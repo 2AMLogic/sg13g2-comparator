@@ -1,0 +1,17 @@
+{
+  "_comment": "Pinned SG13G2 PDK revision this sim/ tree's committed evidence records were generated against. Every record under sim/*/records/*.md must trace to this file (or a later commit that bumps it). Not consumed by tooling; kept as a plain, greppable fact sheet -- mirrors sg13g2-bandgap's sim/pdk.json convention (same PDK, same pinned release, confirmed by matching .fetched-version content).",
+  "source": "IHP-GmbH/IHP-Open-PDK",
+  "fetch_method": "klayout-tools scripts/fetch-ihp-sg13g2.sh (2AMLogic/klayout-tools)",
+  "release_tag": "v0.3.0",
+  "release_url": "https://github.com/IHP-GmbH/IHP-Open-PDK/archive/refs/tags/v0.3.0.tar.gz",
+  "tarball_sha256": "f6afb7a8d2adf3e40acd3fd2c7892fc93510e6f760565409a8df2b5b242254fc",
+  "pdk_root_layout": "PDK_ROOT/ihp-sg13g2 (open_pdks-shaped install, klt pdk find/list convention)",
+  "variant": "ihp-sg13g2",
+  "confirmed_via": "installed checkout's own .fetched-version file reads '0.3.0', checked directly during issue #6 (see sim/device-mismatch-confirm/README.md)",
+  "osdi_toolchain": {
+    "_comment": "Provenance of the OSDI (Verilog-A compact model) binaries the sg13_lv_nmos/sg13_lv_pmos subckts load (psp103va). sim/device-mismatch-confirm/README.md 'Reproducing' documents the build recipe if psp103.osdi is not already present under PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi -- same recipe sg13g2-bandgap's sim/tools/build-osdi.sh uses.",
+    "models_needed_by_this_repo_so_far": ["psp103.osdi"],
+    "install_dir": "PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi (PDK-install territory, not tracked in this repo)",
+    "ngspice_actually_used": "ngspice-46, confirmed with OSDI support (loads psp103.osdi via pre_osdi with no error)"
+  }
+}

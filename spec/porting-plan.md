@@ -186,10 +186,14 @@ unchecked as of this pass). Future work, once a Builder picks it up:
    device models and Razavi's StrongARM tutorial, documenting the topology
    and preamp/no-preamp decision as a decision record (mirroring
    `sky130-sar-adc`'s DR-004 shape).
-2. Confirm whether SG13G2's LV device models ship real per-instance
-   local-mismatch terms (the "strong" statistical story) or only
-   global-process corners (requiring the sensitivity-analysis fallback) —
-   this is itself a committed early result per `CLAUDE.md`.
+2. ✅ **Done (issue #6)**: confirmed SG13G2's LV device models DO ship real
+   per-instance local-mismatch terms (the "strong" statistical story), by
+   both reading the PDK's model files and running an actual ngspice Monte
+   Carlo testbench with a passing negative control — see
+   [`sim/device-mismatch-confirm/`](../sim/device-mismatch-confirm/). This
+   repo's offset-sigma evidence (and every other statistical spec claim)
+   therefore uses the Monte Carlo path, not the sensitivity-analysis
+   fallback.
 3. Stand up a `sim/comparator-decision/`-equivalent experiment directory
    here, porting the `regen`/`offset`/`noise` *methodology* (not numbers)
    from `sky130-sar-adc`, with this repo's own ideal-stimulus, standalone

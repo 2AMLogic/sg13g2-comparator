@@ -60,7 +60,7 @@ point. Each row states its basis rather than asserting a bare figure. See
 
 | Parameter | Target | Stretch | Basis |
 |---|---|---|---|
-| Offset sigma | ≤ 15 mV, 3σ (input-referred, post-calibration-free) | ≤ 8 mV, 3σ | Monte Carlo over SG13G2's shipped local-mismatch device models, once confirmed present in the installed PDK's `sg13g2_moslv_mod.lib` (per `CLAUDE.md`'s "Offset claims state their statistical basis"), N ≥ 200 draws per corner, once a comparator schematic exists. If SG13G2 does not ship per-instance mismatch terms for LV devices, this row falls back to a documented sensitivity analysis (device-size / threshold-perturbation sweep) instead of a Monte-Carlo sigma — which of the two worlds applies is itself a result this repo commits to recording, not assumed here. No schematic exists yet, so no measurement exists; this bound is a placeholder pending design. |
+| Offset sigma | ≤ 15 mV, 3σ (input-referred, post-calibration-free) | ≤ 8 mV, 3σ | **Monte Carlo**, confirmed as the applicable evidence path (not the sensitivity-analysis fallback): SG13G2's LV device models (`sg13_lv_nmos`/`sg13_lv_pmos`) DO ship real per-instance local-mismatch terms, confirmed both by reading `sg13g2_moslv_mod_mismatch.lib`/`sg13g2_moslv_mismatch.lib`/`cornerMOSlv.lib` and by an actual ngspice Monte Carlo testbench (N=30 draws, seeded, with a same-seed mismatch-disabled negative control showing exactly zero spread) — see [`sim/device-mismatch-confirm/`](sim/device-mismatch-confirm/) (issue #6). This confirms the *evidence path* (Monte Carlo over shipped local-mismatch models, N ≥ 200 draws per corner) but not yet a comparator-level offset number — that still requires `design/comparator.sch` to exist first (porting-plan next step 1) and a dedicated comparator-level Monte Carlo sweep (porting-plan next step 3); no schematic exists yet, so this bound remains a placeholder pending design. |
 | Input-referred noise | ≤ 1.0 mV rms, differential | ≤ 0.6 mV rms, differential | ngspice `.noise` analysis on a reduced (loop-broken) sub-model of the latch's input pair + tail — the same methodology `sky130-sar-adc`'s [`spec/decision-records/DR-004-comparator-topology-and-noise-budget.md`](https://github.com/2AMLogic/sky130-sar-adc/blob/main/spec/decision-records/DR-004-comparator-topology-and-noise-budget.md) documents (excludes regeneration-phase noise; a lower bound, not a complete figure). No SG13G2-specific same-topology measurement exists yet — this bound is first-principles engineering judgment pending this repo's own testbench (see porting plan). |
 | Decision time vs. overdrive | ≤ 1.5 ns at 50 mV overdrive, 1.2 V core | ≤ 0.8 ns at 50 mV overdrive | Transient regeneration-time sweep vs. differential input at the target clock, methodology mirroring `sky130-sar-adc`'s [`sim/comparator-decision/run.py`](https://github.com/2AMLogic/sky130-sar-adc/blob/main/sim/comparator-decision/run.py) `regen` subcommand, run across this repo's own PVT corners with seeds and run counts committed (per `CLAUDE.md`'s metastability-as-first-class-spec-row requirement). This is a first-class spec row, not a derived afterthought: the noise floor above and this row together define the metastability characterization. No SG13G2 measurement exists yet; this bound is a placeholder pending design. |
 | Kickback | ≤ 5 mV disturbance into a 1 kΩ source impedance at the input nodes, single decision edge | ≤ 2 mV | Bench drives a realistic source impedance and records the input disturbance directly (per `CLAUDE.md`'s "kickback is measured, not assumed"), methodology mirroring `gf180-sar-adc`'s [`sim/comparator-kickback/`](https://github.com/2AMLogic/gf180-sar-adc/tree/main/sim/comparator-kickback) experiment structure. Source impedance (1 kΩ) is a stated planning assumption, not yet tied to any specific driving stage; no SG13G2 measurement exists yet. |
@@ -69,10 +69,15 @@ point. Each row states its basis rather than asserting a bare figure. See
 **Statistical basis, stated once for the table.** Whether SG13G2's LV device
 models ship real per-instance local-mismatch terms (the "strong" statistical
 story) or only global-process corners (requiring the documented
-sensitivity-analysis fallback) is not yet confirmed for this repo — see
-`CLAUDE.md`'s "Offset claims state their statistical basis." Establishing
-which of those two worlds applies is itself an early, committed result, not
-assumed in this table.
+sensitivity-analysis fallback) is now **confirmed**: they DO ship real
+per-instance local mismatch (Pelgrom-style `agauss()` terms in
+`sg13g2_moslv_mod_mismatch.lib`, wired into `cornerMOSlv.lib`'s
+`mos_{tt,ss,ff,sf,fs}_mismatch` corners), confirmed by an actual Monte Carlo
+testbench, not just the PDK-model reading — see
+[`sim/device-mismatch-confirm/`](sim/device-mismatch-confirm/) (issue #6).
+Every statistical claim in this table (offset sigma above all) therefore
+uses the **Monte Carlo** evidence path, per `CLAUDE.md`'s "Offset claims
+state their statistical basis."
 
 **Ratification status.** This table stays **DRAFT** in this pass — no
 decision record is filed for it yet. [`spec/README.md`](spec/README.md)
