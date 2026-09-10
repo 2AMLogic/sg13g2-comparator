@@ -1,0 +1,106 @@
+{
+  "name": "comparator-offset-mc",
+  "description": "Monte-Carlo input-referred offset of the comparator front end over PVT, plus the part of that offset that moves across a +/-50 mV input-common-mode band.",
+  "claim": "PLACEHOLDER DUT. sim/dut.json binds sim/dut/placeholder_comparator.spice (id placeholder-v1, provenance placeholder). This record substantiates the harness -- that a Monte-Carlo offset sweep over the mos_mismatch corner set genuinely runs and genuinely detects SG13G2's per-instance local mismatch -- and is NOT evidence toward README.md#target-specification's Offset-sigma row until design/comparator.sch exists and sim/dut.json is repointed at it (spec/porting-plan.md next step 1).",
+  "netlist": "tb_offset_mc.spice",
+  "nominal_supply_v": 1.2,
+  "supply_tolerance": 0.1,
+  "temperatures_c": [
+    -40,
+    27,
+    125
+  ],
+  "corners": [
+    "mos_mismatch"
+  ],
+  "analyses": [
+    "set rndseed=20260910",
+    "let n = 0",
+    "let nmax = 200",
+    "let sva = 0",
+    "let svaq = 0",
+    "let sdc = 0",
+    "let sdcq = 0",
+    "let sde = 0",
+    "let sdeq = 0",
+    "let sav = 0",
+    "let savq = 0",
+    "let svb = 0",
+    "dowhile n < nmax",
+    "  reset",
+    "  dc vd 0 2m 2m vcmd -50m 50m 50m",
+    "  let dv = v(aop)-v(aon)",
+    "  let avc = (dv[1]-dv[0])/2e-3",
+    "  let ava = (dv[3]-dv[2])/2e-3",
+    "  let ave = (dv[5]-dv[4])/2e-3",
+    "  let voc = -dv[0]/avc",
+    "  let voa = -dv[2]/ava",
+    "  let voe = -dv[4]/ave",
+    "  let ddc = voc - voa",
+    "  let dde = voe - voa",
+    "  print voa",
+    "  print ddc",
+    "  print dde",
+    "  let sva = sva + voa",
+    "  let svaq = svaq + voa*voa",
+    "  let sdc = sdc + ddc",
+    "  let sdcq = sdcq + ddc*ddc",
+    "  let sde = sde + dde",
+    "  let sdeq = sdeq + dde*dde",
+    "  let sav = sav + ava",
+    "  let savq = savq + ava*ava",
+    "  let svb = v(ibn)[2]",
+    "  let n = n + 1",
+    "end"
+  ],
+  "measure": {
+    "n_samples": "nmax",
+    "sig_vos_mv": "sqrt(abs(svaq/nmax - (sva/nmax)^2))*1e3",
+    "vos_3sig_mv": "3*sqrt(abs(svaq/nmax - (sva/nmax)^2))*1e3",
+    "mean_vos_uv": "sva/nmax*1e6",
+    "mean_vos_sem": "(sva/nmax)/(sqrt(abs(svaq/nmax - (sva/nmax)^2))/sqrt(nmax))",
+    "sig_dvos_dn_uv": "sqrt(abs(sdcq/nmax - (sdc/nmax)^2))*1e6",
+    "sig_dvos_up_uv": "sqrt(abs(sdeq/nmax - (sde/nmax)^2))*1e6",
+    "mean_dvos_dn_uv": "sdc/nmax*1e6",
+    "mean_dvos_up_uv": "sde/nmax*1e6",
+    "av_mean": "sav/nmax",
+    "av_sigma_pct": "sqrt(abs(savq/nmax - (sav/nmax)^2))/(sav/nmax)*100",
+    "vbias_anchor_mv": "svb*1e3"
+  },
+  "checks": {
+    "sig_vos_mv": {
+      "min": 0.05,
+      "description": "MISMATCH-ON GUARD, not a spec bound. SG13G2's mismatch corner set (mos_*_mismatch) is what turns local mismatch on here -- there is no separate switch to forget. A deck that failed to select the mismatch corner (e.g. sabotaged to plain mos_tt) would report ~0 here while every other number in the record still looked plausible. 0.05 mV is far below anything a real sub-micron input pair can achieve, so this floor cannot be read as a design assertion -- it only catches a collapsed (mismatch-free) population. THIS IS ALSO THE HARNESS'S SABOTAGE NEGATIVE CONTROL FOR THIS BENCH: --sabotage-corners forces every corner to plain mos_tt (mismatch off, see sim/harness/corners.py), which must and does collapse this measurement toward exactly zero. The SPEC bound (README.md's Offset-sigma row) is deliberately NOT encoded as a check while sim/dut.json binds a placeholder: a placeholder passing or failing a spec row would be meaningless either way."
+    },
+    "av_sigma_pct": {
+      "max": 5.0,
+      "description": "LOAD-BEARING SELF-CHECK, not a design number. Each draw's gain is taken as (DC point at +2 mV minus DC point at 0 mV) within ONE `dc` sweep, which is only valid if the Monte-Carlo draw is constant across that sweep. If the draw were re-rolled per sweep point, (dv1 - dv0) would be dominated by the difference of two independent offsets rather than by the 2 mV probe, and the extracted gain would scatter by tens of percent. A few percent here is the proof that the draw was preserved, and therefore that every V_os in this record is a real offset rather than a difference of two populations."
+    },
+    "mean_vos_sem": {
+      "min": -5.0,
+      "max": 5.0,
+      "description": "SYMMETRY CHECK, expressed in standard errors of the mean so it is independent of whatever sigma the bound DUT happens to have. The population mean offset must be ~0 because the circuit is nominally symmetric; +/-5 standard errors is a ~6e-7 two-sided false-alarm rate at this N. A mean outside it means a systematic asymmetry is riding on top of the mismatch -- a netlist error, or a genuinely asymmetric topology."
+    },
+    "vbias_anchor_mv": {
+      "min": 50.0,
+      "max": 1200.0,
+      "min_spread_pct_by_axis": {
+        "process": 10.0,
+        "temperature": 10.0
+      },
+      "description": "CORNER-SENSITIVITY ANCHOR. The bias pin's own voltage is a V_th proxy and is strongly corner- and temperature-dependent, unlike the mismatch sigma above, which is corner-invariant almost by construction (the agauss() mismatch terms live in the LV MOS subckt, not in any corner section's typical/skew parameters). Without an anchor this manifest would have very little that could fail under --sabotage-corners on the process/temperature axes specifically (sig_vos_mv already catches sabotage via the mismatch-on guard above, but that is a mismatch check, not a process-corner-sensitivity one). Deliberately measured on `ibn`, a CONTRACT node (the DUT's ibias pin), not an internal node, so it survives a DUT swap. Floors calibrated from this experiment's first committed 45-point record (named in this experiment's README.md, run --no-write during issue #8 development), with ~55% margin below the observed weakest slices (process 25.08%, temperature 26.83%). The supply axis is deliberately unfloored: a diode-connected mirror's gate voltage is set by the forced bias current and is essentially supply-independent by design (observed weakest supply slice: 0.17%), so a floor there would fail for a correct circuit."
+    }
+  },
+  "evidence": {
+    "record_kind": "monte-carlo",
+    "mc_seed": "ngspice `set rndseed=20260910` at the top of the control block, then 200 draws per PVT point via `reset` inside a `dowhile` loop (each reset re-evaluates the agauss() expressions the PDK's sg13_lv_nmos/sg13_lv_pmos subckts carry -- confirmed against the installed checkout during issue #6, sim/device-mismatch-confirm/README.md). The SAME seed is used at every PVT point -- common random numbers -- so movement of the reported sigma across the grid is a real PVT effect and not sampling noise; N for statistical-error purposes is 200, not 200 x 45.",
+    "mc_scope": "mismatch-only. The mos_mismatch corner set (mos_{tt,ff,ss,fs,sf}_mismatch) is both the process-corner axis AND the Monte-Carlo mismatch switch at once -- see sim/harness/corners.py's module docstring for why SG13G2 has no equivalent of a separable global mismatch switch. Global process skew is swept deterministically by the corner axis itself (tt/ff/ss/fs/sf), so the two are never confounded in one number.",
+    "mc_sigma": "1-sigma of the input-referred offset is reported directly, alongside the 3-sigma value a comparator offset spec is conventionally stated at. Statistical precision on each sigma is 1/sqrt(2N) = 5.0% at N = 200. Offset per draw is -dv(0 mV)/A_v where A_v is measured on the SAME draw from the 0 mV and +2 mV points of one `dc` sweep; av_sigma_pct is the check that the draw really was preserved between them.",
+    "notes": [
+      "TWO DC POINTS PER DRAW, ONE INSTANCE. Gain is measured inside a single `dc` sweep of the shared differential source, not from a second instance. Two instances would have independent mismatch draws, so their difference would contain an offset difference rather than just the gain.",
+      "WHAT IS NOT IN THIS RECORD. (a) The decision stage's own offset -- it has no DC operating point, so this method cannot reach it at all. (b) Load-resistor mismatch -- this placeholder's front-end load is an ideal SPICE resistor, not a PDK resistor subckt, so there is no resistor mismatch term to include or null-control (see sim/dut/placeholder_comparator.spice's header). (c) Any layout-induced systematic offset -- this is a schematic-level (in fact placeholder-level) record.",
+      "THE COMMON-MODE BAND IS +/-50 mV ABOUT dut_vcm AND IT IS A STANDALONE CHOICE. There is no CDAC or SAR sequencer here to inherit a band from; the band is a stated property of the comparator's own input range.",
+      "EVERY sqrt() IN THIS BLOCK IS GUARDED WITH abs() (issue #8). A variance term (e.g. svaq/nmax - (sva/nmax)^2) that is mathematically ~0 -- which happens whenever the underlying corner carries no mismatch, e.g. a plain (non-`_mismatch`) `mos_*` corner such as `--corners tt`, or `--sabotage-corners` forcing every corner to `mos_tt` -- can land a few ULPs on the negative side of zero from floating-point summation order. ngspice's sqrt() of a negative real returns a COMPLEX result, printed as `real,imag` (e.g. `0.0000000000e+00,8.0920713114e-14`), which does not match this harness's `m_<name> = <float>` measurement regex at all -- the point then fails as 'no measurements parsed' instead of cleanly reporting sig_vos_mv ~ 0 mV and failing the mismatch-on guard above for the intended reason. sqrt(abs(...)) makes the mismatch-off case report a clean near-zero sigma (still correctly failing the >= 0.05 mV floor) instead of a parse failure. Confirmed empirically during issue #8: sim/characterize.sh smoke uses `--corners tt_mismatch` (not plain `tt`) for this experiment specifically so its 200-draw loop always has real mismatch to measure; `--sabotage-corners` still collapses every corner to plain `mos_tt`, so the guarded formulas are what make its FAIL land on the documented mismatch-on-guard check rather than on a parse error."
+    ]
+  }
+}
