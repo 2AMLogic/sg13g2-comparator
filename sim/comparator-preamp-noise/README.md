@@ -103,12 +103,11 @@ divergence table).
 
 ## Records
 
-Not yet minted — see `sim/README.md`'s Experiments table for the one-command
-cold start (`sim/characterize.sh characterize`). The first committed 45-point
-record here is what `av_dc`'s `min_spread_pct_by_axis` floors above are
-calibrated from; this section is updated with that record's id once it
-lands.
+| record | DUT | grid | verdict |
+|---|---|---|---|
+| [`20260910-232822-8148438`](records/20260910-232822-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos` × 3 T × 3 V | PASS |
 
-**Read the banner on any record here before citing it.** Every record taken
-against `sim/dut.json`'s current `placeholder-v1` binding substantiates the
-harness, not the noise row.
+**Read the banner on that record.** It was taken against the placeholder DUT
+and substantiates the harness, not the noise row. It is also the record the
+`av_dc` per-axis floors are calibrated from (observed weakest slices: process
+5.89 %, temperature 38.91 %).

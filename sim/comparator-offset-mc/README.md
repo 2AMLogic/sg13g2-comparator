@@ -115,12 +115,11 @@ fragment line — see "Mismatch is a corner selection here" above and
 
 ## Records
 
-Not yet minted — see `sim/README.md`'s Experiments table for the one-command
-cold start (`sim/characterize.sh characterize`). This section is updated
-with the first committed 45-point record's id, DUT and verdict once it
-lands; that record is also what the `vbias_anchor_mv` per-axis floors above
-are calibrated from.
+| record | DUT | grid | verdict |
+|---|---|---|---|
+| [`20260910-232619-8148438`](records/20260910-232619-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos_mismatch` × 3 T × 3 V | PASS |
 
-**Read the banner on any record here before citing it.** Every record taken
-against `sim/dut.json`'s current `placeholder-v1` binding substantiates the
-harness, not the offset row.
+**Read the banner on that record.** It was taken against the placeholder DUT
+and substantiates the harness, not the offset row. It is also the record the
+`vbias_anchor_mv` per-axis floors are calibrated from (observed weakest
+slices: process 25.17 %, temperature 26.20 %).

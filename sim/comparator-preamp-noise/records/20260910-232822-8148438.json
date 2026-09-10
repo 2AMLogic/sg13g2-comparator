@@ -1,0 +1,1481 @@
+{
+  "record_id": "20260910-232822-8148438",
+  "context": {
+    "record_id": "20260910-232822-8148438",
+    "commit": "8148438",
+    "dirty": false,
+    "dirty_paths": [],
+    "pdk": {
+      "path": "/Users/rwalters/share/pdk/ihp-sg13g2",
+      "variant": "ihp-sg13g2",
+      "release_version": "0.3.0",
+      "discovered_via": "search_root:~/share/pdk"
+    },
+    "toolchain": {
+      "pins": {
+        "pdk_release": "0.3.0",
+        "ngspice_min_major": 46,
+        "python_min": "3.9",
+        "openvaf_tag": "v24.0.1mob"
+      },
+      "observed": {
+        "pdk_release": "0.3.0",
+        "ngspice": "ngspice-46 : Circuit level simulation program",
+        "python": "3.14.7",
+        "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+      },
+      "drift": []
+    },
+    "dut_id": "placeholder-v1",
+    "dut_provenance": "placeholder",
+    "dut_netlist": "sim/dut/placeholder_comparator.spice",
+    "dut_netlist_sha256": "bbd8a8648944eed93c50e066572f58c0c1d554c40a7803416b8faa0024465270",
+    "dut_params": {
+      "dut_ib": 2e-05,
+      "dut_vcm": 0.6
+    }
+  },
+  "testbench": {
+    "name": "comparator-preamp-noise",
+    "description": "Input-referred noise of the comparator front end over PVT via ngspice .noise, reported as total integrated OUTPUT noise divided by the measured DC gain, split into a full band (1 Hz .. 1 GHz) and a >1 kHz band so the flicker content is visible rather than buried.",
+    "claim": "PLACEHOLDER DUT. sim/dut.json binds sim/dut/placeholder_comparator.spice (id placeholder-v1, provenance placeholder). This record substantiates the harness -- that a .noise sweep over the full PVT grid genuinely runs and the divide-by-gain referral genuinely computes -- and is NOT evidence toward README.md#target-specification's Input-referred-noise row until design/comparator.sch exists and sim/dut.json is repointed at it (spec/porting-plan.md next step 1).",
+    "experiment": "comparator-preamp-noise",
+    "directory": "testbench",
+    "netlist": "tb_preamp_noise.spice",
+    "netlist_sha256": "16cb64f2711e37101a909c16fed05f5d72341b06c67cfeb8429a8773a5ce97ae",
+    "manifest_sha256": "68ccb4970883b56ba1b4d0f8763d4ee13cf20d9e692e73c46a07a4a7cfdac3ba",
+    "nominal_supply_v": 1.2,
+    "supply_tolerance": 0.1
+  },
+  "checks": {
+    "av_dc": {
+      "min": 1.0,
+      "min_spread_pct_by_axis": {
+        "process": 3.0,
+        "temperature": 20.0
+      },
+      "description": "DC differential gain of the front end, and this bench's corner-sensitivity anchor. The floor of 1.0 asserts the stage is a gain stage at every corner -- a front end with gain below unity would make every input-referred number here larger than the output-referred one and the divide-by-gain step actively misleading. It is NOT a design bound on gain. The per-axis floors are what make --sabotage-corners fail: gain is (transconductance x load resistance) and both move with corner and temperature. Floors calibrated from this experiment's first committed 45-point record (named in this experiment's README.md, run --no-write during issue #8 development), with ~48% margin below the observed weakest slices (process 5.89%, temperature 38.91%). The supply axis is unfloored: the front end is biased by a forced current, so its gain barely moves with the rail (observed weakest supply slice: 5.63%)."
+    },
+    "vn_in_uv": {
+      "min": 0.1,
+      "description": "THE HEADLINE NUMBER: total integrated output noise (1 Hz .. 1 GHz) DIVIDED BY THE MEASURED DC GAIN. The floor only catches a degenerate analysis (a `.noise` that returned nothing, or a gain so large the division collapses the result); the SPEC bound is deliberately not encoded while a placeholder is bound. Read the units caution in the testbench header: ngspice's own inoise_total is recorded separately as inoise_band_uv precisely so the two referrals can be compared rather than conflated."
+    },
+    "inoise_band_uv": {
+      "min": 0.1,
+      "description": "ngspice's OWN input referral over the same band, recorded alongside the divide-by-gain number rather than instead of it -- AND THE TWO ARE NOT EXPECTED TO AGREE. ngspice refers each frequency bin through the AC transfer function at THAT frequency, so every bin above the front end's bandwidth is divided by a rolled-off gain and inflates the total; the quoted number divides the whole integrated output noise by the DC gain instead."
+    },
+    "flicker_frac_pct": {
+      "min": 0.0,
+      "max": 100.0,
+      "description": "Fraction of the total noise POWER contributed below 1 kHz, i.e. the flicker content. Bounded only to the range a fraction can legally take -- outside it means the two noise integrals came back inconsistent."
+    },
+    "enbw_mhz": {
+      "min": 0.001,
+      "description": "Equivalent noise bandwidth implied by (total integrated noise / white density). Lets a reader re-derive the headline number by hand as density x sqrt(ENBW) instead of taking the integral on trust. Floor only -- a zero or negative ENBW means the spectrum sample used as the white reference landed somewhere it should not have."
+    },
+    "vbias_anchor_mv": {
+      "min": 50.0,
+      "max": 1200.0,
+      "description": "The same V_th-proxy anchor as sim/comparator-offset-mc/, measured on the DUT's ibias contract pin. Recorded here without per-axis floors because av_dc above already carries them for this bench; keeping the same anchor in both records makes the two directly comparable point by point."
+    }
+  },
+  "points": [
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "tt_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.1996488715,
+        "vn_in_uv": 160.33004784,
+        "vn_in_hf_uv": 159.95834661,
+        "onoise_uv": 833.65995233,
+        "onoise_hf_uv": 831.72723645,
+        "inoise_band_uv": 266.80730486,
+        "flicker_frac_pct": 0.46313260435,
+        "white_nv_rthz": 48.194262435,
+        "enbw_mhz": 299.21764602,
+        "vbias_anchor_mv": 344.91774906
+      },
+      "seconds": 4.56,
+      "deck": "tt_-40c_1.08v.spice",
+      "log": "tt_-40c_1.08v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "tt_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.3726001497,
+        "vn_in_uv": 158.29644061,
+        "vn_in_hf_uv": 157.95710447,
+        "onoise_uv": 850.46348053,
+        "onoise_hf_uv": 848.64036313,
+        "inoise_band_uv": 265.13488247,
+        "flicker_frac_pct": 0.42827548773,
+        "white_nv_rthz": 48.980675517,
+        "enbw_mhz": 301.48228492,
+        "vbias_anchor_mv": 344.91774906
+      },
+      "seconds": 4.751,
+      "deck": "tt_-40c_1.20v.spice",
+      "log": "tt_-40c_1.20v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "tt_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.5278935863,
+        "vn_in_uv": 156.50198594,
+        "vn_in_hf_uv": 156.18960639,
+        "onoise_uv": 865.1263243,
+        "onoise_hf_uv": 863.3995234,
+        "inoise_band_uv": 263.3945783,
+        "flicker_frac_pct": 0.39880361875,
+        "white_nv_rthz": 49.640166439,
+        "enbw_mhz": 303.73343109,
+        "vbias_anchor_mv": 344.91774906
+      },
+      "seconds": 4.598,
+      "deck": "tt_-40c_1.32v.spice",
+      "log": "tt_-40c_1.32v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "tt_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.3446102663,
+        "vn_in_uv": 202.65696146,
+        "vn_in_hf_uv": 202.23441256,
+        "onoise_uv": 880.46551529,
+        "onoise_hf_uv": 878.62970501,
+        "inoise_band_uv": 333.05860036,
+        "flicker_frac_pct": 0.4165742721,
+        "white_nv_rthz": 50.166174927,
+        "enbw_mhz": 308.03688669,
+        "vbias_anchor_mv": 308.66490635
+      },
+      "seconds": 4.609,
+      "deck": "tt_27c_1.08v.spice",
+      "log": "tt_27c_1.08v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "tt_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.4921446534,
+        "vn_in_uv": 200.15988825,
+        "vn_in_hf_uv": 199.77459933,
+        "onoise_uv": 899.14717181,
+        "onoise_hf_uv": 897.41639825,
+        "inoise_band_uv": 331.50628449,
+        "flicker_frac_pct": 0.38461062355,
+        "white_nv_rthz": 51.094505079,
+        "enbw_mhz": 309.6800095,
+        "vbias_anchor_mv": 308.66490635
+      },
+      "seconds": 4.577,
+      "deck": "tt_27c_1.20v.spice",
+      "log": "tt_27c_1.20v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "tt_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.6268118097,
+        "vn_in_uv": 197.86804327,
+        "vn_in_hf_uv": 197.51394245,
+        "onoise_uv": 915.49819934,
+        "onoise_hf_uv": 913.85984151,
+        "inoise_band_uv": 329.67723834,
+        "flicker_frac_pct": 0.35759586442,
+        "white_nv_rthz": 51.883504219,
+        "enbw_mhz": 311.35538934,
+        "vbias_anchor_mv": 308.66490635
+      },
+      "seconds": 4.537,
+      "deck": "tt_27c_1.32v.spice",
+      "log": "tt_27c_1.32v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "tt_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.4679841037,
+        "vn_in_uv": 268.46948902,
+        "vn_in_hf_uv": 267.97249286,
+        "onoise_uv": 931.04792025,
+        "onoise_hf_uv": 929.32434547,
+        "inoise_band_uv": 431.65112834,
+        "flicker_frac_pct": 0.36990135125,
+        "white_nv_rthz": 52.161153142,
+        "enbw_mhz": 318.60288262,
+        "vbias_anchor_mv": 249.50880908
+      },
+      "seconds": 4.549,
+      "deck": "tt_125c_1.08v.spice",
+      "log": "tt_125c_1.08v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "tt_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.5880879488,
+        "vn_in_uv": 265.48146231,
+        "vn_in_hf_uv": 265.02786908,
+        "onoise_uv": 952.57083556,
+        "onoise_hf_uv": 950.94330313,
+        "inoise_band_uv": 430.95618349,
+        "flicker_frac_pct": 0.34142175841,
+        "white_nv_rthz": 53.297687191,
+        "enbw_mhz": 319.43156879,
+        "vbias_anchor_mv": 249.50880909
+      },
+      "seconds": 4.538,
+      "deck": "tt_125c_1.20v.spice",
+      "log": "tt_125c_1.20v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "tt_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.7016837361,
+        "vn_in_uv": 262.49117623,
+        "vn_in_hf_uv": 262.07451834,
+        "onoise_uv": 971.65931792,
+        "onoise_hf_uv": 970.11698219,
+        "inoise_band_uv": 429.45224426,
+        "flicker_frac_pct": 0.31721234259,
+        "white_nv_rthz": 54.289662974,
+        "enbw_mhz": 320.32714897,
+        "vbias_anchor_mv": 249.50880911
+      },
+      "seconds": 4.668,
+      "deck": "tt_125c_1.32v.spice",
+      "log": "tt_125c_1.32v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "ff_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.4183602879,
+        "vn_in_uv": 156.10896303,
+        "vn_in_hf_uv": 155.73261045,
+        "onoise_uv": 845.8546059,
+        "onoise_hf_uv": 843.81539199,
+        "inoise_band_uv": 257.26683807,
+        "flicker_frac_pct": 0.48158532014,
+        "white_nv_rthz": 48.707540347,
+        "enbw_mhz": 301.57757111,
+        "vbias_anchor_mv": 300.87619407
+      },
+      "seconds": 4.896,
+      "deck": "ff_-40c_1.08v.spice",
+      "log": "ff_-40c_1.08v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "ff_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.6125460634,
+        "vn_in_uv": 154.07452762,
+        "vn_in_hf_uv": 153.73137026,
+        "onoise_uv": 864.75038348,
+        "onoise_hf_uv": 862.824397,
+        "inoise_band_uv": 255.8049658,
+        "flicker_frac_pct": 0.44494728688,
+        "white_nv_rthz": 49.618827702,
+        "enbw_mhz": 303.73058581,
+        "vbias_anchor_mv": 300.87619407
+      },
+      "seconds": 4.613,
+      "deck": "ff_-40c_1.20v.spice",
+      "log": "ff_-40c_1.20v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "ff_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.7878506444,
+        "vn_in_uv": 152.26020392,
+        "vn_in_hf_uv": 151.94471331,
+        "onoise_uv": 881.2593194,
+        "onoise_hf_uv": 879.43330685,
+        "inoise_band_uv": 254.20989394,
+        "flicker_frac_pct": 0.4139804752,
+        "white_nv_rthz": 50.387691929,
+        "enbw_mhz": 305.8852353,
+        "vbias_anchor_mv": 300.87619407
+      },
+      "seconds": 4.862,
+      "deck": "ff_-40c_1.32v.spice",
+      "log": "ff_-40c_1.32v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "ff_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.5079398623,
+        "vn_in_uv": 197.64301667,
+        "vn_in_hf_uv": 197.21688203,
+        "onoise_uv": 890.96283333,
+        "onoise_hf_uv": 889.04184402,
+        "inoise_band_uv": 321.68382016,
+        "flicker_frac_pct": 0.43075161709,
+        "white_nv_rthz": 50.518027084,
+        "enbw_mhz": 311.04728339,
+        "vbias_anchor_mv": 264.6621686
+      },
+      "seconds": 4.575,
+      "deck": "ff_27c_1.08v.spice",
+      "log": "ff_27c_1.08v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "ff_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.6696844981,
+        "vn_in_uv": 195.22483786,
+        "vn_in_hf_uv": 194.83654991,
+        "onoise_uv": 911.63839899,
+        "onoise_hf_uv": 909.82521678,
+        "inoise_band_uv": 320.50017191,
+        "flicker_frac_pct": 0.39738981272,
+        "white_nv_rthz": 51.566060488,
+        "enbw_mhz": 312.54842308,
+        "vbias_anchor_mv": 264.66216861
+      },
+      "seconds": 4.474,
+      "deck": "ff_27c_1.20v.spice",
+      "log": "ff_27c_1.20v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "ff_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.8187412955,
+        "vn_in_uv": 192.95964794,
+        "vn_in_hf_uv": 192.60310341,
+        "onoise_uv": 929.82262387,
+        "onoise_hf_uv": 928.10452804,
+        "inoise_band_uv": 318.93196563,
+        "flicker_frac_pct": 0.36921203369,
+        "white_nv_rthz": 52.466067568,
+        "enbw_mhz": 314.0821025,
+        "vbias_anchor_mv": 264.66216863
+      },
+      "seconds": 4.627,
+      "deck": "ff_27c_1.32v.spice",
+      "log": "ff_27c_1.32v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "ff_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.5817399581,
+        "vn_in_uv": 262.23495395,
+        "vn_in_hf_uv": 261.73765347,
+        "onoise_uv": 939.25741296,
+        "onoise_hf_uv": 937.47621196,
+        "inoise_band_uv": 417.52387696,
+        "flicker_frac_pct": 0.37891893025,
+        "white_nv_rthz": 52.301565485,
+        "enbw_mhz": 322.50755002,
+        "vbias_anchor_mv": 205.62317952
+      },
+      "seconds": 4.321,
+      "deck": "ff_125c_1.08v.spice",
+      "log": "ff_125c_1.08v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "ff_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.709756037,
+        "vn_in_uv": 259.46912056,
+        "vn_in_hf_uv": 259.01504819,
+        "onoise_uv": 962.56713642,
+        "onoise_hf_uv": 960.8826387,
+        "inoise_band_uv": 417.42498206,
+        "flicker_frac_pct": 0.34969483431,
+        "white_nv_rthz": 53.546430372,
+        "enbw_mhz": 323.14765719,
+        "vbias_anchor_mv": 205.62317967
+      },
+      "seconds": 4.405,
+      "deck": "ff_125c_1.20v.spice",
+      "log": "ff_125c_1.20v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "ff_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.8322221191,
+        "vn_in_uv": 256.6221798,
+        "vn_in_hf_uv": 256.20512898,
+        "onoise_uv": 983.4331937,
+        "onoise_hf_uv": 981.83496233,
+        "inoise_band_uv": 416.41269136,
+        "flicker_frac_pct": 0.32476688791,
+        "white_nv_rthz": 54.648988693,
+        "enbw_mhz": 323.83625372,
+        "vbias_anchor_mv": 205.62317981
+      },
+      "seconds": 4.634,
+      "deck": "ff_125c_1.32v.spice",
+      "log": "ff_125c_1.32v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "ss_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.0387700318,
+        "vn_in_uv": 163.60838477,
+        "vn_in_hf_uv": 163.24001996,
+        "onoise_uv": 824.38502615,
+        "onoise_hf_uv": 822.52892057,
+        "inoise_band_uv": 275.02493984,
+        "flicker_frac_pct": 0.44979372813,
+        "white_nv_rthz": 47.914813792,
+        "enbw_mhz": 296.01967683,
+        "vbias_anchor_mv": 390.91421508
+      },
+      "seconds": 4.533,
+      "deck": "ss_-40c_1.08v.spice",
+      "log": "ss_-40c_1.08v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "ss_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.1929013219,
+        "vn_in_uv": 161.61859715,
+        "vn_in_hf_uv": 161.28151156,
+        "onoise_uv": 839.2694268,
+        "onoise_hf_uv": 837.51897456,
+        "inoise_band_uv": 273.17003011,
+        "flicker_frac_pct": 0.41670213162,
+        "white_nv_rthz": 48.583218146,
+        "enbw_mhz": 298.42159515,
+        "vbias_anchor_mv": 390.91421508
+      },
+      "seconds": 4.681,
+      "deck": "ss_-40c_1.20v.spice",
+      "log": "ss_-40c_1.20v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "ss_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.3306728215,
+        "vn_in_uv": 159.88008083,
+        "vn_in_hf_uv": 159.56907453,
+        "onoise_uv": 852.26840157,
+        "onoise_hf_uv": 850.61052873,
+        "inoise_band_uv": 271.31441965,
+        "flicker_frac_pct": 0.38867106918,
+        "white_nv_rthz": 49.141242525,
+        "enbw_mhz": 300.78800092,
+        "vbias_anchor_mv": 390.91421508
+      },
+      "seconds": 4.744,
+      "deck": "ss_-40c_1.32v.spice",
+      "log": "ss_-40c_1.32v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "ss_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.2158052201,
+        "vn_in_uv": 206.87593509,
+        "vn_in_hf_uv": 206.45675807,
+        "onoise_uv": 872.1486471,
+        "onoise_hf_uv": 870.38147842,
+        "inoise_band_uv": 343.5091754,
+        "flicker_frac_pct": 0.40483427637,
+        "white_nv_rthz": 49.990444054,
+        "enbw_mhz": 304.37363706,
+        "vbias_anchor_mv": 355.19814321
+      },
+      "seconds": 4.46,
+      "deck": "ss_27c_1.08v.spice",
+      "log": "ss_27c_1.08v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "ss_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.3491826091,
+        "vn_in_uv": 204.37429089,
+        "vn_in_hf_uv": 203.99138925,
+        "onoise_uv": 888.86111169,
+        "onoise_hf_uv": 887.19580254,
+        "inoise_band_uv": 341.63906158,
+        "flicker_frac_pct": 0.37435525507,
+        "white_nv_rthz": 50.796215425,
+        "enbw_mhz": 306.1999385,
+        "vbias_anchor_mv": 355.19814321
+      },
+      "seconds": 4.851,
+      "deck": "ss_27c_1.20v.spice",
+      "log": "ss_27c_1.20v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "ss_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.4701755815,
+        "vn_in_uv": 202.11172195,
+        "vn_in_hf_uv": 201.75915848,
+        "onoise_uv": 903.47488417,
+        "onoise_hf_uv": 901.89886358,
+        "inoise_band_uv": 339.59215186,
+        "flicker_frac_pct": 0.34857548657,
+        "white_nv_rthz": 51.476798873,
+        "enbw_mhz": 308.04141089,
+        "vbias_anchor_mv": 355.19814321
+      },
+      "seconds": 4.808,
+      "deck": "ss_27c_1.32v.spice",
+      "log": "ss_27c_1.32v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "ss_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.3771758755,
+        "vn_in_uv": 273.85210983,
+        "vn_in_hf_uv": 273.35634385,
+        "onoise_uv": 924.84673878,
+        "onoise_hf_uv": 923.17244987,
+        "inoise_band_uv": 444.97277266,
+        "flicker_frac_pct": 0.3617406711,
+        "white_nv_rthz": 52.177893062,
+        "enbw_mhz": 314.17126612,
+        "vbias_anchor_mv": 296.51883696
+      },
+      "seconds": 4.558,
+      "deck": "ss_125c_1.08v.spice",
+      "log": "ss_125c_1.08v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "ss_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.4888444394,
+        "vn_in_uv": 270.71835012,
+        "vn_in_hf_uv": 270.26554981,
+        "onoise_uv": 944.49421046,
+        "onoise_hf_uv": 942.91446063,
+        "inoise_band_uv": 443.68816814,
+        "flicker_frac_pct": 0.3342378777,
+        "white_nv_rthz": 53.196228475,
+        "enbw_mhz": 315.23680344,
+        "vbias_anchor_mv": 296.51883696
+      },
+      "seconds": 4.508,
+      "deck": "ss_125c_1.20v.spice",
+      "log": "ss_125c_1.20v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "ss_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.5933152582,
+        "vn_in_uv": 267.66672487,
+        "vn_in_hf_uv": 267.25034299,
+        "onoise_uv": 961.81092657,
+        "onoise_hf_uv": 960.31473523,
+        "inoise_band_uv": 441.74507908,
+        "flicker_frac_pct": 0.3108776505,
+        "white_nv_rthz": 54.074529053,
+        "enbw_mhz": 316.36899983,
+        "vbias_anchor_mv": 296.51883697
+      },
+      "seconds": 4.533,
+      "deck": "ss_125c_1.32v.spice",
+      "log": "ss_125c_1.32v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "fs_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.310200936,
+        "vn_in_uv": 158.18114688,
+        "vn_in_hf_uv": 157.8068706,
+        "onoise_uv": 839.97367421,
+        "onoise_hf_uv": 837.98619196,
+        "inoise_band_uv": 261.96998345,
+        "flicker_frac_pct": 0.47266503498,
+        "white_nv_rthz": 48.468039946,
+        "enbw_mhz": 300.3450202,
+        "vbias_anchor_mv": 322.90474369
+      },
+      "seconds": 4.773,
+      "deck": "fs_-40c_1.08v.spice",
+      "log": "fs_-40c_1.08v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "fs_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.4935836233,
+        "vn_in_uv": 156.14568055,
+        "vn_in_hf_uv": 155.80420862,
+        "onoise_uv": 857.79935354,
+        "onoise_hf_uv": 855.92344891,
+        "inoise_band_uv": 260.40038228,
+        "flicker_frac_pct": 0.43689784286,
+        "white_nv_rthz": 49.315390666,
+        "enbw_mhz": 302.55649019,
+        "vbias_anchor_mv": 322.90474369
+      },
+      "seconds": 4.172,
+      "deck": "fs_-40c_1.20v.spice",
+      "log": "fs_-40c_1.20v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "fs_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.6586573001,
+        "vn_in_uv": 154.34047467,
+        "vn_in_hf_uv": 154.02633357,
+        "onoise_uv": 873.35985368,
+        "onoise_hf_uv": 871.58223688,
+        "inoise_band_uv": 258.73063447,
+        "flicker_frac_pct": 0.40666118001,
+        "white_nv_rthz": 50.027892589,
+        "enbw_mhz": 304.76285376,
+        "vbias_anchor_mv": 322.90474369
+      },
+      "seconds": 4.115,
+      "deck": "fs_-40c_1.32v.spice",
+      "log": "fs_-40c_1.32v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "fs_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.427027427,
+        "vn_in_uv": 200.11378196,
+        "vn_in_hf_uv": 199.68913496,
+        "onoise_uv": 885.90920128,
+        "onoise_hf_uv": 884.02927733,
+        "inoise_band_uv": 327.30416002,
+        "flicker_frac_pct": 0.42395525747,
+        "white_nv_rthz": 50.357436814,
+        "enbw_mhz": 309.49325733,
+        "vbias_anchor_mv": 286.67237278
+      },
+      "seconds": 4.163,
+      "deck": "fs_27c_1.08v.spice",
+      "log": "fs_27c_1.08v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "fs_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.5816340737,
+        "vn_in_uv": 197.65319562,
+        "vn_in_hf_uv": 197.26613459,
+        "onoise_uv": 905.5746158,
+        "onoise_hf_uv": 903.80124383,
+        "inoise_band_uv": 325.93301504,
+        "flicker_frac_pct": 0.39127324447,
+        "white_nv_rthz": 51.344934465,
+        "enbw_mhz": 311.06652158,
+        "vbias_anchor_mv": 286.67237279
+      },
+      "seconds": 4.259,
+      "deck": "fs_27c_1.20v.spice",
+      "log": "fs_27c_1.20v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "fs_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.7234212176,
+        "vn_in_uv": 195.37210135,
+        "vn_in_hf_uv": 195.01653016,
+        "onoise_uv": 922.82472885,
+        "onoise_hf_uv": 921.14521632,
+        "inoise_band_uv": 324.23004293,
+        "flicker_frac_pct": 0.36366259902,
+        "white_nv_rthz": 52.188324821,
+        "enbw_mhz": 312.67397437,
+        "vbias_anchor_mv": 286.67237279
+      },
+      "seconds": 4.075,
+      "deck": "fs_27c_1.32v.spice",
+      "log": "fs_27c_1.32v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "fs_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.5245359685,
+        "vn_in_uv": 265.3539114,
+        "vn_in_hf_uv": 264.85650948,
+        "onoise_uv": 935.24940512,
+        "onoise_hf_uv": 933.49629414,
+        "inoise_band_uv": 424.58119954,
+        "flicker_frac_pct": 0.37454562985,
+        "white_nv_rthz": 52.239904866,
+        "enbw_mhz": 320.51630432,
+        "vbias_anchor_mv": 227.55100183
+      },
+      "seconds": 4.152,
+      "deck": "fs_125c_1.08v.spice",
+      "log": "fs_125c_1.08v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "fs_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.6485470364,
+        "vn_in_uv": 262.47640829,
+        "vn_in_hf_uv": 262.02236569,
+        "onoise_uv": 957.65752161,
+        "onoise_hf_uv": 956.0009258,
+        "inoise_band_uv": 424.18810307,
+        "flicker_frac_pct": 0.34566908144,
+        "white_nv_rthz": 53.430339196,
+        "enbw_mhz": 321.251072,
+        "vbias_anchor_mv": 227.55100189
+      },
+      "seconds": 4.114,
+      "deck": "fs_125c_1.20v.spice",
+      "log": "fs_125c_1.20v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "fs_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.7665180393,
+        "vn_in_uv": 259.55454705,
+        "vn_in_hf_uv": 259.13750879,
+        "onoise_uv": 977.61688364,
+        "onoise_hf_uv": 976.0461015,
+        "inoise_band_uv": 422.92594379,
+        "flicker_frac_pct": 0.32109106207,
+        "white_nv_rthz": 54.476581046,
+        "enbw_mhz": 322.04584464,
+        "vbias_anchor_mv": 227.55100194
+      },
+      "seconds": 4.084,
+      "deck": "fs_125c_1.32v.spice",
+      "log": "fs_125c_1.32v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "sf_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.1207266901,
+        "vn_in_uv": 161.93904974,
+        "vn_in_hf_uv": 161.56885535,
+        "onoise_uv": 829.24561418,
+        "onoise_hf_uv": 827.34994987,
+        "inoise_band_uv": 270.87100934,
+        "flicker_frac_pct": 0.45667954659,
+        "white_nv_rthz": 48.072033577,
+        "enbw_mhz": 297.56467812,
+        "vbias_anchor_mv": 367.90579778
+      },
+      "seconds": 4.135,
+      "deck": "sf_-40c_1.08v.spice",
+      "log": "sf_-40c_1.08v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "sf_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.2841131392,
+        "vn_in_uv": 159.92537204,
+        "vn_in_hf_uv": 159.58701531,
+        "onoise_uv": 845.06375969,
+        "onoise_hf_uv": 843.27584447,
+        "inoise_band_uv": 269.10254769,
+        "flicker_frac_pct": 0.42269564739,
+        "white_nv_rthz": 48.797799581,
+        "enbw_mhz": 299.90138891,
+        "vbias_anchor_mv": 367.90579778
+      },
+      "seconds": 4.044,
+      "deck": "sf_-40c_1.20v.spice",
+      "log": "sf_-40c_1.20v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "sf_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 5.4304624157,
+        "vn_in_uv": 158.15778172,
+        "vn_in_hf_uv": 157.84595415,
+        "onoise_uv": 858.86988937,
+        "onoise_hf_uv": 857.17652149,
+        "inoise_band_uv": 267.30101701,
+        "flicker_frac_pct": 0.39393592757,
+        "white_nv_rthz": 49.404914758,
+        "enbw_mhz": 302.21390742,
+        "vbias_anchor_mv": 367.90579778
+      },
+      "seconds": 4.002,
+      "deck": "sf_-40c_1.32v.spice",
+      "log": "sf_-40c_1.32v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "sf_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.2814111849,
+        "vn_in_uv": 204.72963263,
+        "vn_in_hf_uv": 204.30854267,
+        "onoise_uv": 876.53173903,
+        "onoise_hf_uv": 874.72887975,
+        "inoise_band_uv": 338.22585048,
+        "flicker_frac_pct": 0.41093896128,
+        "white_nv_rthz": 50.095644048,
+        "enbw_mhz": 306.15077559,
+        "vbias_anchor_mv": 331.91438347
+      },
+      "seconds": 4.011,
+      "deck": "sf_27c_1.08v.spice",
+      "log": "sf_27c_1.08v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "sf_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.4217898536,
+        "vn_in_uv": 202.22743107,
+        "vn_in_hf_uv": 201.84313604,
+        "onoise_uv": 894.2072028,
+        "onoise_hf_uv": 892.50793097,
+        "inoise_band_uv": 336.50976546,
+        "flicker_frac_pct": 0.3797010923,
+        "white_nv_rthz": 50.96141756,
+        "enbw_mhz": 307.8884006,
+        "vbias_anchor_mv": 331.91438347
+      },
+      "seconds": 3.955,
+      "deck": "sf_27c_1.20v.spice",
+      "log": "sf_27c_1.20v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "sf_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 4.5495388627,
+        "vn_in_uv": 199.94759565,
+        "vn_in_hf_uv": 199.59408059,
+        "onoise_uv": 909.6693569,
+        "onoise_hf_uv": 908.06102642,
+        "inoise_band_uv": 334.56597644,
+        "flicker_frac_pct": 0.35329511147,
+        "white_nv_rthz": 51.694895308,
+        "enbw_mhz": 309.65051766,
+        "vbias_anchor_mv": 331.91438347
+      },
+      "seconds": 3.896,
+      "deck": "sf_27c_1.32v.spice",
+      "log": "sf_27c_1.32v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "sf_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.4230895072,
+        "vn_in_uv": 271.13706495,
+        "vn_in_hf_uv": 270.64040389,
+        "onoise_uv": 928.12644204,
+        "onoise_hf_uv": 926.42632678,
+        "inoise_band_uv": 438.2717495,
+        "flicker_frac_pct": 0.36601869599,
+        "white_nv_rthz": 52.183424568,
+        "enbw_mhz": 316.33637855,
+        "vbias_anchor_mv": 272.98592274
+      },
+      "seconds": 4.089,
+      "deck": "sf_125c_1.08v.spice",
+      "log": "sf_125c_1.08v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "sf_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.5390124194,
+        "vn_in_uv": 268.07078592,
+        "vn_in_hf_uv": 267.61734622,
+        "onoise_uv": 948.70584063,
+        "onoise_hf_uv": 947.10111191,
+        "inoise_band_uv": 437.2761549,
+        "flicker_frac_pct": 0.33801236657,
+        "white_nv_rthz": 53.260719424,
+        "enbw_mhz": 317.28467191,
+        "vbias_anchor_mv": 272.98592274
+      },
+      "seconds": 3.812,
+      "deck": "sf_125c_1.20v.spice",
+      "log": "sf_125c_1.20v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "sf_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "av_dc": 3.6479718154,
+        "vn_in_uv": 265.04786481,
+        "vn_in_hf_uv": 264.63113332,
+        "onoise_uv": 966.88714055,
+        "onoise_hf_uv": 965.36691581,
+        "inoise_band_uv": 435.54942128,
+        "flicker_frac_pct": 0.3142103269,
+        "white_nv_rthz": 54.194563112,
+        "enbw_mhz": 318.30255836,
+        "vbias_anchor_mv": 272.98592275
+      },
+      "seconds": 3.915,
+      "deck": "sf_125c_1.32v.spice",
+      "log": "sf_125c_1.32v.log"
+    }
+  ],
+  "summary": {
+    "av_dc": {
+      "min": 3.3771758755,
+      "max": 5.7878506444,
+      "mean": 4.49220867912,
+      "at_min": "ss_125c_1.08v",
+      "at_max": "ff_-40c_1.32v",
+      "spread_pct": 53.663463589857955,
+      "per_axis": {
+        "process": {
+          "weakest": 5.886896986749946,
+          "strongest": 8.241733821922466,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 38.913013322349116,
+          "strongest": 40.797423861254714,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 5.627098072381153,
+          "strongest": 6.755353518359473,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "vn_in_uv": {
+      "min": 152.26020392,
+      "max": 273.85210983,
+      "mean": 207.77628817955556,
+      "at_min": "ff_-40c_1.32v",
+      "at_max": "ss_125c_1.08v",
+      "spread_pct": 58.520588164960884,
+      "per_axis": {
+        "process": {
+          "weakest": 4.211031156422973,
+          "strongest": 4.87740467037604,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 51.32895796984812,
+          "strongest": 52.0212798658224,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 2.1634015757219087,
+          "strongest": 2.4967963593354283,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "vn_in_hf_uv": {
+      "min": 151.94471331,
+      "max": 273.35634385,
+      "mean": 207.38129254666666,
+      "at_min": "ff_-40c_1.32v",
+      "at_max": "ss_125c_1.08v",
+      "spread_pct": 58.545121910009755,
+      "per_axis": {
+        "process": {
+          "weakest": 4.217988828715466,
+          "strongest": 4.89007122498275,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 51.37195675284293,
+          "strongest": 52.06487113359817,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 2.136225778988314,
+          "strongest": 2.4628255963264256,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "onoise_uv": {
+      "min": 824.38502615,
+      "max": 983.4331937,
+      "mean": 900.7559160353333,
+      "at_min": "ss_-40c_1.08v",
+      "at_max": "ff_125c_1.32v",
+      "spread_pct": 17.657188225867955,
+      "per_axis": {
+        "process": {
+          "weakest": 1.546698273585681,
+          "strongest": 3.3469978931535653,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 10.470873822930917,
+          "strongest": 12.092769796877647,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 3.324828744638084,
+          "strongest": 4.593258350587683,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "onoise_hf_uv": {
+      "min": 822.52892057,
+      "max": 981.83496233,
+      "mean": 899.0186189884445,
+      "at_min": "ss_-40c_1.08v",
+      "at_max": "ff_125c_1.32v",
+      "spread_pct": 17.719993601383656,
+      "per_axis": {
+        "process": {
+          "weakest": 1.5380734573041919,
+          "strongest": 3.334270047703321,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 10.522373530676639,
+          "strongest": 12.131734459264061,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 3.3554872968533274,
+          "strongest": 4.620392228808048,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "inoise_band_uv": {
+      "min": 254.20989394,
+      "max": 444.97277266,
+      "mean": 342.08867568466667,
+      "at_min": "ff_-40c_1.32v",
+      "at_max": "ss_125c_1.08v",
+      "spread_pct": 55.76416066337225,
+      "per_axis": {
+        "process": {
+          "weakest": 5.901999044118856,
+          "strongest": 6.666254021425773,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 47.93983981304875,
+          "strongest": 49.17448884477133,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 0.2663943765083479,
+          "strongest": 1.3583200767758516,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "flicker_frac_pct": {
+      "min": 0.3108776505,
+      "max": 0.48158532014,
+      "mean": 0.38734381946244445,
+      "at_min": "ss_125c_1.32v",
+      "at_max": "ff_-40c_1.08v",
+      "spread_pct": 44.07135497267209,
+      "per_axis": {
+        "process": {
+          "weakest": 4.372749767018623,
+          "strongest": 6.840266523862913,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 21.71703171817523,
+          "strongest": 24.156188633175354,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 14.609051005376386,
+          "strongest": 15.422357211428531,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "white_nv_rthz": {
+      "min": 47.914813792,
+      "max": 54.648988693,
+      "mean": 51.14076958535556,
+      "at_min": "ss_-40c_1.08v",
+      "at_max": "ff_125c_1.32v",
+      "spread_pct": 13.167918581593602,
+      "per_axis": {
+        "process": {
+          "weakest": 0.26892328062618004,
+          "strongest": 2.506918415921159,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 7.115607090630499,
+          "strongest": 9.567272391202494,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 2.526300829612241,
+          "strongest": 4.387789367971653,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "enbw_mhz": {
+      "min": 296.01967683,
+      "max": 323.83625372,
+      "mean": 309.99679676244443,
+      "at_min": "ss_-40c_1.08v",
+      "at_max": "ff_125c_1.32v",
+      "spread_pct": 8.97318203946356,
+      "per_axis": {
+        "process": {
+          "weakest": 1.679613169715583,
+          "strongest": 2.617958633449479,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 5.052213248739124,
+          "strongest": 6.714550413021973,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 0.41115484361010013,
+          "strongest": 1.59791158567242,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "vbias_anchor_mv": {
+      "min": 205.62317952,
+      "max": 390.91421508,
+      "mean": 301.78789496422223,
+      "at_min": "ff_125c_1.08v",
+      "at_max": "ss_-40c_1.08v",
+      "spread_pct": 61.397769311445295,
+      "per_axis": {
+        "process": {
+          "weakest": 26.059926594912802,
+          "strongest": 36.29473991842012,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 27.16071949673271,
+          "strongest": 37.05566577379895,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 0.0,
+          "strongest": 1.4103468448865596e-07,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    }
+  }
+}

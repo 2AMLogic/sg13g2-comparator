@@ -95,15 +95,14 @@ switching energy from the same deck; the `abstol=1e-13` solver tolerance
 
 ## Records
 
-Not yet minted — see `sim/README.md`'s Experiments table for the one-command
-cold start (`sim/characterize.sh characterize`). This section is updated
-with the first committed 45-point record's id, DUT and verdict once it
-lands; that record is also what the `td_od50_ns` per-axis floors above are
-calibrated from.
+| record | DUT | grid | verdict |
+|---|---|---|---|
+| [`20260910-232833-8148438`](records/20260910-232833-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos` × 3 T × 3 V | PASS |
 
-**Read the banner on any record here before citing it.** Every record taken
-against `sim/dut.json`'s current `placeholder-v1` binding substantiates the
-harness, not the decision-time row.
+**Read the banner on that record.** It was taken against the placeholder DUT
+and substantiates the harness, not the decision-time row. It is also the
+record the `td_od50_ns` per-axis floors are calibrated from (observed
+weakest slices: process 2.61 %, temperature 12.76 %).
 
 ### Two placeholder-specific caveats that will apply to that record
 

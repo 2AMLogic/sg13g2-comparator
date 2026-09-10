@@ -101,15 +101,14 @@ it, not merely restating it.
 
 ## Records
 
-Not yet minted — see `sim/README.md`'s Experiments table for the one-command
-cold start (`sim/characterize.sh characterize`). This section is updated
-with the first committed 45-point record's id, DUT and verdict once it
-lands; that record is also what the `kick_1k_peak_mv` per-axis floors above
-are calibrated from.
+| record | DUT | grid | verdict |
+|---|---|---|---|
+| [`20260910-233015-8148438`](records/20260910-233015-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos` × 3 T × 3 V | PASS |
 
-**Read the banner on any record here before citing it.** Every record taken
-against `sim/dut.json`'s current `placeholder-v1` binding substantiates the
-harness, not the kickback row.
+**Read the banner on that record.** It was taken against the placeholder DUT
+and substantiates the harness, not the kickback row. It is also the record
+the `kick_1k_peak_mv` per-axis floors are calibrated from (observed weakest
+slices: process 3.53 %, temperature 0.71 %, supply 14.55 %).
 
 **Placeholder caveat.** The coupling from the placeholder's decision stage
 back to its front end is an explicit 5 fF/side stand-in for a real latch
