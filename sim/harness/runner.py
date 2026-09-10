@@ -1,0 +1,351 @@
+"""Deck composition and ngspice execution for one PVT point.
+
+Ported from ``2AMLogic/gf180-comparator``'s ``sim/harness/runner.py``
+(itself ported from ``2AMLogic/gf180-sar-adc``). The DUT netlist is included
+here, from ``sim/dut.json`` (see ``harness/dut.py`` for why) -- unchanged
+from gf180-comparator's own divergence from the sar-adc harness.
+
+TWO STRUCTURAL CHANGES FOR SG13G2, both confirmed empirically against the
+installed checkout while building this harness (issue #8):
+
+1. **OSDI preflight**. gf180mcu's MOS models are ordinary SPICE ``.model``
+   cards, usable the instant a corner ``.lib`` is included. SG13G2's
+   PSP103-based MOS models (and its r3_cmc-based resistor models) are
+   Verilog-A, compiled to OSDI shared libraries that must be
+   ``pre_osdi``-loaded, inside the ``.control`` block, BEFORE the circuit is
+   elaborated (i.e. before the first analysis command runs) -- confirmed
+   against the installed checkout during issue #6
+   (``sim/device-mismatch-confirm/testbench/tb_lv_mismatch_pair.spice.tmpl``:
+   ``pre_osdi`` is the very first ``.control`` command, ahead of even
+   ``set rndseed``). ``compose_deck`` below emits a ``pre_osdi`` line for
+   every model in ``pdk.REQUIRED_OSDI`` -- not only the ones today's
+   placeholder DUT happens to instantiate -- so that a DUT swap to a design
+   using more of the PDK's device families never silently needs a rebuild of
+   this function. **The path must be UNQUOTED**: ``pre_osdi "/path"``
+   (gf180-comparator's `.include`/`.lib` convention, which this module
+   otherwise follows) silently fails ngspice's argument parsing for this
+   particular control command -- confirmed by direct A/B testing during
+   issue #8; every working reference invocation in this repo (including
+   ``sim/device-mismatch-confirm``'s) is unquoted. There is no gf180mcu
+   equivalent of this step at all.
+
+2. **``.param`` lines are emitted AFTER the corner ``.lib`` section, not
+   before it.** gf180-comparator's deck (and gf180-sar-adc's before it)
+   emits every ``.param`` ahead of ``.include design_include`` / the corner
+   ``.lib`` lines. Doing the same here breaks parameter substitution with
+   ``Undefined parameter`` errors on the very next line that references one
+   -- confirmed empirically (issue #8): SG13G2's ``cornerMOSlv.lib`` ``.LIB``
+   blocks each carry dozens of their own internal ``.param`` lines (PSP103
+   binning coefficients), and a top-level ``.param`` block placed before
+   such a ``.LIB`` does not survive ngspice's parse of it. Placing this
+   harness's ``.param`` block after the ``.lib`` line (still well before the
+   DUT/testbench ``.include``s that consume the params) avoids the
+   collision entirely and was confirmed, by direct testing, to compose and
+   simulate correctly at all 45 PVT points of the placeholder DUT's front
+   end. See ``sim/harness/README.md``'s divergence table.
+"""
+
+from __future__ import annotations
+
+import re
+import shutil
+import subprocess
+import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from . import pdk as pdk_mod
+from .corners import PvtPoint
+from .dut import Dut
+from .pdk import Pdk
+from .testbench import Testbench
+
+NGSPICE = "ngspice"
+DEFAULT_TIMEOUT_S = 600
+
+# `print` output for a length-1 vector: "m_vos_mv = 6.9043645202e-01"
+_MEAS_RE = re.compile(r"^\s*m_(\w+)\s*=\s*([-+]?[0-9.]+(?:[eE][-+]?[0-9]+)?)\s*$")
+_ERROR_RE = re.compile(r"^\s*(?:Error|ERROR|Fatal|fatal error|doAnalyses:)", re.MULTILINE)
+
+
+class NgspiceMissing(RuntimeError):
+    pass
+
+
+def ngspice_version() -> str:
+    exe = shutil.which(NGSPICE)
+    if not exe:
+        raise NgspiceMissing(
+            "ngspice not found on PATH.\n"
+            "  Debian/Ubuntu: apt-get install ngspice\n"
+            "  macOS:         brew install ngspice\n"
+            "See sim/README.md 'Cold start'."
+        )
+    out = subprocess.run(
+        [exe, "--version"], capture_output=True, text=True, check=False
+    ).stdout
+    for line in out.splitlines():
+        if "ngspice-" in line:
+            return line.strip().lstrip("* ").strip()
+    return out.strip().splitlines()[0] if out.strip() else "unknown"
+
+
+def compose_deck(
+    tb: Testbench,
+    pdk: Pdk,
+    dut: Dut,
+    point: PvtPoint,
+    num_threads: int = 0,
+) -> str:
+    """Build the complete, self-contained ngspice deck for one PVT point.
+
+    ``num_threads`` (0 = leave ngspice's default alone) emits ``set
+    num_threads=N`` at the top of the control block. It is a **scheduling**
+    knob, not a circuit one: an OpenMP-built ngspice defaults to one thread
+    per processor, which on a busy host makes several concurrent points
+    fight over the same cores and burn most of their CPU in OpenMP
+    spin-waits. Grid throughput comes from ``-j``, not from ngspice's
+    internal threads.
+    """
+    lines: list[str] = [
+        f"* {tb.name} @ {point.corner_id} -- GENERATED by sim/harness, do not edit",
+        f"* corner={point.corner.name} ({point.corner.description})",
+        f"* temp={point.temp_c} C  vdd={point.vdd} V  pdk={pdk.variant}@{pdk.version}",
+        f"* dut={dut.dut_id} ({dut.provenance})  sha256={dut.netlist_sha256[:16]}",
+        "",
+        "* ---- SG13G2 process corner (cornerMOSlv.lib) --------------------------",
+        "* MUST come before the .param block below -- each .LIB section here",
+        "* carries dozens of its own internal .param lines (PSP103 binning",
+        "* coefficients), and a top-level .param placed BEFORE such a .LIB does",
+        "* not survive ngspice's parse of it (confirmed empirically, issue #8;",
+        "* see this module's docstring).",
+    ]
+    for section in point.corner.sections:
+        lines.append(f'.lib "{pdk.mos_corner_lib}" {section}')
+
+    lines += [
+        "",
+        "* ---- PVT parameters -------------------------------------------------",
+        f".param vdd_nom={tb.nominal_supply_v!r}",
+        f".param vdd_val={point.vdd!r}",
+        f".param temp_c={point.temp_c!r}",
+        "",
+        "* ---- DUT operating-point parameters (sim/dut.json) -------------------",
+        *dut.param_lines(),
+    ]
+    if tb.params:
+        lines += ["", "* ---- testbench parameters -------------------------------------------"]
+        for key, value in tb.params.items():
+            lines.append(f".param {key}={value}")
+
+    lines += [
+        "",
+        f".temp {point.temp_c!r}",
+    ]
+    for option in tb.options:
+        lines.append(f".options {option}")
+
+    lines += [
+        "",
+        "* ---- device under test (sim/dut.json) --------------------------------",
+        f'.include "{dut.netlist}"',
+        "",
+        "* ---- testbench ------------------------------------------------------",
+        f'.include "{tb.netlist}"',
+        "",
+        "* ---- measurement ----------------------------------------------------",
+        ".control",
+        "* SG13G2's PSP103/r3_cmc-based device models are Verilog-A, compiled to",
+        "* OSDI shared libraries that must be pre_osdi-loaded ahead of circuit",
+        "* elaboration (see this module's docstring). Every required model is",
+        "* loaded, not only the ones this DUT happens to instantiate today, so a",
+        "* DUT swap never silently needs this function rebuilt.",
+    ]
+    for name in pdk_mod.REQUIRED_OSDI:
+        lines.append(f"pre_osdi {pdk.osdi_dir / name}")
+    lines += [
+        "set numdgt=10",
+        "set noaskquit",
+    ]
+    if num_threads:
+        lines.append(f"set num_threads={num_threads}")
+    lines += [f"  {analysis}" for analysis in tb.analyses]
+    for name, expr in tb.measure.items():
+        lines.append(f"  let m_{name} = {expr}")
+    for name in tb.measure:
+        lines.append(f"  print m_{name}")
+    lines += [".endc", ".end", ""]
+    return "\n".join(lines)
+
+
+@dataclass
+class PointResult:
+    point: PvtPoint
+    status: str                                   # "ok" | "failed" | "error"
+    measurements: dict[str, float] = field(default_factory=dict)
+    missing: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    seconds: float = 0.0
+    deck: str = ""
+    log: str = ""
+    message: str = ""
+
+    def as_dict(self) -> dict:
+        record = self.point.as_dict()
+        record.update(
+            {
+                "status": self.status,
+                "measurements": self.measurements,
+                "seconds": round(self.seconds, 3),
+                "deck": self.deck,
+                "log": self.log,
+            }
+        )
+        if self.missing:
+            record["missing_measurements"] = self.missing
+        if self.warnings:
+            record["warnings"] = self.warnings
+        if self.message:
+            record["message"] = self.message
+        return record
+
+
+def parse_measurements(text: str) -> dict[str, float]:
+    found: dict[str, float] = {}
+    for line in text.splitlines():
+        match = _MEAS_RE.match(line)
+        if match:
+            try:
+                found[match.group(1)] = float(match.group(2))
+            except ValueError:  # pragma: no cover - regex already constrains this
+                continue
+    return found
+
+
+def run_point(
+    tb: Testbench,
+    pdk: Pdk,
+    dut: Dut,
+    point: PvtPoint,
+    workdir: Path,
+    timeout_s: int = DEFAULT_TIMEOUT_S,
+    log_dir: Path | None = None,
+    num_threads: int = 0,
+) -> PointResult:
+    """Simulate one PVT point. Never raises for simulation failure.
+
+    ``workdir`` holds the generated deck (scratch, disposable). ``log_dir``
+    -- when given -- is where the raw ngspice output lands as
+    ``<corner-id>.log``; that is the ``sim/<slug>/corners/<record-id>/``
+    directory from ``sim/README.md``. It defaults to ``workdir`` so a
+    throwaway run does not touch the evidence tree.
+    """
+    workdir.mkdir(parents=True, exist_ok=True)
+    log_dir = workdir if log_dir is None else log_dir
+    log_dir.mkdir(parents=True, exist_ok=True)
+    deck_path = workdir / f"{point.corner_id}.spice"
+    log_path = log_dir / f"{point.corner_id}.log"
+    deck_path.write_text(compose_deck(tb, pdk, dut, point, num_threads=num_threads))
+
+    started = time.monotonic()
+    try:
+        proc = subprocess.run(
+            [NGSPICE, "-b", str(deck_path)],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            cwd=workdir,
+            check=False,
+        )
+        output = proc.stdout + "\n" + proc.stderr
+        returncode = proc.returncode
+    except FileNotFoundError as exc:
+        raise NgspiceMissing(str(exc)) from exc
+    except subprocess.TimeoutExpired:
+        elapsed = time.monotonic() - started
+        log_path.write_text(f"TIMEOUT after {timeout_s}s\n")
+        return PointResult(
+            point=point,
+            status="error",
+            seconds=elapsed,
+            deck=deck_path.name,
+            log=log_path.name,
+            message=f"ngspice timed out after {timeout_s}s",
+        )
+    elapsed = time.monotonic() - started
+    log_path.write_text(output)
+
+    measurements = parse_measurements(output)
+    missing = [name for name in tb.measure if name not in measurements]
+
+    # Computed unconditionally, mirroring gf180-comparator's fix (#7): a
+    # non-fatal ngspice error (non-zero exit, or an Error/Fatal/doAnalyses:
+    # line) must surface even when every requested measurement still
+    # happened to parse.
+    error_lines = [line.strip() for line in output.splitlines() if _ERROR_RE.match(line)]
+    warnings: list[str] = []
+    if returncode != 0:
+        warnings.append(f"ngspice exited {returncode}")
+    warnings.extend(error_lines[:5])
+
+    if missing:
+        errors = "; ".join(_ERROR_RE.findall(output)[:3])
+        first_error = error_lines[0] if error_lines else ""
+        return PointResult(
+            point=point,
+            status="failed",
+            measurements=measurements,
+            missing=missing,
+            warnings=warnings,
+            seconds=elapsed,
+            deck=deck_path.name,
+            log=log_path.name,
+            message=first_error or errors or f"ngspice exit {returncode}, no measurements parsed",
+        )
+
+    return PointResult(
+        point=point,
+        status="ok",
+        measurements=measurements,
+        warnings=warnings,
+        seconds=elapsed,
+        deck=deck_path.name,
+        log=log_path.name,
+    )
+
+
+def run_grid(
+    tb: Testbench,
+    pdk: Pdk,
+    dut: Dut,
+    points: list[PvtPoint],
+    workdir: Path,
+    jobs: int = 1,
+    timeout_s: int = DEFAULT_TIMEOUT_S,
+    on_result=None,
+    log_dir: Path | None = None,
+    num_threads: int = 0,
+) -> list[PointResult]:
+    """Run every PVT point; results come back in grid order regardless of jobs."""
+    results: list[PointResult | None] = [None] * len(points)
+
+    def _one(index_point):
+        index, point = index_point
+        result = run_point(
+            tb, pdk, dut, point, workdir, timeout_s=timeout_s, log_dir=log_dir,
+            num_threads=num_threads,
+        )
+        results[index] = result
+        if on_result is not None:
+            on_result(result)
+        return result
+
+    if jobs <= 1:
+        for item in enumerate(points):
+            _one(item)
+    else:
+        with ThreadPoolExecutor(max_workers=jobs) as pool:
+            list(pool.map(_one, enumerate(points)))
+
+    return [r for r in results if r is not None]

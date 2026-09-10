@@ -1,0 +1,70 @@
+* tb_offset_mc -- Monte-Carlo input-referred offset of the comparator front
+* end, and the part of that offset that MOVES with input common mode.
+*
+* Netlist FRAGMENT. The harness supplies the models, the corner .lib
+* section, .temp, the DUT netlist, the .control block and .end
+* (sim/harness/README.md). Parameters from the harness: vdd_val, vdd_nom,
+* temp_c, dut_ib, dut_vcm.
+*
+* METHODOLOGY PORTED FROM gf180-comparator/sim/comparator-offset-mc/ (itself
+* ported from gf180-sar-adc) -- see this experiment's README.md for the full
+* transfer/non-transfer list. In one line: N draws through a
+* `dowhile`/`reset` loop, each draw re-evaluating the agauss expressions
+* inside SG13G2's mismatch-enabled LV MOS model, with the gain of the SAME
+* draw measured by a second DC point so that offset = -dv0/A_v is a real
+* offset rather than a difference of two independent populations.
+*
+* STANDALONE STIMULUS. gf180-comparator's version of this bench sweeps a
+* common-mode band about its own DUT's dut_vcm. There is no CDAC here and no
+* SAR sequencer either: the stimulus is an ideal differential DC source
+* riding on an ideal common-mode source, and the common-mode band swept is a
+* stated +/-50 mV about the DUT's own specified `dut_vcm` -- a property of
+* the comparator, not of anything driving it.
+*
+* MISMATCH IS A CORNER SELECTION HERE, NOT A FRAGMENT PARAMETER. Unlike
+* gf180mcu (a global `sw_stat_mismatch` switch that a fragment can flip, and
+* MUST flip after the model include or design.ngspice's default silently
+* wins), SG13G2 has no such switch: local mismatch is baked into which
+* `cornerMOSlv.lib` `.LIB` section this bench's tb.json names in its
+* `corners` field (`mos_mismatch` -- the `mos_{tt,ff,ss,fs,sf}_mismatch`
+* set, see sim/harness/corners.py). This fragment therefore sets nothing
+* mismatch-related at all; the corner IS the switch. `mm_ok` defaults to 1
+* inside the PDK's own sg13_lv_nmos/sg13_lv_pmos subckts, confirmed during
+* issue #6 (sim/device-mismatch-confirm/README.md).
+*
+* NO RESISTOR NULL CONTROL. gf180-comparator's twin of this bench also
+* carries a null control proving gf180mcu's resistor model has its local-
+* mismatch coefficient hard-set to zero. SG13G2's placeholder front end
+* loads with an IDEAL resistor (sim/dut/placeholder_comparator.spice's
+* header explains why), so there is no PDK resistor mismatch model in this
+* circuit to null-control at all -- not because SG13G2's resistors lack
+* real mismatch (they do NOT: rsil/rhigh/rppd's own model files carry
+* genuine per-instance agauss() terms, unlike gf180mcu's), but because this
+* placeholder does not instantiate one. See sim/harness/corners.py's module
+* docstring "extension point" for what happens when a real design does.
+
+.param c_route=10f
+.param vcm_step=50m
+
+* ---- supply ----------------------------------------------------------
+vsup vdd 0 dc {vdd_val}
+
+* ---- ideal standalone stimulus ---------------------------------------
+* cm  = dut_vcm + vcmd, so sweeping `vcmd` moves the input common mode
+* without the manifest having to know what dut_vcm is.
+vcmb cmb 0 dc {dut_vcm}
+vcmd cm  cmb dc 0
+vd   vd 0 dc 0
+Eap  ap cm vd 0 0.5
+Ean  an cm vd 0 -0.5
+
+* ---- device under test (front end; see sim/dut/README.md) -------------
+ib   vdd ibn dc {dut_ib}
+Xa   ap an ibn aop aon vdd 0 comparator_dut_analog
+
+* Routing allowance on each front-end output. Deliberately SMALL: loading
+* this node harder would only lower the bandwidth, which does not affect a
+* DC offset measurement, but keeping the same allowance as the noise bench
+* means the two benches see the same circuit.
+Cwp aop 0 {c_route}
+Cwn aon 0 {c_route}

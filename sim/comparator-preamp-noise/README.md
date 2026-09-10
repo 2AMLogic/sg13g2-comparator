@@ -1,0 +1,114 @@
+# `sim/comparator-preamp-noise/`
+
+**Input-referred noise** of the comparator front end over the full PVT grid,
+via ngspice `.noise`, reported as **total integrated output noise divided by
+the measured DC gain**.
+
+Backs [`README.md`'s noise row](../../README.md#target-specification-draft--engineering-to-ratify)
+(≤ 1.0 mV rms differential, ≤ 0.6 mV stretch) and, together with
+`sim/comparator-regeneration/`'s τ, the noise-floor half of the metastability
+story.
+
+```bash
+python3 sim/run_corners.py comparator-preamp-noise -j 8
+```
+
+## Method
+
+One `op`, two `.noise` runs (1 Hz–1 GHz and 1 kHz–1 GHz) and one `.ac`, per
+PVT point.
+
+**The quoted number is `onoise_total / A_v(DC)`, not ngspice's own
+`inoise_total`.** That is the whole reason this bench was worth porting: the
+methodology's own upstream (`gf180-sar-adc`, via `gf180-comparator`) documents
+a prior **200× magnitude error** from reporting `sqrt(onoise_total)` directly
+as the answer. Both referrals are in the record side by side:
+
+| measurement | what it is |
+|---|---|
+| `vn_in_uv` | **the quoted number** — integrated output noise ÷ measured DC gain |
+| `inoise_band_uv` | ngspice's own input referral over the same band |
+
+**They are not expected to agree, and the record shows why.** ngspice refers
+each frequency bin through the AC transfer function *at that frequency*, so
+every bin above the front end's bandwidth is divided by a rolled-off gain and
+inflates the total. Keeping both makes the divergence an explained property
+of two referrals rather than an unexplained factor somebody rediscovers
+later — which is precisely what the upstream 200× error was.
+
+**Total integrated noise, not a density.** A comparator *samples* its input
+noise at the decision instant rather than filtering it, so the band-limited
+total is the relevant quantity. That is why the integration runs to 1 GHz
+rather than to some assumed signal bandwidth, and why `enbw_mhz` is reported
+so a reader can re-derive the total by hand as (density × √ENBW).
+
+**The two-band split is the flicker story.** `vn_in_hf_uv` integrates from
+1 kHz up; `flicker_frac_pct` is the sub-kHz share of the noise *power*.
+Sub-kHz noise drifts slowly enough to behave as an offset rather than as
+per-decision noise, so keeping the split visible is what lets a reader
+separate the two. PSP103's own flicker-noise coefficients are used
+as-shipped (no override), and the flicker fraction is what a reader rescales
+to see whether the worst-case setting would change any verdict.
+
+**The decision stage is instantiated, with its clock held low.** It draws no
+current in reset, but its input capacitance is part of the load that sets the
+front end's noise bandwidth. Omitting it would over-state the bandwidth and
+therefore *over*-state the noise; replacing it with an invented lumped
+capacitor would make the answer depend on the invention.
+
+## What this bench cannot reach
+
+`.noise` is a small-signal analysis about a DC operating point. A
+reset-and-regenerate decision stage has none, and ngspice offers no
+PSS/pnoise and no automatic device-level transient noise. So the decision
+stage's own noise is **not in this record** and is not claimed. Referred to
+the comparator input it is divided by the gain measured here, which is why
+the front end is where a noise budget gets closed. See
+[`sim/dut/README.md`](../dut/README.md) for what happens to this bench if the
+ratified topology turns out to have no DC-resolvable front end at all — that
+is a named consequence for the topology decision to weigh, not a gap to paper
+over.
+
+## Provenance
+
+Methodology ported from
+[`gf180-comparator/sim/comparator-preamp-noise/`](https://github.com/2AMLogic/gf180-comparator/tree/main/sim/comparator-preamp-noise)
+(itself ported from `gf180-sar-adc`), per
+[`spec/porting-plan.md`](../../spec/porting-plan.md) and issue #8.
+
+**Ported, unchanged:** the divide-integrated-output-noise-by-measured-DC-gain
+methodology and the units caution behind it; the two-band (full / >1 kHz)
+split and its flicker-as-slow-offset rationale; instantiating the decision
+stage in reset for its loading; reporting ENBW and the white density so the
+integral can be checked by hand. Nothing in the testbench fragment names a
+PDK-specific device or switch (`sim/harness/testbench.py`'s module docstring
+notes the same for the module that loads it), so this bench needed no
+structural adaptation for SG13G2 beyond running against `sg13_lv_nmos`
+through the DUT netlist and the SG13G2 corner grid (`sim/harness/README.md`'s
+divergence table).
+
+**Deliberately NOT ported:**
+
+- **The topology and its sizing**, and any upstream numeric result.
+- **The 10-µs-conversion / ten-bit-trial argument** for which noise is
+  correlated across decisions. That is a SAR sequencing property; a
+  standalone comparator has no conversion to span, so the flicker split is
+  reported as a property of the block and the correlation argument is left to
+  whoever integrates it.
+- **`.nodeset` operating-point hints.** This bench converges without one, and
+  a hint that is not needed is a hidden dependency on a guess.
+- **The `av_dc`/`f3db` pair's specific numeric bounds**, which are upstream's.
+  `av_dc` is kept, but as a *sensitivity anchor* with a unity floor rather
+  than as a gain specification.
+
+## Records
+
+Not yet minted — see `sim/README.md`'s Experiments table for the one-command
+cold start (`sim/characterize.sh characterize`). The first committed 45-point
+record here is what `av_dc`'s `min_spread_pct_by_axis` floors above are
+calibrated from; this section is updated with that record's id once it
+lands.
+
+**Read the banner on any record here before citing it.** Every record taken
+against `sim/dut.json`'s current `placeholder-v1` binding substantiates the
+harness, not the noise row.
