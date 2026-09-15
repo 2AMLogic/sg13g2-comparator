@@ -9,6 +9,15 @@ Backs [`README.md`'s noise row](../../README.md#target-specification-draft--engi
 `sim/comparator-regeneration/`'s τ, the noise-floor half of the metastability
 story.
 
+> **`provenance: schematic` records here are a LOWER BOUND, not the design's
+> real noise floor.** The chosen topology
+> ([DR-0001](../../spec/decision-records/0001-comparator-topology.md)) has
+> no DC-resolvable analog front end, so `comparator_dut_analog` (what this
+> bench instantiates) is a diode-connected, loop-broken reduced sub-model —
+> it excludes the regenerative loop's own noise contribution entirely. See
+> [`design/README.md`](../../design/README.md) before quoting any number
+> below.
+
 ```bash
 python3 sim/run_corners.py comparator-preamp-noise -j 8
 ```

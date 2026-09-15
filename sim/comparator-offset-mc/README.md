@@ -11,6 +11,15 @@ per-instance local mismatch (`sim/device-mismatch-confirm/`, issue #6), so
 this claim uses the Monte Carlo evidence path rather than the
 sensitivity-analysis fallback.
 
+> **`provenance: schematic` records here are a LOWER BOUND, not the design's
+> real offset.** The chosen topology
+> ([DR-0001](../../spec/decision-records/0001-comparator-topology.md)) has
+> no DC-resolvable analog front end, so `comparator_dut_analog` (what this
+> bench instantiates) is a diode-connected, loop-broken reduced sub-model —
+> it excludes the regenerative loop's own contribution to offset entirely.
+> See [`design/README.md`](../../design/README.md) before quoting any
+> number below.
+
 ```bash
 python3 sim/run_corners.py comparator-offset-mc -j 8
 ```
