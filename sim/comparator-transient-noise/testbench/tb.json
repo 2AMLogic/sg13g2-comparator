@@ -1,0 +1,82 @@
+{
+  "name": "comparator-transient-noise",
+  "description": "Input-referred noise floor of the WHOLE comparator (comparator_dut, the real regenerative latch, NOT comparator_dut_analog), measured by transient-noise decision statistics (a 'hit-rate' / probit measurement) over the full PVT grid -- the compliance evidence path DR-0002 names, per CLAUDE.md's 'input-referred noise floor from transient-noise runs with seeds and run counts committed'.",
+  "claim": "sim/dut.json binds design/comparator.spice (id comparator-dr0001, provenance schematic), the ratified topology from spec/decision-records/0001-comparator-topology.md ('DR-0001'). This record substantiates that a TRNOISE-injected, decision-statistics sweep over the full PVT grid genuinely runs against the WHOLE latch (comparator_dut, real CLK strobe, real regenerative pair) and genuinely measures a probability-of-correct-decision at each rung -- but is STILL NOT itself the README.md#target-specification Input-referred-noise row ratification act (that is spec/porting-plan.md's separate third step; DR-0002 already ratified the SCOPING of this row -- see README.md). Unlike comparator-preamp-noise/'s .noise analysis, this bench exercises the ACTUAL regenerative loop (no loop-broken reduced sub-model, no small-signal DC-operating-point assumption) -- see this experiment's README.md for the calibration methodology, what the resulting implied sigma is and is not evidence of, and the sub-model-retention decision (issue #24).",
+  "netlist": "tb_transient_noise.spice",
+  "nominal_supply_v": 1.2,
+  "supply_tolerance": 0.1,
+  "temperatures_c": [
+    -40,
+    27,
+    125
+  ],
+  "corners": [
+    "mos"
+  ],
+  "analyses": [
+    "setseed 20260916",
+    "let n = 0",
+    "let nmax = 40",
+    "let s0 = 0",
+    "let s1 = 0",
+    "let s2 = 0",
+    "dowhile n < nmax",
+    "  reset",
+    "  tran 20p 5.1n 0 20p",
+    "  meas tran vsup_v find v(vdd) at=0.5n",
+    "  meas tran d0now find v(dout0) at=5n",
+    "  meas tran d1now find v(dout1) at=5n",
+    "  meas tran d2now find v(dout2) at=5n",
+    "  let s0 = s0 + d0now/vsup_v",
+    "  let s1 = s1 + d1now/vsup_v",
+    "  let s2 = s2 + d2now/vsup_v",
+    "  let n = n + 1",
+    "end",
+    "let frac_high_zero = s0/nmax",
+    "let frac_high_plus = s1/nmax",
+    "let frac_high_minus = s2/nmax"
+  ],
+  "measure": {
+    "frac_high_zero": "frac_high_zero",
+    "frac_high_plus": "frac_high_plus",
+    "frac_high_minus": "frac_high_minus"
+  },
+  "checks": {
+    "frac_high_zero": {
+      "min": 0.1,
+      "max": 0.9,
+      "description": "NOISE-IS-ACTUALLY-INJECTED GUARD, not a spec bound. At zero applied overdrive, zero mismatch (the plain mos corner set), the ONLY thing that can make a trial decide either way is the injected trnoise() realization -- so frac_high_zero should sit near 0.5 (statistical noise at N=40 gives an SEM of ~7.9%). If trnoise() ever failed to inject (e.g. a regression that zeroed vn_na), the zero-overdrive rung would instead decide the SAME way on EVERY trial (a genuinely zero-input, zero-mismatch regenerative latch resolves a deterministic numerical tie-break identically every reset), collapsing frac_high_zero to exactly 0.0 or 1.0 -- well outside this floor/ceiling. THIS IS ALSO THE HARNESS'S SABOTAGE NEGATIVE CONTROL SURROGATE FOR THIS BENCH: --sabotage-corners forces every corner to plain mos_tt (sim/harness/corners.py), which does not itself disable trnoise() the way it disables mismatch for comparator-offset-mc/, so this check's real teeth are structural (a broken/zeroed noise source), not sabotage-corner-specific."
+    },
+    "frac_high_plus": {
+      "min": 0.3,
+      "max": 1.0,
+      "description": "SANITY ENVELOPE, not a spec bound. At +od_x (75 uV) overdrive, the correct decision is HIGH; frac_high_plus should sit above 0.5 (more trials decide correctly than not) but N=40 gives real sampling variance, so the floor is set loose (0.3) to avoid a false failure from RNG variance while still catching a badly broken/inverted-polarity deck (which would show frac_high_plus stuck near 0 across the whole grid, not just one noisy corner)."
+    },
+    "frac_high_minus": {
+      "min": 0.0,
+      "max": 0.7,
+      "description": "SANITY ENVELOPE, symmetric with frac_high_plus above: at -od_x overdrive the correct decision is LOW, so frac_high_minus (fraction deciding HIGH, i.e. INCORRECTLY) should sit below 0.5. Ceiling loosened to 0.7 for the same N=40 sampling-variance reason."
+    }
+  },
+  "params": {
+    "vn_na": 3.362e-4,
+    "vn_ts": 2e-11
+  },
+  "options": [
+    "reltol=1e-2",
+    "abstol=1e-12"
+  ],
+  "evidence": {
+    "record_kind": "monte-carlo",
+    "mc_seed": "ngspice `setseed 20260916` at the top of the control block (same literal seed value comparator-offset-mc/ uses, and the same `setseed` form its testbench.py loader requires for a record_kind='monte-carlo' manifest per issue #28's agauss()/set-rndseed= finding -- kept for this repo's cross-experiment seed-recording convention, NOT reused for statistical independence, since the two benches inject different noise mechanisms: agauss() mismatch draws there, trnoise() realizations here). 40 trials per PVT point via `reset` inside a `dowhile` loop; each reset genuinely re-draws a new TRNOISE realization (confirmed empirically -- frac_high_zero sits near 0.5 rather than collapsing to a single value, this experiment's README.md 'Debugging notes'). SEED REPRODUCIBILITY DOES NOT HOLD FOR THIS MECHANISM, unlike comparator-offset-mc/'s agauss() draws: `setseed`, `set rndseed=`, and `.option seed=` were each tested independently (this experiment's README.md 'Seed reproducibility') and NONE of them reproduce identical TRNOISE draws across separate ngspice invocations on this repo's pinned ngspice-46 (sim/toolchain.json) -- TRNOISE's internal generator is not tied to the stream any of those three commands control. `setseed 20260916` is still recorded here (satisfying testbench.py's record_kind='monte-carlo' loader guard and this repo's seed-recording convention) but is NOT load-bearing for reproducibility; what IS committed and load-bearing is the run count (N=40 trials per PVT point, common across the whole grid) and the resulting frac_high_* values as observed on this specific dated run -- a re-run with the identical deck will sample a DIFFERENT set of 40 draws and land at a statistically consistent but not bit-identical frac_high_*, which is why this experiment's README.md documents the SEM this run count implies rather than claiming exact reproducibility. N for statistical-error purposes is 40, not 40 x 45 -- SEM(frac_high) is ~7.9% at p=0.5, smaller at the extremes.",
+    "mc_scope": "The SAME injected differential noise level (calibrated to comparator-preamp-noise's own nominal-corner total, 277.827 uV rms at tt_27c_1.20v) is used at EVERY PVT point -- deliberately NOT re-derived per corner. This isolates what this bench measures (how THIS corner's own regeneration dynamics reshape a GIVEN input noise level) from the front end's own already-corner-characterized noise magnitude (comparator-preamp-noise/), the same separation comparator-regeneration/ and comparator-offset-mc/ already make between delay and offset.",
+    "mc_sigma": "Implied 1-sigma input-referred decision-boundary noise, via the standard probit inversion of a hit-rate measurement: sigma = od_x / Phi^-1(frac_high_plus) from the +od_x rung, and sigma = od_x / Phi^-1(1 - frac_high_minus) from the -od_x rung (Phi = the standard normal CDF, Phi^-1 its inverse quantile function), assuming the decision is a threshold-at-zero comparison of (overdrive + noise) with negligible offset (mismatch is off on this corner set). This is a POST-HOC calculation performed over the committed record's frac_high_plus/frac_high_minus columns (this experiment's README.md 'Probit inversion' -- not an in-deck measurement, see the notes below for why). PRECISION AT N=40 IS NOT A FLAT PERCENTAGE, unlike a linear quantity's SEM: the binomial SEM on frac_high itself (~7.9% at p=0.5, smaller at the tails) propagates through Phi^-1's derivative, which is steep near p=0.5 and shallow near the tails this bench's rungs are calibrated to sit at (~0.7-0.95 for frac_high_plus) -- so the per-corner implied sigma has real single-point scatter (a calibration cross-check comparing the +od_x-rung-derived and -od_x-rung-derived sigma at the SAME corner, which should agree if N were infinite, differs by up to ~50% at individual corners in this repo's own committed records -- see README.md). The grid-wide MEAN across all 45 corners x 2 rungs is the more defensible summary statistic than any single corner's value.",
+    "notes": [
+      "THIS MEASURES DECISION STATISTICS (a hit-rate / probit measurement), NOT A PSD INTEGRAL. frac_high_zero/plus/minus are the raw, directly observed quantities; converting frac_high_plus/minus to an implied 1-sigma input-referred noise (probit inversion) is a simple, documented, reproducible calculation performed over the committed record (this experiment's README.md), not a deck measurement -- see tb_transient_noise.spice's header 'WHY NO sigma_uv MEASURE' for why (a saturated frac_high of exactly 1.0, observed at some corners/probes during calibration, makes the ln(1-p) term in the standard probit formula singular, and ngspice's `let` has no clamp this deck can guard it with).",
+      "WHAT THIS ADDS OVER comparator-preamp-noise/ (DR-0002's ratified reportable lower bound). That bench's `.noise` analysis is a small-signal, DC-operating-point analysis of comparator_dut_analog, DR-0001's diode-connected, loop-broken reduced sub-model -- it structurally excludes the regenerative loop's own dynamics and any nonlinear amplification/attenuation the loop applies to a given input noise level. This bench instantiates the WHOLE comparator_dut (real CLK strobe, real cross-coupled regenerative pair) and drives it with the SAME magnitude of noise the AC bench already reports, observing how the real nonlinear regeneration reshapes it into a decision-boundary sigma -- new information the AC bench cannot provide by construction.",
+      "WHAT THIS DOES NOT ADD. This deck injects noise ONLY at comparator_dut's contract input pins (vinp/vinn) -- the DUT's black-box pin contract (sim/dut/README.md) gives testbenches no access to internal nodes, so the regenerative pair's OWN thermal/flicker noise sources cannot be independently injected without editing design/comparator.spice (out of this issue's scope). The measured sigma therefore reflects 'the front end's own already-known noise level, propagated through the real regeneration dynamics' -- not an independent measurement of the latch pair's own noise contribution. This is a materially more complete measurement than the AC bench's (it is transient, whole-latch, and nonlinear-dynamics-aware) but is still not the fully complete number DR-0001 Consequence 2 originally named as the open item; see this experiment's README.md for the explicit retain/retire decision on comparator_dut_analog given this.",
+      "MISMATCH IS OFF (the plain mos corner set). Offset (comparator-offset-mc/) and noise are separate terms budgeted separately -- unchanged convention from the other three benches.",
+      "SOLVER TOLERANCES ARE LOOSER than the other three benches' (reltol=1e-2/abstol=1e-12 here vs 1e-4/1e-9/1e-13 there) -- deliberately: this bench only needs a correct BINARY decision at a fixed readout instant, not sub-picosecond delay precision the way comparator-regeneration/'s tau extraction does, and looser tolerances materially cut the cost of the N x 3-rung x 45-corner transient-run grid this bench needs (vs. those benches' single tran/dc call per point)."
+    ]
+  }
+}

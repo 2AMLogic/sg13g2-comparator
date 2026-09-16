@@ -1,0 +1,131 @@
+* tb_transient_noise -- input-referred noise floor of the WHOLE comparator
+* (comparator_dut, the ratified full latch -- NOT comparator_dut_analog),
+* measured by TRANSIENT-noise decision statistics over the full PVT grid.
+*
+* Netlist FRAGMENT. The harness supplies the models, the corner .lib
+* section, .temp, the DUT netlist, the .control block and .end
+* (sim/harness/README.md). Parameters from the harness: vdd_val, vdd_nom,
+* temp_c, dut_ib, dut_vcm. Parameters from this manifest's own "params":
+* vn_na, vn_ts (the calibrated trnoise() source), od_x (the probe overdrive).
+*
+* WHY TRANSIENT, NOT `.noise`. ngspice-46 has no automatic per-device
+* transient noise (no PSS/pnoise) -- confirmed against the installed
+* checkout (sim/comparator-preamp-noise/testbench/tb_preamp_noise.spice's
+* own header) and against ngspice's upstream source
+* (src/spicelib/devices/vsrc/vsrcload.c's TRNOISE case): the mechanism this
+* repo's CLAUDE.md calls "transient-noise runs" is ngspice's TRNOISE
+* independent-source function -- an explicit, calibrated noise voltage
+* injected at the DUT's own input port, not a small-signal device-physics
+* analysis. That is what this deck does.
+*
+* WHY THE WHOLE LATCH, NOT THE REDUCED SUB-MODEL. comparator_dut_analog
+* (what sim/comparator-preamp-noise/ instantiates) is DR-0001's own named
+* diode-connected, loop-broken interim path -- it has no regenerative loop
+* at all, by construction (design/README.md). This deck instantiates
+* comparator_dut, the full contract subckt (vinp vinn clk ibias dout doutb
+* vdd vss -- sim/dut/README.md), with its real CLK strobe and its real
+* cross-coupled regenerative pair, so the injected noise propagates through
+* the SAME nonlinear dynamics a real decision does.
+*
+* METHOD: DECISION STATISTICS (a "hit-rate" / probit measurement), not a
+* PSD integral. Three parallel instances at three overdrives (-od_x, 0,
+* +od_x), each with its OWN independent trnoise() realization, are re-run
+* dowhile-style for many trials (harness/report.py's evidence.mc_seed field
+* records the seed and count, per CLAUDE.md's "seeds and run counts
+* committed"). Each trial's dout is read once, WHILE CLK IS STILL HIGH (the
+* SR output stage is only guaranteed decided during the evaluate phase --
+* confirmed empirically: reading after CLK falls reads the RESET value, not
+* the held decision -- see this experiment's README.md "Debugging notes").
+* The fraction of trials that decide HIGH at each rung is the raw, directly
+* observed quantity (frac_high_*); README.md/this experiment's README.md
+* convert it to an implied 1-sigma input-referred noise via the standard
+* probit inversion (documented there, not computed in-deck -- see "Why no
+* sigma_uv measure" below).
+*
+* SEED REPRODUCIBILITY: RECORDED, NOT ACHIEVED. `setseed` is issued at the
+* top of the control block (tb.json's analyses) for consistency with this
+* repo's other Monte-Carlo bench and to satisfy testbench.py's
+* record_kind='monte-carlo' loader guard -- but on this repo's pinned
+* ngspice-46, TRNOISE's internal generator is empirically confirmed NOT to
+* be controlled by `setseed`, `set rndseed=`, or `.option seed=` (all three
+* tested independently; see this experiment's README.md "Seed
+* reproducibility"). Reproducibility of the *committed* frac_high_* numbers
+* therefore rests on the run count (N=40/rung/point), not on the seed value;
+* re-running this deck samples a fresh set of draws every time.
+*
+* THE INJECTED trnoise() SOURCE IS CALIBRATED TO comparator-preamp-noise's
+* OWN NOMINAL-CORNER TOTAL INPUT-REFERRED NUMBER (277.827 uV rms at
+* tt_27c_1.20v, sim/comparator-preamp-noise/records/
+* 20260916-021939-36773c7.md), applied directly and IDEALLY at vinp/vinn --
+* exactly the same injection point and the same "total integrated,
+* differential, input-referred" definition that record already uses. The
+* SAME injected level is used at EVERY PVT point (deliberately NOT
+* re-derived per corner): this isolates what this bench actually adds over
+* the AC bench -- how the regenerative dynamics at THIS corner reshape a
+* GIVEN input noise level -- from the front end's own already-corner-
+* characterized noise MAGNITUDE (comparator-preamp-noise/), the same
+* separation-of-concerns comparator-regeneration/ and comparator-offset-mc/
+* already make for delay/offset (this experiment's README.md "Method").
+*
+* NA/TS CALIBRATION (empirically confirmed against this repo's own pinned
+* ngspice-46, not assumed from documentation -- see this experiment's
+* README.md "NA/TS calibration" for the full derivation and the calibration
+* decks that produced it):
+*   - The piecewise-linear-interpolated white component of TRNOISE(NA TS
+*     NALPHA NAMP) has a TOTAL variance of (2/3)*NA^2, INDEPENDENT of TS
+*     (confirmed empirically at TS = 10p/50p/200p, matching the analytic
+*     average-interpolation-variance derivation) -- i.e. NA is calibrated
+*     against the SOURCE's own total broadband rms, not a spectral density.
+*   - TS = 20 ps is chosen safely below the FASTEST measured regeneration
+*     time constant on this PVT grid (42.6 ps at ff_-40c_1.32v,
+*     sim/comparator-regeneration/records/20260916-021945-36773c7.md), so
+*     the injected process is effectively uncorrelated on the latch's own
+*     regeneration timescale, and comfortably inside TRNOISE's internal
+*     4-sample retry-safety window (ngspice's 1-f-code.h TRNOISE_STATE_MEM_LEN)
+*     -- no "ouch, trying to fetch from the past" aborts observed in any
+*     calibration or production run.
+*   - vn_na = 3.362e-4 solves 0.8263*vn_na = 277.827e-6 (the 0.8263 constant
+*     is this repo's OWN empirically measured total-rms/NA ratio, consistent
+*     with the analytic sqrt(2/3) = 0.8165 prediction to ~1%).
+*
+* WHY NO sigma_uv MEASURE IN THIS DECK. The probit inversion involves
+* ln(1 - frac_high) for the plus rung, which is singular if a corner's
+* frac_high ever lands exactly at 1.0 (observed at some corners during
+* calibration) -- ngspice's `let` has no clamp/min/max builtin this deck can
+* guard it with, and a NaN/inf measurement is parsed as MISSING by the
+* harness (sim/harness/runner.py's _MEAS_RE), which would mark an otherwise-
+* fine point "failed". frac_high_zero/plus/minus are reported raw instead;
+* the sigma conversion is a simple, documented, reproducible post-hoc
+* calculation over the committed record (this experiment's README.md).
+
+.param od_x=75u
+
+vsup vdd 0 dc {vdd_val}
+vcm  cm 0 dc {dut_vcm}
+
+* ---- zero-overdrive rung: symmetry / noise-is-actually-injected check ----
+vd0  vd0 0 dc 0     trnoise({vn_na} {vn_ts} 0 0)
+Eap0 ap0 cm vd0 0 0.5
+Ean0 an0 cm vd0 0 -0.5
+ib0  vdd ibn0 dc {dut_ib}
+X0   ap0 an0 clk ibn0 dout0 doutb0 vdd 0 comparator_dut
+
+* ---- +od_x rung: correct decision is HIGH -----------------------------
+vd1  vd1 0 dc {od_x} trnoise({vn_na} {vn_ts} 0 0)
+Eap1 ap1 cm vd1 0 0.5
+Ean1 an1 cm vd1 0 -0.5
+ib1  vdd ibn1 dc {dut_ib}
+X1   ap1 an1 clk ibn1 dout1 doutb1 vdd 0 comparator_dut
+
+* ---- -od_x rung: correct decision is LOW -------------------------------
+.param od_xn={-1*od_x}
+vd2  vd2 0 dc {od_xn} trnoise({vn_na} {vn_ts} 0 0)
+Eap2 ap2 cm vd2 0 0.5
+Ean2 an2 cm vd2 0 -0.5
+ib2  vdd ibn2 dc {dut_ib}
+X2   ap2 an2 clk ibn2 dout2 doutb2 vdd 0 comparator_dut
+
+* ---- clock: ONE strobe, dout read WHILE clk is high --------------------
+* (reading after clk falls reads the SR stage's reset value, not the held
+* decision -- see this experiment's README.md "Debugging notes").
+vclk clk 0 pulse(0 {vdd_val} 1n 100p 100p 4n 20n)

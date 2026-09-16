@@ -85,6 +85,14 @@ not taken by this issue) is open — see "Open items".
   transient methodology (DR-0001 Consequence 1's alternative). That
   re-founding remains a real, not-taken option if the reduced sub-model's
   lower-bound numbers turn out to be uninformative.
+  **PARTIALLY RESOLVED for the noise half (issue #24): retain, not
+  retire.** A transient, whole-latch noise bench now exists alongside
+  `comparator-preamp-noise/` rather than replacing it —
+  [`sim/comparator-transient-noise/README.md`](../sim/comparator-transient-noise/README.md#retain-not-retire-comparator_dut_analog)
+  has the full reasoning (the two benches measure different quantities; the
+  AC number is the transient bench's own calibration input; no cost to
+  keeping it). The offset half of this open item is unchanged — deferred to
+  #23, still open at the time of writing.
 - **Sizing is not gm/Id-optimized.** Device widths/lengths here are the
   round numbers DR-0001's own "Sizing rationale" section named as a
   block-diagram-level starting point (matching `sim/dut.json`'s existing

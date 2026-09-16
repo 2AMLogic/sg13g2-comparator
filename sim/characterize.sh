@@ -62,15 +62,30 @@ RUNNER=(python3 "${SIM_DIR}/run_corners.py")
 #                                       comparator_dut_analog sub-model)
 #   comparator-offset-transient-mc  -> Offset sigma (whole latch, strobe ->
 #                                       decision, the un-reduced comparator_dut)
-#   comparator-preamp-noise         -> Input-referred noise
+#   comparator-preamp-noise         -> Input-referred noise (lower bound,
+#                                       loop-broken comparator_dut_analog)
+#   comparator-transient-noise      -> Input-referred noise (COMPLIANCE path,
+#                                       whole latch, DR-0002 / issue #24)
 #   comparator-regeneration         -> Decision time vs. overdrive (+ metastability)
 #   comparator-kickback              -> Kickback
+#
+# comparator-transient-noise's SMOKE POINT IS NOT "seconds" LIKE THE REST.
+# Its tb.json dowhile-loops 80 FULL transient `reset`+`tran` calls per rung x
+# 3 rungs = 240 transient runs, even at a single PVT point -- the trial count
+# is what the measurement IS (a decision-statistics hit rate), not something
+# a smaller corner/temperature selection can shrink. Observed: ~12 min for one
+# point at -j1 (this bench's own README.md "Method" and "Debugging notes").
+# Accepted as a documented exception to this script's "seconds, not minutes"
+# smoke contract rather than silently degrading the trial count for smoke mode
+# only (which would smoke-test a DIFFERENT, less statistically meaningful
+# deck than `characterize` mode runs).
 CAMPAIGNS=(
   comparator-offset-mc
   comparator-offset-transient-mc
   comparator-preamp-noise
   comparator-regeneration
   comparator-kickback
+  comparator-transient-noise
 )
 
 echo "=============================================================================="
