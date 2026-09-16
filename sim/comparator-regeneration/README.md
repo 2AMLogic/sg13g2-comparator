@@ -98,22 +98,52 @@ switching energy from the same deck; the `abstol=1e-13` solver tolerance
 | record | DUT | grid | verdict |
 |---|---|---|---|
 | [`20260910-232833-8148438`](records/20260910-232833-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos` × 3 T × 3 V | PASS |
+| [`20260916-021945-36773c7`](records/20260916-021945-36773c7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | **FAIL** (`td_od50_ns` temperature-axis floor only — see below) |
 
 **Read the banner on that record.** It was taken against the placeholder DUT
 and substantiates the harness, not the decision-time row. It is also the
 record the `td_od50_ns` per-axis floors are calibrated from (observed
 weakest slices: process 2.61 %, temperature 12.76 %).
 
-### Two placeholder-specific caveats that will apply to that record
+### Two placeholder-specific caveats that applied to `20260910-232833-8148438`
 
-- `e_dec_fj` **carries no check and is not a figure.** The placeholder's
-  decision stage is behavioural and draws no supply current at all, so what
-  is measured is the front end's switching energy plus numerical residue of
-  the charge integral. A check belongs here the moment a transistor-level
-  decision stage is bound.
+- `e_dec_fj` **carried no check and was not a figure.** The placeholder's
+  decision stage was behavioural and drew no supply current at all, so what
+  was measured was the front end's switching energy plus numerical residue of
+  the charge integral. A check belonged here the moment a transistor-level
+  decision stage was bound — which is now the case (`design/comparator.spice`,
+  `sim/dut.json` provenance `schematic`), so `testbench/tb.json` now carries a
+  real `e_dec_fj` sanity-envelope check (issue #20). The first transistor-level
+  record, `20260916-021945-36773c7`, observed `e_dec_fj` in the ~31–61 fJ range
+  across the 45-point grid.
 - **Solver tolerances are load-bearing on this deck.** `abstol` is `1e-13`,
   not the `1e-15` `sim/comparator-kickback/`'s deck uses: at `1e-15`, several
   points fail to take their first transient step at all (`Timestep too
   small …`), because the three PWL-driven controlled sources present branch
   currents far below that floor at t = 0. A re-run that changes `reltol`,
-  `vntol` or `abstol` is not bit-comparable with a record taken here.
+  `vntol` or `abstol` is not bit-comparable with a record taken here. (This
+  caveat is not DUT-specific and still applies unchanged to the real design.)
+
+### Stale-prose flag on `20260916-021945-36773c7` (issue #20)
+
+That record's own `Claim` line correctly states it substantiates
+`design/comparator.spice`'s real transistor-level regeneration behaviour, but
+its evidence `Note` list still carries the verbatim placeholder-era
+"`e_dec_fj` CARRIES NO CHECK, DELIBERATELY…" text above, because the harness
+reproduces `testbench/tb.json`'s `evidence.notes` into every record it
+writes, and that field had not yet been corrected when this record was
+taken. `sim/` records are append-only, so this record is **not** edited;
+`tb.json` has been corrected (issue #20, including adding the `e_dec_fj`
+check named above) so every record taken after it carries the accurate note.
+
+### `td_od50_ns` temperature-axis floor: known FAIL against the real DUT
+
+`design/README.md`'s "Open items" section documents that this bench's
+`td_od50_ns` temperature-axis floor (`>= 8.0 %`, calibrated against the
+placeholder record above) FAILs against `20260916-021945-36773c7`'s observed
+weakest temperature slice (`2.73 %`) — a real measured property of the real
+design's regeneration speed, not a harness defect. Per this repo's "do not
+relax a check to make a result pass" rule, that FAIL is committed as-is;
+recalibrating the floor (or deciding it should stay a worst-case-placeholder
+bound) is left to a dedicated follow-up issue, not folded into issue #20's
+stale-prose correction.
