@@ -31,8 +31,13 @@ Decision §3 — the cross-coupled regenerative pair's positive feedback
 prevents one once `CLK` is high, and the front end is simply off while
 `CLK` is low), so `comparator-offset-mc`'s `dc`-sweep method cannot reach it.
 
-`set rndseed=20260916` once, then **60 draws per PVT point** through a
-`dowhile` / `reset` loop — each `reset` re-evaluates SG13G2's `agauss()`
+`setseed 20260916` once — **not** `set rndseed=20260916`, which does not
+actually reseed ngspice-46's `agauss()` mismatch stream on the pinned
+toolchain ([#28](https://github.com/2AMLogic/sg13g2-comparator/issues/28), fixed
+for `comparator-offset-mc` in
+[#32](https://github.com/2AMLogic/sg13g2-comparator/pull/32); `sim/harness/testbench.py`
+now refuses a `record_kind: monte-carlo` manifest that uses it) — then **60
+draws per PVT point** through a `dowhile` / `reset` loop — each `reset` re-evaluates SG13G2's `agauss()`
 mismatch terms (confirmed against the installed checkout during issue #6,
 [`sim/device-mismatch-confirm/README.md`](../device-mismatch-confirm/README.md)),
 exactly the idiom `comparator-offset-mc` already uses for its own loop. Per
