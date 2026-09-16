@@ -14,7 +14,7 @@
     "mos_mismatch"
   ],
   "analyses": [
-    "set rndseed=20260910",
+    "setseed 20260910",
     "let n = 0",
     "let nmax = 200",
     "let sva = 0",
@@ -93,7 +93,7 @@
   },
   "evidence": {
     "record_kind": "monte-carlo",
-    "mc_seed": "ngspice `set rndseed=20260910` at the top of the control block, then 200 draws per PVT point via `reset` inside a `dowhile` loop (each reset re-evaluates the agauss() expressions the PDK's sg13_lv_nmos/sg13_lv_pmos subckts carry -- confirmed against the installed checkout during issue #6, sim/device-mismatch-confirm/README.md). The SAME seed is used at every PVT point -- common random numbers -- so movement of the reported sigma across the grid is a real PVT effect and not sampling noise; N for statistical-error purposes is 200, not 200 x 45.",
+    "mc_seed": "ngspice `setseed 20260910` (NOT `set rndseed=`) at the top of the control block, then 200 draws per PVT point via `reset` inside a `dowhile` loop (each reset re-evaluates the agauss() expressions the PDK's sg13_lv_nmos/sg13_lv_pmos subckts carry -- confirmed against the installed checkout during issue #6, sim/device-mismatch-confirm/README.md). CORRECTED BY ISSUE #28: on the pinned ngspice-46 toolchain (sim/toolchain.json), `set rndseed=<N>` does NOT seed the stream agauss() mismatch draws are taken from -- two runs of the same deck with the same `set rndseed=` produce different draws (confirmed by direct A/B testing during issue #28: two `ngspice -b` runs of an isolated agauss() probe deck with `set rndseed=12345` printed different values both times). `setseed <N>` (no `set` prefix) is the mechanism that actually seeds that stream on this toolchain -- confirmed to reproduce byte-identical draws across repeated runs, and used here from this record onward. The SAME seed is used at every PVT point -- common random numbers -- so movement of the reported sigma across the grid is a real PVT effect and not sampling noise; N for statistical-error purposes is 200, not 200 x 45. Records taken before issue #28 (see records/ below) used the broken `set rndseed=` mechanism and are NOT reproducible by re-running their own committed command -- their own mc_seed text is left as originally written, per sim/'s append-only convention, and should be read with that caveat.",
     "mc_scope": "mismatch-only. The mos_mismatch corner set (mos_{tt,ff,ss,fs,sf}_mismatch) is both the process-corner axis AND the Monte-Carlo mismatch switch at once -- see sim/harness/corners.py's module docstring for why SG13G2 has no equivalent of a separable global mismatch switch. Global process skew is swept deterministically by the corner axis itself (tt/ff/ss/fs/sf), so the two are never confounded in one number.",
     "mc_sigma": "1-sigma of the input-referred offset is reported directly, alongside the 3-sigma value a comparator offset spec is conventionally stated at. Statistical precision on each sigma is 1/sqrt(2N) = 5.0% at N = 200. Offset per draw is -dv(0 mV)/A_v where A_v is measured on the SAME draw from the 0 mV and +2 mV points of one `dc` sweep; av_sigma_pct is the check that the draw really was preserved between them.",
     "notes": [

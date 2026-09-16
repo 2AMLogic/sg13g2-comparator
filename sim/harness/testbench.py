@@ -157,6 +157,33 @@ def _validate_checks(checks: dict[str, dict], measure: dict[str, str], path: Pat
                 )
 
 
+def _validate_monte_carlo_seed(evidence: dict, analyses, path: Path) -> None:
+    """Refuse `set rndseed=` in a Monte-Carlo bench's control block.
+
+    On the pinned ngspice-46 toolchain (``sim/toolchain.json``), ngspice's
+    ``set rndseed=<N>`` control command does NOT actually seed the stream
+    ``agauss()`` mismatch draws are taken from -- two runs of the same deck
+    with the same ``set rndseed=`` produce genuinely different draws
+    (confirmed by direct A/B testing, issue #28). ``setseed <N>`` (no ``set``
+    prefix) is the mechanism that actually reseeds that stream. A
+    ``record_kind: monte-carlo`` bench that relies on ``set rndseed=`` for
+    its common-random-numbers/reproducibility claim is silently wrong on
+    this toolchain -- refuse it at load time instead of discovering it only
+    after two "identical" runs disagree.
+    """
+    if evidence.get("record_kind") != "monte-carlo":
+        return
+    for entry in analyses:
+        if str(entry).strip().lower().startswith("set rndseed="):
+            raise ValueError(
+                f"{path}: a record_kind='monte-carlo' manifest's analyses must not "
+                f"use 'set rndseed=' (found {entry!r}) -- on the pinned ngspice-46 "
+                "toolchain this does not seed the agauss() mismatch stream (two runs "
+                "produce different draws; confirmed during issue #28). Use "
+                "'setseed <N>' instead, which does reseed it."
+            )
+
+
 def load(directory: str | Path) -> Testbench:
     """Load a testbench manifest into a :class:`Testbench`.
 
@@ -209,6 +236,8 @@ def load(directory: str | Path) -> Testbench:
             f"{manifest_path}: evidence block has unknown key(s) "
             f"{', '.join(unknown_evidence)}; known: {', '.join(EVIDENCE_KEYS)}"
         )
+
+    _validate_monte_carlo_seed(evidence, manifest.get("analyses", ("op",)), manifest_path)
 
     tb = Testbench(
         directory=directory,

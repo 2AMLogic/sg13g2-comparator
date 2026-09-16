@@ -56,7 +56,10 @@ The fragment gets these `.param`s, in this order (see `runner.py`'s
 
 Then `.temp`, then `.options`, then the DUT netlist, then the fragment, then
 the `.control` block — whose first commands are the OSDI `pre_osdi` loads
-(see "OSDI preflight" below), ahead of even `set rndseed`.
+(see "OSDI preflight" below), ahead of even the seed command (`setseed` —
+NOT `set rndseed=`, which does not actually seed ngspice-46's `agauss()`
+stream; see `sim/comparator-offset-mc/README.md`'s "Method" section, issue
+#28).
 
 **One consequence worth knowing.** Unlike gf180mcu, SG13G2 has no separable
 global mismatch switch a fragment can flip after the model include — local

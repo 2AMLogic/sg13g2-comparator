@@ -26,11 +26,26 @@ python3 sim/run_corners.py comparator-offset-mc -j 8
 
 ## Method
 
-`set rndseed=20260910` once, then **200 draws per PVT point** through a
+`setseed 20260910` once, then **200 draws per PVT point** through a
 `dowhile` / `reset` loop — each `reset` re-evaluates the `agauss()`
 expressions inside SG13G2's LV MOS `_mismatch` model, which is what makes
 every iteration an independent local-mismatch draw (confirmed against the
 installed checkout during issue #6, `sim/device-mismatch-confirm/README.md`).
+
+> **Seeding mechanism corrected by issue #28.** On the pinned ngspice-46
+> toolchain (`sim/toolchain.json`), the ngspice `set rndseed=<N>` control
+> command does **not** actually seed the stream `agauss()` mismatch draws
+> come from — two runs of the same deck with the same `set rndseed=`
+> produce *different* draw sequences, confirmed by direct A/B testing
+> during issue #28. `setseed <N>` (no `set` prefix) is the mechanism that
+> actually reseeds ngspice-46's RNG stream and gives byte-identical draws
+> across repeated runs — this manifest was switched to it, and every record
+> taken **after** issue #28 is reproducible via the command above. The two
+> records taken before issue #28 (see "Records" below) used the broken
+> `set rndseed=` mechanism; their reproduction command does not reproduce
+> their own numbers, and their own `mc_seed` text is left describing that
+> (broken) mechanism as originally written, per `sim/`'s append-only
+> convention.
 
 Per draw, one `dc` sweep produces six operating points: the differential
 input at 0 mV and +2 mV, at each of three common modes (`dut_vcm` − 50 mV,
@@ -99,10 +114,12 @@ Methodology ported from
 (itself ported from `gf180-sar-adc`), per
 [`spec/porting-plan.md`](../../spec/porting-plan.md) and issue #8.
 
-**Ported:** the `set rndseed` + `dowhile`/`reset` draw loop; one instance,
-two DC points per draw, with `av_sigma_pct` as the draw-preservation
-self-check; the common-random-numbers convention across the grid; the "state
-seed, draw count and σ derivation in the record" discipline; N = 200.
+**Ported:** the fixed-seed + `dowhile`/`reset` draw loop (the seeding
+control command itself, `setseed`, is corrected for ngspice-46 by issue #28
+— see "Method" above); one instance, two DC points per draw, with
+`av_sigma_pct` as the draw-preservation self-check; the common-random-numbers
+convention across the grid; the "state seed, draw count and σ derivation in
+the record" discipline; N = 200.
 
 **Adapted for SG13G2 (structural, not a numeric change):** mismatch is
 selected by corner (`mos_mismatch`), not by a `.param sw_stat_mismatch=1`
