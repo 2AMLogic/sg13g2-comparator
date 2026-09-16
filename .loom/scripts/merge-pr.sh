@@ -376,8 +376,13 @@ else
     GH="gh"
 fi
 
-REPO_NWO="$(forge_get_repo_nwo "$GH")" || \
-  error "Could not determine repository. Is 'gh' authenticated?"
+REPO_NWO="$(forge_get_repo_nwo "$GH")" || error "Could not determine repository. Is 'gh' authenticated?"
+# Detect which merge strategy the target repo actually allows (#7754) --
+# previously every call site below hardcoded "squash", which fails outright
+# ("Squash merges are not allowed on this repository") on any repo that has
+# squash-merge disabled. Read once per invocation; fails open to "squash"
+# (this script's pre-#7754 behavior) on any probe failure.
+REPO_MERGE_METHOD="$(forge_detect_merge_method "$REPO_NWO" "$GH" 2>/dev/null || echo squash)"
 
 # Parse arguments
 PR_NUMBER=""
@@ -574,37 +579,14 @@ Or, if you have already verified/reconciled them, re-run with --allow-stacked-ch
 _check_no_open_stacked_children
 
 # ---------------------------------------------------------------------------
-# Pre-merge defaults/ VERSION-bump collision guard (#7302).
-#
-# check-defaults-version-bump.sh's CI job (.github/workflows/ci.yml) gates a
-# PR's own HEAD VERSION against its PR's `base.sha` — fixed at PR-open (or
-# last-rebase) time and never re-diffed against the CURRENT default branch.
-# When two PRs are open concurrently and both bump VERSION from the same
-# stale base to the same target (e.g. both from 0.18.197 to 0.18.198), the
-# first to merge advances the default branch to that target; the CI gate on
-# the SECOND PR already passed against ITS OWN stale base and has no
-# visibility into that concurrent merge, so it can land on top with a
-# NET-ZERO version increment despite genuinely changing `defaults/` —
-# silently defeating the currency signal check-defaults-version-bump.sh
-# exists to guarantee (#5874). This happened for real: PR #7300 vs.
-# concurrently-merged #7298.
-#
-# Fix shape: re-run the SAME check script — UNCHANGED, per #7302's own
-# acceptance criteria; its job (diff two given refs) already works correctly,
-# the gap is entirely in which refs the CI caller gives it — here, at the
-# merge choke point, against the default branch's CURRENT tip instead of the
-# PR's stale base.sha. That is the freshest reference available short of an
-# atomic merge, and mirrors the pattern _check_no_open_stacked_children above
-# already uses (a live re-check immediately before the actual merge call).
-#
-# Best-effort at every NON-decision step — an unresolvable default branch, a
-# failed fetch, or a PR head not reachable locally all fall through to "skip
-# the check" rather than blocking a merge this guard cannot evaluate safely.
-# Only a CONFIRMED collision (the check script's own exit 1 against the
-# CURRENT default branch tip) hard-blocks, matching the
-# hard-block-on-confirmed-collision shape of the guard above. --dry-run still
-# runs the guard and reports the would-be block, mirroring that guard's
-# dry-run contract.
+# Pre-merge version policy guard (#7827, replacing #7302's collision policy).
+# Feature PRs must not hand-edit versions: the merge workflow owns bumps.
+# Reuse the canonical checker in the same --forbid-bump mode as CI. It
+# compares against the merge base, so concurrent changes on main cannot be
+# mistaken for edits authored by this PR. Keep legacy checker mode intact
+# for downstream consumers that still require explicit surface bumps.
+# Guard faults retain the existing best-effort behavior; only a confirmed
+# forbidden version edit blocks. Dry-run reports without attempting a merge.
 _check_defaults_version_bump_collision() {
   local check_script="$REPO_ROOT/defaults/scripts/check-defaults-version-bump.sh"
   [[ -x "$check_script" ]] || return 0
@@ -628,43 +610,43 @@ _check_defaults_version_bump_collision() {
   # already-deleted-branch edge case where it might not resolve.
   git -C "$REPO_ROOT" rev-parse --verify --quiet "${PR_HEAD_SHA}^{commit}" >/dev/null 2>&1 || return 0
 
-  local pr_body check_output check_rc
-  pr_body="$(echo "$PR_JSON" | jq -r '.body // ""')"
+  # The checker's shallow-history fallback compares raw tips. That cannot
+  # establish who changed a version; refuse to label it a confirmed edit.
+  if ! git -C "$REPO_ROOT" merge-base "$current_main_sha" "$PR_HEAD_SHA" >/dev/null 2>&1; then
+    warning "Version policy guard: PR ancestry unavailable; skipping unverified comparison."
+    return 0
+  fi
+
+  local check_output check_rc
   check_rc=0
-  check_output=$(cd "$REPO_ROOT" && PR_BODY="$pr_body" "$check_script" --base "$current_main_sha" --head "$PR_HEAD_SHA" 2>&1) || check_rc=$?
+  check_output=$(cd "$REPO_ROOT" && "$check_script" --forbid-bump --base "$current_main_sha" --head "$PR_HEAD_SHA" 2>&1) || check_rc=$?
 
   if [[ "$check_rc" -eq 0 ]]; then
     return 0
   fi
 
   # A non-zero, non-1 exit (bad usage, unresolved ref) is a guard-internal
-  # problem, not a confirmed collision — report and skip rather than block a
+  # problem, not a confirmed version edit — report and skip rather than block a
   # merge on a guard fault.
   if [[ "$check_rc" -ne 1 ]]; then
-    warning "defaults/ VERSION-bump collision guard: check-defaults-version-bump.sh exited $check_rc against current '$DEFAULT_BRANCH_NAME' ($current_main_sha) — skipping (not a confirmed collision):"
+    warning "Version policy guard: check-defaults-version-bump.sh exited $check_rc against current '$DEFAULT_BRANCH_NAME' ($current_main_sha) — skipping (not a confirmed version edit):"
     warning "$check_output"
     return 0
   fi
 
   local msg
-  msg="Merge blocked: PR #$PR_NUMBER's \`defaults/\` change would leave '$DEFAULT_BRANCH_NAME' at an unchanged (or non-increasing) VERSION relative to its CURRENT tip ($current_main_sha) — a concurrently-merged PR likely already advanced '$DEFAULT_BRANCH_NAME' to this PR's target VERSION (#7302).
+  msg="Merge blocked: PR #$PR_NUMBER hand-edits a version-bearing value (#7827).
 
 $check_output
 
-Rebase onto the current '$DEFAULT_BRANCH_NAME' and bump VERSION again, then re-run this merge:
-  git fetch origin $DEFAULT_BRANCH_NAME
-  git rebase origin/$DEFAULT_BRANCH_NAME
-  ./scripts/version.sh bump patch
-  git push --force-with-lease
-
-If this change genuinely does not alter installed behavior, add the
-<!-- loom:no-surface-change --> marker to the PR body or a commit message
-instead of bumping VERSION, then re-run this merge."
+Revert the version-value changes authored by this PR, preserving its other
+changes, then rerun CI and review. Version bumps are applied automatically
+by the merge workflow (#7743); a no-surface-change marker cannot waive this policy."
 
   # --dry-run still runs the guard and REPORTS the would-be block, but honors
   # the dry-run contract (never exits 1) — same shape as the guard above.
   if [[ "$DRY_RUN" == "true" ]]; then
-    warning "[dry-run] Would BLOCK merge of PR #$PR_NUMBER: defaults/ VERSION-bump collision against current '$DEFAULT_BRANCH_NAME' ($current_main_sha)."
+    warning "[dry-run] Would BLOCK merge of PR #$PR_NUMBER: forbidden version edit relative to '$DEFAULT_BRANCH_NAME' ($current_main_sha)."
     return 0
   fi
 
@@ -1826,7 +1808,7 @@ if [[ "$AUTO_MERGE" == "true" ]]; then
       # and captures the native exit code (0=merged, 3=Gitea decline,
       # 4=head-SHA mismatch, else fail).
       _AM_RC=0
-      AUTO_MERGE_OUTPUT=$(forge_cmd_perm_safe loom-daemon forge auto-merge "$PR_NUMBER" --method squash --expected-head-sha "$MERGE_PRECONDITION_SHA" 2>&1) || _AM_RC=$?
+      AUTO_MERGE_OUTPUT=$(forge_cmd_perm_safe loom-daemon forge auto-merge "$PR_NUMBER" --method "$REPO_MERGE_METHOD" --expected-head-sha "$MERGE_PRECONDITION_SHA" 2>&1) || _AM_RC=$?
       if [[ $_AM_RC -eq 0 ]]; then
         AUTO_MERGE_OK=true
         break
@@ -1850,7 +1832,7 @@ if [[ "$AUTO_MERGE" == "true" ]]; then
     if [[ "$_AM_DECLINED" == true ]]; then
       # loom-daemon absent, or it declined (e.g. Gitea) — shell-based
       # forge_auto_merge carries the poll-and-merge for both forges.
-      if AUTO_MERGE_OUTPUT=$(forge_auto_merge "$REPO_NWO" "$PR_NUMBER" "$MERGE_PRECONDITION_SHA" 2>&1); then
+      if AUTO_MERGE_OUTPUT=$(forge_auto_merge "$REPO_NWO" "$PR_NUMBER" "$MERGE_PRECONDITION_SHA" "$REPO_MERGE_METHOD" 2>&1); then
         AUTO_MERGE_OK=true
         break
       fi
@@ -2326,7 +2308,7 @@ if [[ "$PR_MERGEABLE" == "false" ]]; then
 fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
-  info "[dry-run] Would merge PR #$PR_NUMBER (squash) and delete remote branch '$PR_BRANCH'"
+  info "[dry-run] Would merge PR #$PR_NUMBER ($REPO_MERGE_METHOD) and delete remote branch '$PR_BRANCH'"
   if [[ "$CLEANUP_WORKTREE" == "true" ]]; then
     info "[dry-run] Would clean up local worktree"
     if git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$PR_BRANCH"; then
@@ -2338,12 +2320,13 @@ if [[ "$DRY_RUN" == "true" ]]; then
   exit 0
 fi
 
-# Merge via API (squash) with retry for stale branch
+# Merge via API (using the repo's detected/allowed merge method, #7754) with
+# retry for stale branch
 MAX_MERGE_RETRIES=3
 MERGE_RETRY_DELAY=5
 
 for MERGE_ATTEMPT in $(seq 1 $MAX_MERGE_RETRIES); do
-  MERGE_RESPONSE=$(forge_merge_pr "$REPO_NWO" "$PR_NUMBER" "$MERGE_PRECONDITION_SHA" 2>&1) && break  # Success, exit loop
+  MERGE_RESPONSE=$(forge_merge_pr "$REPO_NWO" "$PR_NUMBER" "$MERGE_PRECONDITION_SHA" "$REPO_MERGE_METHOD" 2>&1) && break  # Success, exit loop
 
   # Check if it merged despite error (race condition)
   RECHECK_JSON=$(forge_get_pr_nocache "$REPO_NWO" "$PR_NUMBER" "$GH" 2>/dev/null || echo '{}')

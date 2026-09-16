@@ -98,7 +98,8 @@ switching energy from the same deck; the `abstol=1e-13` solver tolerance
 | record | DUT | grid | verdict |
 |---|---|---|---|
 | [`20260910-232833-8148438`](records/20260910-232833-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos` × 3 T × 3 V | PASS |
-| [`20260916-021945-36773c7`](records/20260916-021945-36773c7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | **FAIL** (`td_od50_ns` temperature-axis floor only — see below) |
+| [`20260916-021945-36773c7`](records/20260916-021945-36773c7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | **FAIL** (`td_od50_ns` temperature-axis floor only — recalibrated below, issue #16) |
+| [`20260916-113309-180cca7`](records/20260916-113309-180cca7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | PASS (post-recalibration, issue #16 — see below) |
 
 **Read the banner on that record.** It was taken against the placeholder DUT
 and substantiates the harness, not the decision-time row. It is also the
@@ -136,14 +137,25 @@ taken. `sim/` records are append-only, so this record is **not** edited;
 `tb.json` has been corrected (issue #20, including adding the `e_dec_fj`
 check named above) so every record taken after it carries the accurate note.
 
-### `td_od50_ns` temperature-axis floor: known FAIL against the real DUT
+### `td_od50_ns` temperature-axis floor: RECALIBRATED against the real DUT (issue #16)
 
-`design/README.md`'s "Open items" section documents that this bench's
-`td_od50_ns` temperature-axis floor (`>= 8.0 %`, calibrated against the
-placeholder record above) FAILs against `20260916-021945-36773c7`'s observed
-weakest temperature slice (`2.73 %`) — a real measured property of the real
-design's regeneration speed, not a harness defect. Per this repo's "do not
-relax a check to make a result pass" rule, that FAIL is committed as-is;
-recalibrating the floor (or deciding it should stay a worst-case-placeholder
-bound) is left to a dedicated follow-up issue, not folded into issue #20's
-stale-prose correction.
+`design/README.md`'s "Open items" section previously documented that this
+bench's `td_od50_ns` temperature-axis floor (`>= 8.0 %`, calibrated against
+the placeholder record above) FAILed against `20260916-021945-36773c7`'s
+observed weakest temperature slice (`2.73 %`) — a real measured property of
+the real design's regeneration speed, not a harness defect: regeneration
+speed is set by transconductance, which falls with temperature, but the
+same temperature rise also lowers `V_th` and so raises the effective
+overdrive, partially cancelling the net temperature dependence. Per this
+repo's "do not relax a check to make a result pass" rule, that FAIL was left
+committed as-is (append-only) rather than silently patched, and the floor
+has now been recalibrated with margin below the real DUT's own observed
+value — not loosened to make the old record retroactively pass. The new
+floor (`>= 1.5 %`, ~45 % margin below the observed `2.729 %`) is calibrated
+from `20260916-021945-36773c7` (`testbench/tb.json`'s `td_od50_ns` check
+comment carries the full citation) and is confirmed by the fresh
+`20260916-113309-180cca7` record above — a clean-tree (`dirty: false`) run
+taken *after* the recalibrated `tb.json` was committed, so it is citable
+under `sim/README.md`'s "Record format" rule — which PASSes against it. The
+process-axis floor (`>= 1.5 %`) is unchanged — it still holds against the
+real DUT's own weakest observed process slice (`25.16 %`).
