@@ -150,8 +150,9 @@ fragment line — see "Mismatch is a corner selection here" above and
 |---|---|---|---|
 | [`20260910-232619-8148438`](records/20260910-232619-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos_mismatch` × 3 T × 3 V | PASS |
 | [`20260916-021822-36773c7`](records/20260916-021822-36773c7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`, `comparator_dut_analog` — a DR-0001 lower-bound reduced sub-model, see banner above) | 45/45, `mos_mismatch` × 3 T × 3 V | PASS |
+| [`20260916-125444-4d0cf7c`](records/20260916-125444-4d0cf7c.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`, `comparator_dut_analog`) | 45/45, `mos_mismatch` × 3 T × 3 V | PASS |
 
-**Read the banner on that record.** It was taken against the placeholder DUT
+**Read the banner on that second record.** It was taken against the placeholder DUT
 and substantiates the harness, not the offset row. It is also the record the
 `vbias_anchor_mv` per-axis floors are calibrated from (observed weakest
 slices: process 25.17 %, temperature 26.20 %).
@@ -168,3 +169,19 @@ diode-connected PMOS pair (see "No resistor null control" above), whose
 local mismatch IS captured in this record's `sig_vos_mv`. `sim/` records are
 append-only, so this record is **not** edited; `tb.json` has been corrected
 (issue #20) so every record taken after it carries the accurate note.
+
+**`20260916-125444-4d0cf7c` is the first record minted on the corrected
+seeding mechanism (issue #28).** Its `mc_seed` correctly names `setseed`
+(not `set rndseed=`) and is genuinely reproducible via its own committed
+reproduction command — confirmed by re-running the single-corner slice
+`--corners tt_mismatch --temps 27 --supply-tolerance 0 --no-write` twice and
+diffing byte-identical output before minting this record. Its per-corner
+`sig_vos_mv`/`vos_3sig_mv` numbers are statistically consistent with (not
+required to exactly equal) `20260916-021822-36773c7`'s own numbers — both
+draw from the same underlying mismatch-on population at N = 200 per point,
+just via different (both fixed) seeds, `20260910` in both cases, but under
+the previously-broken vs. now-corrected seeding mechanism, so an exact
+numeric match between the two is not expected or required. The two earlier
+records above predate this fix; their own reproduction commands do not
+reproduce their own numbers (see "Method" above) — read their `mc_seed`
+text with that caveat.
