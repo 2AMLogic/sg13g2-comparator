@@ -123,9 +123,11 @@ not taken by this issue) is open — see "Open items".
   the observed `2.729%`) — see each check's `tb.json` comment
   (`sim/comparator-preamp-noise/testbench/tb.json`,
   `sim/comparator-regeneration/testbench/tb.json`) for the full citation.
-  Both benches now PASS as freshly re-run, freshly committed evidence
-  (records `sim/comparator-preamp-noise/records/20260916-110453-3038a92.json`
-  and `sim/comparator-regeneration/records/20260916-110512-3038a92.json`);
+  Both benches now PASS as freshly re-run, freshly committed **clean-tree**
+  evidence (records
+  `sim/comparator-preamp-noise/records/20260916-113303-180cca7.json` and
+  `sim/comparator-regeneration/records/20260916-113309-180cca7.json`, both
+  `dirty: false`, i.e. citable per `sim/README.md`'s "Record format" rule);
   the original FAIL records above remain committed as-is (append-only).
 
 ## Regenerating the netlist

@@ -99,7 +99,7 @@ switching energy from the same deck; the `abstol=1e-13` solver tolerance
 |---|---|---|---|
 | [`20260910-232833-8148438`](records/20260910-232833-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos` × 3 T × 3 V | PASS |
 | [`20260916-021945-36773c7`](records/20260916-021945-36773c7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | **FAIL** (`td_od50_ns` temperature-axis floor only — recalibrated below, issue #16) |
-| [`20260916-110512-3038a92`](records/20260916-110512-3038a92.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | PASS (post-recalibration, issue #16 — see below) |
+| [`20260916-113309-180cca7`](records/20260916-113309-180cca7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | PASS (post-recalibration, issue #16 — see below) |
 
 **Read the banner on that record.** It was taken against the placeholder DUT
 and substantiates the harness, not the decision-time row. It is also the
@@ -154,6 +154,8 @@ value — not loosened to make the old record retroactively pass. The new
 floor (`>= 1.5 %`, ~45 % margin below the observed `2.729 %`) is calibrated
 from `20260916-021945-36773c7` (`testbench/tb.json`'s `td_od50_ns` check
 comment carries the full citation) and is confirmed by the fresh
-`20260916-110512-3038a92` record above, which PASSes against it. The
+`20260916-113309-180cca7` record above — a clean-tree (`dirty: false`) run
+taken *after* the recalibrated `tb.json` was committed, so it is citable
+under `sim/README.md`'s "Record format" rule — which PASSes against it. The
 process-axis floor (`>= 1.5 %`) is unchanged — it still holds against the
 real DUT's own weakest observed process slice (`25.16 %`).

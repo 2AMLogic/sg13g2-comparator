@@ -116,7 +116,7 @@ divergence table).
 |---|---|---|---|
 | [`20260910-232822-8148438`](records/20260910-232822-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos` × 3 T × 3 V | PASS |
 | [`20260916-021939-36773c7`](records/20260916-021939-36773c7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | **FAIL** (`av_dc` process-axis floor only — recalibrated below, issue #16) |
-| [`20260916-110453-3038a92`](records/20260916-110453-3038a92.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | PASS (post-recalibration, issue #16 — see below) |
+| [`20260916-113303-180cca7`](records/20260916-113303-180cca7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | PASS (post-recalibration, issue #16 — see below) |
 
 **Read the banner on that record.** It was taken against the placeholder DUT
 and substantiates the harness, not the noise row. It is also the record the
@@ -140,7 +140,9 @@ margin below the real DUT's own observed value — not loosened to make the
 old record retroactively pass. The new floor (`>= 0.5 %`, ~53 % margin
 below the observed `1.069 %`) is calibrated from `20260916-021939-36773c7`
 (`testbench/tb.json`'s `av_dc` check comment carries the full citation) and
-is confirmed by the fresh `20260916-110453-3038a92` record above, which
-PASSes against it. The temperature-axis floor (`>= 20.0 %`) is unchanged —
+is confirmed by the fresh `20260916-113303-180cca7` record above — a
+clean-tree (`dirty: false`) run taken *after* the recalibrated `tb.json` was
+committed, so it is citable under `sim/README.md`'s "Record format" rule —
+which PASSes against it. The temperature-axis floor (`>= 20.0 %`) is unchanged —
 it still holds against the real DUT's own weakest observed temperature
 slice (`21.06 %`).
