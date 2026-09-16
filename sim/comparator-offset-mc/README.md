@@ -26,11 +26,26 @@ python3 sim/run_corners.py comparator-offset-mc -j 8
 
 ## Method
 
-`set rndseed=20260910` once, then **200 draws per PVT point** through a
+`setseed 20260910` once, then **200 draws per PVT point** through a
 `dowhile` / `reset` loop — each `reset` re-evaluates the `agauss()`
 expressions inside SG13G2's LV MOS `_mismatch` model, which is what makes
 every iteration an independent local-mismatch draw (confirmed against the
 installed checkout during issue #6, `sim/device-mismatch-confirm/README.md`).
+
+> **Seeding mechanism corrected by issue #28.** On the pinned ngspice-46
+> toolchain (`sim/toolchain.json`), the ngspice `set rndseed=<N>` control
+> command does **not** actually seed the stream `agauss()` mismatch draws
+> come from — two runs of the same deck with the same `set rndseed=`
+> produce *different* draw sequences, confirmed by direct A/B testing
+> during issue #28. `setseed <N>` (no `set` prefix) is the mechanism that
+> actually reseeds ngspice-46's RNG stream and gives byte-identical draws
+> across repeated runs — this manifest was switched to it, and every record
+> taken **after** issue #28 is reproducible via the command above. The two
+> records taken before issue #28 (see "Records" below) used the broken
+> `set rndseed=` mechanism; their reproduction command does not reproduce
+> their own numbers, and their own `mc_seed` text is left describing that
+> (broken) mechanism as originally written, per `sim/`'s append-only
+> convention.
 
 Per draw, one `dc` sweep produces six operating points: the differential
 input at 0 mV and +2 mV, at each of three common modes (`dut_vcm` − 50 mV,
@@ -99,10 +114,12 @@ Methodology ported from
 (itself ported from `gf180-sar-adc`), per
 [`spec/porting-plan.md`](../../spec/porting-plan.md) and issue #8.
 
-**Ported:** the `set rndseed` + `dowhile`/`reset` draw loop; one instance,
-two DC points per draw, with `av_sigma_pct` as the draw-preservation
-self-check; the common-random-numbers convention across the grid; the "state
-seed, draw count and σ derivation in the record" discipline; N = 200.
+**Ported:** the fixed-seed + `dowhile`/`reset` draw loop (the seeding
+control command itself, `setseed`, is corrected for ngspice-46 by issue #28
+— see "Method" above); one instance, two DC points per draw, with
+`av_sigma_pct` as the draw-preservation self-check; the common-random-numbers
+convention across the grid; the "state seed, draw count and σ derivation in
+the record" discipline; N = 200.
 
 **Adapted for SG13G2 (structural, not a numeric change):** mismatch is
 selected by corner (`mos_mismatch`), not by a `.param sw_stat_mismatch=1`
@@ -133,8 +150,9 @@ fragment line — see "Mismatch is a corner selection here" above and
 |---|---|---|---|
 | [`20260910-232619-8148438`](records/20260910-232619-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos_mismatch` × 3 T × 3 V | PASS |
 | [`20260916-021822-36773c7`](records/20260916-021822-36773c7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`, `comparator_dut_analog` — a DR-0001 lower-bound reduced sub-model, see banner above) | 45/45, `mos_mismatch` × 3 T × 3 V | PASS |
+| [`20260916-125444-4d0cf7c`](records/20260916-125444-4d0cf7c.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`, `comparator_dut_analog`) | 45/45, `mos_mismatch` × 3 T × 3 V | PASS |
 
-**Read the banner on that record.** It was taken against the placeholder DUT
+**Read the banner on that second record.** It was taken against the placeholder DUT
 and substantiates the harness, not the offset row. It is also the record the
 `vbias_anchor_mv` per-axis floors are calibrated from (observed weakest
 slices: process 25.17 %, temperature 26.20 %).
@@ -151,3 +169,19 @@ diode-connected PMOS pair (see "No resistor null control" above), whose
 local mismatch IS captured in this record's `sig_vos_mv`. `sim/` records are
 append-only, so this record is **not** edited; `tb.json` has been corrected
 (issue #20) so every record taken after it carries the accurate note.
+
+**`20260916-125444-4d0cf7c` is the first record minted on the corrected
+seeding mechanism (issue #28).** Its `mc_seed` correctly names `setseed`
+(not `set rndseed=`) and is genuinely reproducible via its own committed
+reproduction command — confirmed by re-running the single-corner slice
+`--corners tt_mismatch --temps 27 --supply-tolerance 0 --no-write` twice and
+diffing byte-identical output before minting this record. Its per-corner
+`sig_vos_mv`/`vos_3sig_mv` numbers are statistically consistent with (not
+required to exactly equal) `20260916-021822-36773c7`'s own numbers — both
+draw from the same underlying mismatch-on population at N = 200 per point,
+just via different (both fixed) seeds, `20260910` in both cases, but under
+the previously-broken vs. now-corrected seeding mechanism, so an exact
+numeric match between the two is not expected or required. The two earlier
+records above predate this fix; their own reproduction commands do not
+reproduce their own numbers (see "Method" above) — read their `mc_seed`
+text with that caveat.
