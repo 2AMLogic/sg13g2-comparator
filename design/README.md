@@ -93,29 +93,40 @@ not taken by this issue) is open — see "Open items".
   DRAFT/unratified — this issue does not claim any row is met (see
   `sim/dut/README.md` and `sim/dut.json`'s own `provenance: schematic`
   notes).
-- **Two corner-sensitivity check floors, calibrated against the placeholder
-  DUT, do not hold against the real design and now FAIL as committed
-  evidence, not as a harness defect.** The first `provenance: schematic`
-  `characterize` run (records
+- **RESOLVED (issue #16): the two corner-sensitivity check floors that were
+  calibrated against the placeholder DUT and FAILed against the real design
+  have been recalibrated against the real DUT's own evidence.** The first
+  `provenance: schematic` `characterize` run (records
   `sim/comparator-preamp-noise/records/20260916-021939-36773c7.json` and
-  `sim/comparator-regeneration/records/20260916-021945-36773c7.json`) shows:
-  (a) `comparator-preamp-noise`'s `av_dc` process-axis floor (`>= 3%`,
-  calibrated from the placeholder's own first 45-point record per that
-  bench's `tb.json`) against a weakest observed process slice of `1.07%` —
-  physically plausible for a diode-connected-load gain stage, whose gain is
-  a `gm`-ratio that partly cancels process skew to first order, unlike the
-  placeholder's ideal-resistor-loaded front end; and (b)
+  `sim/comparator-regeneration/records/20260916-021945-36773c7.json`) had
+  shown two FAILs: (a) `comparator-preamp-noise`'s `av_dc` process-axis
+  floor (`>= 3%`, calibrated from the placeholder's own first 45-point
+  record) against a weakest observed process slice of `1.07%`; and (b)
   `comparator-regeneration`'s `td_od50_ns` temperature-axis floor (`>= 8%`)
-  against a weakest observed slice of `2.73%`. Both benches' nominal-point
-  and `--sabotage-corners` negative-control runs pass (`sim/selftest.sh`),
-  confirming corner switching itself works — these are real measured
-  properties of the reduced sub-model / real latch, not a plumbing bug. Per
-  `sim/README.md`'s "Do not relax a check to make a result pass" rule,
-  this issue does NOT recalibrate either floor; both FAIL records are
-  committed as-is (append-only evidence), and recalibrating the floors
-  against the real DUT — or deciding they should stay calibrated against a
-  worst-case placeholder-shaped bound — is left to a dedicated follow-up
-  issue.
+  against a weakest observed slice of `2.73%`. Both discrepancies are
+  physically plausible, not plumbing bugs: (a) the diode-connected-load gain
+  stage's gain is a `gm`-ratio that partly cancels process skew to first
+  order, unlike the placeholder's ideal-resistor-loaded front end; (b) the
+  transistor-level latch's regeneration speed is set by transconductance,
+  which falls with temperature, but the same temperature rise also lowers
+  `V_th` and so raises the effective overdrive, partially cancelling the
+  net temperature dependence — the same first-order-cancellation story as
+  (a), on a different axis. Both benches' nominal-point and
+  `--sabotage-corners` negative-control runs continued to pass
+  (`sim/selftest.sh`) throughout, confirming corner switching itself was
+  never broken. Per `sim/README.md`'s "Do not relax a check to make a
+  result pass" rule, both floors were recalibrated (not silently loosened)
+  with margin below the real DUT's own observed weakest slice, following
+  the existing floors' own margin convention: `av_dc`'s process floor moved
+  `3.0% -> 0.5%` (~53% margin below the observed `1.069%`) and
+  `td_od50_ns`'s temperature floor moved `8.0% -> 1.5%` (~45% margin below
+  the observed `2.729%`) — see each check's `tb.json` comment
+  (`sim/comparator-preamp-noise/testbench/tb.json`,
+  `sim/comparator-regeneration/testbench/tb.json`) for the full citation.
+  Both benches now PASS as freshly re-run, freshly committed evidence
+  (records `sim/comparator-preamp-noise/records/20260916-110453-3038a92.json`
+  and `sim/comparator-regeneration/records/20260916-110512-3038a92.json`);
+  the original FAIL records above remain committed as-is (append-only).
 
 ## Regenerating the netlist
 

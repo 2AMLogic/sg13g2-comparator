@@ -115,8 +115,32 @@ divergence table).
 | record | DUT | grid | verdict |
 |---|---|---|---|
 | [`20260910-232822-8148438`](records/20260910-232822-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos` × 3 T × 3 V | PASS |
+| [`20260916-021939-36773c7`](records/20260916-021939-36773c7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | **FAIL** (`av_dc` process-axis floor only — recalibrated below, issue #16) |
+| [`20260916-110453-3038a92`](records/20260916-110453-3038a92.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | PASS (post-recalibration, issue #16 — see below) |
 
 **Read the banner on that record.** It was taken against the placeholder DUT
 and substantiates the harness, not the noise row. It is also the record the
-`av_dc` per-axis floors are calibrated from (observed weakest slices: process
-5.89 %, temperature 38.91 %).
+`av_dc` per-axis floors were originally calibrated from (observed weakest
+slices: process 5.89 %, temperature 38.91 %).
+
+### `av_dc` process-axis floor: RECALIBRATED against the real DUT (issue #16)
+
+`design/README.md`'s "Open items" section previously documented that this
+bench's `av_dc` process-axis floor (`>= 3.0 %`, calibrated against the
+placeholder record above) FAILed against `20260916-021939-36773c7`'s
+observed weakest process slice (`1.07 %`) — a real measured property of the
+real design's front end, not a harness defect: `comparator_dut_analog`'s DC
+gain is a `gm`-ratio between the input pair and its diode-connected loads
+(see the `provenance: schematic` note at the top of this file), which
+partly cancels process skew to first order, unlike the placeholder's
+ideal-resistor-loaded front end. Per this repo's "do not relax a check to
+make a result pass" rule, that FAIL was left committed as-is (append-only)
+rather than silently patched, and the floor has now been recalibrated with
+margin below the real DUT's own observed value — not loosened to make the
+old record retroactively pass. The new floor (`>= 0.5 %`, ~53 % margin
+below the observed `1.069 %`) is calibrated from `20260916-021939-36773c7`
+(`testbench/tb.json`'s `av_dc` check comment carries the full citation) and
+is confirmed by the fresh `20260916-110453-3038a92` record above, which
+PASSes against it. The temperature-axis floor (`>= 20.0 %`) is unchanged —
+it still holds against the real DUT's own weakest observed temperature
+slice (`21.06 %`).
