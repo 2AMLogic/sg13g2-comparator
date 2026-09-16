@@ -7,11 +7,25 @@ neither of them ideal.
 Backs [`README.md`'s kickback row](../../README.md#target-specification-ratified--dr-0002)
 as ratified by
 [DR-0002](../../spec/decision-records/0002-target-spec-ratification.md): ≤ 25 fC/side
-injected charge per decision edge **and** ≤ 100 µV signal-dependent
+peak transient injected charge per decision edge **and** ≤ 100 µV signal-dependent
 differential residue at the end of a 30 ns cycle against a non-restoring
 source (≤ 8 fC/side, ≤ 30 µV stretch), with the peak excursion into the
 1 kΩ / 100 fF drive recorded but deliberately unbounded until a driving stage
-is named. DR-0002 Row 4 explains why the DRAFT "≤ 5 mV into 1 kΩ" bound —
+is named.
+
+> **This bench does not yet emit the ratified charge quantity.** No
+> `measure:` key in [`testbench/tb.json`](testbench/tb.json) reports Q_kick —
+> the one charge-shaped key, `q_resid_small_ac`, is the attocoulomb
+> *differential residue* on the floating branches B/C, a different quantity.
+> The 25 fC bound is therefore scored only by the hand derivation
+> `kick_1k_peak_mv × 100 fF`, which under-reports by ~1.3 … 2.9× because
+> branch A's R_src·C_in = 100 ps is the same order as the 100 ps clock edge
+> and the measured regeneration τ. DR-0002 Row 4 (b) works the bias out and
+> ratifies that sub-bound as **consistent, not certified**; adding a
+> `.meas tran` integral of branch A's source current over 30 … 45 ns (plus a
+> `checks:` entry) is the named open item that would settle it.
+
+DR-0002 Row 4 explains why the DRAFT "≤ 5 mV into 1 kΩ" bound —
 exceeded 18–29× at every corner, and equivalent to a C_in ≳ 2.9 pF
 requirement on an unnamed *driver* rather than on this block — was revised
 rather than held or quietly re-conditioned. Kickback is a first-class row here, per
