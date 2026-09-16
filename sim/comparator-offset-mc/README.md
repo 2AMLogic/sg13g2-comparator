@@ -4,7 +4,7 @@
 full PVT grid, plus the part of that offset that moves with input common
 mode.
 
-Backs [`README.md`'s Offset-σ row](../../README.md#target-specification-draft--engineering-to-ratify)
+Backs [`README.md`'s Offset-σ row](../../README.md#target-specification-ratified--dr-0002)
 (≤ 15 mV 3σ input-referred, ≤ 8 mV stretch) — the headline result for this
 block, because SG13G2's LV device models are confirmed to ship real
 per-instance local mismatch (`sim/device-mismatch-confirm/`, issue #6), so

@@ -4,9 +4,17 @@
 over the full PVT grid — measured against two different source impedances,
 neither of them ideal.
 
-Backs [`README.md`'s kickback row](../../README.md#target-specification-draft--engineering-to-ratify)
-(≤ 5 mV disturbance into a 1 kΩ source impedance at the input nodes, single
-decision edge; ≤ 2 mV stretch). Kickback is a first-class row here, per
+Backs [`README.md`'s kickback row](../../README.md#target-specification-ratified--dr-0002)
+as ratified by
+[DR-0002](../../spec/decision-records/0002-target-spec-ratification.md): ≤ 25 fC/side
+injected charge per decision edge **and** ≤ 100 µV signal-dependent
+differential residue at the end of a 30 ns cycle against a non-restoring
+source (≤ 8 fC/side, ≤ 30 µV stretch), with the peak excursion into the
+1 kΩ / 100 fF drive recorded but deliberately unbounded until a driving stage
+is named. DR-0002 Row 4 explains why the DRAFT "≤ 5 mV into 1 kΩ" bound —
+exceeded 18–29× at every corner, and equivalent to a C_in ≳ 2.9 pF
+requirement on an unnamed *driver* rather than on this block — was revised
+rather than held or quietly re-conditioned. Kickback is a first-class row here, per
 [`CLAUDE.md`](../../CLAUDE.md) ("Kickback is measured, not assumed").
 
 ```bash
