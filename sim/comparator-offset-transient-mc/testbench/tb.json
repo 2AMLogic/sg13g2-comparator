@@ -1,0 +1,115 @@
+{
+  "name": "comparator-offset-transient-mc",
+  "description": "Transient Monte-Carlo input-referred offset of the WHOLE latch (strobe -> decision) -- comparator_dut, the actual DR-0001 regenerative topology, not the loop-broken comparator_dut_analog reduced sub-model comparator-offset-mc measures.",
+  "claim": "sim/dut.json binds design/comparator.spice (id comparator-dr0001, provenance schematic), the ratified topology from spec/decision-records/0001-comparator-topology.md ('DR-0001'). This record substantiates that a transient Monte-Carlo digital-staircase offset sweep genuinely runs and genuinely detects SG13G2's per-instance local mismatch across the WHOLE latch (comparator_dut: input pair, tail, cross-coupled regenerative pair, reset devices, isolation inverters, SR output latch) -- STILL NOT evidence toward README.md#target-specification's Offset-sigma row on its own: that ratification is a separate, later act (spec/porting-plan.md's third step in this chain). Unlike comparator-offset-mc, this bench excludes NOTHING from the topology by construction: it is not a lower bound.",
+  "netlist": "tb_offset_transient_mc.spice",
+  "nominal_supply_v": 1.2,
+  "supply_tolerance": 0.1,
+  "temperatures_c": [
+    -40,
+    27,
+    125
+  ],
+  "corners": [
+    "mos_mismatch"
+  ],
+  "analyses": [
+    "set rndseed=20260916",
+    "let n = 0",
+    "let nmax = 60",
+    "let sv = 0",
+    "let svq = 0",
+    "let noor = 0",
+    "let svb = 0",
+    "dowhile n < nmax",
+    "  reset",
+    "  tran 100p 990.0000n",
+    "  meas tran dlev0 find v(doutn) at=27.0000n",
+    "  meas tran dlev1 find v(doutn) at=57.0000n",
+    "  meas tran dlev2 find v(doutn) at=87.0000n",
+    "  meas tran dlev3 find v(doutn) at=117.0000n",
+    "  meas tran dlev4 find v(doutn) at=147.0000n",
+    "  meas tran dlev5 find v(doutn) at=177.0000n",
+    "  meas tran dlev6 find v(doutn) at=207.0000n",
+    "  meas tran dlev7 find v(doutn) at=237.0000n",
+    "  meas tran dlev8 find v(doutn) at=267.0000n",
+    "  meas tran dlev9 find v(doutn) at=297.0000n",
+    "  meas tran dlev10 find v(doutn) at=327.0000n",
+    "  meas tran dlev11 find v(doutn) at=357.0000n",
+    "  meas tran dlev12 find v(doutn) at=387.0000n",
+    "  meas tran dlev13 find v(doutn) at=417.0000n",
+    "  meas tran dlev14 find v(doutn) at=447.0000n",
+    "  meas tran dlev15 find v(doutn) at=477.0000n",
+    "  meas tran dlev16 find v(doutn) at=507.0000n",
+    "  meas tran dlev17 find v(doutn) at=537.0000n",
+    "  meas tran dlev18 find v(doutn) at=567.0000n",
+    "  meas tran dlev19 find v(doutn) at=597.0000n",
+    "  meas tran dlev20 find v(doutn) at=627.0000n",
+    "  meas tran dlev21 find v(doutn) at=657.0000n",
+    "  meas tran dlev22 find v(doutn) at=687.0000n",
+    "  meas tran dlev23 find v(doutn) at=717.0000n",
+    "  meas tran dlev24 find v(doutn) at=747.0000n",
+    "  meas tran dlev25 find v(doutn) at=777.0000n",
+    "  meas tran dlev26 find v(doutn) at=807.0000n",
+    "  meas tran dlev27 find v(doutn) at=837.0000n",
+    "  meas tran dlev28 find v(doutn) at=867.0000n",
+    "  meas tran dlev29 find v(doutn) at=897.0000n",
+    "  meas tran dlev30 find v(doutn) at=927.0000n",
+    "  meas tran dlev31 find v(doutn) at=957.0000n",
+    "  meas tran dlev32 find v(doutn) at=987.0000n",
+    "  let lowcount = 33 - (dlev0+dlev1+dlev2+dlev3+dlev4+dlev5+dlev6+dlev7+dlev8+dlev9+dlev10+dlev11+dlev12+dlev13+dlev14+dlev15+dlev16+dlev17+dlev18+dlev19+dlev20+dlev21+dlev22+dlev23+dlev24+dlev25+dlev26+dlev27+dlev28+dlev29+dlev30+dlev31+dlev32)",
+    "  let vos = -0.048 + (lowcount - 0.5)*0.003",
+    "  print vos",
+    "  print lowcount",
+    "  let sv = sv + vos",
+    "  let svq = svq + vos*vos",
+    "  let oor = (lowcount <= 0.5) + (lowcount >= 32.5)",
+    "  let noor = noor + oor",
+    "  meas tran vbias find v(ibn) at=5n",
+    "  let svb = vbias",
+    "  let n = n + 1",
+    "end"
+  ],
+  "measure": {
+    "n_samples": "nmax",
+    "n_out_of_range": "noor",
+    "sig_vos_raw_mv": "sqrt(abs(svq/nmax - (sv/nmax)^2))*1e3",
+    "sig_vos_mv": "sqrt(abs(svq/nmax - (sv/nmax)^2 - 7.5e-7))*1e3",
+    "vos_3sig_mv": "3*sqrt(abs(svq/nmax - (sv/nmax)^2 - 7.5e-7))*1e3",
+    "mean_vos_uv": "sv/nmax*1e6",
+    "mean_vos_sem": "(sv/nmax)/(sqrt(abs(svq/nmax - (sv/nmax)^2))/sqrt(nmax))",
+    "vbias_anchor_mv": "svb*1e3"
+  },
+  "checks": {
+    "n_out_of_range": {
+      "max": 0.0,
+      "description": "RANGE-ADEQUACY GATE. lowcount (the number of the 33 staircase levels that read LOW) must land strictly between 0 and 33 for every draw, i.e. the true per-draw offset must fall inside the swept -48..+48 mV window. A draw that pins to one end means that draw's offset landed outside the window and vos/sig_vos_mv for that draw is meaningless (clamped, not measured) -- this check must read exactly 0 for the record to be trustworthy. If a real corner ever needs it, the window (DV_MIN/DV_STEP/N_LEVELS in the deck) widens, not this floor."
+    },
+    "sig_vos_mv": {
+      "min": 0.05,
+      "description": "MISMATCH-ON GUARD, mirroring comparator-offset-mc's identical check. --sabotage-corners forces every corner to plain mos_tt (mismatch off, sim/harness/corners.py), which must and does collapse this measurement toward exactly zero. 0.05 mV is far below anything a real sub-micron latch can achieve, so this floor only catches a collapsed (mismatch-free) population, not a design assertion. sqrt(abs(...)) guards the same negative-variance-from-floating-point-noise trap comparator-offset-mc's tb.json documents for the mismatch-off case."
+    },
+    "mean_vos_sem": {
+      "min": -5.0,
+      "max": 5.0,
+      "description": "SYMMETRY CHECK, expressed in standard errors of the RAW (uncorrected) sigma so it is independent of the quantization-correction term. The population mean offset must be ~0 because the circuit is nominally symmetric; +/-5 standard errors is a ~6e-7 two-sided false-alarm rate at this N. A mean outside it means a systematic asymmetry (a netlist error, a genuinely asymmetric topology, or a level-list off-center of true zero)."
+    },
+    "vbias_anchor_mv": {
+      "min": 50.0,
+      "max": 1200.0,
+      "description": "CORNER-SENSITIVITY SANITY FLOOR. The bias pin's own voltage is a V_th proxy and strongly corner/temperature dependent, the same contract node (ibias) comparator-offset-mc anchors on. A floor-only sanity range (not per-axis-calibrated here, unlike comparator-offset-mc's own vbias_anchor_mv floors, since this bench's first committed record is this experiment's own calibration point -- see README.md 'Calibration' for why a per-axis floor was deliberately deferred rather than guessed)."
+    }
+  },
+  "evidence": {
+    "record_kind": "monte-carlo",
+    "mc_seed": "ngspice `set rndseed=20260916` at the top of the control block, then 60 draws per PVT point via `reset` inside a `dowhile` loop -- each `reset` re-evaluates the agauss() expressions inside SG13G2's mismatch-enabled LV MOS model (confirmed during issue #6, sim/device-mismatch-confirm/README.md; the SAME idiom comparator-offset-mc already uses for its own dowhile/reset loop). The SAME seed is used at every PVT point (common random numbers), so movement of the reported sigma across the grid is a real PVT effect, not sampling noise. N for statistical-error purposes is 60, not 60 x 45; 1/sqrt(2N) = 9.1% statistical precision on each reported sigma (comparator-offset-mc's N=200 gives 5.0% -- this bench's per-draw cost is far higher, a full 990 ns / 33-level staircase transient instead of one 6-point dc sweep, so N is smaller; see README.md 'Why N=60, not N=200').",
+    "mc_scope": "mismatch-only, identical scope convention to comparator-offset-mc: the mos_mismatch corner set (mos_{tt,ff,ss,fs,sf}_mismatch) is both the process-corner axis AND the Monte-Carlo mismatch switch at once (sim/harness/corners.py's module docstring). Global process skew is swept deterministically by the corner axis; the two are never confounded in one number.",
+    "mc_sigma": "1-sigma of the input-referred offset is reported both raw (sig_vos_raw_mv, includes the staircase's own quantization noise) and quantization-corrected (sig_vos_mv = sqrt(raw_variance - step_variance), step_variance = (3 mV)^2/12 = 7.5e-7 V^2 for this bench's 3 mV level spacing -- the standard uniform-quantization-noise deconvolution, the same correction a flash-ADC-style threshold detector needs). vos_3sig_mv is the corrected 3-sigma value a comparator offset spec is conventionally stated at.",
+    "notes": [
+      "METHOD: A DIGITAL STAIRCASE, NOT A DC SWEEP OR A PER-DRAW BISECTION. comparator_dut has no DC operating point (DR-0001 Decision Section 3) so a `dc` sweep -- comparator-offset-mc's method -- cannot reach it. A per-draw bisection search (several short `tran` sub-runs per draw, narrowing toward the flip point) was considered and rejected: ngspice only re-rolls SG13G2's agauss() mismatch terms on `reset`, and `reset` also restarts the transient clock, so holding ONE draw's mismatch fixed across several bisection sub-runs is not achievable with this harness's control-block idiom. Instead: ONE reset (one mismatch draw), ONE 990 ns transient sweeping 33 discrete differential-input levels (-48 mV to +48 mV, 3 mV/step, 30 ns/step -- the exact strobe cadence comparator-regeneration already validates: 10 ns reset, 10 ns evaluate, 10 ns settle before the next level's input change), with the held, supply-normalized decision output sampled once per level after that level's strobe has closed. Because every level's decision is a genuinely independent, freshly reset strobe cycle (comparator-regeneration's own 'every instance decides both ways' property already proves reset clears the prior decision on this exact DUT), a monotonic near-binary staircase results, and the offset is extracted as: lowcount = (number of levels reading LOW), vos = DV_MIN + (lowcount - 0.5)*DV_STEP. Because the decision output is near-rail (not exactly 0/1) close to the true crossing (a metastable-adjacent level reads an intermediate voltage rather than a clean rail), the sum lowcount is not exactly an integer near the true crossing, which gives a small free sub-step interpolation on top of the DV_STEP quantization -- not needed for validity (the explicit quantization-variance subtraction above already accounts for the coarse case) but improves the estimate.",
+      "WHAT THIS RECORD ADDS OVER comparator-offset-mc. comparator-offset-mc's comparator_dut_analog is a diode-connected, loop-broken reduced sub-model that structurally excludes the cross-coupled regenerative pair's own local mismatch and the reset devices' own local mismatch. This bench's comparator_dut is the unmodified DR-0001 topology -- every device that participates in a real decision (input pair, tail, cross-coupled PMOS/NMOS regenerative pair, reset devices, isolation inverters, SR output latch) carries its own agauss() mismatch draw on every `reset`, and all of it is exercised on every one of this bench's 33x60 decisions per PVT point.",
+      "WHAT IS STILL NOT IN THIS RECORD. (a) Any common-mode dependence of the whole-latch offset -- this bench sweeps only the differential axis at the DUT's own dut_vcm; comparator-offset-mc's +/-50 mV common-mode sweep has no analogue here yet (a named, not-yet-specified extension, see README.md). (b) Any layout-induced systematic offset -- this is a schematic-level record (no layout exists yet). (c) Dynamic (regeneration-noise-driven) metastability spread -- this bench uses NO transient noise sources (`.control`'s dowhile/reset loop only re-draws static agauss() mismatch, never thermal/flicker noise), so it reports the mismatch-driven offset distribution only; the noise-driven decision-time/metastability spread is issue #24's separate transient-noise bench, not this one.",
+      "EVERY sqrt() IN THIS BLOCK IS GUARDED WITH abs(), the same numerical-precision discipline comparator-offset-mc's tb.json documents (issue #8): a variance term that is mathematically ~0 (a collapsed, mismatch-free population, e.g. under --sabotage-corners) can land a few ULPs negative from floating-point summation order, and ngspice's sqrt() of a negative real returns a COMPLEX result that this harness's `m_<name> = <float>` regex cannot parse at all."
+    ]
+  }
+}

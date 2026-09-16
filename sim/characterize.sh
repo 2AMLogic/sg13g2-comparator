@@ -58,12 +58,16 @@ RUNNER=(python3 "${SIM_DIR}/run_corners.py")
 
 # Every campaign names, in its comment, which README.md target-specification
 # row it backs. Cross-reference against that table.
-#   comparator-offset-mc      -> Offset sigma
-#   comparator-preamp-noise   -> Input-referred noise
-#   comparator-regeneration   -> Decision time vs. overdrive (+ metastability)
-#   comparator-kickback       -> Kickback
+#   comparator-offset-mc            -> Offset sigma (lower bound, loop-broken
+#                                       comparator_dut_analog sub-model)
+#   comparator-offset-transient-mc  -> Offset sigma (whole latch, strobe ->
+#                                       decision, the un-reduced comparator_dut)
+#   comparator-preamp-noise         -> Input-referred noise
+#   comparator-regeneration         -> Decision time vs. overdrive (+ metastability)
+#   comparator-kickback              -> Kickback
 CAMPAIGNS=(
   comparator-offset-mc
+  comparator-offset-transient-mc
   comparator-preamp-noise
   comparator-regeneration
   comparator-kickback
@@ -85,6 +89,23 @@ for campaign in "${CAMPAIGNS[@]}"; do
   echo
   echo "######################## ${campaign} ########################"
   if [ "${MODE}" = "smoke" ]; then
+    # comparator-offset-transient-mc's single nominal point still runs its
+    # tb.json's full 60-draw dowhile/reset loop -- a 990 ns transient PER
+    # DRAW, not the near-instant `dc` sweep comparator-offset-mc's own
+    # 200-draw loop uses -- so unlike every other campaign here, ONE point
+    # of this bench alone takes on the order of a minute, not "seconds".
+    # There is no CLI flag that thins nmax inside a tb.json control block
+    # (the harness is generic; draw count is a testbench-authored constant,
+    # sim/harness/README.md), so there is no way to make this bench's smoke
+    # point cheap without either special-casing the harness (out of scope,
+    # issue #23) or editing its committed tb.json (which would make the
+    # smoke run exercise a DIFFERENT draw count than every committed
+    # record). Skipped here rather than silently blowing smoke's "seconds,
+    # not minutes" budget; `characterize` mode below still runs it in full.
+    if [ "${campaign}" = "comparator-offset-transient-mc" ]; then
+      RESULTS+=("SKIP  ${campaign}  (no cheap smoke point; see comment above)")
+      continue
+    fi
     # comparator-offset-mc's 200-draw loop measures a Monte-Carlo SIGMA, and
     # SG13G2 ties local mismatch to which mos_*_mismatch corner section is
     # loaded (sim/harness/corners.py) rather than to a separable global
