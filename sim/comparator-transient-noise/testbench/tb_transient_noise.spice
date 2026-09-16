@@ -50,32 +50,50 @@
 * be controlled by `setseed`, `set rndseed=`, or `.option seed=` (all three
 * tested independently; see this experiment's README.md "Seed
 * reproducibility"). Reproducibility of the *committed* frac_high_* numbers
-* therefore rests on the run count (N=40/rung/point), not on the seed value;
+* therefore rests on the run count (N=80/rung/point), not on the seed value;
 * re-running this deck samples a fresh set of draws every time.
 *
-* THE INJECTED trnoise() SOURCE IS CALIBRATED TO comparator-preamp-noise's
-* OWN NOMINAL-CORNER TOTAL INPUT-REFERRED NUMBER (277.827 uV rms at
-* tt_27c_1.20v, sim/comparator-preamp-noise/records/
-* 20260916-021939-36773c7.md), applied directly and IDEALLY at vinp/vinn --
-* exactly the same injection point and the same "total integrated,
-* differential, input-referred" definition that record already uses. The
-* SAME injected level is used at EVERY PVT point (deliberately NOT
+* THE INJECTED trnoise() SOURCE IS CALIBRATED TO A SPECTRAL DENSITY, NOT TO
+* A BAND-LIMITED TOTAL -- this is the methodological core of the bench.
+* comparator-preamp-noise/ reports BOTH an integrated total (277.827 uV rms
+* at tt_27c_1.20v) and the white density that total was integrated from
+* (white_nv_rthz = 59.4598 nV/rtHz OUTPUT-referred, av_dc = 1.63936, so
+* 36.27 nV/rtHz INPUT-referred; record
+* sim/comparator-preamp-noise/records/20260916-113303-180cca7.md). This deck
+* injects the DENSITY at vinp/vinn and lets the LATCH set the bandwidth.
+*
+* Why not the total? That 277.827 uV is integrated over the reduced
+* sub-model's OWN noise bandwidth (enbw_mhz = 58.7 MHz -- a property of a
+* diode-connected, loop-broken sub-model, not of a strobed decision). A
+* real decision integrates input noise over its own aperture, which is
+* set by the regeneration dynamics this deck deliberately instantiates.
+* Injecting "the same total rms" over this source's much wider band would
+* silently divide the in-band density by the ratio of the two bandwidths
+* and understate the answer; injecting the same DENSITY asks the only
+* question the reduced sub-model cannot answer for itself.
+*
+* The SAME injected density is used at EVERY PVT point (deliberately NOT
 * re-derived per corner): this isolates what this bench actually adds over
-* the AC bench -- how the regenerative dynamics at THIS corner reshape a
-* GIVEN input noise level -- from the front end's own already-corner-
-* characterized noise MAGNITUDE (comparator-preamp-noise/), the same
+* the AC bench -- how the regenerative dynamics at THIS corner convert a
+* GIVEN input noise density into a decision-boundary sigma -- from the front
+* end's own already-corner-characterized noise magnitude, the same
 * separation-of-concerns comparator-regeneration/ and comparator-offset-mc/
 * already make for delay/offset (this experiment's README.md "Method").
 *
-* NA/TS CALIBRATION (empirically confirmed against this repo's own pinned
-* ngspice-46, not assumed from documentation -- see this experiment's
-* README.md "NA/TS calibration" for the full derivation and the calibration
-* decks that produced it):
+* NA/TS CALIBRATION (derived analytically AND confirmed empirically against
+* this repo's own pinned ngspice-46, not assumed from documentation -- see
+* this experiment's README.md "NA/TS calibration" for the derivation and the
+* calibration decks that produced it):
 *   - The piecewise-linear-interpolated white component of TRNOISE(NA TS
-*     NALPHA NAMP) has a TOTAL variance of (2/3)*NA^2, INDEPENDENT of TS
-*     (confirmed empirically at TS = 10p/50p/200p, matching the analytic
-*     average-interpolation-variance derivation) -- i.e. NA is calibrated
-*     against the SOURCE's own total broadband rms, not a spectral density.
+*     NALPHA NAMP) is a linear interpolation of iid N(0,NA^2) samples spaced
+*     TS apart, so its two-sided PSD is NA^2*TS*sinc^4(f*TS): a ONE-SIDED
+*     density of NA*sqrt(2*TS) V/rtHz at low frequency, and a total variance
+*     of (2/3)*NA^2 (since the integral of sinc^4 is 2/3) independent of TS.
+*     Both halves confirmed empirically: a TRNOISE source through a 1-pole
+*     RC of known ENBW returns NA*sqrt(2*TS*ENBW) to within statistical
+*     error at TS = 10 ps and 20 ps and at two different ENBWs, and the
+*     unfiltered source rms reads 0.8156*NA vs. the predicted
+*     sqrt(2/3) = 0.8165.
 *   - TS = 20 ps is chosen safely below the FASTEST measured regeneration
 *     time constant on this PVT grid (42.6 ps at ff_-40c_1.32v,
 *     sim/comparator-regeneration/records/20260916-021945-36773c7.md), so
@@ -83,10 +101,16 @@
 *     regeneration timescale, and comfortably inside TRNOISE's internal
 *     4-sample retry-safety window (ngspice's 1-f-code.h TRNOISE_STATE_MEM_LEN)
 *     -- no "ouch, trying to fetch from the past" aborts observed in any
-*     calibration or production run.
-*   - vn_na = 3.362e-4 solves 0.8263*vn_na = 277.827e-6 (the 0.8263 constant
-*     is this repo's OWN empirically measured total-rms/NA ratio, consistent
-*     with the analytic sqrt(2/3) = 0.8165 prediction to ~1%).
+*     calibration or production run. Because the calibration fixes the
+*     DENSITY, the answer must not depend on this choice -- and does not:
+*     re-running the nominal point at TS = 10 ps with NA rescaled to hold
+*     NA*sqrt(2*TS) constant reproduces the same sigma within sampling error
+*     (this experiment's README.md "TS-insensitivity cross-check").
+*   - vn_na = 5.735e-3 solves vn_na*sqrt(2*vn_ts) = 36.27e-9 at vn_ts = 20 ps.
+*   - od_x (the probe overdrive, tb.json "params") is set to 1.0 mV, near the
+*     measured 1-sigma decision noise, so each rung's hit rate lands in the
+*     informative 0.7-0.95 band instead of saturating at 1.0 where the probit
+*     inversion is singular.
 *
 * WHY NO sigma_uv MEASURE IN THIS DECK. The probit inversion involves
 * ln(1 - frac_high) for the plus rung, which is singular if a corner's
@@ -97,8 +121,6 @@
 * fine point "failed". frac_high_zero/plus/minus are reported raw instead;
 * the sigma conversion is a simple, documented, reproducible post-hoc
 * calculation over the committed record (this experiment's README.md).
-
-.param od_x=75u
 
 vsup vdd 0 dc {vdd_val}
 vcm  cm 0 dc {dut_vcm}

@@ -68,17 +68,6 @@ RUNNER=(python3 "${SIM_DIR}/run_corners.py")
 #                                       whole latch, DR-0002 / issue #24)
 #   comparator-regeneration         -> Decision time vs. overdrive (+ metastability)
 #   comparator-kickback              -> Kickback
-#
-# comparator-transient-noise's SMOKE POINT IS NOT "seconds" LIKE THE REST.
-# Its tb.json dowhile-loops 80 FULL transient `reset`+`tran` calls per rung x
-# 3 rungs = 240 transient runs, even at a single PVT point -- the trial count
-# is what the measurement IS (a decision-statistics hit rate), not something
-# a smaller corner/temperature selection can shrink. Observed: ~12 min for one
-# point at -j1 (this bench's own README.md "Method" and "Debugging notes").
-# Accepted as a documented exception to this script's "seconds, not minutes"
-# smoke contract rather than silently degrading the trial count for smoke mode
-# only (which would smoke-test a DIFFERENT, less statistically meaningful
-# deck than `characterize` mode runs).
 CAMPAIGNS=(
   comparator-offset-mc
   comparator-offset-transient-mc
@@ -118,6 +107,20 @@ for campaign in "${CAMPAIGNS[@]}"; do
     # record). Skipped here rather than silently blowing smoke's "seconds,
     # not minutes" budget; `characterize` mode below still runs it in full.
     if [ "${campaign}" = "comparator-offset-transient-mc" ]; then
+      RESULTS+=("SKIP  ${campaign}  (no cheap smoke point; see comment above)")
+      continue
+    fi
+    # comparator-transient-noise is the same shape of problem, worse: its
+    # tb.json dowhile-loops 80 full `reset`+`tran` calls, and the deck holds
+    # THREE comparator_dut instances (one per overdrive rung), so one nominal
+    # point is 240 transient runs -- ~12 minutes at -j1 (observed; see that
+    # bench's README.md "Debugging notes"). The trial count is what the
+    # measurement IS here (a decision-statistics hit rate), so it cannot be
+    # thinned for smoke without smoke-testing a different, less meaningful
+    # deck than every committed record was made with -- and, as above, the
+    # harness has no CLI flag that reaches inside a tb.json control block.
+    # Skipped for the same reason and by the same rule.
+    if [ "${campaign}" = "comparator-transient-noise" ]; then
       RESULTS+=("SKIP  ${campaign}  (no cheap smoke point; see comment above)")
       continue
     fi
