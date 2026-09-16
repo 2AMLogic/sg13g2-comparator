@@ -93,6 +93,29 @@ not taken by this issue) is open — see "Open items".
   DRAFT/unratified — this issue does not claim any row is met (see
   `sim/dut/README.md` and `sim/dut.json`'s own `provenance: schematic`
   notes).
+- **Two corner-sensitivity check floors, calibrated against the placeholder
+  DUT, do not hold against the real design and now FAIL as committed
+  evidence, not as a harness defect.** The first `provenance: schematic`
+  `characterize` run (records
+  `sim/comparator-preamp-noise/records/20260916-021939-36773c7.json` and
+  `sim/comparator-regeneration/records/20260916-021945-36773c7.json`) shows:
+  (a) `comparator-preamp-noise`'s `av_dc` process-axis floor (`>= 3%`,
+  calibrated from the placeholder's own first 45-point record per that
+  bench's `tb.json`) against a weakest observed process slice of `1.07%` —
+  physically plausible for a diode-connected-load gain stage, whose gain is
+  a `gm`-ratio that partly cancels process skew to first order, unlike the
+  placeholder's ideal-resistor-loaded front end; and (b)
+  `comparator-regeneration`'s `td_od50_ns` temperature-axis floor (`>= 8%`)
+  against a weakest observed slice of `2.73%`. Both benches' nominal-point
+  and `--sabotage-corners` negative-control runs pass (`sim/selftest.sh`),
+  confirming corner switching itself works — these are real measured
+  properties of the reduced sub-model / real latch, not a plumbing bug. Per
+  `sim/README.md`'s "Do not relax a check to make a result pass" rule,
+  this issue does NOT recalibrate either floor; both FAIL records are
+  committed as-is (append-only evidence), and recalibrating the floors
+  against the real DUT — or deciding they should stay calibrated against a
+  worst-case placeholder-shaped bound — is left to a dedicated follow-up
+  issue.
 
 ## Regenerating the netlist
 
