@@ -3,15 +3,24 @@
 xschem + ngspice testbenches and **append-only** results, on the SG13G2
 1.2 V LV core rail.
 
-Four experiments, one per first-class row of
-[`README.md`'s target specification](../README.md#target-specification-draft--engineering-to-ratify):
+Five experiments backing the four first-class rows of
+[`README.md`'s target specification](../README.md#target-specification-draft--engineering-to-ratify)
+(the offset-σ row has two, deliberately — see below):
 
 | experiment | row it backs | method |
 |---|---|---|
-| [`comparator-offset-mc/`](comparator-offset-mc/) | Offset σ | Monte Carlo on SG13G2's `mos_*_mismatch` per-instance local-mismatch models |
+| [`comparator-offset-mc/`](comparator-offset-mc/) | Offset σ (**lower bound**, front end only) | Monte Carlo on SG13G2's `mos_*_mismatch` per-instance local-mismatch models, `dc` sweep against the loop-broken `comparator_dut_analog` reduced sub-model |
+| [`comparator-offset-transient-mc/`](comparator-offset-transient-mc/) | Offset σ (**whole latch**, strobe → decision) | Monte Carlo on the same `mos_*_mismatch` models, transient digital-staircase sweep against the un-reduced `comparator_dut` topology |
 | [`comparator-preamp-noise/`](comparator-preamp-noise/) | Input-referred noise | `.noise`, total integrated output noise ÷ measured DC gain |
 | [`comparator-regeneration/`](comparator-regeneration/) | Decision time vs. overdrive, **metastability** | transient overdrive ladder, τ extracted from it |
 | [`comparator-kickback/`](comparator-kickback/) | **Kickback** | 1 kΩ source impedance *and* a floating high-Z input |
+
+`comparator_dut` has no DC-resolvable operating point (DR-0001 Decision §3),
+so `comparator-offset-mc`'s reduced sub-model was DR-0001's own named interim
+path for that row (Consequence 2) rather than a design choice made from
+scratch. Both experiments stay committed — see
+[`comparator-offset-transient-mc/README.md`](comparator-offset-transient-mc/README.md#relationship-to-comparator-offset-mc)
+for why retiring the reduced-sub-model bench was considered and rejected.
 
 Metastability and kickback are first-class rows here, not appendices, per
 [`CLAUDE.md`](../CLAUDE.md).
