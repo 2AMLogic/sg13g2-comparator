@@ -58,18 +58,23 @@ see `sim/harness/corners.py`). This fragment therefore sets nothing
 mismatch-related at all; the corner *is* the switch. `mm_ok` defaults to 1
 inside the PDK's own `sg13_lv_nmos`/`sg13_lv_pmos` subckts.
 
-### No resistor null control
+### No resistor null control — and no resistor load at all
 
 `gf180-comparator`'s twin of this bench carries a null control proving
 gf180mcu's resistor model has its local-mismatch coefficient hard-set to
-zero. This placeholder's front-end load is an ideal SPICE resistor, not a
-PDK resistor subckt (`sim/dut/placeholder_comparator.spice`'s header
-explains why), so there is no PDK resistor mismatch model in this circuit to
-null-control at all — not because SG13G2's resistors lack local mismatch
-(they don't: `rsil`/`rhigh`/`rppd` carry real per-instance mismatch, unlike
-gf180mcu's), but because this placeholder does not yet bind one. That is a
-named, tracked extension point (`sim/harness/corners.py`'s module
-docstring), not a silent omission.
+zero. This bench's DUT (`comparator_dut_analog` in `design/comparator.spice`)
+has no resistor load to null-control in the first place: its front-end load
+is a pair of diode-connected PMOS devices (`M5A`/`M6A`, per
+[`design/README.md`](../../design/README.md)), not a resistor of any kind —
+ideal or PDK. Those load devices ARE real `sg13_lv_pmos` instances, so their
+own local mismatch is captured by `sig_vos_mv` below like any other device on
+the `mos_mismatch` corner set; there is no separate resistor-mismatch term to
+include or exclude. (An earlier, now-superseded placeholder DUT used an ideal
+SPICE resistor load here, which genuinely had no PDK resistor mismatch model
+to null-control — SG13G2's own `rsil`/`rhigh`/`rppd` resistor subckts do
+carry real per-instance mismatch, unlike gf180mcu's, and remain a named,
+tracked extension point, `sim/harness/corners.py`'s module docstring, for a
+DUT that actually instantiates one.)
 
 ### The two checks that are not design numbers
 
@@ -127,8 +132,22 @@ fragment line — see "Mismatch is a corner selection here" above and
 | record | DUT | grid | verdict |
 |---|---|---|---|
 | [`20260910-232619-8148438`](records/20260910-232619-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos_mismatch` × 3 T × 3 V | PASS |
+| [`20260916-021822-36773c7`](records/20260916-021822-36773c7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`, `comparator_dut_analog` — a DR-0001 lower-bound reduced sub-model, see banner above) | 45/45, `mos_mismatch` × 3 T × 3 V | PASS |
 
 **Read the banner on that record.** It was taken against the placeholder DUT
 and substantiates the harness, not the offset row. It is also the record the
 `vbias_anchor_mv` per-axis floors are calibrated from (observed weakest
 slices: process 25.17 %, temperature 26.20 %).
+
+**Stale-prose flag on `20260916-021822-36773c7` (issue #20).** That record's
+own `Claim` line correctly states `comparator_dut_analog` is DR-0001's
+diode-connected, loop-broken reduced sub-model — but its evidence `Note`
+list still carries verbatim placeholder-era text describing "this
+placeholder's front-end load" as "an ideal SPICE resistor, not a PDK
+resistor subckt", because the harness reproduces `testbench/tb.json`'s
+`evidence.notes` into every record it writes, and that field had not yet
+been corrected when this record was taken. The real front-end load is a
+diode-connected PMOS pair (see "No resistor null control" above), whose
+local mismatch IS captured in this record's `sig_vos_mv`. `sim/` records are
+append-only, so this record is **not** edited; `tb.json` has been corrected
+(issue #20) so every record taken after it carries the accurate note.

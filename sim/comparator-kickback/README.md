@@ -104,15 +104,28 @@ it, not merely restating it.
 | record | DUT | grid | verdict |
 |---|---|---|---|
 | [`20260910-233015-8148438`](records/20260910-233015-8148438.md) | `placeholder-v1` (**placeholder**) | 45/45, `mos` × 3 T × 3 V | PASS |
+| [`20260916-022249-36773c7`](records/20260916-022249-36773c7.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos` × 3 T × 3 V | PASS |
 
 **Read the banner on that record.** It was taken against the placeholder DUT
 and substantiates the harness, not the kickback row. It is also the record
 the `kick_1k_peak_mv` per-axis floors are calibrated from (observed weakest
 slices: process 3.53 %, temperature 0.71 %, supply 14.55 %).
 
-**Placeholder caveat.** The coupling from the placeholder's decision stage
-back to its front end is an explicit 5 fF/side stand-in for a real latch
-input pair's `C_gd`, declared in
-[`sim/dut/placeholder_comparator.spice`](../dut/placeholder_comparator.spice),
-not an extracted capacitance. The numbers exercise the measurement path end
-to end; they characterise no real topology.
+**Placeholder caveat (applies only to `20260910-233015-8148438` above).** The
+coupling from the placeholder's decision stage back to its front end was an
+explicit 5 fF/side stand-in for a real latch input pair's `C_gd`, declared in
+`sim/dut/placeholder_comparator.spice`, not an extracted capacitance. The
+numbers exercise the measurement path end to end; they characterise no real
+topology.
+
+**Stale-prose flag on `20260916-022249-36773c7` (issue #20).** That record's
+own `Claim` line correctly states the coupling now runs through the real
+StrongARM input pair's intrinsic `C_gd` (SG13G2's PSP103 models,
+`design/comparator.spice`) — but its evidence `Note` list still ends with the
+verbatim "PLACEHOLDER CAVEAT" text quoted above, because the harness
+reproduces `testbench/tb.json`'s `evidence.notes` into every record it
+writes, and that field had not yet been corrected when this record was taken.
+`sim/` records are append-only, so this record is **not** edited; `tb.json`
+has been corrected (issue #20) so every record taken after it carries the
+accurate note. When reading `20260916-022249-36773c7.md`, trust its `Claim`
+line over its final `Note` line.
