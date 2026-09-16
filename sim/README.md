@@ -4,7 +4,7 @@ xschem + ngspice testbenches and **append-only** results, on the SG13G2
 1.2 V LV core rail.
 
 Four experiments, one per first-class row of
-[`README.md`'s target specification](../README.md#target-specification-draft--engineering-to-ratify):
+[`README.md`'s target specification](../README.md#target-specification-ratified--dr-0002):
 
 | experiment | row it backs | method |
 |---|---|---|
@@ -29,17 +29,24 @@ sim/device-mismatch-confirm/
                           one for comparator-offset-mc above.
 ```
 
-> **Current status: the device under test is the ratified DR-0001 schematic,
-> not yet a ratified spec.** `sim/dut.json` binds
+> **Current status: the device under test is the DR-0001 schematic, and the
+> spec table it is scored against is ratified by
+> [DR-0002](../spec/decision-records/0002-target-spec-ratification.md).**
+> Ratified is not met — DR-0002 records three rows the current design misses,
+> and two rows whose evidence here is a lower bound that cannot certify
+> compliance either way. `sim/dut.json` binds
 > [`design/comparator.spice`](../design/comparator.spice) (`provenance:
 > schematic`), regenerated from the xschem sources in
 > [`design/`](../design/) per
 > [`spec/decision-records/0001-comparator-topology.md`](../spec/decision-records/0001-comparator-topology.md):
 > a single-tail StrongARM dynamic latch on `sg13_lv_nmos`/`sg13_lv_pmos`.
-> Records made against it are no longer placeholder-banner'd, but they still
-> do **not** substantiate `README.md`'s target-specification table — that
-> ratification is a separate, later act (`spec/porting-plan.md`'s third step
-> in this chain). Earlier `provenance: placeholder` records made against
+> Records made against it are no longer placeholder-banner'd, and the
+> `20260916-*` ones are the evidence DR-0002 ratified the table on
+> (`spec/porting-plan.md`'s third step in this chain, now taken). Their own
+> Claim text still says they are "NOT evidence toward
+> `README.md#target-specification`" — correct when written, superseded by
+> DR-0002; `sim/` is append-only, so that text stays as-is rather than being
+> rewritten. Earlier `provenance: placeholder` records made against
 > [`sim/dut/placeholder_comparator.spice`](dut/) remain committed
 > (append-only) and still carry their own banner. See
 > [`sim/dut/README.md`](dut/README.md) for the full binding history and the

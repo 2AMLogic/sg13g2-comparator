@@ -4,9 +4,12 @@
 regeneration time constant **τ** extracted from it, near-metastable
 behaviour, and the switching energy per decision.
 
-Backs [`README.md`'s decision-time row](../../README.md#target-specification-draft--engineering-to-ratify)
+Backs [`README.md`'s decision-time row](../../README.md#target-specification-ratified--dr-0002)
 (≤ 1.5 ns at 50 mV overdrive, 1.2 V core; ≤ 0.8 ns stretch), and supplies the
-τ that **every metastability statement in this repo is computed from** —
+τ that **every metastability statement in this repo is computed from** — now
+itself a ratified, bounded sub-row (**τ ≤ 250 ps**, and ≤ 2.0 ns at 0.1 mV
+overdrive, per
+[DR-0002](../../spec/decision-records/0002-target-spec-ratification.md)) —
 metastability is a first-class row here, per [`CLAUDE.md`](../../CLAUDE.md),
 not a footnote.
 
