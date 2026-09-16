@@ -13,10 +13,10 @@
     "              all four benches bias the DUT identically without each",
     "              re-stating the numbers"
   ],
-  "netlist": "dut/placeholder_comparator.spice",
-  "id": "placeholder-v1",
-  "provenance": "placeholder",
-  "description": "Deliberately crude harness-exercising stub on sg13_lv_nmos/sg13_lv_pmos: a resistively-loaded NMOS differential preamplifier (comparator_dut_analog) feeding a BEHAVIOURAL regenerative decision stage (comparator_dut_latch). NOT a topology proposal -- see sim/dut/README.md and the header of sim/dut/placeholder_comparator.spice.",
+  "netlist": "../design/comparator.spice",
+  "id": "comparator-dr0001",
+  "provenance": "schematic",
+  "description": "The ratified topology from spec/decision-records/0001-comparator-topology.md: a single-tail (bottom-tail) StrongARM dynamic latch on sg13_lv_nmos/sg13_lv_pmos, with isolation inverters and a NOR SR output latch holding dout/doutb between strobes. Regenerated from design/comparator*.sch by design/netlist.py -- see design/README.md. Per that DR's Decision Section 3, this topology has no DC-resolvable analog front end, so comparator_dut_analog here is the DR's own named interim path: a diode-connected, loop-broken reduced sub-model, NOT the design's actual front end -- an offset/noise LOWER BOUND that excludes regeneration noise. Read design/README.md before quoting any number measured against it.",
   "params": {
     "dut_ib": 2e-05,
     "dut_vcm": 0.6
@@ -24,6 +24,8 @@
   "notes": [
     "dut_ib is the tail-mirror reference current forced into the `ibias` pin.",
     "dut_vcm is the input common mode the front end is specified at. It is a property of the DUT, not of any one testbench, so it lives here.",
-    "0.6 V is mid-rail (VDD/2 at the nominal 1.2 V SG13G2 LV supply) -- there is no CDAC or other driving circuit to inherit a common mode from here, so mid-rail is the natural standalone choice, matching gf180-comparator's identical convention at its own nominal rail."
+    "0.6 V is mid-rail (VDD/2 at the nominal 1.2 V SG13G2 LV supply) -- there is no CDAC or other driving circuit to inherit a common mode from here, so mid-rail is the natural standalone choice, matching gf180-comparator's identical convention at its own nominal rail.",
+    "dut_ib = 20uA matches spec/decision-records/0001-comparator-topology.md's own 'Sizing rationale' section, which names this value as the harness's existing expectation absent a documented reason to change it -- carried over unchanged from the placeholder binding.",
+    "provenance: schematic means these records substantiate DR-0001's chosen topology's own measured behaviour -- NOT that README.md's target-specification table rows are met. That ratification is a separate, later act (spec/porting-plan.md's third step in this chain); see sim/dut/README.md."
   ]
 }

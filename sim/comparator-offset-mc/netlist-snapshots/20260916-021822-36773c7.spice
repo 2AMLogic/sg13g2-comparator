@@ -1,0 +1,187 @@
+* Netlist snapshot for record 20260916-021822-36773c7 -- exactly what was simulated.
+* DUT: comparator-dr0001 (schematic), design/comparator.spice
+* Testbench: sim/comparator-offset-mc/testbench/tb_offset_mc.spice
+* ---------------- DUT NETLIST ----------------
+* ============================================================================
+* sg13g2-comparator -- DERIVED NETLIST.  DO NOT EDIT BY HAND.
+* ============================================================================
+*
+* Generated from the xschem sources in design/ by:
+*
+*     python3 design/netlist.py
+*
+* The schematics are the source of record:
+*
+*   design/comparator.sch              the design -- a single-tail StrongARM
+*                                      dynamic latch (spec/decision-records/
+*                                      0001-comparator-topology.md), plus the
+*                                      isolation inverters and NOR SR latch
+*                                      that make its outputs HELD between
+*                                      strobes as the interface contract
+*                                      requires
+*   design/comparator_dut.sch          contract wrapper: tail-bias reference
+*                                      on the `ibias` pin + the core
+*   design/comparator_dut_latch.sch    contract wrapper: the core with its
+*                                      tail-bias node tied to vdd
+*   design/comparator_dut_analog.sch   the LOOP-BROKEN reduced sub-model --
+*                                      an offset/noise LOWER BOUND, not the
+*                                      design's front end.  Read
+*                                      design/README.md before quoting any
+*                                      number measured against it.
+*
+* Interface contract: sim/dut/README.md.  Asserted at generation time by
+* design/netlist.py (against sim/harness/dut.py's own REQUIRED_SUBCKTS) and
+* again at load time by the harness.
+*
+* Parameters supplied by the harness, not by this file: dut_ib, dut_vcm,
+* vdd_val, vdd_nom, temp_c (sim/harness/runner.py compose_deck).  This file
+* deliberately contains no .include / .lib / .temp / .control / .endc / .end.
+* ============================================================================
+
+.subckt comparator vinp vinn clk vbias dout doutb vdd vss
+*.iopin vinp
+*.iopin vinn
+*.iopin clk
+*.iopin vbias
+*.iopin dout
+*.iopin doutb
+*.iopin vdd
+*.iopin vss
+XMT tmid vbias vss vss sg13_lv_nmos w=40u l=0.5u ng=1 m=1
+XMSW tail clk tmid vss sg13_lv_nmos w=40u l=0.13u ng=1 m=1
+XM1 np vinp tail vss sg13_lv_nmos w=12u l=0.34u ng=1 m=1
+XM2 nn vinn tail vss sg13_lv_nmos w=12u l=0.34u ng=1 m=1
+XM3 ln lp np vss sg13_lv_nmos w=3u l=0.13u ng=1 m=1
+XM4 lp ln nn vss sg13_lv_nmos w=3u l=0.13u ng=1 m=1
+XM5 ln lp vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM6 lp ln vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM7 ln clk vdd vdd sg13_lv_pmos w=6u l=0.13u ng=1 m=1
+XM8 lp clk vdd vdd sg13_lv_pmos w=6u l=0.13u ng=1 m=1
+XM9 np clk vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM10 nn clk vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIAP lnb ln vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIAN lnb ln vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMIBP lpb lp vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIBN lpb lp vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNAP1 na lnb vdd vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNAP2 doutb dout na vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNAN1 doutb lnb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNAN2 doutb dout vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNBP1 nb lpb vdd vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNBP2 dout doutb nb vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNBN1 dout lpb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNBN2 dout doutb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+.ends
+
+.subckt comparator_dut_analog vinp vinn ibias aop aon vdd vss
+*.iopin vinp
+*.iopin vinn
+*.iopin ibias
+*.iopin aop
+*.iopin aon
+*.iopin vdd
+*.iopin vss
+XMBA ibias ibias vss vss sg13_lv_nmos w=10u l=0.5u ng=1 m=1
+XMTA tmid ibias vss vss sg13_lv_nmos w=40u l=0.5u ng=1 m=1
+XMSWA tail vdd tmid vss sg13_lv_nmos w=40u l=0.13u ng=1 m=1
+XM1A aon vinp tail vss sg13_lv_nmos w=12u l=0.34u ng=1 m=1
+XM2A aop vinn tail vss sg13_lv_nmos w=12u l=0.34u ng=1 m=1
+XM5A aon aon vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM6A aop aop vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+.ends
+
+.subckt comparator_dut_latch inp inn clk dout doutb vdd vss
+*.iopin inp
+*.iopin inn
+*.iopin clk
+*.iopin dout
+*.iopin doutb
+*.iopin vdd
+*.iopin vss
+x1 inp inn clk vdd dout doutb vdd vss comparator
+.ends
+
+.subckt comparator_dut vinp vinn clk ibias dout doutb vdd vss
+*.iopin vinp
+*.iopin vinn
+*.iopin clk
+*.iopin ibias
+*.iopin dout
+*.iopin doutb
+*.iopin vdd
+*.iopin vss
+XMB ibias ibias vss vss sg13_lv_nmos w=10u l=0.5u ng=1 m=1
+x1 vinp vinn clk ibias dout doutb vdd vss comparator
+.ends
+
+* ---------------- TESTBENCH FRAGMENT ----------------
+* tb_offset_mc -- Monte-Carlo input-referred offset of the comparator front
+* end, and the part of that offset that MOVES with input common mode.
+*
+* Netlist FRAGMENT. The harness supplies the models, the corner .lib
+* section, .temp, the DUT netlist, the .control block and .end
+* (sim/harness/README.md). Parameters from the harness: vdd_val, vdd_nom,
+* temp_c, dut_ib, dut_vcm.
+*
+* METHODOLOGY PORTED FROM gf180-comparator/sim/comparator-offset-mc/ (itself
+* ported from gf180-sar-adc) -- see this experiment's README.md for the full
+* transfer/non-transfer list. In one line: N draws through a
+* `dowhile`/`reset` loop, each draw re-evaluating the agauss expressions
+* inside SG13G2's mismatch-enabled LV MOS model, with the gain of the SAME
+* draw measured by a second DC point so that offset = -dv0/A_v is a real
+* offset rather than a difference of two independent populations.
+*
+* STANDALONE STIMULUS. gf180-comparator's version of this bench sweeps a
+* common-mode band about its own DUT's dut_vcm. There is no CDAC here and no
+* SAR sequencer either: the stimulus is an ideal differential DC source
+* riding on an ideal common-mode source, and the common-mode band swept is a
+* stated +/-50 mV about the DUT's own specified `dut_vcm` -- a property of
+* the comparator, not of anything driving it.
+*
+* MISMATCH IS A CORNER SELECTION HERE, NOT A FRAGMENT PARAMETER. Unlike
+* gf180mcu (a global `sw_stat_mismatch` switch that a fragment can flip, and
+* MUST flip after the model include or design.ngspice's default silently
+* wins), SG13G2 has no such switch: local mismatch is baked into which
+* `cornerMOSlv.lib` `.LIB` section this bench's tb.json names in its
+* `corners` field (`mos_mismatch` -- the `mos_{tt,ff,ss,fs,sf}_mismatch`
+* set, see sim/harness/corners.py). This fragment therefore sets nothing
+* mismatch-related at all; the corner IS the switch. `mm_ok` defaults to 1
+* inside the PDK's own sg13_lv_nmos/sg13_lv_pmos subckts, confirmed during
+* issue #6 (sim/device-mismatch-confirm/README.md).
+*
+* NO RESISTOR NULL CONTROL. gf180-comparator's twin of this bench also
+* carries a null control proving gf180mcu's resistor model has its local-
+* mismatch coefficient hard-set to zero. SG13G2's placeholder front end
+* loads with an IDEAL resistor (sim/dut/placeholder_comparator.spice's
+* header explains why), so there is no PDK resistor mismatch model in this
+* circuit to null-control at all -- not because SG13G2's resistors lack
+* real mismatch (they do NOT: rsil/rhigh/rppd's own model files carry
+* genuine per-instance agauss() terms, unlike gf180mcu's), but because this
+* placeholder does not instantiate one. See sim/harness/corners.py's module
+* docstring "extension point" for what happens when a real design does.
+
+.param c_route=10f
+.param vcm_step=50m
+
+* ---- supply ----------------------------------------------------------
+vsup vdd 0 dc {vdd_val}
+
+* ---- ideal standalone stimulus ---------------------------------------
+* cm  = dut_vcm + vcmd, so sweeping `vcmd` moves the input common mode
+* without the manifest having to know what dut_vcm is.
+vcmb cmb 0 dc {dut_vcm}
+vcmd cm  cmb dc 0
+vd   vd 0 dc 0
+Eap  ap cm vd 0 0.5
+Ean  an cm vd 0 -0.5
+
+* ---- device under test (front end; see sim/dut/README.md) -------------
+ib   vdd ibn dc {dut_ib}
+Xa   ap an ibn aop aon vdd 0 comparator_dut_analog
+
+* Routing allowance on each front-end output. Deliberately SMALL: loading
+* this node harder would only lower the bandwidth, which does not affect a
+* DC offset measurement, but keeping the same allowance as the noise bench
+* means the two benches see the same circuit.
+Cwp aop 0 {c_route}
+Cwn aon 0 {c_route}

@@ -29,16 +29,21 @@ sim/device-mismatch-confirm/
                           one for comparator-offset-mc above.
 ```
 
-> **Current status: the device under test is a PLACEHOLDER.** This repo's
-> comparator topology is not decided yet — that is
-> [`spec/porting-plan.md`](../spec/porting-plan.md) next step 1, a separate
-> decision record. `sim/dut.json` therefore binds
-> [`sim/dut/placeholder_comparator.spice`](dut/), a deliberately crude stub
-> on `sg13_lv_nmos`/`sg13_lv_pmos`, and **every record committed so far
-> carries a banner saying its numbers substantiate the harness and not a
-> spec row.** The plumbing is real, exercised, and reproducible; the circuit
-> is not the design. Swapping in the real netlist is a one-line edit of
-> `sim/dut.json` — see [`sim/dut/README.md`](dut/README.md).
+> **Current status: the device under test is the ratified DR-0001 schematic,
+> not yet a ratified spec.** `sim/dut.json` binds
+> [`design/comparator.spice`](../design/comparator.spice) (`provenance:
+> schematic`), regenerated from the xschem sources in
+> [`design/`](../design/) per
+> [`spec/decision-records/0001-comparator-topology.md`](../spec/decision-records/0001-comparator-topology.md):
+> a single-tail StrongARM dynamic latch on `sg13_lv_nmos`/`sg13_lv_pmos`.
+> Records made against it are no longer placeholder-banner'd, but they still
+> do **not** substantiate `README.md`'s target-specification table — that
+> ratification is a separate, later act (`spec/porting-plan.md`'s third step
+> in this chain). Earlier `provenance: placeholder` records made against
+> [`sim/dut/placeholder_comparator.spice`](dut/) remain committed
+> (append-only) and still carry their own banner. See
+> [`sim/dut/README.md`](dut/README.md) for the full binding history and the
+> `comparator_dut_analog` reduced-sub-model caveat.
 
 ## Cold start
 
