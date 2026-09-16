@@ -125,11 +125,6 @@ class Pdk:
         return self.models_dir / "cornerMOSlv.lib"
 
     @property
-    def res_corner_lib(self) -> Path:
-        """The resistor process-corner bundle: ``.LIB res_typ`` / ``res_typ_mismatch`` / ..."""
-        return self.models_dir / "cornerRES.lib"
-
-    @property
     def version(self) -> str:
         """The release tag recorded in the install's own ``.fetched-version``.
 
