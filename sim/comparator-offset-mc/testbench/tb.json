@@ -1,7 +1,7 @@
 {
   "name": "comparator-offset-mc",
   "description": "Monte-Carlo input-referred offset of the comparator front end over PVT, plus the part of that offset that moves across a +/-50 mV input-common-mode band.",
-  "claim": "PLACEHOLDER DUT. sim/dut.json binds sim/dut/placeholder_comparator.spice (id placeholder-v1, provenance placeholder). This record substantiates the harness -- that a Monte-Carlo offset sweep over the mos_mismatch corner set genuinely runs and genuinely detects SG13G2's per-instance local mismatch -- and is NOT evidence toward README.md#target-specification's Offset-sigma row until design/comparator.sch exists and sim/dut.json is repointed at it (spec/porting-plan.md next step 1).",
+  "claim": "sim/dut.json binds design/comparator.spice (id comparator-dr0001, provenance schematic), the ratified topology from spec/decision-records/0001-comparator-topology.md ('DR-0001'). This record substantiates that a Monte-Carlo offset sweep over the mos_mismatch corner set genuinely runs and genuinely detects SG13G2's per-instance local mismatch on that design -- but is STILL NOT evidence toward README.md#target-specification's Offset-sigma row: that ratification is a separate, later act (spec/porting-plan.md's third step in this chain). It is ALSO a LOWER BOUND, not the design's real offset: per DR-0001 Decision Section 3, this topology has no DC-resolvable analog front end, so comparator_dut_analog (what this bench instantiates) is DR-0001's own named interim path, a diode-connected, loop-broken reduced sub-model that excludes the regenerative loop's own contribution to offset entirely (design/README.md).",
   "netlist": "tb_offset_mc.spice",
   "nominal_supply_v": 1.2,
   "supply_tolerance": 0.1,

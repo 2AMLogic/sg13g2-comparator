@@ -1,7 +1,7 @@
 {
   "name": "comparator-regeneration",
   "description": "Decision time versus input overdrive over PVT at 50 mV / 1 mV / 0.1 mV, the regeneration time constant tau extracted from the two small rungs, the near-metastable behaviour at 0.1 mV, and the switching energy and static current per decision.",
-  "claim": "PLACEHOLDER DUT. sim/dut.json binds sim/dut/placeholder_comparator.spice (id placeholder-v1, provenance placeholder). This record substantiates the harness -- that a three-overdrive transient regeneration sweep genuinely runs and tau is genuinely extracted from it over the full PVT grid -- and is NOT evidence toward README.md#target-specification's Decision-time-vs-overdrive row until design/comparator.sch exists and sim/dut.json is repointed at it (spec/porting-plan.md next step 1).",
+  "claim": "sim/dut.json binds design/comparator.spice (id comparator-dr0001, provenance schematic), the ratified topology from spec/decision-records/0001-comparator-topology.md ('DR-0001'). This record substantiates that a three-overdrive transient regeneration sweep genuinely runs and tau is genuinely extracted from it, on that design, over the full PVT grid. Unlike the offset-MC and preamp-noise benches, this bench is transient and unaffected by DR-0001 Decision Section 3's DC-resolvable-front-end finding -- but it is STILL NOT evidence toward README.md#target-specification's Decision-time-vs-overdrive row: that ratification is a separate, later act (spec/porting-plan.md's third step in this chain).",
   "netlist": "tb_regeneration.spice",
   "nominal_supply_v": 1.2,
   "supply_tolerance": 0.1,
