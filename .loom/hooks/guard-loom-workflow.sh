@@ -37,17 +37,34 @@
 
 # Determine log directory relative to this script's location
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null || echo ".")"
-HOOK_ERROR_LOG="${SCRIPT_DIR}/../logs/hook-errors.log"
+
+# Runtime log directory (#7882) — identical resolution to
+# guard-destructive-generic.sh, deliberately kept in lockstep so both guards
+# always write to the same place. At runtime SCRIPT_DIR is the INSTALLED hook's
+# own dir (.loom/hooks/) and ../logs is .loom/logs; when the guard is invoked
+# directly from its SOURCE location (defaults/hooks/) the same expression would
+# resolve to defaults/logs, depositing runtime telemetry inside the VENDORED
+# tree that ships to every consumer repo and that
+# scripts/check-vendored-private-refs.sh scans. Redirect that case to the repo's
+# own .loom/logs. Pure parameter expansion (no subshells) — this runs on every
+# hook invocation.
+_LOOM_HOOK_PARENT="${SCRIPT_DIR%/*}"
+if [[ "${_LOOM_HOOK_PARENT##*/}" == "defaults" ]]; then
+    HOOK_LOG_DIR="${_LOOM_HOOK_PARENT%/*}/.loom/logs"
+else
+    HOOK_LOG_DIR="${SCRIPT_DIR}/../logs"
+fi
+
+HOOK_ERROR_LOG="${HOOK_LOG_DIR}/hook-errors.log"
 
 # Decision telemetry log (issue #3771 / #3898) — a SEPARATE JSONL file from
 # HOOK_ERROR_LOG, sharing the SAME schema + stable rule tags as
 # guard-destructive.sh so a single reader (#3772 / the standing per-trigger
-# review policy) aggregates BOTH guards' fires. At runtime SCRIPT_DIR is the
-# installed hook's own dir (.loom/hooks/), so this resolves to
+# review policy) aggregates BOTH guards' fires. Resolves to
 # .loom/logs/guard-decisions.log. LOOM_GUARD_DECISION_LOG_FILE overrides the
 # path (test seam / operator override). Off by default — see
 # decision_log_enabled() below.
-DECISION_LOG="${LOOM_GUARD_DECISION_LOG_FILE:-${SCRIPT_DIR}/../logs/guard-decisions.log}"
+DECISION_LOG="${LOOM_GUARD_DECISION_LOG_FILE:-${HOOK_LOG_DIR}/guard-decisions.log}"
 
 # Shared config-tier resolver (#4063). Source defaults/scripts/lib/config-resolver.sh
 # so decision_log_enabled() below reads the full config tier chain through the
@@ -1712,7 +1729,25 @@ if echo "$GH_PR_MERGE_SCAN_TEXT" | grep -qE 'gh\s+pr\s+merge'; then
             MERGE_SCRIPT="$REPO_ROOT/defaults/scripts/merge-pr.sh"
         fi
     fi
-    deny "Use $MERGE_SCRIPT <PR_NUMBER> instead of 'gh pr merge'. The script merges via the GitHub API without local checkout, which avoids worktree errors." "loom:gh-pr-merge-redirect"
+
+    # Issue #7773: mask_cat_heredoc_bodies() only neutralizes a cat-heredoc
+    # CAPTURED by a text-data-consuming command (the `-m "$(cat <<EOF ...)"`
+    # idiom) -- a heredoc redirected straight to a FILE (`cat > FILE
+    # <<'DELIM'`) is deliberately left unmasked, because #5122 showed a later
+    # command on the same line can execute that file. That is still the right
+    # call ("masking only ever narrows what this ONE check can see; it never
+    # widens what it misses" -- see the block comment above
+    # mask_cat_heredoc_bodies()), but it means writing prose that merely
+    # quotes the phrase to a file this way denies with no hint that the
+    # trigger was inert documentation, not a live invocation. When that shape
+    # is present, name it explicitly so the false-positive case (an agent
+    # documenting this very rule) isn't left guessing why an apparently-inert
+    # command was denied.
+    HEREDOC_TO_FILE_NOTE=""
+    if echo "$COMMAND" | grep -qE 'cat[[:space:]]*>>?[[:space:]]*[^<[:space:]]+[[:space:]]*<<'; then
+        HEREDOC_TO_FILE_NOTE=" If this matched inside a heredoc body being written to a file rather than executed (e.g. documenting this rule), write the file with a non-Bash tool (Write/Edit) instead -- a file-bound heredoc is deliberately left visible to this check (#7773)."
+    fi
+    deny "Use $MERGE_SCRIPT <PR_NUMBER> instead of 'gh pr merge'. The script merges via the GitHub API without local checkout, which avoids worktree errors.${HEREDOC_TO_FILE_NOTE}" "loom:gh-pr-merge-redirect"
 fi
 
 # =============================================================================
