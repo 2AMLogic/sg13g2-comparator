@@ -1500,6 +1500,60 @@ resolve_default_branch() {
 }
 
 # =============================================================================
+# LIVE-vs-ESCAPED COMMAND-SUBSTITUTION SCAN (#7495 / #7498)
+#
+# Every masking-eligibility gate in this file asks "does this quoted span carry
+# a command substitution?" before redacting it. A plain byte-presence check
+# (index(inner, "$(") / index(inner, "`")) cannot tell a backslash-ESCAPED
+# backtick or `\$(` -- a literal character inside a double-quoted string, the
+# standard way to spell a markdown code span, and what every automated
+# Champion/Judge/Curator/Doctor comment contains -- from a genuinely live one.
+# The escaped form has zero execution risk, so vetoing masking on it is a false
+# positive (a recurring class: #5109, #6464/#6866, #7495, #7558, #7498).
+#
+# has_live_subst(str) returns 1 only when a backtick or `$(` is preceded by an
+# EVEN number of backslashes (0, 2, ...) -- i.e. is live at the shell's first
+# parse -- and 0 when every occurrence is escaped. The body is byte-identical to
+# the copies in guard-loom-workflow.sh (#7495/#7559). It is held here as ONE
+# shared awk source string -- the same mechanism as _QSPLIT_AWK /
+# _MASKHEREDOC_AWK below -- so its consumers cannot drift: it is prepended to
+# _QSPLIT_AWK (so every qsplit()-bearing program gets it) and to each standalone
+# masker's own awk program (strip_literal_text, mask_ask_positional_args,
+# mask_catastrophic_positional_args, mask_stash_scan_positional_args,
+# mask_catastrophic_var_assignment, mask_catastrophic_forloop_wordlist).
+# NEVER also define it inside _MASKHEREDOC_AWK: extract_write_targets()
+# concatenates _QSPLIT_AWK and _MASKHEREDOC_AWK into ONE program, and awk
+# rejects a duplicate function definition. (_heredoc_body_expansion_free()
+# needs no helper -- its own per-line backslash walk covers `$(` directly.)
+#
+# Safety direction: an escaped-only span expands to a plain string that merely
+# CONTAINS a backtick / `$(` -- the same risk class as any plain literal these
+# passes already redact. It can only execute if something re-parses it, and
+# every pass gates re-parsing separately and independently of this scan (the
+# non-executing command allowlists, the `$NAME`/`${NAME}` read check, the
+# interpreter-sink and pipe-to-interpreter checks). A live occurrence keeps the
+# span visible exactly as before, so this only ever narrows a false positive
+# -- it never widens a deny into an allow on live substitution.
+# =============================================================================
+_HASLIVESUBST_AWK='
+function has_live_subst(str,    i, c, bs) {
+    bs = 0
+    for (i = 1; i <= length(str); i++) {
+        c = substr(str, i, 1)
+        if (c == "\\") {
+            bs++
+            continue
+        }
+        if (bs % 2 == 0) {
+            if (c == "`") return 1
+            if (c == "$" && substr(str, i + 1, 1) == "(") return 1
+        }
+        bs = 0
+    }
+    return 0
+}
+'
+# =============================================================================
 # QUOTE-AWARE COMMAND SEGMENTATION (#3755)
 #
 # The three segment parsers below (parse_force_ops, lifecycle_or_cloud_reason,
@@ -1514,7 +1568,9 @@ resolve_default_branch() {
 # `qsplit()` replaces that gsub: it walks the string tracking single-/double-quote
 # state and emits a newline for a separator ONLY when it is OUTSIDE a quoted span.
 # A quoted span is treated as inert (its separators are preserved as literal
-# text) ONLY when it carries no command substitution — no `$(` and no backtick —
+# text) ONLY when it carries no LIVE command substitution — no unescaped `$(`
+# and no unescaped backtick (has_live_subst(), #7498: a backslash-escaped
+# `\`code\`` / `\$(` is literal text and keeps the span inert) —
 # mirroring strip_literal_text()'s #3679 safety floor: a smuggled
 # `"$(a|halt)"` keeps its separators ACTIVE so the genuine protection is intact.
 # The token VALUES are preserved verbatim (unlike a redaction approach), so
@@ -1524,7 +1580,7 @@ resolve_default_branch() {
 #
 # Shared as a single awk source string so the three parsers cannot drift.
 # =============================================================================
-_QSPLIT_AWK='
+_QSPLIT_AWK="$_HASLIVESUBST_AWK"'
 function qsplit(s,   out, n, i, c, j, qc, ci, inner, SQ, DQ, k, ch, scanfrom) {
     SQ = sprintf("%c", 39)   # single quote
     DQ = sprintf("%c", 34)   # double quote
@@ -1570,7 +1626,7 @@ function qsplit(s,   out, n, i, c, j, qc, ci, inner, SQ, DQ, k, ch, scanfrom) {
                 continue
             }
             inner = substr(s, i + 1, ci - i - 1)
-            if (index(inner, "$(") == 0 && index(inner, "`") == 0) {
+            if (!has_live_subst(inner)) {
                 # Inert quoted span: copy verbatim, separators inside are literal.
                 out = out substr(s, i, ci - i + 1)
                 i = ci + 1
@@ -2827,7 +2883,12 @@ function mask_heredoc_bodies_selective(s, shell_only,   out, lines, nl, i, j, li
 #   * a `$(` command substitution -- the shell runs whatever is inside it while
 #     building the body, so text there is executable, not data. (`$((...))`
 #     arithmetic also starts with `$(` and is likewise rejected: conservative,
-#     and arithmetic never appears in prose bodies anyway.)
+#     and arithmetic never appears in prose bodies anyway.) A backslash-
+#     escaped `\$(` is literal text -- in an unquoted-delimiter heredoc body
+#     backslash escapes exactly `$`, backtick and `\`, the same rule the
+#     escaped-backtick bullet below already relies on -- and does NOT
+#     disqualify the body (#7498; mirrors _heredoc_mark_live_lines() below,
+#     which has walked backslash parity for `$(` since #7421).
 #   * an UNESCAPED backtick -- the older command-substitution spelling. A
 #     backslash-escaped backtick (`\`` -- overwhelmingly the common case, since
 #     a markdown fenced code block inside a double-quoted `"$(cat <<EOF ...)"`
@@ -2843,19 +2904,19 @@ function mask_heredoc_bodies_selective(s, shell_only,   out, lines, nl, i, j, li
 # and escaped markdown fences.
 #
 # Backslash handling walks the line so an escaped backslash (`\\`) does not
-# swallow the character after it -- `\\` followed by a backtick is a LIVE
-# backtick and correctly disqualifies the body.
+# swallow the character after it -- `\\` followed by a backtick or `$(` is a
+# LIVE substitution and correctly disqualifies the body.
 function _heredoc_body_expansion_free(lines, from, to,   j, line, k, n, c, BTC) {
     BTC = sprintf("%c", 96)   # backtick
     for (j = from; j < to; j++) {
         line = lines[j]
-        if (index(line, "$(")) return 0
-        if (index(line, BTC) == 0) continue
+        if (index(line, "$(") == 0 && index(line, BTC) == 0) continue
         n = length(line)
         for (k = 1; k <= n; k++) {
             c = substr(line, k, 1)
             if (c == "\\") { k++; continue }
             if (c == BTC) return 0
+            if (c == "$" && substr(line, k + 1, 1) == "(") return 0
         }
     }
     return 1
@@ -3729,7 +3790,7 @@ resolve_stash_cwd() {
 # bypass), and the shape above is the one the repo's own role prompts prescribe.
 # -----------------------------------------------------------------------------
 strip_literal_text() {
-    printf '%s' "$1" | awk '
+    printf '%s' "$1" | awk "$_HASLIVESUBST_AWK"'
     # Mask the body of a `<flag> "$(cat <<QUOTED_DELIM … DELIM\n)"` heredoc.
     # See the header comment above for the four conditions and why each is
     # load-bearing. Body bytes are replaced 1:1 with "X" so the buffer keeps
@@ -3868,11 +3929,16 @@ strip_literal_text() {
             # elsewhere in this file must not turn that inert prose into a new
             # false ask/deny. A DOUBLE-quoted span keeps the original
             # conservative floor: dollar-paren / backtick there IS live shell
-            # syntax, so it stays un-redacted and visible to the scans below.
+            # syntax, so it stays un-redacted and visible to the scans below
+            # -- unless every such occurrence is backslash-ESCAPED (#7498,
+            # has_live_subst()): `\`code\`` / `\$(...)` inside double quotes
+            # is literal text -- the standard markdown code-span spelling in
+            # an automated Champion/Judge/Curator/Doctor comment -- and
+            # carries no execution risk, so it no longer vetoes redaction.
             # gsub(/./) leaves embedded newlines untouched (awk `.` never matches a
             # newline), so a multi-line span stays SAME-LENGTH and byte offsets of
             # the surrounding command are preserved.
-            if (qchar == SQ || (index(inner, "$(") == 0 && index(inner, "`") == 0)) {
+            if (qchar == SQ || !has_live_subst(inner)) {
                 gsub(/./, "X", inner)
             }
             out = out pre head inner qchar
@@ -3932,7 +3998,7 @@ strip_literal_text() {
 # after that boundary — including a real ask-triggering invocation chained
 # onto the same line — fully visible.
 mask_ask_positional_args() {
-    printf '%s' "$1" | awk '
+    printf '%s' "$1" | awk "$_HASLIVESUBST_AWK"'
     BEGIN {
         SQ = sprintf("%c", 39)
         DQ = sprintf("%c", 34)
@@ -3992,7 +4058,7 @@ mask_ask_positional_args() {
                 }
                 if (endpos == 0) break
                 inner = substr(rest, 2, endpos - 2)
-                if (index(inner, "$(") == 0 && index(inner, "`") == 0) {
+                if (!has_live_subst(inner)) {
                     gsub(/./, "X", inner)
                 }
                 out = out qc inner qc
@@ -4066,7 +4132,7 @@ mask_ask_positional_args() {
 # Single-quoted spans are untouched (still a plain same-character scan):
 # real bash gives backslash no special meaning inside single quotes.
 mask_catastrophic_positional_args() {
-    printf '%s' "$1" | awk '
+    printf '%s' "$1" | awk "$_HASLIVESUBST_AWK"'
     BEGIN {
         SQ = sprintf("%c", 39)
         DQ = sprintf("%c", 34)
@@ -4167,7 +4233,7 @@ mask_catastrophic_positional_args() {
                 # real text of each embedded line. A single-line narrated
                 # heading (`echo "=== docker system prune ==="`, #6068'\''s own
                 # target shape) has no embedded newline and is unaffected.
-                if (index(inner, "$(") == 0 && index(inner, "`") == 0 && \
+                if (!has_live_subst(inner) && \
                     !(is_echo_printf && index(inner, "\n") != 0)) {
                     gsub(/./, "X", masked_inner)
                 }
@@ -4222,8 +4288,8 @@ mask_catastrophic_positional_args() {
 # stash-scope's detectors have no such competing raw-text consumer, so a
 # SEPARATE branched copy (COMMAND_STASH_SCAN, built below) can safely mask
 # grep/awk's own search-pattern argument without touching that SQL-DDL
-# invariant — mirrors how COMMAND_CLOUD_ASK_SCAN / COMMAND_ASK_SCAN_PRINTENV
-# each get their own more-aggressively-masked branch off COMMAND_ASK_SCAN.
+# invariant — mirrors how COMMAND_CLOUD_ASK_SCAN gets its own
+# more-aggressively-masked branch off COMMAND_ASK_SCAN.
 #
 # Without this, a read-only `grep -n "...git stash pop..." file` or
 # `awk '/git stash pop/{...}' file` — searching for a TEST-CASE NAME or other
@@ -4249,7 +4315,7 @@ mask_catastrophic_positional_args() {
 # special meaning inside single quotes, so the plain same-character scan
 # mask_catastrophic_positional_args() already uses is correct there too.
 mask_stash_scan_positional_args() {
-    printf '%s' "$1" | awk '
+    printf '%s' "$1" | awk "$_HASLIVESUBST_AWK"'
     BEGIN {
         SQ = sprintf("%c", 39)
         DQ = sprintf("%c", 34)
@@ -4302,7 +4368,7 @@ mask_stash_scan_positional_args() {
                 }
                 if (endpos == 0) break
                 inner = substr(rest, 2, endpos - 2)
-                if (index(inner, "$(") == 0 && index(inner, "`") == 0) {
+                if (!has_live_subst(inner)) {
                     gsub(/./, "X", inner)
                 }
                 out = out qc inner qc
@@ -4372,7 +4438,7 @@ mask_stash_scan_positional_args() {
 # own anchor above) so an incidental `NAME=` substring inside an unrelated
 # quoted string or URL query component is not mistaken for an assignment.
 mask_catastrophic_var_assignment() {
-    printf '%s' "$1" | ORIG_COMMAND_FOR_READ_CHECK="$2" awk '
+    printf '%s' "$1" | ORIG_COMMAND_FOR_READ_CHECK="$2" awk "$_HASLIVESUBST_AWK"'
     BEGIN {
         SQ = sprintf("%c", 39)
         DQ = sprintf("%c", 34)
@@ -4412,8 +4478,12 @@ mask_catastrophic_var_assignment() {
             }
             inner = substr(rest, 2, endpos - 2)
             after = substr(rest, endpos + 1)
-            if (index(inner, "$(") != 0 || index(inner, "`") != 0) {
-                # Value itself carries a command substitution -- never mask.
+            if (has_live_subst(inner)) {
+                # Value itself carries a LIVE command substitution -- never mask.
+                # (#7498: a backslash-escaped `\$(` / backtick is literal text,
+                # so it no longer forces the value visible; the $NAME read
+                # check below is unchanged and still fails closed on ANY
+                # consumer of the variable.)
                 out = out pre matched qc inner qc
                 s = after
                 continue
@@ -4519,10 +4589,11 @@ mask_catastrophic_var_assignment() {
 #
 # Only when every check passes are the word-list literals masked, using the
 # same inertness floor as every other pass in this file: a span containing
-# `$(` or a backtick is left unmasked so command-substitution smuggling
+# a LIVE (unescaped, #7498) `$(` or backtick is left unmasked so
+# command-substitution smuggling
 # still reaches the raw scan.
 mask_catastrophic_forloop_wordlist() {
-    printf '%s' "$1" | awk '
+    printf '%s' "$1" | awk "$_HASLIVESUBST_AWK"'
     BEGIN {
         SQ = sprintf("%c", 39)
         DQ = sprintf("%c", 34)
@@ -4650,11 +4721,12 @@ mask_catastrophic_forloop_wordlist() {
 
             # All checks passed — mask each word-list literal (same
             # inertness floor as every other masking pass in this file: only
-            # a span with no `$(` / backtick is redacted).
+            # a span with no LIVE `$(` / backtick is redacted -- a backslash-
+            # escaped one is literal text, see has_live_subst(), #7498).
             masked = ""
             for (wi = 1; wi <= words_n; wi++) {
                 inner = word_inner[wi]
-                if (index(inner, "$(") == 0 && index(inner, "`") == 0) {
+                if (!has_live_subst(inner)) {
                     gsub(/./, "X", inner)
                 }
                 masked = masked word_q[wi] inner word_q[wi] word_trail[wi]
@@ -5461,52 +5533,18 @@ if [[ "$COMMAND_NO_COMMENT" == *"--body"* || "$COMMAND_NO_COMMENT" == *"--messag
     COMMAND_CLOUD_ASK_SCAN=$(strip_literal_text "$COMMAND_CLOUD_ASK_SCAN")
 fi
 
-# COMMAND_ASK_SCAN_PRINTENV (#7355): a THIRD branched copy, same shape as
-# COMMAND_CLOUD_ASK_SCAN above, used ONLY by the credential-exposure
-# `printenv.*(SECRET|TOKEN|KEY)` ASK_PATTERNS entries further down. Those
-# three patterns are plain substring checks with no other consumer (unlike
-# COMMAND_ASK_SCAN itself, which SQL_DDL_PATTERN also reads -- see the
-# COMMAND_CLOUD_ASK_SCAN comment above for why that invariant means
-# grep/rg/jq positional text can never be masked out of COMMAND_ASK_SCAN
-# generally). So it is safe to give the printenv patterns their own
-# more-aggressively-masked copy, reusing mask_catastrophic_positional_args()
-# (grep/rg/jq/for-loop-wordlist positional-text masking) exactly as
-# COMMAND_CLOUD_ASK_SCAN does. This closes the false positive where a
-# jq/grep/rg command's own QUOTED filter/pattern argument merely contains the
-# word "printenv" -- e.g. `jq -c 'select(.pattern | test("printenv"))'` --
-# with no live `printenv` invocation anywhere in the command.
-#
-# Branched off the FULLY narrowed $COMMAND_ASK_SCAN -- i.e. AFTER the
-# check-duplicate.sh / strip_literal_text passes immediately above, not
-# before -- so it inherits every existing COMMAND_ASK_SCAN narrowing first
-# and only ADDS the extra positional masking on top. Never fed back into
-# COMMAND_ASK_SCAN itself, so SQL_DDL_PATTERN and every other
-# COMMAND_ASK_SCAN consumer are completely unaffected by this branch.
-COMMAND_ASK_SCAN_PRINTENV="$COMMAND_ASK_SCAN"  # scan-contract: COMMAND_ASK_SCAN_PRINTENV=ask-only from=COMMAND_ASK_SCAN
-if [[ "$COMMAND" == *"for "* && "$COMMAND" == *" in "* ]]; then
-    COMMAND_ASK_SCAN_PRINTENV=$(mask_catastrophic_forloop_wordlist "$COMMAND_ASK_SCAN_PRINTENV")
-fi
-if [[ "$COMMAND" == *"grep"* || "$COMMAND" == *"rg "* || \
-      "$COMMAND" == *"check-duplicate"* || "$COMMAND" == *"jq"* ]]; then
-    COMMAND_ASK_SCAN_PRINTENV=$(mask_catastrophic_positional_args "$COMMAND_ASK_SCAN_PRINTENV")
-fi
-if [[ "$COMMAND" == *"='"* || "$COMMAND" == *'="'* ]]; then
-    COMMAND_ASK_SCAN_PRINTENV=$(mask_catastrophic_var_assignment "$COMMAND_ASK_SCAN_PRINTENV" "$COMMAND")
-fi
-# #6245 allowlist carve-out for the backstop loop below: the two documented
-# non-secret pointer vars are masked out of THIS scan copy as exact tokens
-# (word-bounded, two passes so adjacent operands both mask), so
-# `printenv LOOM_TOKEN_NAME` no longer trips the TOKEN substring here while
-# a lookalike such as LOOM_TOKEN_NAME_BACKUP still does. Live-invocation
-# precision lives in printenv_ask_reason() further down; this loop stays as
-# the fail-closed backstop for shapes the segment parser cannot see (e.g.
-# a var whose value quotes the phrase and is later read via eval, #6207).
-for _ in 1 2; do
-    COMMAND_ASK_SCAN_PRINTENV=$(printf '%s' "$COMMAND_ASK_SCAN_PRINTENV" | sed -E 's/(^|[^A-Za-z0-9_])LOOM_TOKEN_(NAME|MODE)($|[^A-Za-z0-9_])/\1LOOM_ALLOWLISTED_VAR\3/g')
-done
+# COMMAND_ASK_SCAN_PRINTENV (#7355) was a THIRD branched copy here, built
+# solely so the credential-exposure `printenv.*(SECRET|TOKEN|KEY)` substring
+# backstop could run against a more-aggressively-masked string. RETIRED in
+# #7795 together with that backstop: with no consumer left, four conditional
+# masking passes (for-loop wordlist, grep/rg/jq positionals, var assignment,
+# and a two-pass LOOM_TOKEN_{NAME,MODE} allowlist sed) came off the hot path.
+# The retirement rationale lives with the backstop itself, further down, next
+# to the ASK_PATTERNS array. printenv_ask_reason() — the precise, segment-
+# parsed check that survives — reads COMMAND_ASK_SCAN directly.
 
-# COMMAND_STASH_SCAN (#7363): a FOURTH branched copy, same shape as
-# COMMAND_CLOUD_ASK_SCAN / COMMAND_ASK_SCAN_PRINTENV above, used ONLY by the
+# COMMAND_STASH_SCAN (#7363): a branched copy, same shape as
+# COMMAND_CLOUD_ASK_SCAN above, used ONLY by the
 # stash-recovery/-create detectors below (`_stash_is_recover` / `_stash_is_pop`
 # / stash_create_invoked()) that gate the stash-scope:* ASK_PATTERNS entries.
 # Those detectors are plain regex/substring checks with no other consumer
@@ -8001,6 +8039,18 @@ fi
 
 # =============================================================================
 # REQUIRE CONFIRMATION - Potentially dangerous but sometimes legitimate
+#
+# TIER SIZING (#7795): every ask() call site in this file was individually
+# classified against 30 days of `.loom/logs/guard-decisions.log` (2026-08-18 ..
+# 2026-09-16, 225 decisions). The per-site disposition table — what stayed an
+# ask and the specific reason, what was promoted to deny, what was dropped —
+# is in defaults/docs/guard-hooks.md § "Ask-tier composition". The rule that
+# produced it: an ask is only worth its cost when refusing would strand work
+# (so a deny is wrong) AND the site is not firing overwhelmingly on inert
+# quoted text (so an allow is wrong). A site that names a safe, guard-free
+# alternative and whose refusal is lossless belongs in the deny tier, where it
+# blocks WITH an actionable verdict instead of stalling a headless run without
+# one.
 # =============================================================================
 
 ASK_PATTERNS=(
@@ -8102,11 +8152,9 @@ ASK_PATTERNS=(
     # LOOM_TOKEN_NAME` — an account-label string, not a credential; see
     # docs/token-pool.md). It is handled by the segment-parsed,
     # name-allowlisted printenv_ask_reason() check below instead — see its
-    # own comment block (#6245).
-    # The #7355 masked-scan substring loop (COMMAND_ASK_SCAN_PRINTENV, just
-    # below this array) is kept as the fail-closed backstop for shapes the
-    # segment parser cannot see, with the two allowlisted names masked out of
-    # that scan copy so both fixes hold at once.
+    # own comment block (#6245). The #7355 substring backstop that used to
+    # sit alongside it was RETIRED in #7795 (11/11 observed hits were false
+    # positives); see the retirement note just below this array.
     # NOTE: `cat .../.ssh/<file>` is NOT a plain substring entry here. It used
     # to be '(^|[;&|[:space:]])cat.*/\.ssh/', which matched the whole `.ssh/`
     # directory rather than the specific secret-bearing files inside it — so
@@ -8124,21 +8172,34 @@ for pattern in "${ASK_PATTERNS[@]}"; do
     fi
 done
 
-# Credential exposure (#7355): scanned against COMMAND_ASK_SCAN_PRINTENV, NOT
-# COMMAND_ASK_SCAN — see the NOTE above and the COMMAND_ASK_SCAN_PRINTENV
-# construction comment further up for why these three need their own,
-# further-masked copy rather than living in the ASK_PATTERNS array above.
-PRINTENV_ASK_PATTERNS=(
-    '(^|[;&|[:space:]])printenv.*SECRET'
-    '(^|[;&|[:space:]])printenv.*TOKEN'
-    '(^|[;&|[:space:]])printenv.*KEY'
-)
-
-for pattern in "${PRINTENV_ASK_PATTERNS[@]}"; do
-    if echo "$COMMAND_ASK_SCAN_PRINTENV" | grep -qE "$pattern"; then
-        ask "Command requires confirmation: $COMMAND" "ask:$pattern"  # scan-reads: COMMAND_ASK_SCAN_PRINTENV
-    fi
-done
+# RETIRED (#7795): the credential-exposure SUBSTRING BACKSTOP
+# (PRINTENV_ASK_PATTERNS + its dedicated COMMAND_ASK_SCAN_PRINTENV scan copy)
+# used to sit here. It was a plain `printenv.*(SECRET|TOKEN|KEY)` substring
+# scan, kept as a fail-closed net for shapes the segment parser cannot see
+# (#7355/#6207), and it is the one ask site the decision log convicted
+# outright: 11 hits in the 30 days 2026-08-18..09-16, ELEVEN of them false
+# positives and zero of them a live invocation. Every hit was a Guide/Champion
+# digest builder whose shell variables quote ISSUE TITLES that contain the
+# phrase (#6245's own title, "…printenv SECRET/TOKEN/KEY ask pattern…"), read
+# back later with printf — which #6207's fail-closed "the var is read later, so
+# it might be eval'd" heuristic cannot distinguish from an actual eval.
+#
+# The precise check survives: printenv_ask_reason() below is segment-parsed,
+# command-word anchored and name-allowlisted (#6245), and still asks on every
+# real `printenv <CREDENTIAL>` invocation. What is gone is the substring net
+# whose only unique coverage was "the phrase sits in a quoted string that is
+# later read", plus the four masking passes that existed solely to stop that
+# net from firing on quoted data. Three reasons this is the right direction and
+# not a hole:
+#   1. The op is a READ, not a destruction — the worst case is a credential in
+#      a local transcript, recoverable by rotation, not lost work or lost infra.
+#   2. It was never a boundary: `echo $GITHUB_TOKEN`, `env | grep TOKEN`, and
+#      any interpreter one-liner print the same value and were never scanned.
+#      Gating one spelling of a dozen is theatre with a latency bill.
+#   3. In this fleet's primary (headless) run mode the ask never protected
+#      anything — it stalled the role tick that tripped it.
+# See defaults/docs/guard-hooks.md § "Ask-tier composition" for the full
+# per-site disposition table this came from.
 
 # =============================================================================
 # SERVICE-MANAGEMENT ASK — systemctl restart/stop/disable, segment-parsed,
@@ -8359,8 +8420,13 @@ if [[ -n "$_PRINTENV_ASK" ]]; then
 fi
 
 # =============================================================================
-# CARGO CLEAN SCOPE ASK — bare `cargo clean` clearing a build.target-dir
+# CARGO CLEAN SCOPE DENY — bare `cargo clean` clearing a build.target-dir
 # SHARED outside the current repo (#6684), gated by cargo_clean_guard_enabled()
+#
+# TIER: ask → deny (#7795). This was an ask from #6684 until the ask-tier
+# sizing pass; see the deny() call site at the bottom of this block for the
+# rationale (lossless refusal + a named replacement = a deny is strictly more
+# useful than an ask in both run modes).
 #
 # On a host whose `~/.cargo/config.toml` (or an ancestor `.cargo/config.toml`)
 # sets a single `build.target-dir` shared across every project — e.g. an
@@ -8373,8 +8439,8 @@ fi
 # faulted volume.
 #
 # `cargo clean -p <pkg>` (package-scoped) and a repo-local target dir are
-# completely unaffected — no resolution is attempted, no prompt — so this adds
-# zero friction to the common case.
+# completely unaffected — no resolution is attempted, no decision emitted — so
+# this adds zero friction to the common case.
 #
 # Detection is segment-parsed (qsplit(), #3755) and command-word anchored,
 # mirroring systemctl_ask_reason()/ssh_cat_ask_reason() immediately above:
@@ -8385,8 +8451,8 @@ fi
 # command word is captured too (cargo's own env-override precedence).
 #
 # CARGO_TARGET_DIR — same-command OR the guard's own process env — is always
-# treated as an explicit, deliberate scoping decision and NEVER asks, however
-# it resolves: it is the exact fix this ask's own message recommends, so
+# treated as an explicit, deliberate scoping decision and is NEVER gated, however
+# it resolves: it is the exact fix this guard's own message recommends, so
 # treating it as unsafe would be self-defeating. Only the CONFIG-derived
 # resolution (`cargo config get build.target-dir`, falling back to a manual
 # `.cargo/config.toml` walk-up from cwd to the filesystem root, then
@@ -8581,7 +8647,21 @@ if echo "$COMMAND_ASK_SCAN" | grep -qE '(^|[;&|(`[:space:]])cargo[[:space:]]+cle
                 # Report the path as CONFIGURED (logical spelling), not the
                 # physically-resolved one — that is the string the operator
                 # will recognize from their own .cargo/config.toml.
-                ask "Command requires confirmation: $COMMAND (target-dir is shared at '$_CARGO_TD_PATH'; this clears every project on this host, including in-flight sweeps — use 'cargo clean -p <pkg>' or set CARGO_TARGET_DIR)" "cargo-clean-scope-outside-repo"  # scan-reads: COMMAND_ASK_SCAN
+                #
+                # DENY, not ask (#7795 tier-sizing pass). This site already
+                # steers toward two named, guard-free alternatives, and
+                # refusing is LOSSLESS — nothing has been deleted, so the
+                # caller simply reruns with the scoped form. An ask here was
+                # the worst of both worlds: headless it blocks anyway (an
+                # unanswered ask denies, see defaults/docs/guard-hooks.md) but
+                # with no actionable verdict, and interactively it invites a
+                # reflex "yes" to a host-wide delete. A deny that names the
+                # replacement is strictly more useful in both modes. The
+                # category toggle (guards.cargoCleanScope:false /
+                # LOOM_GUARD_CARGO_CLEAN=0) remains the escape hatch for a
+                # repo whose shared target-dir clean is intentional, and is
+                # named in the message.
+                deny "Blocked: $COMMAND (cargo's target-dir is shared at '$_CARGO_TD_PATH' — OUTSIDE this repo — so this clears the build output of every project on this host, including whatever sweep is compiling right now. Nothing has been deleted: your target-dir is untouched, so just rerun with a scoped form. Package-scoped: 'cargo clean -p <pkg>'. Repo-scoped: prefix with CARGO_TARGET_DIR=<repo>/target. To opt out repo-wide set guards.cargoCleanScope:false in .loom/config.json, or export LOOM_GUARD_CARGO_CLEAN=0 in the agent's OWN environment before the session — an inline 'LOOM_GUARD_CARGO_CLEAN=0 cargo clean' prefix does not reach this hook, which runs as a separate process)" "cargo-clean-scope-outside-repo"  # scan-reads: COMMAND_ASK_SCAN
             fi
         fi
     fi
@@ -8626,12 +8706,22 @@ done
 # is silent and near-invisible (issue #3637 — a judge ran one against the main
 # checkout during a merge simulation and emptied the live index).
 #
-# This is an ASK (not a deny) because it is generic git hygiene, not a Loom
-# workflow rule, and an isolated form is legitimate. It is kept narrow: the
-# safe, index-free path is `git merge-tree --write-tree <base> <branch>` for a
-# merge preview, or `GIT_INDEX_FILE=$(mktemp) git read-tree <tree>` when a
-# temporary index really is needed. Any command that carries a `GIT_INDEX_FILE=`
-# assignment is treated as isolated and passes through untouched.
+# TIER: ask → deny (#7795). This was an ASK from #3637 on the reasoning that
+# "an isolated form is legitimate" — but that is an argument for the CARVE-OUT,
+# not for the middle tier: the isolated form does not reach this check at all.
+# What reaches it is a read-tree that would clobber the REAL index, and for that
+# shape refusing is LOSSLESS (the index is not touched, the caller reruns
+# isolated) and the replacement can be named exactly. An ask bought nothing in
+# either run mode — headless it blocks anyway with no actionable verdict (an
+# unanswered ask denies, see defaults/docs/guard-hooks.md), interactively it is
+# a bare confirm on an operation whose safe spelling is one env assignment away.
+#
+# It is kept narrow: the safe, index-free path is `git merge-tree --write-tree
+# <base> <branch>` for a merge preview, or `GIT_INDEX_FILE=$(mktemp) git
+# read-tree <tree>` when a temporary index really is needed. Any command that
+# carries a `GIT_INDEX_FILE=` assignment is treated as isolated and passes
+# through untouched — including the legitimate scripted-merge shapes
+# (`read-tree -m -u`), which must simply say which index they mean.
 #
 # `git commit-tree` is intentionally NOT guarded here — it writes a commit
 # object from an existing tree and does not mutate the index.
@@ -8644,7 +8734,7 @@ done
 if echo "$COMMAND_NO_COMMENT" | grep -qE '(^|[;&|(`]|[[:space:]])git[[:space:]]+read-tree'; then
     # Isolated form (GIT_INDEX_FILE=... git read-tree ...) is allowed.
     if ! echo "$COMMAND_NO_COMMENT" | grep -qE 'GIT_INDEX_FILE='; then
-        ask "Command requires confirmation: $COMMAND (a bare 'git read-tree' empties the real staging index with no reflog trace; use 'git merge-tree --write-tree <base> <branch>' for a merge preview, or isolate with GIT_INDEX_FILE=\$(mktemp))" "git-read-tree"  # scan-reads: COMMAND_NO_COMMENT
+        deny "Blocked: $COMMAND (this 'git read-tree' targets the REAL staging index — a bare form empties it outright, turning every tracked file into a phantom staged deletion, and no reflog entry is written, so the damage is silent and near-unrecoverable. Nothing has been run: your index is intact, so just rerun against an isolated index. Merge preview with no index at all: 'git merge-tree --write-tree <base> <branch>'. Temporary index: 'GIT_INDEX_FILE=\$(mktemp) git read-tree <tree>' — any command carrying a GIT_INDEX_FILE= assignment passes through untouched)" "git-read-tree"  # scan-reads: COMMAND_NO_COMMENT
     fi
 fi
 
@@ -8961,6 +9051,17 @@ fi
 # out state a *different* container still depends on) keeps asking; the
 # genuinely catastrophic host-wide `docker system prune` stays covered as an
 # ungated catastrophic deny above, unaffected by this change.
+#
+# TIER (#7795): the ask-tier sizing pass examined the docker half of this array
+# and left it EXACTLY as-is. It is the one site whose disposition was settled by
+# an operator ruling rather than by the decision log: on 2026-09-16 the operator
+# ruled on #7440 (the docker-rmi headless-stall report) that "the 'docker rmi'
+# entry in CLOUD_ASK_PATTERNS stays as-is", adopting a role-guidance remedy
+# instead — steer the Auditor to the ungated, dangling-only `docker image prune
+# -f`, or leave images to the #7332 retention reaper, and never issue a
+# tag-targeted `docker rmi`. See defaults/docs/guard-hooks.md
+# § "Ask-tier composition" for the logged hits and why they do not override that
+# ruling.
 # =============================================================================
 CLOUD_ASK_PATTERNS=(
     # aws mutating subcommands (verb-anchored). The service list covers the
@@ -8989,6 +9090,9 @@ CLOUD_ASK_PATTERNS=(
     # volumes, or networks, and the host-wide catastrophic case is already
     # covered by the ungated `docker system prune` deny above.
     'docker rm[^;&|]*[[:space:]](-[a-zA-Z]*v[a-zA-Z]*|--volumes)([[:space:]]|$)'
+    # KEPT AS-IS by #7795 per the operator's 2026-09-16 ruling on #7440 — see
+    # the TIER note in this block's header comment. Do not drop these without a
+    # fresh operator decision.
     'docker rmi'
     'docker stop'
     'docker kill'
