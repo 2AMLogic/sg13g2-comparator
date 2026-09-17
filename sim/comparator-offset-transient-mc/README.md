@@ -147,25 +147,38 @@ standing lower-bound check. Do not retire it.**
 
 ### An observation, not (yet) a DR-contradiction
 
-The first full grid measured by this bench (see "Records" below) reports
-whole-latch `sig_vos_mv` **below** `comparator-offset-mc`'s own reported
-front-end-only `sig_vos_mv` at the matching corners, rather than at or above
-it. `design/README.md`'s "lower bound" framing for `comparator_dut_analog`
+The full 45-point grid measured by this bench (record
+[`20260917-060858-ea40b57`](records/20260917-060858-ea40b57.md)) reports
+whole-latch `vos_3sig_mv` **below** `comparator-offset-mc`'s own reported
+front-end-only `vos_3sig_mv` at **every one of the 45 matched PVT points** —
+not just on average. Concretely: this bench's 3σ ranges 7.456 mV
+(`tt_mismatch_27c_1.32v`) … 10.537 mV (`tt_mismatch_125c_1.08v`), mean
+8.404 mV, versus `comparator-offset-mc`'s own record
+[`20260916-125444-4d0cf7c`](../comparator-offset-mc/records/20260916-125444-4d0cf7c.md)
+at 11.613 mV (`ss_mismatch_-40c_1.32v`) … 18.097 mV
+(`ff_mismatch_125c_1.32v`), mean 14.142 mV — a consistent ~35–45 % *reduction*
+at matched corners, in the opposite direction "lower bound" might suggest.
+`design/README.md`'s "lower bound" framing for `comparator_dut_analog`
 describes what that reduced sub-model *excludes* (the regenerative loop's own
 mismatch contribution) — it is not itself a proof that the excluded term can
 only add variance; the reduced sub-model's loop-broken bias point (tail
 switch gate tied to `vdd`, not clocked; diode-connected rather than
 cross-coupled loads) is also a different operating point from the real
 clocked latch's, and a different operating point can carry different
-mismatch *sensitivity* (e.g. different small-signal gain at the point the
-offset is referred through), independent of which devices are or are not
-included. This is flagged here as a genuine, measured finding worth
-carrying into DR-0002's eventual review (§ once [PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18)
-lands) — it is **not** filed as a new decision record on its own: DR-0002
-is not yet merged/ratified, so there is nothing ratified for this finding to
-contradict on physics grounds yet, and the finding itself is consistent with
-"different methodology, different operating point" rather than with either
-bench being wrong.
+mismatch *sensitivity* (e.g. a diode-connected load's own low intrinsic gain
+means the same device-level current mismatch divides down to a *larger*
+input-referred offset than the same mismatch would produce through the
+regenerative pair's much higher effective decision gain), independent of
+which devices are or are not included. This is flagged here as a genuine,
+measured, fully-reproduced (45/45 points, same direction throughout) finding
+worth carrying into DR-0002's eventual review (once
+[PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18) lands) — it is
+**not** filed as a new decision record on its own: DR-0002 is not yet
+merged/ratified on `main` at the time this bench's evidence is committed, so
+there is nothing ratified for this finding to contradict on physics grounds
+yet, and the finding itself is consistent with "different methodology,
+different operating point, different mismatch sensitivity" rather than with
+either bench being wrong.
 
 ## Mismatch is a corner selection, not a fragment parameter
 
@@ -207,4 +220,25 @@ quantization-guard discipline are carried over unchanged from
 
 | record | DUT | grid | verdict |
 |---|---|---|---|
-| _pending — see the record minted by the full 45-point run this PR commits_ | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos_mismatch` × 3 T × 3 V | _pending_ |
+| [`20260917-060858-ea40b57`](records/20260917-060858-ea40b57.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, `mos_mismatch` × 3 T × 3 V | PASS |
+
+**One benign, isolated ngspice convergence warning, not a check failure.**
+`sf_mismatch_125c_1.32v` — the hottest temperature at the highest supply —
+carries 5 warnings on its one worst draw (`doAnalyses: TRAN: Timestep too
+small ... trouble with node "xa.x1.np"`, then 4 `measure ... out of interval`
+lines for that same draw's first four staircase levels). All four of this
+record's checks (`n_out_of_range = 0`, `sig_vos_mv >= 0.05`, `mean_vos_sem`
+within ±5, `vbias_anchor_mv` in range) still pass at that corner, and its
+reported `sig_vos_mv` (2.63 mV) / `vos_3sig_mv` (7.90 mV) interpolate smoothly
+between its `27 °C` and (extrapolated) neighboring-corner values — consistent
+with one difficult solver step on one of 60 draws, not a corrupted aggregate.
+Surfaced here rather than silently dropped, per this record's own committed
+`warnings` field (`sim/harness/runner.py`'s non-fatal-warning surfacing,
+ported from `gf180-comparator` issue #7).
+
+**Summary across the 45-point grid**: `vos_3sig_mv` ranges 7.456 mV
+(`tt_mismatch_27c_1.32v`) … 10.537 mV (`tt_mismatch_125c_1.08v`), mean
+8.404 mV — inside the 15 mV Target at **45/45** points, above the 8 mV
+Stretch at 27/45 points. See "An observation, not (yet) a DR-contradiction"
+below for how this compares to `comparator-offset-mc`'s own front-end-only
+number.

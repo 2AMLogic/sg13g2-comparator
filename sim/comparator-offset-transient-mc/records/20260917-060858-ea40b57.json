@@ -1,0 +1,1332 @@
+{
+  "record_id": "20260917-060858-ea40b57",
+  "context": {
+    "record_id": "20260917-060858-ea40b57",
+    "commit": "ea40b57",
+    "dirty": false,
+    "dirty_paths": [],
+    "pdk": {
+      "path": "/home/ubuntu/share/pdk/ihp-sg13g2",
+      "variant": "ihp-sg13g2",
+      "release_version": "0.3.0",
+      "discovered_via": "search_root:~/share/pdk"
+    },
+    "toolchain": {
+      "pins": {
+        "pdk_release": "0.3.0",
+        "ngspice_min_major": 46,
+        "python_min": "3.9",
+        "openvaf_tag": "v24.0.1mob"
+      },
+      "observed": {
+        "pdk_release": "0.3.0",
+        "ngspice": "ngspice-46 : Circuit level simulation program",
+        "python": "3.12.3",
+        "platform": "Linux-7.0.0-1010-aws-x86_64-with-glibc2.39"
+      },
+      "drift": []
+    },
+    "dut_id": "comparator-dr0001",
+    "dut_provenance": "schematic",
+    "dut_netlist": "design/comparator.spice",
+    "dut_netlist_sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90",
+    "dut_params": {
+      "dut_ib": 2e-05,
+      "dut_vcm": 0.6
+    }
+  },
+  "testbench": {
+    "name": "comparator-offset-transient-mc",
+    "description": "Transient Monte-Carlo input-referred offset of the WHOLE latch (strobe -> decision) -- comparator_dut, the actual DR-0001 regenerative topology, not the loop-broken comparator_dut_analog reduced sub-model comparator-offset-mc measures.",
+    "claim": "sim/dut.json binds design/comparator.spice (id comparator-dr0001, provenance schematic), the ratified topology from spec/decision-records/0001-comparator-topology.md ('DR-0001'). This record substantiates that a transient Monte-Carlo digital-staircase offset sweep genuinely runs and genuinely detects SG13G2's per-instance local mismatch across the WHOLE latch (comparator_dut: input pair, tail, cross-coupled regenerative pair, reset devices, isolation inverters, SR output latch) -- STILL NOT evidence toward README.md#target-specification's Offset-sigma row on its own: that ratification is a separate, later act (spec/porting-plan.md's third step in this chain). Unlike comparator-offset-mc, this bench excludes NOTHING from the topology by construction: it is not a lower bound.",
+    "experiment": "comparator-offset-transient-mc",
+    "directory": "testbench",
+    "netlist": "tb_offset_transient_mc.spice",
+    "netlist_sha256": "00a9c7ccc9798e023bb2a5c4ab891ed65964cf4d6c105b9b7a6141cc0b77fd6d",
+    "manifest_sha256": "3254e6566b92805626dce6b844aad83e89e0f882e21ddad7117de03a746e259b",
+    "nominal_supply_v": 1.2,
+    "supply_tolerance": 0.1
+  },
+  "checks": {
+    "n_out_of_range": {
+      "max": 0.0,
+      "description": "RANGE-ADEQUACY GATE. lowcount (the number of the 33 staircase levels that read LOW) must land strictly between 0 and 33 for every draw, i.e. the true per-draw offset must fall inside the swept -48..+48 mV window. A draw that pins to one end means that draw's offset landed outside the window and vos/sig_vos_mv for that draw is meaningless (clamped, not measured) -- this check must read exactly 0 for the record to be trustworthy. If a real corner ever needs it, the window (DV_MIN/DV_STEP/N_LEVELS in the deck) widens, not this floor."
+    },
+    "sig_vos_mv": {
+      "min": 0.05,
+      "description": "MISMATCH-ON GUARD, mirroring comparator-offset-mc's identical check. --sabotage-corners forces every corner to plain mos_tt (mismatch off, sim/harness/corners.py), which must and does collapse this measurement toward exactly zero. 0.05 mV is far below anything a real sub-micron latch can achieve, so this floor only catches a collapsed (mismatch-free) population, not a design assertion. sqrt(abs(...)) guards the same negative-variance-from-floating-point-noise trap comparator-offset-mc's tb.json documents for the mismatch-off case."
+    },
+    "mean_vos_sem": {
+      "min": -5.0,
+      "max": 5.0,
+      "description": "SYMMETRY CHECK, expressed in standard errors of the RAW (uncorrected) sigma so it is independent of the quantization-correction term. The population mean offset must be ~0 because the circuit is nominally symmetric; +/-5 standard errors is a ~6e-7 two-sided false-alarm rate at this N. A mean outside it means a systematic asymmetry (a netlist error, a genuinely asymmetric topology, or a level-list off-center of true zero)."
+    },
+    "vbias_anchor_mv": {
+      "min": 50.0,
+      "max": 1200.0,
+      "description": "CORNER-SENSITIVITY SANITY FLOOR. The bias pin's own voltage is a V_th proxy and strongly corner/temperature dependent, the same contract node (ibias) comparator-offset-mc anchors on. A floor-only sanity range (not per-axis-calibrated here, unlike comparator-offset-mc's own vbias_anchor_mv floors, since this bench's first committed record is this experiment's own calibration point -- see README.md 'Calibration' for why a per-axis floor was deliberately deferred rather than guessed)."
+    }
+  },
+  "points": [
+    {
+      "corner": "tt_mismatch",
+      "corner_sections": [
+        "mos_tt_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "tt_mismatch_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.9030337984,
+        "sig_vos_mv": 2.7708491901,
+        "vos_3sig_mv": 8.3125475704,
+        "mean_vos_uv": -849.6871661,
+        "mean_vos_sem": -2.267162198,
+        "vbias_anchor_mv": 346.8939
+      },
+      "seconds": 322.501,
+      "deck": "tt_mismatch_-40c_1.08v.spice",
+      "log": "tt_mismatch_-40c_1.08v.log"
+    },
+    {
+      "corner": "tt_mismatch",
+      "corner_sections": [
+        "mos_tt_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "tt_mismatch_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.782134117,
+        "sig_vos_mv": 2.6439119209,
+        "vos_3sig_mv": 7.9317357626,
+        "mean_vos_uv": -898.1621677,
+        "mean_vos_sem": -2.500646605,
+        "vbias_anchor_mv": 346.8939
+      },
+      "seconds": 325.548,
+      "deck": "tt_mismatch_-40c_1.20v.spice",
+      "log": "tt_mismatch_-40c_1.20v.log"
+    },
+    {
+      "corner": "tt_mismatch",
+      "corner_sections": [
+        "mos_tt_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "tt_mismatch_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7276353291,
+        "sig_vos_mv": 2.5865023659,
+        "vos_3sig_mv": 7.7595070976,
+        "mean_vos_uv": -901.5297751,
+        "mean_vos_sem": -2.560173472,
+        "vbias_anchor_mv": 346.8939
+      },
+      "seconds": 329.3,
+      "deck": "tt_mismatch_-40c_1.32v.spice",
+      "log": "tt_mismatch_-40c_1.32v.log"
+    },
+    {
+      "corner": "tt_mismatch",
+      "corner_sections": [
+        "mos_tt_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "tt_mismatch_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.0886937342,
+        "sig_vos_mv": 2.964798304,
+        "vos_3sig_mv": 8.8943949121,
+        "mean_vos_uv": -899.8582574,
+        "mean_vos_sem": -2.256705484,
+        "vbias_anchor_mv": 310.6323
+      },
+      "seconds": 330.04,
+      "deck": "tt_mismatch_27c_1.08v.spice",
+      "log": "tt_mismatch_27c_1.08v.log"
+    },
+    {
+      "corner": "tt_mismatch",
+      "corner_sections": [
+        "mos_tt_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "tt_mismatch_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7977736866,
+        "sig_vos_mv": 2.6603641858,
+        "vos_3sig_mv": 7.9810925575,
+        "mean_vos_uv": -848.5348634,
+        "mean_vos_sem": -2.349268928,
+        "vbias_anchor_mv": 310.6323
+      },
+      "seconds": 279.457,
+      "deck": "tt_mismatch_27c_1.20v.spice",
+      "log": "tt_mismatch_27c_1.20v.log"
+    },
+    {
+      "corner": "tt_mismatch",
+      "corner_sections": [
+        "mos_tt_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "tt_mismatch_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.6320146742,
+        "sig_vos_mv": 2.4854579548,
+        "vos_3sig_mv": 7.4563738645,
+        "mean_vos_uv": -850.9934632,
+        "mean_vos_sem": -2.50445679,
+        "vbias_anchor_mv": 310.6323
+      },
+      "seconds": 279.009,
+      "deck": "tt_mismatch_27c_1.32v.spice",
+      "log": "tt_mismatch_27c_1.32v.log"
+    },
+    {
+      "corner": "tt_mismatch",
+      "corner_sections": [
+        "mos_tt_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "tt_mismatch_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.6176160851,
+        "sig_vos_mv": 3.5124273856,
+        "vos_3sig_mv": 10.537282157,
+        "mean_vos_uv": -749.9131325,
+        "mean_vos_sem": -1.605698894,
+        "vbias_anchor_mv": 251.4608
+      },
+      "seconds": 268.798,
+      "deck": "tt_mismatch_125c_1.08v.spice",
+      "log": "tt_mismatch_125c_1.08v.log"
+    },
+    {
+      "corner": "tt_mismatch",
+      "corner_sections": [
+        "mos_tt_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "tt_mismatch_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.9541967331,
+        "sig_vos_mv": 2.8244076084,
+        "vos_3sig_mv": 8.4732228251,
+        "mean_vos_uv": -849.3486055,
+        "mean_vos_sem": -2.227010116,
+        "vbias_anchor_mv": 251.4608
+      },
+      "seconds": 271.346,
+      "deck": "tt_mismatch_125c_1.20v.spice",
+      "log": "tt_mismatch_125c_1.20v.log"
+    },
+    {
+      "corner": "tt_mismatch",
+      "corner_sections": [
+        "mos_tt_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "tt_mismatch_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7856660913,
+        "sig_vos_mv": 2.6476282919,
+        "vos_3sig_mv": 7.9428848757,
+        "mean_vos_uv": -700.2438056,
+        "mean_vos_sem": -1.947134013,
+        "vbias_anchor_mv": 251.4608
+      },
+      "seconds": 266.587,
+      "deck": "tt_mismatch_125c_1.32v.spice",
+      "log": "tt_mismatch_125c_1.32v.log"
+    },
+    {
+      "corner": "ff_mismatch",
+      "corner_sections": [
+        "mos_ff_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "ff_mismatch_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.9899878462,
+        "sig_vos_mv": 2.8618223775,
+        "vos_3sig_mv": 8.5854671324,
+        "mean_vos_uv": -897.8182235,
+        "mean_vos_sem": -2.325919172,
+        "vbias_anchor_mv": 302.844
+      },
+      "seconds": 264.748,
+      "deck": "ff_mismatch_-40c_1.08v.spice",
+      "log": "ff_mismatch_-40c_1.08v.log"
+    },
+    {
+      "corner": "ff_mismatch",
+      "corner_sections": [
+        "mos_ff_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "ff_mismatch_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.8354806023,
+        "sig_vos_mv": 2.6999907863,
+        "vos_3sig_mv": 8.0999723589,
+        "mean_vos_uv": -901.8622694,
+        "mean_vos_sem": -2.463707597,
+        "vbias_anchor_mv": 302.844
+      },
+      "seconds": 268.936,
+      "deck": "ff_mismatch_-40c_1.20v.spice",
+      "log": "ff_mismatch_-40c_1.20v.log"
+    },
+    {
+      "corner": "ff_mismatch",
+      "corner_sections": [
+        "mos_ff_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "ff_mismatch_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.6476016367,
+        "sig_vos_mv": 2.5019581185,
+        "vos_3sig_mv": 7.5058743556,
+        "mean_vos_uv": -800.8295094,
+        "mean_vos_sem": -2.34295017,
+        "vbias_anchor_mv": 302.844
+      },
+      "seconds": 272.384,
+      "deck": "ff_mismatch_-40c_1.32v.spice",
+      "log": "ff_mismatch_-40c_1.32v.log"
+    },
+    {
+      "corner": "ff_mismatch",
+      "corner_sections": [
+        "mos_ff_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "ff_mismatch_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.1160921726,
+        "sig_vos_mv": 2.9933309921,
+        "vos_3sig_mv": 8.9799929762,
+        "mean_vos_uv": -798.6421718,
+        "mean_vos_sem": -1.985260807,
+        "vbias_anchor_mv": 266.621
+      },
+      "seconds": 269.397,
+      "deck": "ff_mismatch_27c_1.08v.spice",
+      "log": "ff_mismatch_27c_1.08v.log"
+    },
+    {
+      "corner": "ff_mismatch",
+      "corner_sections": [
+        "mos_ff_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "ff_mismatch_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.8261483645,
+        "sig_vos_mv": 2.6901885767,
+        "vos_3sig_mv": 8.0705657302,
+        "mean_vos_uv": -751.357859,
+        "mean_vos_sem": -2.059337373,
+        "vbias_anchor_mv": 266.621
+      },
+      "seconds": 274.897,
+      "deck": "ff_mismatch_27c_1.20v.spice",
+      "log": "ff_mismatch_27c_1.20v.log"
+    },
+    {
+      "corner": "ff_mismatch",
+      "corner_sections": [
+        "mos_ff_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "ff_mismatch_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7179555139,
+        "sig_vos_mv": 2.5762923311,
+        "vos_3sig_mv": 7.7288769934,
+        "mean_vos_uv": -750.6831135,
+        "mean_vos_sem": -2.139389833,
+        "vbias_anchor_mv": 266.621
+      },
+      "seconds": 279.659,
+      "deck": "ff_mismatch_27c_1.32v.spice",
+      "log": "ff_mismatch_27c_1.32v.log"
+    },
+    {
+      "corner": "ff_mismatch",
+      "corner_sections": [
+        "mos_ff_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "ff_mismatch_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.5953381325,
+        "sig_vos_mv": 3.489477939,
+        "vos_3sig_mv": 10.468433817,
+        "mean_vos_uv": -849.8217757,
+        "mean_vos_sem": -1.830896268,
+        "vbias_anchor_mv": 207.5567
+      },
+      "seconds": 274.268,
+      "deck": "ff_mismatch_125c_1.08v.spice",
+      "log": "ff_mismatch_125c_1.08v.log"
+    },
+    {
+      "corner": "ff_mismatch",
+      "corner_sections": [
+        "mos_ff_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "ff_mismatch_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.1873459941,
+        "sig_vos_mv": 3.0674377722,
+        "vos_3sig_mv": 9.2023133165,
+        "mean_vos_uv": -700.7079727,
+        "mean_vos_sem": -1.702877763,
+        "vbias_anchor_mv": 207.5567
+      },
+      "seconds": 286.95,
+      "deck": "ff_mismatch_125c_1.20v.spice",
+      "log": "ff_mismatch_125c_1.20v.log"
+    },
+    {
+      "corner": "ff_mismatch",
+      "corner_sections": [
+        "mos_ff_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "ff_mismatch_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7855907287,
+        "sig_vos_mv": 2.6475490001,
+        "vos_3sig_mv": 7.9426470002,
+        "mean_vos_uv": -700.7017087,
+        "mean_vos_sem": -1.948459995,
+        "vbias_anchor_mv": 207.5567
+      },
+      "seconds": 283.86,
+      "deck": "ff_mismatch_125c_1.32v.spice",
+      "log": "ff_mismatch_125c_1.32v.log"
+    },
+    {
+      "corner": "ss_mismatch",
+      "corner_sections": [
+        "mos_ss_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "ss_mismatch_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.9029537111,
+        "sig_vos_mv": 2.7707652821,
+        "vos_3sig_mv": 8.3122958464,
+        "mean_vos_uv": -850.3875827,
+        "mean_vos_sem": -2.26909367,
+        "vbias_anchor_mv": 392.8987
+      },
+      "seconds": 287.255,
+      "deck": "ss_mismatch_-40c_1.08v.spice",
+      "log": "ss_mismatch_-40c_1.08v.log"
+    },
+    {
+      "corner": "ss_mismatch",
+      "corner_sections": [
+        "mos_ss_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "ss_mismatch_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7821145238,
+        "sig_vos_mv": 2.6438913033,
+        "vos_3sig_mv": 7.9316739098,
+        "mean_vos_uv": -899.4727761,
+        "mean_vos_sem": -2.504313214,
+        "vbias_anchor_mv": 392.8987
+      },
+      "seconds": 288.083,
+      "deck": "ss_mismatch_-40c_1.20v.spice",
+      "log": "ss_mismatch_-40c_1.20v.log"
+    },
+    {
+      "corner": "ss_mismatch",
+      "corner_sections": [
+        "mos_ss_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "ss_mismatch_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7276637687,
+        "sig_vos_mv": 2.5865323572,
+        "vos_3sig_mv": 7.7595970717,
+        "mean_vos_uv": -899.4420845,
+        "mean_vos_sem": -2.554218195,
+        "vbias_anchor_mv": 392.8987
+      },
+      "seconds": 275.145,
+      "deck": "ss_mismatch_-40c_1.32v.spice",
+      "log": "ss_mismatch_-40c_1.32v.log"
+    },
+    {
+      "corner": "ss_mismatch",
+      "corner_sections": [
+        "mos_ss_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "ss_mismatch_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.0244697761,
+        "sig_vos_mv": 2.8978297787,
+        "vos_3sig_mv": 8.6934893362,
+        "mean_vos_uv": -949.3618993,
+        "mean_vos_sem": -2.431409865,
+        "vbias_anchor_mv": 357.1747
+      },
+      "seconds": 264.143,
+      "deck": "ss_mismatch_27c_1.08v.spice",
+      "log": "ss_mismatch_27c_1.08v.log"
+    },
+    {
+      "corner": "ss_mismatch",
+      "corner_sections": [
+        "mos_ss_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "ss_mismatch_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.8355169368,
+        "sig_vos_mv": 2.7000289441,
+        "vos_3sig_mv": 8.1000868322,
+        "mean_vos_uv": -900.4275584,
+        "mean_vos_sem": -2.459756733,
+        "vbias_anchor_mv": 357.1747
+      },
+      "seconds": 266.983,
+      "deck": "ss_mismatch_27c_1.20v.spice",
+      "log": "ss_mismatch_27c_1.20v.log"
+    },
+    {
+      "corner": "ss_mismatch",
+      "corner_sections": [
+        "mos_ss_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "ss_mismatch_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7276816905,
+        "sig_vos_mv": 2.5865512569,
+        "vos_3sig_mv": 7.7596537707,
+        "mean_vos_uv": -898.7283817,
+        "mean_vos_sem": -2.552174667,
+        "vbias_anchor_mv": 357.1747
+      },
+      "seconds": 272.647,
+      "deck": "ss_mismatch_27c_1.32v.spice",
+      "log": "ss_mismatch_27c_1.32v.log"
+    },
+    {
+      "corner": "ss_mismatch",
+      "corner_sections": [
+        "mos_ss_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "ss_mismatch_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.4420494473,
+        "sig_vos_mv": 3.3313217193,
+        "vos_3sig_mv": 9.993965158,
+        "mean_vos_uv": -948.5951656,
+        "mean_vos_sem": -2.134712667,
+        "vbias_anchor_mv": 298.4837
+      },
+      "seconds": 269.043,
+      "deck": "ss_mismatch_125c_1.08v.spice",
+      "log": "ss_mismatch_125c_1.08v.log"
+    },
+    {
+      "corner": "ss_mismatch",
+      "corner_sections": [
+        "mos_ss_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "ss_mismatch_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.9899865829,
+        "sig_vos_mv": 2.8618210576,
+        "vos_3sig_mv": 8.5854631729,
+        "mean_vos_uv": -900.0173627,
+        "mean_vos_sem": -2.331617324,
+        "vbias_anchor_mv": 298.4837
+      },
+      "seconds": 271.999,
+      "deck": "ss_mismatch_125c_1.20v.spice",
+      "log": "ss_mismatch_125c_1.20v.log"
+    },
+    {
+      "corner": "ss_mismatch",
+      "corner_sections": [
+        "mos_ss_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "ss_mismatch_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7037073839,
+        "sig_vos_mv": 2.5612562578,
+        "vos_3sig_mv": 7.6837687733,
+        "mean_vos_uv": -799.512694,
+        "mean_vos_sem": -2.290558044,
+        "vbias_anchor_mv": 298.4837
+      },
+      "seconds": 273.785,
+      "deck": "ss_mismatch_125c_1.32v.spice",
+      "log": "ss_mismatch_125c_1.32v.log"
+    },
+    {
+      "corner": "fs_mismatch",
+      "corner_sections": [
+        "mos_fs_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "fs_mismatch_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.9899710907,
+        "sig_vos_mv": 2.8618048717,
+        "vos_3sig_mv": 8.585414615,
+        "mean_vos_uv": -902.706275,
+        "mean_vos_sem": -2.338595434,
+        "vbias_anchor_mv": 324.8767
+      },
+      "seconds": 267.842,
+      "deck": "fs_mismatch_-40c_1.08v.spice",
+      "log": "fs_mismatch_-40c_1.08v.log"
+    },
+    {
+      "corner": "fs_mismatch",
+      "corner_sections": [
+        "mos_fs_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "fs_mismatch_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.8509343035,
+        "sig_vos_mv": 2.7162154559,
+        "vos_3sig_mv": 8.1486463676,
+        "mean_vos_uv": -848.3771405,
+        "mean_vos_sem": -2.305034201,
+        "vbias_anchor_mv": 324.8767
+      },
+      "seconds": 275.797,
+      "deck": "fs_mismatch_-40c_1.20v.spice",
+      "log": "fs_mismatch_-40c_1.20v.log"
+    },
+    {
+      "corner": "fs_mismatch",
+      "corner_sections": [
+        "mos_fs_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "fs_mismatch_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7276503224,
+        "sig_vos_mv": 2.5865181772,
+        "vos_3sig_mv": 7.7595545317,
+        "mean_vos_uv": -900.1352753,
+        "mean_vos_sem": -2.556199306,
+        "vbias_anchor_mv": 324.8767
+      },
+      "seconds": 276.795,
+      "deck": "fs_mismatch_-40c_1.32v.spice",
+      "log": "fs_mismatch_-40c_1.32v.log"
+    },
+    {
+      "corner": "fs_mismatch",
+      "corner_sections": [
+        "mos_fs_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "fs_mismatch_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.1697594607,
+        "sig_vos_mv": 3.0491597266,
+        "vos_3sig_mv": 9.1474791799,
+        "mean_vos_uv": -951.9217158,
+        "mean_vos_sem": -2.326218754,
+        "vbias_anchor_mv": 288.6355
+      },
+      "seconds": 267.999,
+      "deck": "fs_mismatch_27c_1.08v.spice",
+      "log": "fs_mismatch_27c_1.08v.log"
+    },
+    {
+      "corner": "fs_mismatch",
+      "corner_sections": [
+        "mos_fs_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "fs_mismatch_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.8355071889,
+        "sig_vos_mv": 2.700018707,
+        "vos_3sig_mv": 8.1000561211,
+        "mean_vos_uv": -899.2796083,
+        "mean_vos_sem": -2.456629248,
+        "vbias_anchor_mv": 288.6355
+      },
+      "seconds": 272.05,
+      "deck": "fs_mismatch_27c_1.20v.spice",
+      "log": "fs_mismatch_27c_1.20v.log"
+    },
+    {
+      "corner": "fs_mismatch",
+      "corner_sections": [
+        "mos_fs_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "fs_mismatch_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7037502177,
+        "sig_vos_mv": 2.5613014738,
+        "vos_3sig_mv": 7.6839044214,
+        "mean_vos_uv": -799.2582943,
+        "mean_vos_sem": -2.289792928,
+        "vbias_anchor_mv": 288.6355
+      },
+      "seconds": 270.993,
+      "deck": "fs_mismatch_27c_1.32v.spice",
+      "log": "fs_mismatch_27c_1.32v.log"
+    },
+    {
+      "corner": "fs_mismatch",
+      "corner_sections": [
+        "mos_fs_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "fs_mismatch_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.6068928302,
+        "sig_vos_mv": 3.5013819969,
+        "vos_3sig_mv": 10.504145991,
+        "mean_vos_uv": -799.8034477,
+        "mean_vos_sem": -1.717614345,
+        "vbias_anchor_mv": 229.4954
+      },
+      "seconds": 265.196,
+      "deck": "fs_mismatch_125c_1.08v.spice",
+      "log": "fs_mismatch_125c_1.08v.log"
+    },
+    {
+      "corner": "fs_mismatch",
+      "corner_sections": [
+        "mos_fs_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "fs_mismatch_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.1028066157,
+        "sig_vos_mv": 2.9794980943,
+        "vos_3sig_mv": 8.938494283,
+        "mean_vos_uv": -849.0463549,
+        "mean_vos_sem": -2.119592227,
+        "vbias_anchor_mv": 229.4954
+      },
+      "seconds": 266.195,
+      "deck": "fs_mismatch_125c_1.20v.spice",
+      "log": "fs_mismatch_125c_1.20v.log"
+    },
+    {
+      "corner": "fs_mismatch",
+      "corner_sections": [
+        "mos_fs_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "fs_mismatch_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7179683313,
+        "sig_vos_mv": 2.5763058534,
+        "vos_3sig_mv": 7.7289175601,
+        "mean_vos_uv": -748.514545,
+        "mean_vos_sem": -2.133199518,
+        "vbias_anchor_mv": 229.4954
+      },
+      "seconds": 263.967,
+      "deck": "fs_mismatch_125c_1.32v.spice",
+      "log": "fs_mismatch_125c_1.32v.log"
+    },
+    {
+      "corner": "sf_mismatch",
+      "corner_sections": [
+        "mos_sf_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "sf_mismatch_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.903041963,
+        "sig_vos_mv": 2.7708577443,
+        "vos_3sig_mv": 8.3125732329,
+        "mean_vos_uv": -849.9217535,
+        "mean_vos_sem": -2.267781754,
+        "vbias_anchor_mv": 369.8862
+      },
+      "seconds": 265.957,
+      "deck": "sf_mismatch_-40c_1.08v.spice",
+      "log": "sf_mismatch_-40c_1.08v.log"
+    },
+    {
+      "corner": "sf_mismatch",
+      "corner_sections": [
+        "mos_sf_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "sf_mismatch_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.8124728761,
+        "sig_vos_mv": 2.6758183195,
+        "vos_3sig_mv": 8.0274549585,
+        "mean_vos_uv": -801.2315459,
+        "mean_vos_sem": -2.206710301,
+        "vbias_anchor_mv": 369.8862
+      },
+      "seconds": 269.791,
+      "deck": "sf_mismatch_-40c_1.20v.spice",
+      "log": "sf_mismatch_-40c_1.20v.log"
+    },
+    {
+      "corner": "sf_mismatch",
+      "corner_sections": [
+        "mos_sf_mismatch"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "sf_mismatch_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.6883713708,
+        "sig_vos_mv": 2.5450620085,
+        "vos_3sig_mv": 7.6351860255,
+        "mean_vos_uv": -850.7042144,
+        "mean_vos_sem": -2.451122111,
+        "vbias_anchor_mv": 369.8862
+      },
+      "seconds": 274.139,
+      "deck": "sf_mismatch_-40c_1.32v.spice",
+      "log": "sf_mismatch_-40c_1.32v.log"
+    },
+    {
+      "corner": "sf_mismatch",
+      "corner_sections": [
+        "mos_sf_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "sf_mismatch_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.0244422707,
+        "sig_vos_mv": 2.8978010713,
+        "vos_3sig_mv": 8.6934032138,
+        "mean_vos_uv": -950.262411,
+        "mean_vos_sem": -2.433738298,
+        "vbias_anchor_mv": 333.8864
+      },
+      "seconds": 261.996,
+      "deck": "sf_mismatch_27c_1.08v.spice",
+      "log": "sf_mismatch_27c_1.08v.log"
+    },
+    {
+      "corner": "sf_mismatch",
+      "corner_sections": [
+        "mos_sf_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "sf_mismatch_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.8652967918,
+        "sig_vos_mv": 2.7312864561,
+        "vos_3sig_mv": 8.1938593684,
+        "mean_vos_uv": -800.6813926,
+        "mean_vos_sem": -2.164540656,
+        "vbias_anchor_mv": 333.8864
+      },
+      "seconds": 297.596,
+      "deck": "sf_mismatch_27c_1.20v.spice",
+      "log": "sf_mismatch_27c_1.20v.log"
+    },
+    {
+      "corner": "sf_mismatch",
+      "corner_sections": [
+        "mos_sf_mismatch"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "sf_mismatch_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.6476251893,
+        "sig_vos_mv": 2.5019830421,
+        "vos_3sig_mv": 7.5059491264,
+        "mean_vos_uv": -800.5927983,
+        "mean_vos_sem": -2.3422368,
+        "vbias_anchor_mv": 333.8864
+      },
+      "seconds": 299.748,
+      "deck": "sf_mismatch_27c_1.32v.spice",
+      "log": "sf_mismatch_27c_1.32v.log"
+    },
+    {
+      "corner": "sf_mismatch",
+      "corner_sections": [
+        "mos_sf_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "sf_mismatch_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 3.5336943232,
+        "sig_vos_mv": 3.4259298839,
+        "vos_3sig_mv": 10.277789652,
+        "mean_vos_uv": -750.8146473,
+        "mean_vos_sem": -1.64580881,
+        "vbias_anchor_mv": 274.9448
+      },
+      "seconds": 294.25,
+      "deck": "sf_mismatch_125c_1.08v.spice",
+      "log": "sf_mismatch_125c_1.08v.log"
+    },
+    {
+      "corner": "sf_mismatch",
+      "corner_sections": [
+        "mos_sf_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "sf_mismatch_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.9171550119,
+        "sig_vos_mv": 2.7856405661,
+        "vos_3sig_mv": 8.3569216983,
+        "mean_vos_uv": -800.5225337,
+        "mean_vos_sem": -2.12563983,
+        "vbias_anchor_mv": 274.9448
+      },
+      "seconds": 294.021,
+      "deck": "sf_mismatch_125c_1.20v.spice",
+      "log": "sf_mismatch_125c_1.20v.log"
+    },
+    {
+      "corner": "sf_mismatch",
+      "corner_sections": [
+        "mos_sf_mismatch"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "sf_mismatch_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "n_samples": 60.0,
+        "n_out_of_range": 0.0,
+        "sig_vos_raw_mv": 2.7724740003,
+        "sig_vos_mv": 2.633744878,
+        "vos_3sig_mv": 7.9012346339,
+        "mean_vos_uv": -725.7630723,
+        "mean_vos_sem": -2.027696773,
+        "vbias_anchor_mv": 274.9448
+      },
+      "seconds": 147.262,
+      "deck": "sf_mismatch_125c_1.32v.spice",
+      "log": "sf_mismatch_125c_1.32v.log",
+      "warnings": [
+        "doAnalyses: TRAN:  Timestep too small; time = 2.028e-09, timestep = 1.25e-22: trouble with node \"xa.x1.np\"",
+        "Error: measure  dlev0  find(AT) : out of interval",
+        "Error: measure  dlev1  find(AT) : out of interval",
+        "Error: measure  dlev2  find(AT) : out of interval",
+        "Error: measure  dlev3  find(AT) : out of interval"
+      ]
+    }
+  ],
+  "summary": {
+    "n_samples": {
+      "min": 60.0,
+      "max": 60.0,
+      "mean": 60.0,
+      "at_min": "tt_mismatch_-40c_1.08v",
+      "at_max": "tt_mismatch_-40c_1.08v",
+      "spread_pct": 0.0,
+      "per_axis": {
+        "process": {
+          "weakest": 0.0,
+          "strongest": 0.0,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 0.0,
+          "strongest": 0.0,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 0.0,
+          "strongest": 0.0,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "n_out_of_range": {
+      "min": 0.0,
+      "max": 0.0,
+      "mean": 0.0,
+      "at_min": "tt_mismatch_-40c_1.08v",
+      "at_max": "tt_mismatch_-40c_1.08v",
+      "spread_pct": 0.0,
+      "per_axis": {
+        "process": {
+          "weakest": 0.0,
+          "strongest": 0.0,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 0.0,
+          "strongest": 0.0,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 0.0,
+          "strongest": 0.0,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "sig_vos_raw_mv": {
+      "min": 2.6320146742,
+      "max": 3.6176160851,
+      "mean": 2.9332502937733334,
+      "at_min": "tt_mismatch_27c_1.32v",
+      "at_max": "tt_mismatch_125c_1.08v",
+      "spread_pct": 33.60099930756751,
+      "per_axis": {
+        "process": {
+          "weakest": 2.3842495269936803,
+          "strongest": 8.916316661870882,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 0.8798265881868534,
+          "strongest": 22.308983270733595,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 6.250880534111494,
+          "strongest": 28.286672374575627,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "sig_vos_mv": {
+      "min": 2.4854579548,
+      "max": 3.5124273856,
+      "mean": 2.801438252988889,
+      "at_min": "tt_mismatch_27c_1.32v",
+      "at_max": "tt_mismatch_125c_1.08v",
+      "spread_pct": 36.658649524197564,
+      "per_axis": {
+        "process": {
+          "weakest": 2.630279833433221,
+          "strongest": 9.704559162626012,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 0.979400323789485,
+          "strongest": 24.056191320243396,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 6.907708075200139,
+          "strongest": 30.641177596167424,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "vos_3sig_mv": {
+      "min": 7.4563738645,
+      "max": 10.537282157,
+      "mean": 8.404314758991111,
+      "at_min": "tt_mismatch_27c_1.32v",
+      "at_max": "tt_mismatch_125c_1.08v",
+      "spread_pct": 36.658649525280815,
+      "per_axis": {
+        "process": {
+          "weakest": 2.630279833413706,
+          "strongest": 9.704559161478072,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 0.97940032508413,
+          "strongest": 24.056191320977867,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 6.907708075171347,
+          "strongest": 30.641177600245488,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "mean_vos_uv": {
+      "min": -951.9217158,
+      "max": -700.2438056,
+      "mean": -839.4706304666668,
+      "at_min": "fs_mismatch_27c_1.08v",
+      "at_max": "tt_mismatch_125c_1.32v",
+      "spread_pct": 29.980549773384062,
+      "per_axis": {
+        "process": {
+          "weakest": 6.093420637465089,
+          "strongest": 24.308140768485938,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 0.08853667974074975,
+          "strongest": 25.636419813247446,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 5.52663514213027,
+          "strongest": 19.871799480639897,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "mean_vos_sem": {
+      "min": -2.560173472,
+      "max": -1.605698894,
+      "mean": -2.2322902478,
+      "at_min": "tt_mismatch_-40c_1.32v",
+      "at_max": "tt_mismatch_125c_1.08v",
+      "spread_pct": 42.75763776420507,
+      "per_axis": {
+        "process": {
+          "weakest": 3.1143092249080477,
+          "strongest": 29.920780611582558,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 3.743504715927448,
+          "strongest": 37.24068053494848,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 4.867362560730315,
+          "strongest": 32.248863136641624,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "vbias_anchor_mv": {
+      "min": 207.5567,
+      "max": 392.8987,
+      "mean": 303.75272,
+      "at_min": "ff_mismatch_125c_1.08v",
+      "at_max": "ss_mismatch_-40c_1.08v",
+      "spread_pct": 61.01739599237169,
+      "per_axis": {
+        "process": {
+          "weakest": 25.916520639035532,
+          "strongest": 36.02663324937275,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 27.01283506639744,
+          "strongest": 36.789435867749894,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 0.0,
+          "strongest": 0.0,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    }
+  }
+}
