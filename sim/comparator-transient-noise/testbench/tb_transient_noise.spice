@@ -119,6 +119,18 @@
 *     informative 0.7-0.95 band instead of saturating at 1.0 where the probit
 *     inversion is singular.
 *
+* WHITE ONLY, DELIBERATELY: trnoise(NA TS 0 0) -- NALPHA/NAMP are zero, so
+* no 1/f term is injected. comparator-preamp-noise/ attributes 11.28 % of
+* its total noise POWER to flicker, but over ITS OWN 58.7 MHz band; flicker
+* power grows as ln(f_hi) while white power grows as f_hi, so over this
+* bench's ~0.9 GHz decision aperture the flicker share falls to ~0.9 % of
+* power, i.e. ~0.46 % on sigma -- ~1/28 of this bench's own +/-13 % per-
+* corner sampling error. Physically: 1/f power sits decades below a ~1 GHz
+* aperture, so inside one 5 ns strobe it is a STATIC OFFSET, and offset is
+* the offset benches' row (comparator-offset-mc/,
+* comparator-offset-transient-mc/), not this one. Injecting it here would
+* double-count it. See this experiment's README.md "Why white only".
+*
 * WHY NO sigma_uv MEASURE IN THIS DECK. The probit inversion involves
 * ln(1 - frac_high) for the plus rung, which is singular if a corner's
 * frac_high ever lands exactly at 1.0 (observed at some corners during
