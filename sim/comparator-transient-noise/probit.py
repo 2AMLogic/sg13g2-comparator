@@ -45,6 +45,10 @@ and REFUSES to analyze a record whose manifest has since changed (pass
 older record after a recalibration; the params then used are stamped in the
 output so the mismatch cannot pass unnoticed).
 
+`--selftest` runs the estimator's own closed-loop check (hit rates
+synthesized forward from a known sigma/theta, inverted back) and needs no
+record; see README.md "Probit inversion".
+
 Stdlib only (math.erf / a bisection inverse), matching the harness's
 no-dependency rule.
 """
@@ -159,9 +163,107 @@ def analyze(record: dict, params: dict) -> dict:
     }
 
 
+def selftest() -> int:
+    """Closed-loop check: synthesize hit rates from a KNOWN sigma, recover it.
+
+    The estimator is what turns this bench's raw evidence into the number
+    README.md quotes, so it gets its own falsification test rather than
+    being trusted by inspection. Hit rates are generated forward from a
+    chosen (sigma, theta) via p = Phi((od - theta)/sigma) -- no sampling, so
+    the inversion must return the inputs to machine precision.
+
+    The load-bearing case is a NON-ZERO theta: that is precisely where the
+    per-rung diagnostic is wrong and the slope estimator is not, and the
+    whole argument for making the slope form primary (README.md "Probit
+    inversion") rests on that difference being real.
+    """
+    failures: list[str] = []
+
+    def check(label: str, got: float, want: float, tol: float) -> None:
+        if not math.isclose(got, want, rel_tol=tol, abs_tol=tol * abs(want)):
+            failures.append(f"{label}: got {got!r}, want {want!r} (rel_tol {tol})")
+
+    od_x, na, ts = 1.0e-3, 5.735e-3, 20e-12
+    params = {"od_x": od_x, "vn_na": na, "vn_ts": ts}
+    s_inj = na * math.sqrt(2.0 * ts)
+
+    for sigma_true, theta_true in ((1.0e-3, 0.0), (1.142e-3, 150e-6), (0.6e-3, -300e-6)):
+        record = {
+            "record_id": f"selftest-sigma{sigma_true}-theta{theta_true}",
+            "testbench": {},
+            "points": [
+                {
+                    "corner_id": "selftest",
+                    "status": "ok",
+                    "measurements": {
+                        "frac_high_zero": phi((0.0 - theta_true) / sigma_true),
+                        "frac_high_plus": phi((od_x - theta_true) / sigma_true),
+                        "frac_high_minus": phi((-od_x - theta_true) / sigma_true),
+                    },
+                }
+            ],
+        }
+        out = analyze(record, params)
+        row = out["rows"][0]
+        tag = f"sigma={sigma_true * 1e3:.3f}mV theta={theta_true * 1e6:.0f}uV"
+        check(f"{tag} slope sigma", row["sigma_mv"], sigma_true * 1e3, 1e-9)
+        check(f"{tag} theta", row["theta_uv"], theta_true * 1e6, 1e-6)
+        check(f"{tag} implied ENBW", row["enbw_ghz"], (sigma_true / s_inj) ** 2 / 1e9, 1e-9)
+        if theta_true == 0.0:
+            # With theta == 0 the per-rung diagnostic is EXACT too ...
+            check(f"{tag} sigma_plus", row["sigma_plus_mv"], sigma_true * 1e3, 1e-9)
+            check(f"{tag} sigma_minus", row["sigma_minus_mv"], sigma_true * 1e3, 1e-9)
+        else:
+            # ... and with theta != 0 it is NOT: a positive theta inflates the
+            # +rung's apparent sigma and deflates the -rung's, and vice versa.
+            # If the two ever agreed here, the slope form would be pointless
+            # and README.md's argument for making it primary would be wrong.
+            straddles = (
+                row["sigma_plus_mv"] > row["sigma_minus_mv"]
+                if theta_true > 0
+                else row["sigma_plus_mv"] < row["sigma_minus_mv"]
+            )
+            if not straddles:
+                failures.append(
+                    f"{tag}: per-rung diagnostics did not straddle as expected "
+                    f"(sigma_plus {row['sigma_plus_mv']:.4f}, "
+                    f"sigma_minus {row['sigma_minus_mv']:.4f})"
+                )
+            # Both per-rung numbers are biased, but the slope form recovered
+            # sigma exactly above -- that is the claim, stated as a check.
+            if math.isclose(row["sigma_plus_mv"], sigma_true * 1e3, rel_tol=1e-6):
+                failures.append(
+                    f"{tag}: sigma_plus matched the true sigma at theta != 0, "
+                    "which contradicts the estimator's stated failure mode"
+                )
+
+    # Saturation must RAISE, not silently return a flattering zero sigma.
+    try:
+        probit(1.0)
+    except ValueError:
+        pass
+    else:
+        failures.append("probit(1.0) did not raise -- a saturated rung would read sigma = 0")
+
+    # Phi/probit round trip over the band od_x actually puts these rungs in.
+    for p in (0.001, 0.05, 0.16, 0.5, 0.8, 0.95, 0.999):
+        check(f"phi(probit({p}))", phi(probit(p)), p, 1e-12)
+
+    for line in failures:
+        print(f"FAIL {line}")
+    print(f"probit.py selftest: {'FAIL' if failures else 'PASS'} "
+          f"({len(failures)} failure(s))")
+    return 1 if failures else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("record", type=Path, help="path to a records/<id>.json")
+    ap.add_argument("record", type=Path, nargs="?", help="path to a records/<id>.json")
+    ap.add_argument(
+        "--selftest",
+        action="store_true",
+        help="run the estimator's own closed-loop check and exit (no record needed)",
+    )
     ap.add_argument("--json", action="store_true", help="emit the full analysis as JSON")
     ap.add_argument(
         "--allow-manifest-drift",
@@ -169,6 +271,11 @@ def main(argv: list[str] | None = None) -> int:
         help="analyze even if testbench/tb.json has changed since the record was minted",
     )
     args = ap.parse_args(argv)
+
+    if args.selftest:
+        return selftest()
+    if args.record is None:
+        ap.error("a records/<id>.json path is required (or pass --selftest)")
 
     record = json.loads(args.record.read_text())
     manifest = Path(__file__).resolve().parent / "testbench" / "tb.json"

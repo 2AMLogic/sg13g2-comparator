@@ -226,6 +226,26 @@ record whose `manifest_sha256` no longer matches that file — so a future
 recalibration cannot leave an old aperture or an old `od_x` silently in
 circulation.
 
+**The estimator itself is tested, not trusted by inspection**, since it is
+what converts this bench's raw evidence into the σ the repo-root `README.md`
+quotes:
+
+```bash
+python3 sim/comparator-transient-noise/probit.py --selftest
+```
+
+It synthesizes hit rates *forward* from a chosen `(σ, θ)` — no sampling, so
+the inversion must return the inputs to machine precision — and asserts the
+slope estimator recovers σ and θ exactly at `θ = 0` **and** at `θ = ±150…300
+µV`, that the per-rung diagnostics are biased in *opposite* directions there
+(the claim below, stated as a check rather than as prose), that `Φ⁻¹`
+round-trips `Φ` across the whole `p = 0.001…0.999` band, and that a saturated
+rung *raises* instead of quietly returning σ = 0. It has teeth: swapping the
+primary estimator for the per-rung form — the exact regression the section
+below argues against — turns the `θ ≠ 0` cases red while the `θ = 0` case
+still passes, which is precisely the failure signature that makes the
+per-rung form look fine on a symmetric point.
+
 Model the decision as a comparison of `(overdrive + noise)` against an
 effective threshold `θ`, so `p(od) = Φ((od − θ)/σ)`. Two rungs at `±od_x`
 then give two equations in two unknowns, and the **difference of the two
