@@ -206,10 +206,25 @@ gap.
 ## Probit inversion
 
 `frac_high_plus`/`frac_high_minus` are the raw measurements; converting them
-to an implied 1-sigma input-referred noise is a simple, documented,
-reproducible **post-hoc** calculation over the committed record, not a deck
-measurement (ngspice's `let` has no clamp with which the deck could guard
-the singularity at `p = 1`).
+to an implied 1-sigma input-referred noise is a **post-hoc** step over the
+committed record, not a deck measurement (`Φ⁻¹(p)` diverges as `p → 0` or
+`1`; ngspice has no `Φ⁻¹` builtin at all and `let` has no clamp with which
+the deck could guard the singularity).
+
+That step is **executable, not prose** — every σ quoted in this file and in
+the repo-root `README.md` is an output of
+[`probit.py`](probit.py) run against a committed record:
+
+```bash
+python3 sim/comparator-transient-noise/probit.py \
+        sim/comparator-transient-noise/records/<record-id>.json
+```
+
+It reads `od_x`/`vn_na`/`vn_ts` from `testbench/tb.json` (the harness's record
+provenance carries the manifest's sha256, not its `params`) and **refuses** a
+record whose `manifest_sha256` no longer matches that file — so a future
+recalibration cannot leave an old aperture or an old `od_x` silently in
+circulation.
 
 Model the decision as a comparison of `(overdrive + noise)` against an
 effective threshold `θ`, so `p(od) = Φ((od − θ)/σ)`. Two rungs at `±od_x`
