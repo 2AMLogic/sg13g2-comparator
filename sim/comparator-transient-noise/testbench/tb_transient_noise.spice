@@ -37,10 +37,17 @@
 * confirmed empirically: reading after CLK falls reads the RESET value, not
 * the held decision -- see this experiment's README.md "Debugging notes").
 * The fraction of trials that decide HIGH at each rung is the raw, directly
-* observed quantity (frac_high_*); README.md/this experiment's README.md
-* convert it to an implied 1-sigma input-referred noise via the standard
-* probit inversion (documented there, not computed in-deck -- see "Why no
-* sigma_uv measure" below).
+* observed quantity (frac_high_*); this experiment's README.md converts it to
+* an implied 1-sigma input-referred noise by a TWO-RUNG PROBIT SLOPE
+* inversion -- sigma = 2*od_x / (Phi^-1(frac_high_plus) -
+* Phi^-1(frac_high_minus)), whose probit DIFFERENCE cancels any effective
+* threshold offset exactly, rather than the per-rung form od_x/Phi^-1(p)
+* which converts each corner's own sampling fluctuation straight into
+* apparent noise (measured: the per-rung pair swings +/-20-30% between two
+* runs of the identical calibrated density where the slope form reproduces
+* to 1.1%). The zero-overdrive rung is the third, redundant constraint and
+* the noise-injection guard. Documented there, not computed in-deck -- see
+* "Why no sigma_uv measure" below.
 *
 * SEED REPRODUCIBILITY: RECORDED, NOT ACHIEVED. `setseed` is issued at the
 * top of the control block (tb.json's analyses) for consistency with this

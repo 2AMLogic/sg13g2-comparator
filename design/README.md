@@ -85,14 +85,26 @@ not taken by this issue) is open — see "Open items".
   transient methodology (DR-0001 Consequence 1's alternative). That
   re-founding remains a real, not-taken option if the reduced sub-model's
   lower-bound numbers turn out to be uninformative.
-  **PARTIALLY RESOLVED for the noise half (issue #24): retain, not
-  retire.** A transient, whole-latch noise bench now exists alongside
-  `comparator-preamp-noise/` rather than replacing it —
-  [`sim/comparator-transient-noise/README.md`](../sim/comparator-transient-noise/README.md#retain-not-retire-comparator_dut_analog)
-  has the full reasoning (the two benches measure different quantities; the
-  AC number is the transient bench's own calibration input; no cost to
-  keeping it). The offset half of this open item is unchanged — deferred to
-  #23, still open at the time of writing.
+  **RESOLVED, both halves, the same way: RETAIN the reduced sub-model as a
+  standing lower-bound check; do not retire it.** The two halves were
+  decided independently, on their own evidence, by the two benches that
+  earned the right to decide them:
+  - *Offset half* — issue #23 / PR #33,
+    [`sim/comparator-offset-transient-mc/README.md`](../sim/comparator-offset-transient-mc/README.md#relationship-to-comparator-offset-mc).
+    That decision explicitly scoped itself to the offset row and left the
+    noise row's equivalent choice open.
+  - *Noise half* — issue #24,
+    [`sim/comparator-transient-noise/README.md`](../sim/comparator-transient-noise/README.md#retain-not-retire-comparator_dut_analog):
+    the two noise benches measure different quantities, the AC `.noise`
+    number is literally the transient bench's own calibration input (so
+    retiring it would remove the number the new bench is calibrated
+    against), and `sim/` being append-only evidence means a second standing
+    bench costs wall-clock time, not upkeep risk.
+
+  A whole-latch transient bench now exists for each row *alongside* the
+  reduced-sub-model bench, not in place of it, so DR-0001 Consequence 1's
+  "re-found the benches on transient methodology instead" alternative was
+  in the end neither taken nor needed.
 - **Sizing is not gm/Id-optimized.** Device widths/lengths here are the
   round numbers DR-0001's own "Sizing rationale" section named as a
   block-diagram-level starting point (matching `sim/dut.json`'s existing

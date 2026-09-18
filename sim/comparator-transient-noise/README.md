@@ -6,11 +6,27 @@ the real regenerative latch — **not** `comparator_dut_analog`), measured by
 probit measurement) over the full PVT grid.
 
 Backs [`README.md`'s noise row](../../README.md#target-specification-draft--engineering-to-ratify)
-as the **compliance evidence path** `CLAUDE.md` names — "the input-referred
+via the **compliance evidence path** `CLAUDE.md` names — "the input-referred
 noise floor from transient-noise runs with seeds and run counts committed".
 `sim/comparator-preamp-noise/`'s `.noise` AC analysis remains a **reportable
 lower bound**, not this row's compliance evidence; see "Retain, not retire"
 below for why both benches stay committed side by side.
+
+> **DR-0002 is proposed, not ratified, at the time this bench's evidence is
+> committed.** [Issue #12](https://github.com/2AMLogic/sg13g2-comparator/issues/12)
+> / [PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18) — which
+> would ratify the noise row's scoping, name transient noise as its
+> compliance path, and demote the `.noise` number to a reportable lower
+> bound — is **open** and deliberately held for a human
+> (`loom:operator-only`). Everything below that cites DR-0002 cites a
+> *proposal*. The requirement this bench actually answers to today is
+> `CLAUDE.md`'s own, which is in force regardless. Consequently **nothing
+> here is measured against a ratified bound**, and this bench files no new
+> decision record: there is no ratified DR-0002 claim for it to contradict
+> on physics grounds. What it does instead is hand DR-0002's eventual review
+> a number the proposal currently has to leave blank — see "Implications for
+> DR-0002's review" below, and `comparator-offset-transient-mc/`'s identical
+> handling of the same situation one row over.
 
 ```bash
 python3 sim/run_corners.py comparator-transient-noise -j 8
@@ -113,10 +129,33 @@ regeneration timescale.
 
 Because the calibration fixes the **density**, the measured sigma must not
 depend on `TS` — the injected bandwidth is an artifact of the source, not of
-the circuit. Re-running the nominal point at `TS = 10 ps` with `NA` rescaled
-to `8.110e-3` (holding `NA·sqrt(2·TS)` constant) is therefore a real
-falsification test of the whole calibration, not a formality. Result: see
-"Records" below.
+the circuit. If the deck were in fact responding to the injected source's
+*total* variance (which is `(2/3)·NA²`, i.e. **`TS`-independent**) rather
+than to its density, halving `TS` at constant density would change the
+answer by √2. So this is a real falsification test of the whole calibration,
+not a formality. It was run:
+
+| nominal point `tt_27c_1.20v`, `N = 80` | `NA` | `frac_high_zero` | `frac_high_plus` | `frac_high_minus` | slope `sigma` |
+|---|---|---|---|---|---|
+| `TS = 20 ps` (production) | 5.735e-3 | 0.4750 | 0.8500 | 0.2375 | **1.142 mV** |
+| `TS = 10 ps` (cross-check) | 8.110e-3 | 0.4375 | 0.7875 | 0.1750 | **1.155 mV** |
+
+**Agreement to 1.1 %**, against a ±13 % sampling error per point and the
+√2 = 41 % shift the "responds to total variance" failure mode would have
+produced. The calibration is measuring what it claims to measure.
+
+This doubles as the **timestep-resolution check**, which is the other way
+this bench could have been quietly wrong. Both runs use the deck's
+`tran 20p 5.1n 0 20p` (max timestep 20 ps), so the cross-check run injects a
+source whose knots are spaced *half* the max timestep — the most aliasing-
+exposed configuration of the two — and still lands within 1.1 % of the
+production run. That matches the analytic expectation: the source's
+`sinc⁴(f·TS)` envelope has its first null at `1/TS`, and the only spectral
+power that can fold below the latch's own ~1 GHz effective aperture
+bandwidth (see "Records") comes from within a few percent of that null,
+where `sinc⁴` has already collapsed. Resolving the *circuit* is what the
+20 ps cap is really for, and 20 ps is ~2× finer than the fastest measured
+regeneration time constant on this grid.
 
 ### Why transient, not `.noise`
 
@@ -137,29 +176,60 @@ gap.
 to an implied 1-sigma input-referred noise is a simple, documented,
 reproducible **post-hoc** calculation over the committed record, not a deck
 measurement (ngspice's `let` has no clamp with which the deck could guard
-the singularity at `p = 1`):
+the singularity at `p = 1`).
+
+Model the decision as a comparison of `(overdrive + noise)` against an
+effective threshold `θ`, so `p(od) = Φ((od − θ)/σ)`. Two rungs at `±od_x`
+then give two equations in two unknowns, and the **difference of the two
+probits eliminates `θ` exactly**:
 
 ```
-sigma_plus  = od_x / Phi^-1(frac_high_plus)
-sigma_minus = od_x / Phi^-1(1 - frac_high_minus)
+PRIMARY (two-rung slope; threshold-offset-immune):
+  sigma = 2 * od_x / ( Phi^-1(frac_high_plus) - Phi^-1(frac_high_minus) )
+
+SECONDARY (per-rung, reported only as a consistency check):
+  sigma_plus  = od_x / Phi^-1(frac_high_plus)
+  sigma_minus = od_x / Phi^-1(1 - frac_high_minus)
+
+INCIDENTALLY RECOVERED (a diagnostic, not a spec number):
+  theta = -(sigma/2) * ( Phi^-1(frac_high_plus) + Phi^-1(frac_high_minus) )
 ```
 
-where `Phi^-1` is the standard normal inverse-CDF (probit function) and
-`od_x = 1.0 mV`. This assumes the decision is a zero-threshold comparison of
-`(overdrive + noise)` — reasonable here because mismatch is off (the plain
-`mos` corner set) and the injected noise dominates any residual
-simulator-level asymmetry.
+where `Φ⁻¹` is the standard normal inverse-CDF (probit function) and
+`od_x = 1.0 mV`.
+
+**Why the slope form is the primary one, and the per-rung form is not.**
+The per-rung forms assume `θ = 0` exactly. Mismatch *is* off here (plain
+`mos` corner set), so there is no device-mismatch offset — but `θ` is not
+identically zero at `N = 80`: it absorbs both real residual asymmetry and,
+much more importantly, the sampling fluctuation of that corner's own two
+draws. The effect is not academic. At the nominal corner the two estimators
+behave completely differently across two independent runs of the *same*
+calibrated density (the `TS` cross-check below):
+
+| run | `sigma_plus` | `sigma_minus` | **slope `sigma`** |
+|---|---|---|---|
+| `TS = 20 ps` (production calibration) | 0.965 mV | 1.400 mV | **1.142 mV** |
+| `TS = 10 ps` (rescaled `NA`, same density) | 1.254 mV | 1.070 mV | **1.155 mV** |
+
+The per-rung numbers swing by ±20–30 % and even swap which rung is larger;
+the slope estimator reproduces to **1.1 %**. That is the whole argument: a
+common-mode shift in the pair of hit rates is exactly what `θ` is, and the
+slope form cancels it while the per-rung form converts it straight into
+apparent noise. `sigma_plus`/`sigma_minus` are still worth reporting — their
+*spread* is a live readout of how much of any one corner's number is
+sampling scatter — but they are a diagnostic, not the measurement.
 
 **Precision at `N = 80` is not a flat percentage.** The binomial standard
 error on `frac_high` is ~5.6 % at `p = 0.5` (smaller at the tails), but it
-propagates through `Phi^-1`'s derivative, which is steep near `p = 0.5` and
-shallow in the `p ≈ 0.7–0.95` band `od_x` puts these rungs in — roughly
-±20 % of sampling scatter on any **single** corner's implied sigma.
-Comparing the `+od_x`-derived and `−od_x`-derived sigma **at the same
-corner** (which would agree exactly at infinite `N`) is the honest
-single-point precision check; the **grid-wide mean across all 45 corners ×
-2 rungs** is the defensible summary statistic, not any single corner's
-number.
+propagates through `Φ⁻¹`'s derivative, which is steep near `p = 0.5` and
+shallow in the `p ≈ 0.7–0.95` band `od_x` puts these rungs in. Propagating
+both rungs through the slope form gives roughly **±13 % (1σ) of sampling
+scatter on a single corner's** implied sigma — better than either per-rung
+number, but still coarse. The **grid-wide mean across all 45 corners** is
+the defensible summary statistic; no single corner's number should be quoted
+as a corner-specific result, and the grid's min/max are sampling-dominated
+extremes, not a measured PVT envelope.
 
 ## Seed reproducibility: recorded, not achieved
 
@@ -250,7 +320,7 @@ complete figure, not a certificate.
 
 **The two numbers are consistent, and in the expected order.** The sigma
 this bench reports is *larger* than `comparator-preamp-noise/`'s integrated
-total, which is exactly what DR-0002's framing of that number as a
+total, which is exactly what DR-0002's *proposed* framing of that number as a
 *reportable lower bound* predicts: the AC bench has both fewer noise sources
 and a much narrower integration band. (An earlier draft of this bench
 calibrated the injection to the AC bench's *total* instead of its density
@@ -264,12 +334,19 @@ emphatic as it is.)
 DR-0001 Consequence 2 named an open item: whether `comparator_dut_analog`
 (the reduced sub-model `comparator-offset-mc/` and `comparator-preamp-noise/`
 instantiate) stays a standing lower-bound check once a transient,
-whole-latch path exists, or is retired. **Decision: RETAIN, not retire —**
-made independently here because, at the time of writing, the sibling issue
-(#23, the transient Monte-Carlo offset bench) that could otherwise have
-settled this for the reduced sub-model in general is still open, so there is
-no existing decision to defer to. This decision binds the **noise** row
-only; #23 decides the offset row's half on its own evidence.
+whole-latch path exists, or is retired. **Decision: RETAIN, not retire.**
+
+**This is not a re-litigation of the sibling decision — that one did not
+cover this row.** The sibling issue (#23, the transient Monte-Carlo offset
+bench) landed first ([PR #33](https://github.com/2AMLogic/sg13g2-comparator/pull/33))
+and reached the same *retain* answer, but it
+[scoped itself explicitly to the offset row](../comparator-offset-transient-mc/README.md#relationship-to-comparator-offset-mc)
+— "the noise row's equivalent choice is out of scope — a separate future
+issue, not #23". So the noise half was still open when this bench was
+written, and is decided here. Its reasoning is also not merely #23's
+reasoning restated: #23's decisive arguments were cost-per-point and
+common-mode-axis coverage, neither of which applies to the noise pair; this
+row's decisive argument (point 1 below) has no offset-row counterpart at all.
 
 **Reasoning:**
 
@@ -288,9 +365,9 @@ only; #23 decides the offset row's half on its own evidence.
    extended to re-derive the injection per corner.
 3. **No cost to keeping it.** `sim/comparator-preamp-noise/`'s testbench,
    corners, and records are unmodified by this issue; retaining it costs
-   nothing beyond what already exists, and DR-0002 already frames it as a
-   *reportable lower bound*, not a claim of completeness — a framing this
-   decision leaves intact.
+   nothing beyond what already exists, and DR-0002's proposal already frames
+   it as a *reportable lower bound*, not a claim of completeness — a framing
+   this decision leaves intact rather than needing to revise.
 
 ## Debugging notes
 
