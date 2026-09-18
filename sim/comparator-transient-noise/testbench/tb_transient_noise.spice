@@ -32,10 +32,14 @@
 * +od_x), each with its OWN independent trnoise() realization, are re-run
 * dowhile-style for many trials (harness/report.py's evidence.mc_seed field
 * records the seed and count, per CLAUDE.md's "seeds and run counts
-* committed"). Each trial's dout is read once, WHILE CLK IS STILL HIGH (the
-* SR output stage is only guaranteed decided during the evaluate phase --
-* confirmed empirically: reading after CLK falls reads the RESET value, not
-* the held decision -- see this experiment's README.md "Debugging notes").
+* committed"). Each trial's dout is read once, INSIDE THE EVALUATE PHASE
+* (at 5 ns; CLK falls at 5.1 ns) -- because that samples the REGENERATIVE
+* DECISION itself rather than the output latch's retention of it, and lets
+* the transient stop before the reset. NOT because the output cannot be read
+* later: the NOR SR pair does hold between strobes (comparator-regeneration/
+* reads it at 55 ns against a CLK that fell at 50.1 ns, 45/45 points) -- see
+* this experiment's README.md "Debugging notes", which corrects an earlier
+* draft of this deck's header that claimed otherwise.
 * The fraction of trials that decide HIGH at each rung is the raw, directly
 * observed quantity (frac_high_*); this experiment's README.md converts it to
 * an implied 1-sigma input-referred noise by a TWO-RUNG PROBIT SLOPE
@@ -131,15 +135,17 @@
 * comparator-offset-transient-mc/), not this one. Injecting it here would
 * double-count it. See this experiment's README.md "Why white only".
 *
-* WHY NO sigma_uv MEASURE IN THIS DECK. The probit inversion involves
-* ln(1 - frac_high) for the plus rung, which is singular if a corner's
-* frac_high ever lands exactly at 1.0 (observed at some corners during
-* calibration) -- ngspice's `let` has no clamp/min/max builtin this deck can
+* WHY NO sigma_uv MEASURE IN THIS DECK. Phi^-1(p) diverges as p -> 0 or 1,
+* so the inversion is singular if a rung's frac_high ever lands exactly at
+* 1.0 (observed at some corners during calibration) -- and ngspice has no
+* Phi^-1 builtin at all; `let` has no clamp/min/max builtin this deck can
 * guard it with, and a NaN/inf measurement is parsed as MISSING by the
 * harness (sim/harness/runner.py's _MEAS_RE), which would mark an otherwise-
 * fine point "failed". frac_high_zero/plus/minus are reported raw instead;
-* the sigma conversion is a simple, documented, reproducible post-hoc
-* calculation over the committed record (this experiment's README.md).
+* the sigma conversion is a documented, executable post-hoc step over the
+* committed record --
+*     python3 sim/comparator-transient-noise/probit.py records/<id>.json
+* -- whose derivation is this experiment's README.md "Probit inversion".
 
 vsup vdd 0 dc {vdd_val}
 vcm  cm 0 dc {dut_vcm}
@@ -166,7 +172,9 @@ Ean2 an2 cm vd2 0 -0.5
 ib2  vdd ibn2 dc {dut_ib}
 X2   ap2 an2 clk ibn2 dout2 doutb2 vdd 0 comparator_dut
 
-* ---- clock: ONE strobe, dout read WHILE clk is high --------------------
-* (reading after clk falls reads the SR stage's reset value, not the held
-* decision -- see this experiment's README.md "Debugging notes").
+* ---- clock: ONE strobe; dout sampled at 5n, inside the evaluate phase ---
+* Rises at 1n (+100p edge), so CLK is high 1.1n..5.1n and the 5n readout
+* sits 3.9 ns into evaluate -- ~5x the slowest measured 50 mV decision time
+* on this grid (0.85 ns, comparator-regeneration/). The transient stops at
+* 5.1n, so the deck never simulates the reset it does not need.
 vclk clk 0 pulse(0 {vdd_val} 1n 100p 100p 4n 20n)

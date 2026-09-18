@@ -125,6 +125,39 @@ measured regeneration time constant on this grid (42.6 ps at `ff_-40c_1.32v`,
 so the injected process is effectively uncorrelated on the latch's own
 regeneration timescale.
 
+### Why white only (no 1/f term is injected)
+
+`trnoise()` takes four arguments — `TRNOISE(NA TS NALPHA NAMP)` — and this
+deck passes `NALPHA = NAMP = 0`. That is a decision, not an omission, and it
+is quantified rather than asserted.
+
+`comparator-preamp-noise/` attributes **11.28 % of its total noise power** to
+flicker at the nominal corner (`flicker_frac_pct`) — but that share is stated
+over *its own* 58.7 MHz band. The two terms rescale to a different band very
+differently: white power grows **linearly** with the upper limit, 1/f power
+only **logarithmically**. Carried to this bench's ~0.9 GHz decision aperture
+("Implied aperture" below):
+
+| term | scaling to ~0.9 GHz | power at nominal |
+|---|---|---|
+| white | × `9.2e8 / 5.87e7` = **15.7** | 1.07e−6 V² |
+| flicker | × `ln(9.2e8) / ln(5.87e7)` = **1.15** | 1.0e−8 V² |
+
+so flicker falls to **~0.9 % of the in-aperture noise power**, i.e. **~0.46 %
+on σ** — roughly **1/28** of this bench's own ±13 % per-corner sampling error,
+and far below the discrimination of any check here.
+
+The physical argument lands in the same place from the other direction: 1/f
+power that matters sits decades below a ~1 GHz aperture, so **within one 5 ns
+strobe a flicker fluctuation is a static offset**, not decision noise. Offset
+is budgeted by [`comparator-offset-mc/`](../comparator-offset-mc/) and
+[`comparator-offset-transient-mc/`](../comparator-offset-transient-mc/), so
+injecting 1/f here would double-count it into the noise row. Combined with
+"mismatch is off" (the plain `mos` corner set), the division of labour is
+explicit: **everything static within one strobe — device mismatch *and* 1/f —
+belongs to the offset row; this bench measures only what varies
+strobe-to-strobe.**
+
 ### TS-insensitivity cross-check
 
 Because the calibration fixes the **density**, the measured sigma must not
@@ -230,6 +263,34 @@ number, but still coarse. The **grid-wide mean across all 45 corners** is
 the defensible summary statistic; no single corner's number should be quoted
 as a corner-specific result, and the grid's min/max are sampling-dominated
 extremes, not a measured PVT envelope.
+
+### Implied aperture — an independent physical cross-check
+
+The probit σ and the injected density together imply an **effective decision
+noise bandwidth**, and that number is worth reading back out because it is
+the one place this bench's answer can be checked against circuit physics
+rather than against itself:
+
+```
+ENBW_implied = ( sigma / S_injected )^2          S_injected = 36.27 nV/√Hz
+```
+
+At the nominal corner σ ≈ 1.1 mV gives **ENBW ≈ 0.9 GHz**. A StrongARM latch
+integrates its input noise onto the output capacitance during the
+integration phase before regeneration takes over, so a first-order estimate
+is `1/(4·t_int)` — landing ~0.9 GHz for `t_int` of a few hundred picoseconds,
+which is the right order for this DUT's measured `τ` (42.6–167.3 ps across
+the grid, [`comparator-regeneration/`](../comparator-regeneration/records/20260916-113309-180cca7.md))
+and its 0.60–0.85 ns measured 50 mV decision time.
+
+**This is a sanity check, not a measurement**: it is a single-pole
+idealization of an aperture that is neither single-pole nor
+time-invariant. Its value is falsification, not precision — an implied ENBW
+of 60 MHz (the AC sub-model's own band, i.e. the density never saw the
+latch's aperture at all) or of 25 GHz (the injected source's own `1/TS`
+knot rate leaking through, i.e. the deck responding to the source instead of
+the circuit) would each be a specific, diagnosable bug. Neither is what comes
+out.
 
 ## Seed reproducibility: recorded, not achieved
 
@@ -371,13 +432,31 @@ row's decisive argument (point 1 below) has no offset-row counterpart at all.
 
 ## Debugging notes
 
-- **`dout` must be read while `CLK` is still high.** The comparator's
-  output stage (an SR latch) holds the decided value only during the
-  evaluate phase; reading after `CLK` falls reads the **reset** value, not
-  the held decision — confirmed empirically while developing this deck
-  (an early version that sampled after the strobe read a constant value at
-  every trial, which is what first surfaced the mistake, not a noise-
-  injection failure).
+- **`dout` is read *inside* the evaluate phase (at 5 ns, with `CLK` falling
+  at 5.1 ns) — and *not* because the output cannot be read later.** An
+  earlier draft of this file asserted that reading after `CLK` falls returns
+  the reset value rather than the held decision. **That is wrong, and is
+  corrected here rather than carried forward.** Both the netlist and this
+  repo's own committed evidence say the opposite:
+  - *Netlist.* During reset (`CLK` low) `XM7`/`XM8` pull `ln`/`lp` to `VDD`,
+    so the isolation inverters drive `lnb = lpb = 0` — which is exactly the
+    **hold** input condition of the NOR SR pair (`doutb = NOR(lnb, dout)`,
+    `dout = NOR(lpb, doutb)` degenerate to a cross-coupled inverter pair).
+    Holding between strobes is the interface contract `sim/dut/README.md`
+    states for `dout`/`doutb`, and the topology implements it.
+  - *Committed measurement.* [`comparator-regeneration/`](../comparator-regeneration/)
+    reads `dout` at **55 ns** against a `CLK` that fell at **50.1 ns** and
+    requires the held value to be ≥ 0.9 of its own supply — passing at
+    **45/45** PVT points on this same DUT
+    ([record `20260916-113309-180cca7`](../comparator-regeneration/records/20260916-113309-180cca7.md)).
+
+  The real reasons for the in-phase readout are narrower and both hold:
+  (1) it samples the **regenerative decision itself** rather than the output
+  latch's retention of it, which is the quantity this bench is about, and
+  (2) it lets the transient stop at 5.1 ns instead of running past the
+  falling edge and through the reset — worth having across
+  `240 runs × 45 points`. Either readout would give the same answer; this one
+  is cheaper and assumes less.
 - **Solver tolerances are looser than the other three benches'**
   (`reltol=1e-2`/`abstol=1e-12` here vs. `1e-4`/`1e-9`/`1e-13` there) —
   deliberately: this bench only needs a correct binary decision at a fixed
