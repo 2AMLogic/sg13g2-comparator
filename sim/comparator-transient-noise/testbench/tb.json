@@ -1,0 +1,84 @@
+{
+  "name": "comparator-transient-noise",
+  "description": "Input-referred noise floor of the WHOLE comparator (comparator_dut, the real regenerative latch, NOT comparator_dut_analog), measured by transient-noise decision statistics (a 'hit-rate' / probit measurement) over the full PVT grid -- the compliance evidence path CLAUDE.md requires and DR-0002 (issue #12 / PR #18, PROPOSED AND STILL OPEN at the time this bench was built) proposes to ratify, per CLAUDE.md's 'input-referred noise floor from transient-noise runs with seeds and run counts committed'. The injected trnoise() source is calibrated to the SPECTRAL DENSITY of comparator-preamp-noise's own input-referred white noise (36.27 nV/rtHz at the nominal corner), NOT to that bench's band-limited integrated total -- the latch's own aperture, not the reduced sub-model's bandwidth, then sets the noise bandwidth that reaches the decision.",
+  "claim": "sim/dut.json binds design/comparator.spice (id comparator-dr0001, provenance schematic), the ratified topology from spec/decision-records/0001-comparator-topology.md ('DR-0001'). This record substantiates a TRNOISE-injected, decision-statistics sweep over the full PVT grid against the WHOLE latch (comparator_dut, real CLK strobe, real regenerative pair): at each PVT point it measures the probability of a correct decision at +/- a fixed differential overdrive, from which an input-referred 1-sigma decision noise follows by probit inversion (see this experiment's README.md). It is NOT itself the README.md#target-specification Input-referred-noise row ratification act (that is spec/porting-plan.md's separate third step; DR-0002, issue #12 / PR #18, would ratify the SCOPING of the row and name transient noise as its compliance evidence path -- but that PR is OPEN AND UNRATIFIED on main at the time this record is committed, so nothing here is measured against a ratified bound; the requirement this bench actually answers to is CLAUDE.md's own, which is in force today). Unlike comparator-preamp-noise/'s .noise analysis, this bench exercises the ACTUAL regenerative loop -- no loop-broken reduced sub-model, no small-signal DC-operating-point assumption, and no reliance on that sub-model's own noise bandwidth. It remains a LOWER BOUND on the complete figure in one specific, stated way: the DUT's black-box pin contract lets this deck inject noise only at vinp/vinn, so the regenerative pair's own noise sources are not independently sourced (see the notes below).",
+  "netlist": "tb_transient_noise.spice",
+  "nominal_supply_v": 1.2,
+  "supply_tolerance": 0.1,
+  "temperatures_c": [
+    -40,
+    27,
+    125
+  ],
+  "corners": [
+    "mos"
+  ],
+  "analyses": [
+    "setseed 20260916",
+    "let n = 0",
+    "let nmax = 80",
+    "let s0 = 0",
+    "let s1 = 0",
+    "let s2 = 0",
+    "dowhile n < nmax",
+    "  reset",
+    "  tran 20p 5.1n 0 20p",
+    "  meas tran vsup_v find v(vdd) at=0.5n",
+    "  meas tran d0now find v(dout0) at=5n",
+    "  meas tran d1now find v(dout1) at=5n",
+    "  meas tran d2now find v(dout2) at=5n",
+    "  let s0 = s0 + d0now/vsup_v",
+    "  let s1 = s1 + d1now/vsup_v",
+    "  let s2 = s2 + d2now/vsup_v",
+    "  let n = n + 1",
+    "end",
+    "let frac_high_zero = s0/nmax",
+    "let frac_high_plus = s1/nmax",
+    "let frac_high_minus = s2/nmax"
+  ],
+  "measure": {
+    "frac_high_zero": "frac_high_zero",
+    "frac_high_plus": "frac_high_plus",
+    "frac_high_minus": "frac_high_minus"
+  },
+  "checks": {
+    "frac_high_zero": {
+      "min": 0.1,
+      "max": 0.9,
+      "description": "NOISE-IS-ACTUALLY-INJECTED GUARD, not a spec bound. At zero applied overdrive, zero mismatch (the plain mos corner set), the ONLY thing that can make a trial decide either way is the injected trnoise() realization -- so frac_high_zero should sit near 0.5 (binomial SEM at N=80 is ~5.6% at p=0.5). If trnoise() ever failed to inject (e.g. a regression that zeroed vn_na), the zero-overdrive rung would instead decide the SAME way on EVERY trial, collapsing frac_high_zero to 0.0 or 1.0 -- well outside this floor/ceiling. THIS IS NOT AN ASSUMPTION, IT WAS RUN: with vn_na forced to 0 at tt_27c_1.20v this deck returns frac_high_zero = 2.3e-8 (LOW on every trial), frac_high_plus = 1.0 and frac_high_minus = 2.3e-8, and this check FAILS as designed -- see this experiment's README.md 'Negative control (actually run)'. THIS IS ALSO THE HARNESS'S SABOTAGE-NEGATIVE-CONTROL SURROGATE FOR THIS BENCH: --sabotage-corners forces every corner to plain mos_tt (sim/harness/corners.py), which does not itself disable trnoise() the way it disables mismatch for comparator-offset-mc/, so this check's real teeth are structural (a broken or zeroed noise source), not sabotage-corner-specific."
+    },
+    "frac_high_plus": {
+      "min": 0.3,
+      "max": 0.999,
+      "description": "SANITY ENVELOPE, not a spec bound. At +od_x (1.0 mV, deliberately chosen near the measured 1-sigma decision noise so the hit rate lands in the informative 0.7-0.95 band rather than saturating) the correct decision is HIGH, so frac_high_plus should sit above 0.5. The floor is loose (0.3) so N=80 sampling variance cannot fail an otherwise-fine point, while still catching a badly broken or inverted-polarity deck (frac_high_plus stuck near 0 across the WHOLE grid). The ceiling is 0.999, not 1.0, on purpose: a saturated frac_high_plus = 1.0 carries no information about sigma (the probit inversion of p=1 is infinite, so sigma would read as exactly 0), so saturation is a measurement failure for this bench and must fail the check rather than silently produce a flattering number."
+    },
+    "frac_high_minus": {
+      "min": 0.001,
+      "max": 0.7,
+      "description": "SANITY ENVELOPE, symmetric with frac_high_plus above: at -od_x the correct decision is LOW, so frac_high_minus (the fraction deciding HIGH, i.e. INCORRECTLY) should sit below 0.5. Ceiling loosened to 0.7 for the same N=80 sampling-variance reason; the 0.001 floor is the mirror of the 0.999 ceiling above -- a saturated frac_high_minus = 0 inverts to an infinite probit and a sigma of exactly 0, which is a measurement failure, not a pass."
+    }
+  },
+  "params": {
+    "vn_na": 0.005735,
+    "vn_ts": 2e-11,
+    "od_x": 0.001
+  },
+  "options": [
+    "reltol=1e-2",
+    "abstol=1e-12"
+  ],
+  "evidence": {
+    "record_kind": "monte-carlo",
+    "mc_seed": "ngspice `setseed 20260916` at the top of the control block (the same literal seed value comparator-offset-mc/ uses, and the same `setseed` form testbench.py's record_kind='monte-carlo' loader guard requires, per issue #28's agauss()/`set rndseed=` finding). RUN COUNT: N=80 trials per rung per PVT point, via `reset` inside a `dowhile` loop -- each reset genuinely re-draws a new TRNOISE realization. SEED REPRODUCIBILITY DOES NOT HOLD FOR THIS MECHANISM, unlike comparator-offset-mc/'s agauss() draws: `setseed`, `set rndseed=` and `.option seed=` were each tested independently (this experiment's README.md 'Seed reproducibility') and NONE of them reproduces identical TRNOISE draws across separate ngspice invocations on this repo's pinned ngspice-46 (sim/toolchain.json) -- TRNOISE's internal generator is not tied to the RNG stream any of those three commands controls. The seed is therefore RECORDED, NOT LOAD-BEARING; what is load-bearing, and is committed, is the run count (N=80 per rung per point, common across the whole 45-point grid) together with the frac_high_* values observed on this specific dated run. A re-run of the identical deck samples a DIFFERENT set of draws and lands at a statistically consistent but not bit-identical frac_high_*. N for statistical-error purposes is 80 per rung per point, not 80 x 45.",
+    "mc_scope": "SPECTRAL-DENSITY CALIBRATION, NOT TOTAL-RMS CALIBRATION -- and this distinction is the methodological core of this bench. The trnoise() source injects a white differential voltage whose ONE-SIDED spectral density equals comparator-preamp-noise's own INPUT-REFERRED white density at the nominal corner: 36.27 nV/rtHz = white_nv_rthz / av_dc = 59.4598 / 1.63936 (record 20260916-113303-180cca7). vn_na = 5.735e-3 solves vn_na*sqrt(2*vn_ts) = 36.27e-9 at vn_ts = 20 ps, using the TRNOISE density relation S_1sided = vn_na*sqrt(2*vn_ts) V/rtHz -- derived analytically AND confirmed empirically on this pinned ngspice-46 (this experiment's README.md 'NA/TS calibration'). Calibrating to that bench's INTEGRATED TOTAL instead (277.827 uV rms) would be wrong here: that total is integrated over the reduced sub-model's OWN 58.7 MHz noise bandwidth, whereas the quantity this bench measures is set by the LATCH's own aperture -- a bandwidth the reduced sub-model has no say in. Matching the total rather than the density would understate the injected in-band density by the ratio of those bandwidths. The SAME injected density is used at EVERY PVT point (deliberately not re-derived per corner), isolating what this bench adds -- how THIS corner's own regeneration dynamics convert a GIVEN input noise density into a decision-boundary sigma -- from the front end's own already-corner-characterized noise magnitude, the same separation-of-concerns comparator-regeneration/ and comparator-offset-mc/ already make for delay and offset.",
+    "mc_sigma": "Implied 1-sigma input-referred decision noise, by a TWO-RUNG PROBIT SLOPE inversion of the hit-rate measurement: modelling the decision as p(od) = Phi((od - theta)/sigma) for an effective threshold theta, the two rungs at +/- od_x give sigma = 2*od_x / (Phi^-1(frac_high_plus) - Phi^-1(frac_high_minus)), with od_x = 1.0 mV and Phi^-1 the standard-normal inverse CDF. The DIFFERENCE of the two probits cancels theta exactly, which is why this, and not the per-rung form sigma = od_x/Phi^-1(frac_high_plus), is the primary estimator: mismatch is off on this corner set so there is no device offset, but at N=80 theta still absorbs each corner's own sampling fluctuation, and the per-rung form converts that straight into apparent noise. Measured, not asserted: across the TS = 20 ps and TS = 10 ps runs of the identical calibrated density at the nominal corner, the per-rung sigmas swing 0.965 -> 1.254 mV and 1.400 -> 1.070 mV while the slope sigma moves 1.142 -> 1.155 mV (1.1 %). The per-rung pair is still worth reporting -- its SPREAD reads out how much of a single corner's number is sampling scatter -- but as a diagnostic, not the measurement. This is a POST-HOC calculation over this record's frac_high_plus/frac_high_minus columns, not an in-deck measurement (see the notes below for why the deck emits no sigma_uv). PRECISION IS NOT A FLAT PERCENTAGE, unlike a linear quantity's SEM: the binomial SEM on frac_high (~5.6% at p=0.5 for N=80, smaller at the tails) propagates through Phi^-1's derivative, which is steep near p=0.5 and shallow in the p~0.7-0.95 band the od_x choice puts these rungs in -- roughly +/-13% (1 sigma) of sampling scatter on a SINGLE corner's slope sigma. Quote the GRID-WIDE MEAN across all 45 corners as the summary statistic; the grid min/max are sampling-dominated extremes, not a measured PVT envelope. The exact spread observed on any given record is reported in this experiment's README.md 'Records', not asserted here, because a re-run resamples it.",
+    "notes": [
+      "THIS MEASURES DECISION STATISTICS (a hit-rate / probit measurement), NOT A PSD INTEGRAL. frac_high_zero/plus/minus are the raw, directly observed quantities; the conversion to an implied 1-sigma input-referred noise is a documented, EXECUTABLE post-hoc step over this record -- `python3 sim/comparator-transient-noise/probit.py records/<id>.json`, derivation in this experiment's README.md 'Probit inversion'. Every sigma this repo quotes from this bench is that script's output against a committed record, not hand arithmetic. The deck deliberately emits no sigma_uv measurement: Phi^-1(p) diverges as p -> 0 or 1, ngspice has no Phi^-1 builtin at all, and `let` has no clamp with which the deck could guard the singularity -- the frac_high_plus/frac_high_minus checks above fail on saturation instead.",
+      "WHAT THIS ADDS OVER comparator-preamp-noise/ (the 'reportable lower bound' DR-0002 / PR #18 PROPOSES, not yet ratified). That bench's `.noise` analysis is a small-signal, DC-operating-point analysis of comparator_dut_analog, DR-0001's diode-connected, loop-broken reduced sub-model: it structurally excludes the regenerative loop's dynamics, and -- just as importantly -- its integrated total is band-limited by that sub-model's own 58.7 MHz noise bandwidth, which is not the bandwidth over which a real strobed decision integrates noise. This bench instantiates the WHOLE comparator_dut (real CLK strobe, real cross-coupled regenerative pair), injects the SAME input-referred noise DENSITY, and lets the real latch set its own aperture. That is why the sigma reported here is LARGER than the AC bench's integrated total: the AC number is a genuine lower bound (fewer noise sources AND a narrower band), exactly as DR-0002's proposed framing predicts.",
+      "WHAT THIS DOES NOT ADD. This deck injects noise ONLY at comparator_dut's contract input pins (vinp/vinn) -- the DUT's black-box pin contract (sim/dut/README.md) gives testbenches no access to internal nodes, so the regenerative pair's OWN thermal/flicker noise sources cannot be independently injected without editing design/comparator.spice (out of this issue's scope). The injected density is itself the reduced sub-model's input-referred white density, so the front-end term inherits that model's own limits. The result is therefore 'the front end's own noise density, propagated through the real regeneration dynamics and the real aperture' -- materially more complete than the AC bench's number, but still a lower bound on the complete figure, not a certificate.",
+      "WHITE ONLY: THE INJECTED trnoise() CARRIES NO 1/f TERM (NALPHA = NAMP = 0), AND THAT IS A QUANTIFIED CHOICE, NOT AN OVERSIGHT. comparator-preamp-noise/ reports flicker_frac_pct = 11.28% of its total noise POWER at the nominal corner -- but that fraction is stated over that bench's own 58.7 MHz band. Flicker power grows only logarithmically with the upper integration limit while white power grows linearly, so over THIS bench's much wider decision aperture (~0.9 GHz implied, see mc_sigma and README.md 'Implied aperture') the same two terms rescale by ln(9.2e8/1)/ln(5.87e7/1) = 1.15 and 9.2e8/5.87e7 = 15.7 respectively: flicker falls to ~0.9% of the in-aperture noise POWER, i.e. ~0.46% on sigma -- about 1/28 of this bench's own +/-13% per-corner sampling error, and far below the discrimination of any check here. Physically the same conclusion from the other direction: 1/f power that matters sits decades below the ~1 GHz aperture, so within one 5 ns strobe it is a static offset, and offset is budgeted by comparator-offset-mc/ and comparator-offset-transient-mc/, not here. Injecting it would double-count it into the noise row.",
+      "MISMATCH IS OFF (the plain mos corner set). Offset (comparator-offset-mc/) and noise are separate terms budgeted separately -- unchanged convention from the other three benches. Together with the white-only note above, this makes the division of labour explicit: everything static-within-a-strobe (device mismatch AND 1/f) belongs to the offset row's two benches; this bench measures only what varies strobe-to-strobe.",
+      "SOLVER TOLERANCES ARE LOOSER than the other three benches' (reltol=1e-2/abstol=1e-12 here vs 1e-4/1e-9/1e-13 there) -- deliberately: this bench only needs a correct BINARY decision at a fixed readout instant, not the sub-picosecond delay precision comparator-regeneration/'s tau extraction needs, and looser tolerances materially cut the cost of the N x 3-rung x 45-corner transient-run grid this bench needs (vs. those benches' single tran/dc call per point)."
+    ]
+  }
+}

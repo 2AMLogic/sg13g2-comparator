@@ -1,0 +1,297 @@
+* Netlist snapshot for record 20260921-154729-41cbc7f -- exactly what was simulated.
+* DUT: comparator-dr0001 (schematic), design/comparator.spice
+* Testbench: sim/comparator-transient-noise/testbench/tb_transient_noise.spice
+* ---------------- DUT NETLIST ----------------
+* ============================================================================
+* sg13g2-comparator -- DERIVED NETLIST.  DO NOT EDIT BY HAND.
+* ============================================================================
+*
+* Generated from the xschem sources in design/ by:
+*
+*     python3 design/netlist.py
+*
+* The schematics are the source of record:
+*
+*   design/comparator.sch              the design -- a single-tail StrongARM
+*                                      dynamic latch (spec/decision-records/
+*                                      0001-comparator-topology.md), plus the
+*                                      isolation inverters and NOR SR latch
+*                                      that make its outputs HELD between
+*                                      strobes as the interface contract
+*                                      requires
+*   design/comparator_dut.sch          contract wrapper: tail-bias reference
+*                                      on the `ibias` pin + the core
+*   design/comparator_dut_latch.sch    contract wrapper: the core with its
+*                                      tail-bias node tied to vdd
+*   design/comparator_dut_analog.sch   the LOOP-BROKEN reduced sub-model --
+*                                      an offset/noise LOWER BOUND, not the
+*                                      design's front end.  Read
+*                                      design/README.md before quoting any
+*                                      number measured against it.
+*
+* Interface contract: sim/dut/README.md.  Asserted at generation time by
+* design/netlist.py (against sim/harness/dut.py's own REQUIRED_SUBCKTS) and
+* again at load time by the harness.
+*
+* Parameters supplied by the harness, not by this file: dut_ib, dut_vcm,
+* vdd_val, vdd_nom, temp_c (sim/harness/runner.py compose_deck).  This file
+* deliberately contains no .include / .lib / .temp / .control / .endc / .end.
+* ============================================================================
+
+.subckt comparator vinp vinn clk vbias dout doutb vdd vss
+*.iopin vinp
+*.iopin vinn
+*.iopin clk
+*.iopin vbias
+*.iopin dout
+*.iopin doutb
+*.iopin vdd
+*.iopin vss
+XMT tmid vbias vss vss sg13_lv_nmos w=40u l=0.5u ng=1 m=1
+XMSW tail clk tmid vss sg13_lv_nmos w=40u l=0.13u ng=1 m=1
+XM1 np vinp tail vss sg13_lv_nmos w=12u l=0.34u ng=1 m=1
+XM2 nn vinn tail vss sg13_lv_nmos w=12u l=0.34u ng=1 m=1
+XM3 ln lp np vss sg13_lv_nmos w=3u l=0.13u ng=1 m=1
+XM4 lp ln nn vss sg13_lv_nmos w=3u l=0.13u ng=1 m=1
+XM5 ln lp vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM6 lp ln vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM7 ln clk vdd vdd sg13_lv_pmos w=6u l=0.13u ng=1 m=1
+XM8 lp clk vdd vdd sg13_lv_pmos w=6u l=0.13u ng=1 m=1
+XM9 np clk vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM10 nn clk vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIAP lnb ln vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIAN lnb ln vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMIBP lpb lp vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIBN lpb lp vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNAP1 na lnb vdd vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNAP2 doutb dout na vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNAN1 doutb lnb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNAN2 doutb dout vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNBP1 nb lpb vdd vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNBP2 dout doutb nb vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNBN1 dout lpb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNBN2 dout doutb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+.ends
+
+.subckt comparator_dut_analog vinp vinn ibias aop aon vdd vss
+*.iopin vinp
+*.iopin vinn
+*.iopin ibias
+*.iopin aop
+*.iopin aon
+*.iopin vdd
+*.iopin vss
+XMBA ibias ibias vss vss sg13_lv_nmos w=10u l=0.5u ng=1 m=1
+XMTA tmid ibias vss vss sg13_lv_nmos w=40u l=0.5u ng=1 m=1
+XMSWA tail vdd tmid vss sg13_lv_nmos w=40u l=0.13u ng=1 m=1
+XM1A aon vinp tail vss sg13_lv_nmos w=12u l=0.34u ng=1 m=1
+XM2A aop vinn tail vss sg13_lv_nmos w=12u l=0.34u ng=1 m=1
+XM5A aon aon vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM6A aop aop vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+.ends
+
+.subckt comparator_dut_latch inp inn clk dout doutb vdd vss
+*.iopin inp
+*.iopin inn
+*.iopin clk
+*.iopin dout
+*.iopin doutb
+*.iopin vdd
+*.iopin vss
+x1 inp inn clk vdd dout doutb vdd vss comparator
+.ends
+
+.subckt comparator_dut vinp vinn clk ibias dout doutb vdd vss
+*.iopin vinp
+*.iopin vinn
+*.iopin clk
+*.iopin ibias
+*.iopin dout
+*.iopin doutb
+*.iopin vdd
+*.iopin vss
+XMB ibias ibias vss vss sg13_lv_nmos w=10u l=0.5u ng=1 m=1
+x1 vinp vinn clk ibias dout doutb vdd vss comparator
+.ends
+
+* ---------------- TESTBENCH FRAGMENT ----------------
+* tb_transient_noise -- input-referred noise floor of the WHOLE comparator
+* (comparator_dut, the ratified full latch -- NOT comparator_dut_analog),
+* measured by TRANSIENT-noise decision statistics over the full PVT grid.
+*
+* Netlist FRAGMENT. The harness supplies the models, the corner .lib
+* section, .temp, the DUT netlist, the .control block and .end
+* (sim/harness/README.md). Parameters from the harness: vdd_val, vdd_nom,
+* temp_c, dut_ib, dut_vcm. Parameters from this manifest's own "params":
+* vn_na, vn_ts (the calibrated trnoise() source), od_x (the probe overdrive).
+*
+* WHY TRANSIENT, NOT `.noise`. ngspice-46 has no automatic per-device
+* transient noise (no PSS/pnoise) -- confirmed against the installed
+* checkout (sim/comparator-preamp-noise/testbench/tb_preamp_noise.spice's
+* own header) and against ngspice's upstream source
+* (src/spicelib/devices/vsrc/vsrcload.c's TRNOISE case): the mechanism this
+* repo's CLAUDE.md calls "transient-noise runs" is ngspice's TRNOISE
+* independent-source function -- an explicit, calibrated noise voltage
+* injected at the DUT's own input port, not a small-signal device-physics
+* analysis. That is what this deck does.
+*
+* WHY THE WHOLE LATCH, NOT THE REDUCED SUB-MODEL. comparator_dut_analog
+* (what sim/comparator-preamp-noise/ instantiates) is DR-0001's own named
+* diode-connected, loop-broken interim path -- it has no regenerative loop
+* at all, by construction (design/README.md). This deck instantiates
+* comparator_dut, the full contract subckt (vinp vinn clk ibias dout doutb
+* vdd vss -- sim/dut/README.md), with its real CLK strobe and its real
+* cross-coupled regenerative pair, so the injected noise propagates through
+* the SAME nonlinear dynamics a real decision does.
+*
+* METHOD: DECISION STATISTICS (a "hit-rate" / probit measurement), not a
+* PSD integral. Three parallel instances at three overdrives (-od_x, 0,
+* +od_x), each with its OWN independent trnoise() realization, are re-run
+* dowhile-style for many trials (harness/report.py's evidence.mc_seed field
+* records the seed and count, per CLAUDE.md's "seeds and run counts
+* committed"). Each trial's dout is read once, INSIDE THE EVALUATE PHASE
+* (at 5 ns; CLK falls at 5.1 ns) -- because that samples the REGENERATIVE
+* DECISION itself rather than the output latch's retention of it, and lets
+* the transient stop before the reset. NOT because the output cannot be read
+* later: the NOR SR pair does hold between strobes (comparator-regeneration/
+* reads it at 55 ns against a CLK that fell at 50.1 ns, 45/45 points) -- see
+* this experiment's README.md "Debugging notes", which corrects an earlier
+* draft of this deck's header that claimed otherwise.
+* The fraction of trials that decide HIGH at each rung is the raw, directly
+* observed quantity (frac_high_*); this experiment's README.md converts it to
+* an implied 1-sigma input-referred noise by a TWO-RUNG PROBIT SLOPE
+* inversion -- sigma = 2*od_x / (Phi^-1(frac_high_plus) -
+* Phi^-1(frac_high_minus)), whose probit DIFFERENCE cancels any effective
+* threshold offset exactly, rather than the per-rung form od_x/Phi^-1(p)
+* which converts each corner's own sampling fluctuation straight into
+* apparent noise (measured: the per-rung pair swings +/-20-30% between two
+* runs of the identical calibrated density where the slope form reproduces
+* to 1.1%). The zero-overdrive rung is the third, redundant constraint and
+* the noise-injection guard. Documented there, not computed in-deck -- see
+* "Why no sigma_uv measure" below.
+*
+* SEED REPRODUCIBILITY: RECORDED, NOT ACHIEVED. `setseed` is issued at the
+* top of the control block (tb.json's analyses) for consistency with this
+* repo's other Monte-Carlo bench and to satisfy testbench.py's
+* record_kind='monte-carlo' loader guard -- but on this repo's pinned
+* ngspice-46, TRNOISE's internal generator is empirically confirmed NOT to
+* be controlled by `setseed`, `set rndseed=`, or `.option seed=` (all three
+* tested independently; see this experiment's README.md "Seed
+* reproducibility"). Reproducibility of the *committed* frac_high_* numbers
+* therefore rests on the run count (N=80/rung/point), not on the seed value;
+* re-running this deck samples a fresh set of draws every time.
+*
+* THE INJECTED trnoise() SOURCE IS CALIBRATED TO A SPECTRAL DENSITY, NOT TO
+* A BAND-LIMITED TOTAL -- this is the methodological core of the bench.
+* comparator-preamp-noise/ reports BOTH an integrated total (277.827 uV rms
+* at tt_27c_1.20v) and the white density that total was integrated from
+* (white_nv_rthz = 59.4598 nV/rtHz OUTPUT-referred, av_dc = 1.63936, so
+* 36.27 nV/rtHz INPUT-referred; record
+* sim/comparator-preamp-noise/records/20260916-113303-180cca7.md). This deck
+* injects the DENSITY at vinp/vinn and lets the LATCH set the bandwidth.
+*
+* Why not the total? That 277.827 uV is integrated over the reduced
+* sub-model's OWN noise bandwidth (enbw_mhz = 58.7 MHz -- a property of a
+* diode-connected, loop-broken sub-model, not of a strobed decision). A
+* real decision integrates input noise over its own aperture, which is
+* set by the regeneration dynamics this deck deliberately instantiates.
+* Injecting "the same total rms" over this source's much wider band would
+* silently divide the in-band density by the ratio of the two bandwidths
+* and understate the answer; injecting the same DENSITY asks the only
+* question the reduced sub-model cannot answer for itself.
+*
+* The SAME injected density is used at EVERY PVT point (deliberately NOT
+* re-derived per corner): this isolates what this bench actually adds over
+* the AC bench -- how the regenerative dynamics at THIS corner convert a
+* GIVEN input noise density into a decision-boundary sigma -- from the front
+* end's own already-corner-characterized noise magnitude, the same
+* separation-of-concerns comparator-regeneration/ and comparator-offset-mc/
+* already make for delay/offset (this experiment's README.md "Method").
+*
+* NA/TS CALIBRATION (derived analytically AND confirmed empirically against
+* this repo's own pinned ngspice-46, not assumed from documentation -- see
+* this experiment's README.md "NA/TS calibration" for the derivation and the
+* calibration decks that produced it):
+*   - The piecewise-linear-interpolated white component of TRNOISE(NA TS
+*     NALPHA NAMP) is a linear interpolation of iid N(0,NA^2) samples spaced
+*     TS apart, so its two-sided PSD is NA^2*TS*sinc^4(f*TS): a ONE-SIDED
+*     density of NA*sqrt(2*TS) V/rtHz at low frequency, and a total variance
+*     of (2/3)*NA^2 (since the integral of sinc^4 is 2/3) independent of TS.
+*     Both halves confirmed empirically: a TRNOISE source through a 1-pole
+*     RC of known ENBW returns NA*sqrt(2*TS*ENBW) to within statistical
+*     error at TS = 10 ps and 20 ps and at two different ENBWs, and the
+*     unfiltered source rms reads 0.8156*NA vs. the predicted
+*     sqrt(2/3) = 0.8165.
+*   - TS = 20 ps is chosen safely below the FASTEST measured regeneration
+*     time constant on this PVT grid (42.6 ps at ff_-40c_1.32v,
+*     sim/comparator-regeneration/records/20260916-021945-36773c7.md), so
+*     the injected process is effectively uncorrelated on the latch's own
+*     regeneration timescale, and comfortably inside TRNOISE's internal
+*     4-sample retry-safety window (ngspice's 1-f-code.h TRNOISE_STATE_MEM_LEN)
+*     -- no "ouch, trying to fetch from the past" aborts observed in any
+*     calibration or production run. Because the calibration fixes the
+*     DENSITY, the answer must not depend on this choice -- and does not:
+*     re-running the nominal point at TS = 10 ps with NA rescaled to hold
+*     NA*sqrt(2*TS) constant reproduces the same sigma within sampling error
+*     (this experiment's README.md "TS-insensitivity cross-check").
+*   - vn_na = 5.735e-3 solves vn_na*sqrt(2*vn_ts) = 36.27e-9 at vn_ts = 20 ps.
+*   - od_x (the probe overdrive, tb.json "params") is set to 1.0 mV, near the
+*     measured 1-sigma decision noise, so each rung's hit rate lands in the
+*     informative 0.7-0.95 band instead of saturating at 1.0 where the probit
+*     inversion is singular.
+*
+* WHITE ONLY, DELIBERATELY: trnoise(NA TS 0 0) -- NALPHA/NAMP are zero, so
+* no 1/f term is injected. comparator-preamp-noise/ attributes 11.28 % of
+* its total noise POWER to flicker, but over ITS OWN 58.7 MHz band; flicker
+* power grows as ln(f_hi) while white power grows as f_hi, so over this
+* bench's ~0.9 GHz decision aperture the flicker share falls to ~0.9 % of
+* power, i.e. ~0.46 % on sigma -- ~1/28 of this bench's own +/-13 % per-
+* corner sampling error. Physically: 1/f power sits decades below a ~1 GHz
+* aperture, so inside one 5 ns strobe it is a STATIC OFFSET, and offset is
+* the offset benches' row (comparator-offset-mc/,
+* comparator-offset-transient-mc/), not this one. Injecting it here would
+* double-count it. See this experiment's README.md "Why white only".
+*
+* WHY NO sigma_uv MEASURE IN THIS DECK. Phi^-1(p) diverges as p -> 0 or 1,
+* so the inversion is singular if a rung's frac_high ever lands exactly at
+* 1.0 (observed at some corners during calibration) -- and ngspice has no
+* Phi^-1 builtin at all; `let` has no clamp/min/max builtin this deck can
+* guard it with, and a NaN/inf measurement is parsed as MISSING by the
+* harness (sim/harness/runner.py's _MEAS_RE), which would mark an otherwise-
+* fine point "failed". frac_high_zero/plus/minus are reported raw instead;
+* the sigma conversion is a documented, executable post-hoc step over the
+* committed record --
+*     python3 sim/comparator-transient-noise/probit.py records/<id>.json
+* -- whose derivation is this experiment's README.md "Probit inversion".
+
+vsup vdd 0 dc {vdd_val}
+vcm  cm 0 dc {dut_vcm}
+
+* ---- zero-overdrive rung: symmetry / noise-is-actually-injected check ----
+vd0  vd0 0 dc 0     trnoise({vn_na} {vn_ts} 0 0)
+Eap0 ap0 cm vd0 0 0.5
+Ean0 an0 cm vd0 0 -0.5
+ib0  vdd ibn0 dc {dut_ib}
+X0   ap0 an0 clk ibn0 dout0 doutb0 vdd 0 comparator_dut
+
+* ---- +od_x rung: correct decision is HIGH -----------------------------
+vd1  vd1 0 dc {od_x} trnoise({vn_na} {vn_ts} 0 0)
+Eap1 ap1 cm vd1 0 0.5
+Ean1 an1 cm vd1 0 -0.5
+ib1  vdd ibn1 dc {dut_ib}
+X1   ap1 an1 clk ibn1 dout1 doutb1 vdd 0 comparator_dut
+
+* ---- -od_x rung: correct decision is LOW -------------------------------
+.param od_xn={-1*od_x}
+vd2  vd2 0 dc {od_xn} trnoise({vn_na} {vn_ts} 0 0)
+Eap2 ap2 cm vd2 0 0.5
+Ean2 an2 cm vd2 0 -0.5
+ib2  vdd ibn2 dc {dut_ib}
+X2   ap2 an2 clk ibn2 dout2 doutb2 vdd 0 comparator_dut
+
+* ---- clock: ONE strobe; dout sampled at 5n, inside the evaluate phase ---
+* Rises at 1n (+100p edge), so CLK is high 1.1n..5.1n and the 5n readout
+* sits 3.9 ns into evaluate -- ~5x the slowest measured 50 mV decision time
+* on this grid (0.85 ns, comparator-regeneration/). The transient stops at
+* 5.1n, so the deck never simulates the reset it does not need.
+vclk clk 0 pulse(0 {vdd_val} 1n 100p 100p 4n 20n)
