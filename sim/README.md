@@ -4,7 +4,7 @@ xschem + ngspice testbenches and **append-only** results, on the SG13G2
 1.2 V LV core rail.
 
 Six experiments backing the four first-class rows of
-[`README.md`'s target specification](../README.md#target-specification-draft--engineering-to-ratify)
+[`README.md`'s target specification](../README.md#target-specification-ratified--dr-0002)
 (the offset-σ *and* noise rows each have two, deliberately — see below):
 
 | experiment | row it backs | method |
@@ -18,9 +18,9 @@ Six experiments backing the four first-class rows of
 
 `comparator_dut` has no DC-resolvable operating point (DR-0001 Decision §3),
 so the reduced sub-model was DR-0001's own named interim path for the offset
-and noise rows (Consequence 2) rather than a design choice made from scratch.
-In both pairs the reduced-sub-model bench stays committed alongside the
-whole-latch one — see
+and noise rows (Consequence 2) rather than a design choice made from
+scratch. In both pairs the reduced-sub-model bench stays committed alongside
+the whole-latch one — see
 [`comparator-offset-transient-mc/README.md`](comparator-offset-transient-mc/README.md#relationship-to-comparator-offset-mc)
 (offset) and
 [`comparator-transient-noise/README.md`](comparator-transient-noise/README.md#retain-not-retire-comparator_dut_analog)
@@ -29,10 +29,11 @@ evidence.
 
 The two noise benches are **not** peers: `CLAUDE.md` requires the noise floor
 to come "from transient-noise runs with seeds and run counts committed", and
-DR-0002 ([issue #12](https://github.com/2AMLogic/sg13g2-comparator/issues/12)
-/ [PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18), **proposed,
-still open**) would name transient noise as that row's compliance evidence
-path and the `.noise` number as a *reportable lower bound*.
+[DR-0002](../spec/decision-records/0002-target-spec-ratification.md)
+([#12](https://github.com/2AMLogic/sg13g2-comparator/issues/12) /
+[PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18)) names
+transient noise as that row's compliance evidence path and the `.noise`
+number as a *reportable lower bound*.
 `comparator-transient-noise/` is therefore the row's compliance measurement;
 `comparator-preamp-noise/` is the lower bound it is calibrated against.
 
@@ -52,17 +53,34 @@ sim/device-mismatch-confirm/
                           one for comparator-offset-mc above.
 ```
 
-> **Current status: the device under test is the ratified DR-0001 schematic,
-> not yet a ratified spec.** `sim/dut.json` binds
+> **Current status: the device under test is the DR-0001 schematic, and the
+> spec table it is scored against is ratified by
+> [DR-0002](../spec/decision-records/0002-target-spec-ratification.md).**
+> Ratified is not met — DR-0002 records the rows the current design misses:
+> the noise row at Target on the whole-latch compliance path, the decision-time
+> stretch at the `ss` points, and the power stretch; the offset row's Target
+> is met on the whole-latch measurement with its Stretch missed at 27/45
+> points. DR-0002 also names the residual evidence gaps rather than hiding
+> them: the noise compliance figure is itself still a lower bound (the
+> regeneration stage's own noise is not yet injected), and the offset
+> whole-latch number covers the differential axis only. `sim/dut.json` binds
 > [`design/comparator.spice`](../design/comparator.spice) (`provenance:
 > schematic`), regenerated from the xschem sources in
 > [`design/`](../design/) per
 > [`spec/decision-records/0001-comparator-topology.md`](../spec/decision-records/0001-comparator-topology.md):
 > a single-tail StrongARM dynamic latch on `sg13_lv_nmos`/`sg13_lv_pmos`.
-> Records made against it are no longer placeholder-banner'd, but they still
-> do **not** substantiate `README.md`'s target-specification table — that
-> ratification is a separate, later act (`spec/porting-plan.md`'s third step
-> in this chain). Earlier `provenance: placeholder` records made against
+> Records made against it are no longer placeholder-banner'd, and they are
+> the evidence DR-0002 rests on: the `20260916-*` re-founded and drafted-era
+> records (`spec/porting-plan.md`'s third step in this chain, now taken), plus
+> the whole-latch `20260917-*` / `20260921-*` records the two PRs after
+> (#23 / PR #33 and #24 / PR #40) committed — folded into DR-0002's Rows 1–2
+> by issue
+> [#36](https://github.com/2AMLogic/sg13g2-comparator/issues/36) ahead of its
+> two-key review. Their own
+> Claim text still says they are "NOT evidence toward
+> `README.md#target-specification`" — correct when written, superseded by
+> DR-0002; `sim/` is append-only, so that text stays as-is rather than being
+> rewritten. Earlier `provenance: placeholder` records made against
 > [`sim/dut/placeholder_comparator.spice`](dut/) remain committed
 > (append-only) and still carry their own banner. See
 > [`sim/dut/README.md`](dut/README.md) for the full binding history and the
@@ -146,7 +164,7 @@ definitions and rationale, including the full divergence table from
 
 | axis | points |
 |---|---|
-| process | `tt`, `ff`, `ss`, `fs`, `sf` (the default `mos` set, mismatch off); the same five with mismatch on (`mos_mismatch`) for `comparator-offset-mc` |
+| process | `tt`, `ff`, `ss`, `fs`, `sf` (the default `mos` set, mismatch off); the same five with mismatch on (`mos_mismatch`) for the two Monte-Carlo offset benches (`comparator-offset-mc`, `comparator-offset-transient-mc`) |
 | temperature | −40 °C, 27 °C, 125 °C |
 | supply | 1.08 V, 1.20 V, 1.32 V (1.2 V ± 10 %) |
 

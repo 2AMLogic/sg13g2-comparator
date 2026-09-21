@@ -4,7 +4,7 @@
 via ngspice `.noise`, reported as **total integrated output noise divided by
 the measured DC gain**.
 
-Backs [`README.md`'s noise row](../../README.md#target-specification-draft--engineering-to-ratify)
+Backs [`README.md`'s noise row](../../README.md#target-specification-ratified--dr-0002)
 (≤ 1.0 mV rms differential, ≤ 0.6 mV stretch) and, together with
 `sim/comparator-regeneration/`'s τ, the noise-floor half of the metastability
 story.

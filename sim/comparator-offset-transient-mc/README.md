@@ -6,7 +6,7 @@ topology (`comparator_dut`, `design/comparator.spice`), not
 [`sim/comparator-offset-mc/`](../comparator-offset-mc/)'s loop-broken,
 diode-connected `comparator_dut_analog` reduced sub-model.
 
-Backs [`README.md`'s Offset-σ row](../../README.md#target-specification-draft--engineering-to-ratify)
+Backs [`README.md`'s Offset-σ row](../../README.md#target-specification-ratified--dr-0002)
 alongside `comparator-offset-mc` — see "Relationship to `comparator-offset-mc`"
 below for what each of the two experiments now answers, and why **both stay
 committed**.

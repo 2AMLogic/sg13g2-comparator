@@ -200,6 +200,11 @@ unchecked as of this pass). Future work, once a Builder picks it up:
    testbench (no CDAC or SAR-sequencer dependency).
 4. Stand up a `sim/comparator-kickback/`-equivalent experiment, porting the
    *methodology* (not the embedded design) from `gf180-sar-adc`.
-5. Once real measurements exist, revisit the README target-spec table's
-   DRAFT bounds and file a ratification decision record if/when the table
-   is set, changed, or scoped (see `spec/README.md`).
+5. ✅ **Done (issue #12)**: with real `provenance: schematic` measurements in
+   hand, the README target-spec table's DRAFT bounds were revisited and
+   ratified by
+   [`decision-records/0002-target-spec-ratification.md`](decision-records/0002-target-spec-ratification.md)
+   — every row **set**, the Kickback row **changed**, and two scope questions
+   closed (the power row's clock rate; a bounded τ for the metastability
+   row). Three rows are ratified in a state the current design misses; none
+   was relaxed to fit (see `spec/README.md`).
