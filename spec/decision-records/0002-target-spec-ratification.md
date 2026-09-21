@@ -10,11 +10,28 @@
   `RATIFY-KEY: ee` and `RATIFY-KEY: market` verdicts present from non-author
   reviewers. The drafting agent holds neither key (see "How this record gets
   ratified" below).
-- **Date**: 2026-09-16
+- **Date**: 2026-09-16; **Rows 1–2 and the evidence table revised
+  2026-09-21** per
+  [#36](https://github.com/2AMLogic/sg13g2-comparator/issues/36) to fold in
+  the two whole-latch benches that landed on `main` after this record was
+  drafted:
+  [`sim/comparator-offset-transient-mc/`](../../sim/comparator-offset-transient-mc/)
+  (issue
+  [#23](https://github.com/2AMLogic/sg13g2-comparator/issues/23),
+  [PR #33](https://github.com/2AMLogic/sg13g2-comparator/pull/33), merged
+  2026-09-17) and
+  [`sim/comparator-transient-noise/`](../../sim/comparator-transient-noise/)
+  (issue
+  [#24](https://github.com/2AMLogic/sg13g2-comparator/issues/24),
+  [PR #40](https://github.com/2AMLogic/sg13g2-comparator/pull/40), merged
+  2026-09-21)
 - **Decided by**: Builder agent, issue
   [#12](https://github.com/2AMLogic/sg13g2-comparator/issues/12) — drafting
   only; the proposal below is a recommendation to the key-holders, not a
-  self-ratification.
+  self-ratification. The 2026-09-21 revision is drafting in the same sense:
+  it records what the two new benches measured and re-derives Rows 1–2's
+  verdict language accordingly; it applies no ratification key and moves no
+  bound.
 - **Related**:
   [#3](https://github.com/2AMLogic/sg13g2-comparator/issues/3) (gap-to-T1
   tracker; this record is the third and last step of the topology →
@@ -25,8 +42,8 @@
   [`../README.md`](../README.md) (the DR process this record follows),
   [`../porting-plan.md`](../porting-plan.md) (next step 5, "revisit the
   README target-spec table's DRAFT bounds… if/when the table is set"),
-  [`../../sim/README.md`](../../sim/README.md) (the four experiments, one per
-  first-class row), [`../../design/README.md`](../../design/README.md) (the
+  [`../../sim/README.md`](../../sim/README.md) (the six experiments backing
+  the four first-class rows), [`../../design/README.md`](../../design/README.md) (the
   `comparator_dut_analog` reduced-sub-model caveat, load-bearing for two
   rows below)
 - **Supersedes**: none. This is the first record that ratifies anything in
@@ -62,23 +79,69 @@ re-ran all four experiments over the full 45-point PVT grid. **Every number
 in this record comes from those `provenance: schematic` records. No row is
 ratified from a placeholder-DUT record.**
 
+**Two things then landed on `main` between this record's drafting
+(2026-09-16, records at commit `36773c7`) and its two-key review, and this
+revision folds both in rather than deferring the record further.** First,
+the **two whole-latch benches DR-0001 Consequence 1 named as the eventual
+re-founding of the offset and noise rows**:
+[`sim/comparator-offset-transient-mc/`](../../sim/comparator-offset-transient-mc/)
+(issue
+[#23](https://github.com/2AMLogic/sg13g2-comparator/issues/23),
+[PR #33](https://github.com/2AMLogic/sg13g2-comparator/pull/33)) — the
+un-reduced topology, strobed decisions — and
+[`sim/comparator-transient-noise/`](../../sim/comparator-transient-noise/)
+(issue
+[#24](https://github.com/2AMLogic/sg13g2-comparator/issues/24),
+[PR #40](https://github.com/2AMLogic/sg13g2-comparator/pull/40)) — the
+`TRNOISE` compliance measurement `CLAUDE.md` mandates for the noise row.
+Second, the two **run-mechanism corrections** that re-founded the
+front-end benches' own records: comparator-offset-mc's Monte-Carlo seeding
+([#28](https://github.com/2AMLogic/sg13g2-comparator/issues/28) —
+`set rndseed=` does not reseed ngspice-46's `agauss()` stream — fixed by
+[#32](https://github.com/2AMLogic/sg13g2-comparator/pull/32), re-run
+committed as
+[`20260916-125444-4d0cf7c`](../../sim/comparator-offset-mc/records/20260916-125444-4d0cf7c.md))
+and the two placeholder-derived corner-sensitivity check floors
+([#16](https://github.com/2AMLogic/sg13g2-comparator/issues/16), recalibrated
+against the real DUT by
+[#29](https://github.com/2AMLogic/sg13g2-comparator/pull/29), re-runs
+committed as
+[`20260916-113303-180cca7`](../../sim/comparator-preamp-noise/records/20260916-113303-180cca7.md)
+and
+[`20260916-113309-180cca7`](../../sim/comparator-regeneration/records/20260916-113309-180cca7.md)).
+Drafted before any of that, Rows 1 and 2 below could cite only front-end-only
+reduced-sub-model numbers — one extrapolated from a claimed lower bound to
+"the real offset is worse than shown", one leaving the compliance path blank.
+The revised rows cite the whole-latch measurements, name what each one still
+does not cover, and rest each verdict on the bench that measures the row's
+actual subject.
+
 ## The evidence this record rests on
 
-| row | experiment | record (all `provenance: schematic`, commit `36773c7`) | grid | record verdict |
+All `provenance: schematic`, every one measured on the DR-0001 single-tail
+StrongARM over the full 45-point PVT grid:
+
+| row | experiment | record | grid / statistical basis | record verdict |
 |---|---|---|---|---|
-| Offset σ | [`sim/comparator-offset-mc/`](../../sim/comparator-offset-mc/) | [`20260916-021822-36773c7`](../../sim/comparator-offset-mc/records/20260916-021822-36773c7.md) | 45 pts (5 `mos_*_mismatch` × 3 T × 3 V), **200 MC draws per point**, ngspice `rndseed=20260910` common across points | PASS |
-| Input-referred noise | [`sim/comparator-preamp-noise/`](../../sim/comparator-preamp-noise/) | [`20260916-021939-36773c7`](../../sim/comparator-preamp-noise/records/20260916-021939-36773c7.md) | 45 pts (5 × 3 × 3), `.noise` | **FAIL** — check-floor only, see below |
-| Decision time / metastability | [`sim/comparator-regeneration/`](../../sim/comparator-regeneration/) | [`20260916-021945-36773c7`](../../sim/comparator-regeneration/records/20260916-021945-36773c7.md) | 45 pts (5 × 3 × 3), transient, 3-rung overdrive ladder (50 mV / 1 mV / 0.1 mV) | **FAIL** — check-floor only, see below |
+| Offset σ (front end only, reduced sub-model) | [`sim/comparator-offset-mc/`](../../sim/comparator-offset-mc/) | [`20260916-125444-4d0cf7c`](../../sim/comparator-offset-mc/records/20260916-125444-4d0cf7c.md) | 45 pts (5 `mos_*_mismatch` × 3 T × 3 V), **200 MC draws per point**, `setseed 20260910` common across points — the `set rndseed=` form used at drafting does not reseed ngspice-46's `agauss()` stream (issue #28); this is the #32-corrected re-run, and the drafting-time record [`20260916-021822-36773c7`](../../sim/comparator-offset-mc/records/20260916-021822-36773c7.md) is **not reproducible by its own committed command** for that reason | PASS |
+| Offset σ (**whole latch**) | [`sim/comparator-offset-transient-mc/`](../../sim/comparator-offset-transient-mc/) | [`20260917-060858-ea40b57`](../../sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.md) | 45 pts, **60 MC draws per point**, `setseed 20260916` common across points, one 33-level digital-staircase transient per draw (PR #33) | PASS |
+| Input-referred noise (front end only, reduced sub-model — reportable lower bound) | [`sim/comparator-preamp-noise/`](../../sim/comparator-preamp-noise/) | [`20260916-113303-180cca7`](../../sim/comparator-preamp-noise/records/20260916-113303-180cca7.md) | 45 pts (5 × 3 × 3), `.noise`, total integrated ÷ measured DC gain | PASS |
+| Input-referred noise (**whole latch** — compliance path) | [`sim/comparator-transient-noise/`](../../sim/comparator-transient-noise/) | [`20260921-154729-41cbc7f`](../../sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md) | 45 pts, `TRNOISE`-injected decision statistics, **N = 80 trials per rung per point** (3 rungs); the run count, not the seed, is the load-bearing reproducibility input (PR #40) | PASS |
+| Decision time / metastability | [`sim/comparator-regeneration/`](../../sim/comparator-regeneration/) | [`20260916-021945-36773c7`](../../sim/comparator-regeneration/records/20260916-021945-36773c7.md) | 45 pts (5 × 3 × 3), transient, 3-rung overdrive ladder (50 mV / 1 mV / 0.1 mV) — cited as drafted; the floor-recalibrated re-run of the same measurement, [`20260916-113309-180cca7`](../../sim/comparator-regeneration/records/20260916-113309-180cca7.md) (identical numbers, PASS), exists alongside it | **FAIL** — check-floor only, see below |
 | Kickback | [`sim/comparator-kickback/`](../../sim/comparator-kickback/) | [`20260916-022249-36773c7`](../../sim/comparator-kickback/records/20260916-022249-36773c7.md) | 45 pts (5 × 3 × 3), transient, 1 kΩ/100 fF drive plus 1 GΩ/1 pF non-restoring drive | PASS |
 
-All four: PDK `ihp-sg13g2` release `0.3.0`, ngspice-46, Python 3.14.7;
-process {tt, ff, ss, fs, sf} × temperature {−40, 27, 125 °C} × supply {1.08,
-1.20, 1.32 V}, 45/45 points completed in every case.
+All six: PDK `ihp-sg13g2` release `0.3.0`, ngspice-46; process {tt, ff, ss,
+fs, sf} × temperature {−40, 27, 125 °C} × supply {1.08, 1.20, 1.32 V},
+45/45 points completed in every case. The drafting-era records (commit
+`36773c7`) ran under Python 3.14.7 and the re-founded / whole-latch records
+under Python 3.12.3; `sim/toolchain.json` floors Python at ≥ 3.9 and both
+interpreters exceed it.
 
-**Two of the four records carry `Verdict: FAIL`, and this record ratifies
-rows from them anyway — deliberately, with the reason stated.** Both failures
-are *corner-sensitivity floor* checks (`min_spread_pct_by_axis`), not
-measurement-validity checks and not spec checks:
+At drafting, **two of the then-four cited records carried `Verdict: FAIL`,
+and the record ratified rows from them anyway — deliberately, with the
+reason stated.** Both failures were *corner-sensitivity floor* checks
+(`min_spread_pct_by_axis`), not measurement-validity checks and not spec
+checks:
 
 - `comparator-preamp-noise`: `av_dc`'s process-axis floor (≥ 3 %) against a
   weakest observed slice of 1.07 %.
@@ -87,73 +150,158 @@ measurement-validity checks and not spec checks:
 
 Those floors exist to catch a corner runner that is silently not sweeping an
 axis. They were calibrated against the **placeholder** DUT's own first
-45-point record and do not hold against the real design — a diode-connected-
+45-point record and did not hold against the real design — a diode-connected-
 load gain stage's `gm`-ratio gain genuinely cancels process skew to first
 order, and the real latch's supply-normalized delay threshold genuinely
 removes much of the temperature dependence. `sim/selftest.sh`'s
 `--sabotage-corners` negative control still fails as designed on both
 benches, which is the actual proof that corner switching works.
-`design/README.md` already records this finding and, per `sim/README.md`'s
-"Do not relax a check to make a result pass", deliberately left both FAIL
-records committed as-is rather than recalibrating the floors. This record
-takes the same position: **the floors are not touched here either**, and
-recalibrating them is named as an open item, not performed.
+`design/README.md` already recorded this finding, and the drafting record
+accordingly took the position that the floors were not touched there and
+recalibrating them was named as an open item, not performed. **That open
+item has since been resolved the honest way — recalibrated against the real
+DUT by #16 / [PR #29](https://github.com/2AMLogic/sg13g2-comparator/pull/29)
+(issue
+[#16](https://github.com/2AMLogic/sg13g2-comparator/issues/16)), which
+re-ran both benches — so this revision cites the recalibrated, PASS re-run
+for the noise row.** The one remaining FAIL-verdict citation is the
+regeneration row's drafting-time record, kept (with the re-run named beside
+it) because re-pointing Row 3 is outside the scope `loom:issue` #36 gave this
+revision; its failure is the floor artifact just described, and its own
+Status cell needs no caveat to read correctly against it.
 
 ## Decision
 
 Five rows. Four keep their DRAFT bounds unchanged; one (Kickback) is revised,
 with the alternatives laid out for the key-holders rather than decided
-unilaterally. **Three of the five rows are NOT met by the current design, and
-this record ratifies the bounds anyway** — that is the point of the exercise.
-A fourth (Kickback) is ratified with its charge clause **undetermined**: the
-bench emits no charge measurement, so that sub-bound is "consistent, not
-certified" rather than met (Row 4 (b)–(c)); its residue clause is met.
+unilaterally. **The bounds are ratified in the state the current design
+actually measures — met, missed, or undetermined — and no bound moves to
+flatter it; that is the point of the exercise.** With the two whole-latch
+benches folded in by this revision: Row 1's Target is **met at 45/45 points**
+with its Stretch missed at 27/45; Row 2's Target is **NOT met on the
+ratified compliance path** (grid-wide mean 1.335 mV vs. ≤ 1.0 mV — the
+worst finding this revision adds); Row 3's Target is met with its Stretch
+missed at the 9 `ss` points; Row 4's residue clause is met, its charge clause
+is **undetermined** — the bench emits no charge measurement, so that
+sub-bound is "consistent, not certified" rather than met (Row 4 (b)–(c)) —
+and its Stretches are missed; Row 5's supply axis is exercised with its power
+Stretch missed.
 
-### Row 1 — Offset σ: **ratified unchanged**, and NOT met
+### Row 1 — Offset σ: **ratified unchanged**; Target MET on the whole latch, Stretch NOT met
 
 | | |
 |---|---|
 | **Ratified Target** | ≤ 15 mV, 3σ, input-referred, calibration-free (unchanged from DRAFT) |
 | **Ratified Stretch** | ≤ 8 mV, 3σ (unchanged from DRAFT) |
-| **Ratified statistical basis** | Monte Carlo over SG13G2's shipped per-instance local-mismatch models (`mos_{tt,ff,ss,fs,sf}_mismatch`), **N = 200 draws per PVT point**, seed `20260910` common across points, σ precision 1/√(2N) = ±5 %. Reported as 1σ and 3σ at **every** point of the 45-point grid; the row is met only if the **worst** point meets it. |
-| **Measured** | σ 3.708 mV (`ss_mismatch_-40c_1.08v`) … 5.676 mV (`ff_mismatch_125c_1.32v`); **3σ 11.12 … 17.03 mV**. 10 of 45 points exceed 15 mV, all of them hot (125 °C) or hot-ish/fast. |
-| **Status** | **NOT MET** — and the true margin is worse than shown, because this number is a **lower bound**. |
+| **Ratified statistical basis** | Monte Carlo over SG13G2's shipped per-instance local-mismatch models (`mos_{tt,ff,ss,fs,sf}_mismatch`), seed common across points in both benches so grid movement is a real PVT effect, not sampling noise: the front-end bench runs **N = 200 draws per point, `setseed 20260910`, σ precision ±5 %**; the whole-latch bench runs **N = 60 draws per point, `setseed 20260916`, σ precision ±9.1 %** (its per-draw cost is a full 990 ns / 33-level transient rather than one `dc` sweep — see the bench README's "Why N = 60, not N = 200"). Reported as 1σ and 3σ at **every** point of the 45-point grid; the row is met only if the **worst** point meets it. |
+| **Measured, front end only** — [`sim/comparator-offset-mc/`](../../sim/comparator-offset-mc/) (loop-broken `comparator_dut_analog` reduced sub-model) | 3σ **11.61 mV** (`ss_mismatch_-40c_1.32v`) … **18.10 mV** (`ff_mismatch_125c_1.32v`), mean 14.14 mV; 10 of 45 points exceed 15 mV, all of them hot or hot-and-fast. Record [`20260916-125444-4d0cf7c`](../../sim/comparator-offset-mc/records/20260916-125444-4d0cf7c.md). |
+| **Measured, whole latch** — [`sim/comparator-offset-transient-mc/`](../../sim/comparator-offset-transient-mc/) (un-reduced `comparator_dut`: input pair, tail, cross-coupled regenerative pair, reset devices, isolation inverters, SR latch; real strobe cadence) | 3σ **7.456 mV** (`tt_mismatch_27c_1.32v`) … **10.537 mV** (`tt_mismatch_125c_1.08v`), mean 8.404 mV — **inside the 15 mV Target at 45/45 points**; above the 8 mV Stretch at 27/45. Record [`20260917-060858-ea40b57`](../../sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.md) (one isolated ngspice convergence warning on one corner's worst draw, disclosed and shown benign in the bench README's Records section; all four of the record's checks pass). |
+| **Status** | **Target MET at 45/45 points on the whole-latch measurement; Stretch NOT MET at 27/45 points.** |
 
-**Why it is a lower bound.** Per DR-0001 Decision §3 the topology has no
-DC-resolvable analog front end; `comparator_dut_analog` is DR-0001's named
-interim path — a diode-connected, loop-broken reduced sub-model. It captures
-input-pair and tail-mirror mismatch and **excludes the regenerative loop's own
-offset contribution entirely, by construction**. The real offset is ≥ the
-measured 17.03 mV worst corner.
+**Why the verdict rests on the whole-latch number.** The row's subject is the
+input-referred offset of the comparator *as built*, and the whole-latch bench
+measures exactly that: every device that participates in a real decision
+carries its own `agauss()` mismatch draw and is exercised through the real
+strobe, so nothing in the topology is excluded by construction and nothing
+has to be extrapolated from the result. The front-end bench cannot make that
+claim: per DR-0001 Decision §3 the topology has no DC-resolvable analog front
+end, `comparator_dut_analog` is the named interim path, and the drafting-time
+version of this row — readable in the PR's history — carried its "lower
+bound" qualifier *precisely because* that sub-model excludes the
+regenerative loop's own contribution.
 
-**Why the bound does not move.** There is a known, unexercised design lever:
-σ_Vos ∝ 1/√(W·L) (Pelgrom), and DR-0001's sizing is explicitly *not* a sizing
-study — `design/README.md` states "Device widths/lengths here are the round
-numbers DR-0001's own 'Sizing rationale' section named as a block-diagram-level
-starting point… not the output of a gm/Id or noise-budget sizing study."
-Closing the front-end gap alone needs ≥ 1.3× input-pair area (17.03/15 = 1.135
-in σ ⇒ 1.29 in area); covering the excluded decision-stage term needs more.
-That is ordinary design work on a 130 nm node, not a physical wall. Moving the
-bound to 17.03 mV would be precisely the "relax the ratified spec to make
-results pass" that `CLAUDE.md` forbids, so the bound stays and **the design
-carries the failure** until a sizing pass or a topology escalation (DR-0001's
-named double-tail path) closes it.
+**And the two benches disagree, in the direction the "lower bound" qualifier
+did not predict.** The whole-latch 3σ is *lower* than the front-end-only 3σ
+at **every one of the 45 matched PVT points** — a consistent ~35–45 %
+reduction (means: 8.404 mV vs. 14.14 mV), not just on average. That finding
+was published by the bench itself on landing
+([`sim/comparator-offset-transient-mc/README.md` → "An observation, not
+(yet) a DR-contradiction"](../../sim/comparator-offset-transient-mc/README.md#an-observation-not-yet-a-dr-contradiction)),
+and this record takes that reading rather than re-deriving it:
+`design/README.md`'s "lower bound" framing describes what the reduced
+sub-model *excludes* (the loop's own mismatch term) — it is not a proof that
+an excluded term can only *add* variance, and the reduced sub-model's
+loop-broken bias point (tail switch held on, diode-connected rather than
+cross-coupled loads) is also a **different operating point**, which can carry
+different mismatch **sensitivity**: a diode-connected load's own low
+intrinsic gain divides the same device-level current mismatch into a
+*larger* input-referred offset than the same mismatch produces through the
+regenerative pair's much higher effective decision gain. "Different
+methodology, different operating point, different mismatch sensitivity" is
+the only reading consistent with two benches that each reproduce themselves
+and were calibrated against the same PDK models — not "one bench is wrong".
 
-### Row 2 — Input-referred noise: **ratified unchanged**, evidence path scoped
+**Both benches stay committed** (issue #23's resolution of DR-0001
+Consequence 2 for the offset row — *retain, not retire*): the **difference**
+between the two numbers is itself a diagnostic (it approximates what the
+regenerative stage and its bias conditions contribute), the front-end bench
+is the cheap regression check a sizing pass runs first, and it still carries
+the ±50 mV common-mode axis the whole-latch bench does not sweep at all —
+see [`sim/comparator-offset-transient-mc/README.md` → "Relationship to
+`comparator-offset-mc`"](../../sim/comparator-offset-transient-mc/README.md#relationship-to-comparator-offset-mc).
+
+**Why the bound does not move.** It does not need to: the unchanged DRAFT
+Target is met at 45/45 by the measurement that measures the row's actual
+subject — so the drafting-time question ("is this bound set above what the
+design reaches?") is answered, not waived. The 8 mV **Stretch** is missed at
+27/45 points, exactly what a Stretch column exists to record, and the Pelgrom
+lever named at drafting remains the honest design work for closing it:
+σ_Vos ∝ 1/√(W·L), DR-0001's sizing is explicitly *not* a sizing study
+(`design/README.md`), and the worst whole-latch point (10.537 mV 3σ) needs
+10.537/8 = 1.32 in σ ⇒ ≈ 1.7× input-pair area to come inside the Stretch —
+ordinary design work on a 130 nm node, not a physical wall. What neither
+measurement supports is a **common-mode** claim: the whole-latch bench
+sweeps the differential axis at `dut_vcm` only (a named extension in its
+README), so no statement about whole-latch offset *vs. common-mode movement*
+is made here, and none should be inferred from Row 1's MET status.
+
+### Row 2 — Input-referred noise: **ratified unchanged**; NOT met on the compliance path
 
 | | |
 |---|---|
 | **Ratified Target** | ≤ 1.0 mV rms, differential, input-referred, total integrated (unchanged from DRAFT) |
 | **Ratified Stretch** | ≤ 0.6 mV rms (unchanged from DRAFT) |
-| **Ratified evidence path (scoping, new)** | The **compliance** number must come from **transient-noise runs with seeds and run counts committed**, per `CLAUDE.md`'s metastability row ("the input-referred noise floor from transient-noise runs with seeds and run counts committed"). The `.noise`-on-a-reduced-sub-model number is ratified as a **reportable lower bound**, not as the compliance path. |
-| **Measured (lower bound)** | 216.7 µV rms (`ff_-40c_1.20v`) … **388.9 µV rms** (`fs_125c_1.08v`), all 45 points; total integrated output noise ÷ measured DC gain (not `inoise_total` — see the record's own note on the 200× error that convention has caused upstream). |
-| **Status** | **CONSISTENT, NOT CERTIFIED.** The lower bound sits 2.6× under Target and 1.5× under Stretch, so nothing here argues the bound is wrong; but it excludes the regeneration-phase noise that dominates a StrongARM's real floor, so it cannot certify the row either. |
+| **Ratified evidence path (scoping, unchanged from drafting)** | The **compliance** number must come from **transient-noise runs with seeds and run counts committed**, per `CLAUDE.md` ("the input-referred noise floor from transient-noise runs with seeds and run counts committed"). At drafting this was a forward scoping — no such bench existed; it now exists, and its measurement is the row's Status below. The `.noise`-on-a-reduced-sub-model number remains a **reportable lower bound**, not the compliance path. |
+| **Measured (reportable lower bound, front end only)** — [`sim/comparator-preamp-noise/`](../../sim/comparator-preamp-noise/) | 216.7 µV rms (`ff_-40c_1.20v`) … **388.9 µV rms** (`fs_125c_1.08v`), all 45 points; nominal corner 277.8 µV rms integrated over that sub-model's own 58.7 MHz band (input-referred white density 36.27 nV/√Hz). Total integrated output noise ÷ measured DC gain (not `inoise_total` — the record's own note on the 200× error that convention has caused upstream). Record [`20260916-113303-180cca7`](../../sim/comparator-preamp-noise/records/20260916-113303-180cca7.md). |
+| **Measured (compliance path, whole latch)** — [`sim/comparator-transient-noise/`](../../sim/comparator-transient-noise/) | `TRNOISE`-injected transient decision statistics against `comparator_dut` (real strobe, real cross-coupled regenerative pair), injecting the AC bench's own 36.27 nV/√Hz density at the input pins and letting the latch set its own aperture; **N = 80 trials per rung per PVT point**, 3 rungs (±1.0 mV overdrive plus a zero-overdrive noise-is-injected guard), 45/45 points. Implied 1σ input-referred decision noise (the bench's committed `probit.py` slope estimator, immune to threshold offset): per-point min **0.889 mV** (`tt_27c_1.20v`) … max **2.710 mV** (`tt_125c_1.08v`), **grid-wide mean 1.335 mV**. Record [`20260921-154729-41cbc7f`](../../sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md), `Verdict: PASS`. |
+| **Status** | **NOT MET on the ratified compliance path.** The grid-wide mean — the summary statistic the bench's own precision analysis designates (±13 % 1σ per-corner sampling scatter at N = 80; per-corner rank claims are unsupported below that) — exceeds the 1.0 mV Target. |
 
-**Why the bound does not move.** A bound with 2.6× headroom against a lower
-bound is not evidence to move in either direction — tightening it on
-lower-bound data would be as unfounded as relaxing it. The honest act is to
-ratify the number and ratify the *evidence standard* that can settle it, which
-is what the scoping line above does.
+**Three qualifiers govern the reading, and all three are the bench's own**
+([`sim/comparator-transient-noise/README.md` → "Implications for DR-0002's
+review"](../../sim/comparator-transient-noise/README.md#implications-for-dr-0002s-review)):
+
+1. **The compliance number is itself still a lower bound.** The injection
+   enters at the DUT's black-box input pins; the regenerative pair's own
+   thermal/flicker noise is not independently injected at all. A
+   strictly-more-complete measurement therefore predicts a *higher* true
+   floor — the miss can widen with better evidence, not close.
+2. **It is the first compliance-path number, and it landed ~5× the AC lower
+   bound** — exactly the direction the drafting-time demotion of the
+   `.noise` figure predicted for a strictly-more-complete measurement. (An
+   early draft of the bench that calibrated to the AC *total* instead of its
+   *density* produced the inversion instead; the bench README documents why
+   the density, not the band-limited total, is the right injection.)
+3. **"Exceeds the Target as measured" is not the same finding as "the Target
+   is wrong."** The draft Target was set when the only measurement was a
+   0.278 mV band-limited lower bound; the first whole-latch compliance number
+   comes out at 1.335 mV. Whether the bound is re-derived, the front end
+   re-sized, or the evidence chain (regeneration-stage injection) extended
+   before the row is judged again is a conversation the key-holders hold with
+   real numbers on both sides — this row's order of operations is the DR
+   process itself, and no re-derivation is performed here.
+
+**Why the bound does not move.** Not relaxed — `CLAUDE.md` forbids
+relaxing-to-pass, no relaxation is proposed, and the row is ratified in a
+failing state exactly like the other recorded misses. Not tightened or
+re-derived either — a single first compliance measurement with ±13 %
+per-corner scatter and a known-missing noise term is not evidence on which
+to re-found a bound in *either* direction. Folding it in honestly means
+recording the miss in the table and handing the design the work list:
+front-end noise density (a first-stage sizing matter — the offset row's
+Pelgrom lever and this row's density share their lever), and the
+regeneration-stage injection extension that would complete the bench (an
+open item below — the DUT's black-box pin contract currently gives
+testbenches no access to internal nodes).
 
 ### Row 3 — Decision time vs. overdrive, and metastability: **ratified, with τ added as a bounded sub-row**
 
@@ -273,7 +421,7 @@ offset and noise — gets close. **No dynamic latch meets 5 mV at 100 fF.**
 | **Ratified measurement condition for Q_kick** | Branch **A** of [`sim/comparator-kickback/testbench/tb_kickback.spice`](../../sim/comparator-kickback/testbench/tb_kickback.spice) — input node `apa`/`ana`, driven from an ideal source through R_src = 1 kΩ with C_in = 100 fF to ground. Q_kick is the **peak net charge displaced from that node during one decision**, i.e. `max_t |∫₀ᵗ i_kick dt'|` over the integration window 30 … 45 ns (one strobe of the 33.3 MHz, 30 ns-period clock), referenced to the node's own pre-decision level at 29 ns. It is a **peak-transient** quantity — what the driver must source/sink *during* the event — **not** the net charge retained after recovery on the floating branch, which is a different quantity ~8× smaller (see (a) below). |
 | **Ratified measurement condition for the residue** | Branches **B** and **C** (1 GΩ / 1 pF, RC = 1 ms ≫ the 30 ns cycle), key `kick_sigdep_nv`: the difference between the settled differential input displacement at a 1 mV and a 100 mV input, 29 ns → 55 ns. This clause, unlike Q_kick, is emitted directly by the bench. |
 | **Measured** | Q_kick **estimated** at 8.8 … **14.3 fC/side** via `kick_1k_peak_mv × C_in`, an estimator with a **1.3 … 2.9× under-reporting bias** (derived below) ⇒ a true-value bracket of roughly **11 … 41 fC/side**; residue 1.70 … **15.40 µV**; peak **+87.7 … +143.3 mV** (−29.3 … −40.6 mV negative) |
-| **Status (charge sub-bound)** | **CONSISTENT, NOT CERTIFIED.** The bench emits no Q_kick measurement; the only available estimator is biased toward passing by a factor of ~1.3 … 2.9× (derived in (b) below), a range that straddles the bound. 25 fC survives if the effective kick duration is ≲ R_src·C_in = 100 ps and fails if it is ≳ 200 ps, and the committed records cannot distinguish the two. Same vocabulary as Rows 1 and 2, and for the same reason. |
+| **Status (charge sub-bound)** | **CONSISTENT, NOT CERTIFIED.** The bench emits no Q_kick measurement; the only available estimator is biased toward passing by a factor of ~1.3 … 2.9× (derived in (b) below), a range that straddles the bound. 25 fC survives if the effective kick duration is ≲ R_src·C_in = 100 ps and fails if it is ≳ 200 ps, and the committed records cannot distinguish the two. The same vocabulary this record uses wherever committed evidence cannot certify a bound either way — by contrast, Rows 1 and 2 now carry whole-latch measurements with definite verdicts. |
 | **Status (residue sub-bound)** | **MET**, 6.5× margin (15.40 µV vs. 100 µV), directly from a committed bench key at 45/45 points. |
 | **Status (Stretch)** | **NOT MET** on charge under any reading of the estimator (8.8 fC estimated vs. 8 fC, before any bias correction). |
 
@@ -403,9 +551,15 @@ open item.
 - **Any layout, extraction, or post-layout claim.** Every number is
   schematic-level. No layout exists.
 - **Any Target-column average power bound** (Row 5, above).
-- **A compliance certificate for Rows 1 and 2.** Both rest on the
-  `comparator_dut_analog` reduced sub-model and are lower bounds; the ratified
-  *bounds* bind, but the design's true offset and noise remain unmeasured.
+- **Row 1's common-mode behaviour.** The Target is met on the whole-latch
+  bench's differential axis at `dut_vcm`; no whole-latch common-mode sweep
+  exists (a named extension in that bench's README), and
+  `comparator-offset-mc`'s ±50 mV common-mode axis reaches only the front
+  end. Nothing here certifies the row against common-mode movement.
+- **A complete figure for Row 2.** The compliance-path measurement is itself
+  still a lower bound (the regenerative pair's own device noise is not
+  injected); the ratified Target binds, is missed on what is measured, and
+  the complete floor remains unmeasured.
 - **A compliance certificate for Row 4's charge sub-bound.** The 25 fC bound
   binds; whether the design meets it is undetermined, because the bench emits
   no Q_kick key and the available estimator's bias bracket straddles the bound
@@ -414,8 +568,13 @@ open item.
   blocker* (there is now a ratified table to simulate against). Item 5 itself
   — a full PVT corner campaign scored against the ratified spec — is separate,
   later work.
-- **Recalibration of the two failing corner-sensitivity check floors**
-  (`av_dc` process, `td_od50_ns` temperature). Left failing, on purpose.
+- **Recalibration (or deliberate retention) of the two corner-sensitivity
+  check floors** (`av_dc` process, `td_od50_ns` temperature). This record
+  ratifies no floor either way: the drafting record deliberately left both
+  failing, and the open item was resolved outside it by
+  [#16](https://github.com/2AMLogic/sg13g2-comparator/issues/16) /
+  [PR #29](https://github.com/2AMLogic/sg13g2-comparator/pull/29)
+  recalibrating both against the real DUT.
 
 ## Alternatives considered
 
@@ -433,7 +592,11 @@ open item.
   deferral question: those benches are independently buildable, and leaving
   the table DRAFT keeps every downstream verification item blocked in the
   meantime. Ratifying a bound the design currently misses is the normal state
-  of a spec, not an anomaly.
+  of a spec, not an anomaly. *This revision is the tail of that alternative
+  realized, in the opposite order: the benches landed on `main` while this
+  record sat proposed, and instead of waiting for a re-draft their evidence
+  is folded into Rows 1–2 and the bound-founding reasoning is re-derived
+  there (issue #36).*
 - **Re-open DR-0001's topology choice now, on the kickback and offset
   misses.** Rejected as premature: both misses have unexercised
   sizing/driver-side levers ahead of a topology change, and DR-0001's
@@ -450,17 +613,24 @@ the three experiment READMEs are re-pointed at the renamed section.
 
 ## Consequences
 
-1. **Three rows are ratified in a failing state** (offset, power stretch,
-   decision-time stretch), and the restated kickback row is certified only on
-   its residue clause — its charge clause is ratified as "consistent, not
-   certified", the same status Rows 1 and 2 carry. That is now the public,
-   recorded state of the block — `README.md` says so in the table itself, not
-   in a footnote.
-2. **The design acquires a concrete, ordered work list**: input-pair sizing
-   for offset (≥ 1.3× area at the front end alone), `dut_ib` reduction for
-   power (~95 % of the total), and `ss`-corner speed for the decision-time
-   stretch. None of these needs a new decision record; they are ordinary
-   design work against a now-binding spec.
+1. **The table is ratified in the state the design actually measures, misses
+   included** — as of this revision: the noise row's Target misses on the
+   whole-latch compliance path (1.335 mV grid mean vs. ≤ 1.0 mV), the
+   offset row's Target is met at 45/45 with its Stretch missed at 27/45,
+   the decision-time stretch misses at 9 `ss` points and the power stretch
+   misses outright. The restated kickback row is certified only on its
+   residue clause — its charge clause is ratified as "consistent, not
+   certified", because no committed testbench emits that quantity directly.
+   That is now the public, recorded state of the block — `README.md` says so
+   in the table itself, not in a footnote.
+2. **The design acquires a concrete, ordered work list**: front-end noise
+   density (and the regeneration-stage injection extension) for the noise
+   row's compliance-path miss, input-pair sizing for the offset Stretch
+   (≈ 1.7× front-end area at the worst hot corner by the Pelgrom lever —
+   the Target no longer needs it), `dut_ib` reduction for power (~95 % of
+   the total), and `ss`-corner speed for the decision-time stretch. None of
+   these needs a new decision record; they are ordinary design work against
+   a now-binding spec.
 3. **Item 5 of the gap-to-T1 tracker is unblocked** and can be scored "vs.
    ratified spec" for the first time.
 4. **The kickback row now constrains future driving stages explicitly.**
@@ -469,21 +639,40 @@ the three experiment READMEs are re-pointed at the renamed section.
    applied) and the V_peak ≈ Q/C_in conversion, rather than a 5 mV promise that
    would not have survived contact with a real 100 fF input node. Sizing a
    driver off the low end of that bracket is a mistake the record now names.
-5. **Two committed FAIL records are now cited by a ratified spec.** That is
-   acceptable only because the failures are check-floor calibration artifacts
-   with a passing negative control; it also makes recalibrating those floors
-   more urgent, since a reader landing on a FAIL record cited by the spec has
-   to read three documents to learn it is not a spec failure.
+5. **One committed FAIL record is cited by this spec as drafted** (the
+   regeneration row's — the other drafting-time FAIL citation was retired in
+   this revision by re-pointing Row 2's evidence at the recalibrated, PASS
+   re-run, and the floors themselves were recalibrated outside this record
+   by #16 / PR #29). The remaining citation is acceptable only because the
+   failure is a check-floor calibration artifact with a passing negative
+   control — the evidence section says so inline precisely so a reader
+   landing on that FAIL record does not have to read three documents to
+   learn it is not a spec failure.
 
 ## Open items
 
 - **A Target-column average power bound**, founded on a gm/Id or bias-point
   sizing study (not on the current carried-over `dut_ib`).
-- **Transient Monte-Carlo offset and transient-noise benches** — DR-0001
-  Consequence 1's required re-founding — so Rows 1 and 2 can be certified
-  rather than lower-bounded. `CLAUDE.md` already names transient noise with
-  committed seeds and run counts as this repo's methodology for the noise
-  floor.
+- **Regeneration-stage noise injection.** The whole-latch offset and
+  transient-noise benches DR-0001 Consequence 1 named have both landed
+  (issues
+  [#23](https://github.com/2AMLogic/sg13g2-comparator/issues/23) /
+  [PR #33](https://github.com/2AMLogic/sg13g2-comparator/pull/33) and
+  [#24](https://github.com/2AMLogic/sg13g2-comparator/issues/24) /
+  [PR #40](https://github.com/2AMLogic/sg13g2-comparator/pull/40)) — that
+  requirement is discharged, and Rows 1–2 above rest on them as revised. The
+  residual gap for *Row 2* is injection completeness: the compliance bench
+  injects only the front end's own density at the DUT's black-box input
+  pins, the regenerative pair's own thermal/flicker noise is not
+  independently injected, and completing it needs the DUT's pin contract
+  (`sim/dut/README.md`) extended so a testbench can reach internal nodes —
+  future harness work, not a spec change.
+- **A whole-latch common-mode offset sweep.** The residual gap for *Row 1*:
+  the whole-latch offset bench sweeps the differential axis at `dut_vcm`
+  only, and `comparator-offset-mc`'s ±50 mV common-mode axis has no
+  whole-latch analogue yet — a named, not-yet-specified extension in that
+  bench's README, and the stated reason Row 1's MET status carries no
+  common-mode claim.
 - **A direct Q_kick measurement in the kickback bench.** The ratified charge
   sub-bound of Row 4 currently has **no automated check behind it**: no
   `testbench/tb.json` `measure:` key in
@@ -499,8 +688,10 @@ the three experiment READMEs are re-pointed at the renamed section.
   ratified bound without a testbench** — a standing exception to `CLAUDE.md`'s
   "no claim without a testbench", recorded here rather than papered over.
 - **Recalibration (or deliberate retention) of the two corner-sensitivity
-  check floors** that now fail against the real DUT — already tracked as
-  [#16](https://github.com/2AMLogic/sg13g2-comparator/issues/16).
+  check floors** that failed against the real DUT at drafting — resolved
+  outside this record by #16 / PR #29 (both floors recalibrated, both
+  benches re-run to PASS); the regeneration row's drafting-time citation is
+  kept with its FAIL explained in the evidence section.
 - **Stale placeholder-era note blocks in three `testbench/tb.json` files**,
   which are reproduced verbatim into the `provenance: schematic` records and
   now describe the DUT incorrectly (e.g. the kickback record's "PLACEHOLDER

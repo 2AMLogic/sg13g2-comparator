@@ -3,24 +3,39 @@
 xschem + ngspice testbenches and **append-only** results, on the SG13G2
 1.2 V LV core rail.
 
-Five experiments backing the four first-class rows of
+Six experiments backing the four first-class rows of
 [`README.md`'s target specification](../README.md#target-specification-ratified--dr-0002)
-(the offset-σ row has two, deliberately — see below):
+(the offset-σ *and* noise rows each have two, deliberately — see below):
 
 | experiment | row it backs | method |
 |---|---|---|
 | [`comparator-offset-mc/`](comparator-offset-mc/) | Offset σ (**lower bound**, front end only) | Monte Carlo on SG13G2's `mos_*_mismatch` per-instance local-mismatch models, `dc` sweep against the loop-broken `comparator_dut_analog` reduced sub-model |
 | [`comparator-offset-transient-mc/`](comparator-offset-transient-mc/) | Offset σ (**whole latch**, strobe → decision) | Monte Carlo on the same `mos_*_mismatch` models, transient digital-staircase sweep against the un-reduced `comparator_dut` topology |
-| [`comparator-preamp-noise/`](comparator-preamp-noise/) | Input-referred noise | `.noise`, total integrated output noise ÷ measured DC gain |
+| [`comparator-preamp-noise/`](comparator-preamp-noise/) | Input-referred noise (**reportable lower bound**, front end only) | `.noise`, total integrated output noise ÷ measured DC gain, against the loop-broken `comparator_dut_analog` reduced sub-model |
+| [`comparator-transient-noise/`](comparator-transient-noise/) | Input-referred noise (**compliance path**, whole latch) | `TRNOISE`-injected transient decision statistics against the un-reduced `comparator_dut`, converted to σ by probit inversion |
 | [`comparator-regeneration/`](comparator-regeneration/) | Decision time vs. overdrive, **metastability** | transient overdrive ladder, τ extracted from it |
 | [`comparator-kickback/`](comparator-kickback/) | **Kickback** | 1 kΩ source impedance *and* a floating high-Z input |
 
 `comparator_dut` has no DC-resolvable operating point (DR-0001 Decision §3),
-so `comparator-offset-mc`'s reduced sub-model was DR-0001's own named interim
-path for that row (Consequence 2) rather than a design choice made from
-scratch. Both experiments stay committed — see
+so the reduced sub-model was DR-0001's own named interim path for the offset
+and noise rows (Consequence 2) rather than a design choice made from
+scratch. In both pairs the reduced-sub-model bench stays committed alongside
+the whole-latch one — see
 [`comparator-offset-transient-mc/README.md`](comparator-offset-transient-mc/README.md#relationship-to-comparator-offset-mc)
-for why retiring the reduced-sub-model bench was considered and rejected.
+(offset) and
+[`comparator-transient-noise/README.md`](comparator-transient-noise/README.md#retain-not-retire-comparator_dut_analog)
+(noise) for why retiring it was considered and rejected on each row's own
+evidence.
+
+The two noise benches are **not** peers: `CLAUDE.md` requires the noise floor
+to come "from transient-noise runs with seeds and run counts committed", and
+[DR-0002](../spec/decision-records/0002-target-spec-ratification.md)
+([#12](https://github.com/2AMLogic/sg13g2-comparator/issues/12) /
+[PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18)) names
+transient noise as that row's compliance evidence path and the `.noise`
+number as a *reportable lower bound*.
+`comparator-transient-noise/` is therefore the row's compliance measurement;
+`comparator-preamp-noise/` is the lower bound it is calibrated against.
 
 Metastability and kickback are first-class rows here, not appendices, per
 [`CLAUDE.md`](../CLAUDE.md).
@@ -41,17 +56,27 @@ sim/device-mismatch-confirm/
 > **Current status: the device under test is the DR-0001 schematic, and the
 > spec table it is scored against is ratified by
 > [DR-0002](../spec/decision-records/0002-target-spec-ratification.md).**
-> Ratified is not met — DR-0002 records three rows the current design misses,
-> and two rows whose evidence here is a lower bound that cannot certify
-> compliance either way. `sim/dut.json` binds
+> Ratified is not met — DR-0002 records the rows the current design misses:
+> the noise row at Target on the whole-latch compliance path, the decision-time
+> stretch at the `ss` points, and the power stretch; the offset row's Target
+> is met on the whole-latch measurement with its Stretch missed at 27/45
+> points. DR-0002 also names the residual evidence gaps rather than hiding
+> them: the noise compliance figure is itself still a lower bound (the
+> regeneration stage's own noise is not yet injected), and the offset
+> whole-latch number covers the differential axis only. `sim/dut.json` binds
 > [`design/comparator.spice`](../design/comparator.spice) (`provenance:
 > schematic`), regenerated from the xschem sources in
 > [`design/`](../design/) per
 > [`spec/decision-records/0001-comparator-topology.md`](../spec/decision-records/0001-comparator-topology.md):
 > a single-tail StrongARM dynamic latch on `sg13_lv_nmos`/`sg13_lv_pmos`.
-> Records made against it are no longer placeholder-banner'd, and the
-> `20260916-*` ones are the evidence DR-0002 ratified the table on
-> (`spec/porting-plan.md`'s third step in this chain, now taken). Their own
+> Records made against it are no longer placeholder-banner'd, and they are
+> the evidence DR-0002 rests on: the `20260916-*` re-founded and drafted-era
+> records (`spec/porting-plan.md`'s third step in this chain, now taken), plus
+> the whole-latch `20260917-*` / `20260921-*` records the two PRs after
+> (#23 / PR #33 and #24 / PR #40) committed — folded into DR-0002's Rows 1–2
+> by issue
+> [#36](https://github.com/2AMLogic/sg13g2-comparator/issues/36) ahead of its
+> two-key review. Their own
 > Claim text still says they are "NOT evidence toward
 > `README.md#target-specification`" — correct when written, superseded by
 > DR-0002; `sim/` is append-only, so that text stays as-is rather than being
@@ -139,7 +164,7 @@ definitions and rationale, including the full divergence table from
 
 | axis | points |
 |---|---|
-| process | `tt`, `ff`, `ss`, `fs`, `sf` (the default `mos` set, mismatch off); the same five with mismatch on (`mos_mismatch`) for `comparator-offset-mc` |
+| process | `tt`, `ff`, `ss`, `fs`, `sf` (the default `mos` set, mismatch off); the same five with mismatch on (`mos_mismatch`) for the two Monte-Carlo offset benches (`comparator-offset-mc`, `comparator-offset-transient-mc`) |
 | temperature | −40 °C, 27 °C, 125 °C |
 | supply | 1.08 V, 1.20 V, 1.32 V (1.2 V ± 10 %) |
 
