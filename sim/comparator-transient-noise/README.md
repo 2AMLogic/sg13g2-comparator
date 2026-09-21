@@ -505,7 +505,91 @@ row's decisive argument (point 1 below) has no offset-row counterpart at all.
 
 ## Records
 
-TBD-RECORDS
+| record | DUT | grid | verdict |
+|---|---|---|---|
+| [`20260921-154729-41cbc7f`](records/20260921-154729-41cbc7f.md) | `comparator-dr0001` (**schematic**, `design/comparator.spice`) | 45/45, plain `mos` (no mismatch) × 3 T × 3 V | PASS |
+
+All 45 points pass the manifest's three checks **and the record's corners
+logs carry zero harness-surfaced warnings** (checked in the record's JSON
+`points[].warnings`, not asserted — the sibling offset bench's one benign
+`sf_mismatch_125c_1.32v` convergence warning has no counterpart here).
+`frac_high_plus` never saturates anywhere on the grid: it spans
+**0.6625 … 0.8875**, so every corner sits in the informative band where the
+probit slope is resolvable — the failure mode the saturation-ceiling checks
+exist to catch did not occur.
+
+**Every σ this section quotes is [`probit.py`](probit.py)'s output against
+this record** (`python3 sim/comparator-transient-noise/probit.py
+sim/comparator-transient-noise/records/20260921-154729-41cbc7f.json`):
+
+- **Slope σ (primary estimator)**: min **0.8890 mV** (`tt_27c_1.20v`) …
+  max **2.7104 mV** (`tt_125c_1.08v`), **grid-wide mean 1.3346 mV** — the
+  summary statistic this bench's own precision analysis directs the reader
+  to (±13 % 1σ sampling scatter per corner at N=80; "Probit inversion").
+- **Per-rung diagnostics** (`sig+_mV`/`sig-_mV`) drift from the slope value
+  by ±15–40 % at typical corners and by half or more at the
+  least-converged ones (e.g. `sf_-40c_1.20v`: `sig+` 2.3850 vs `sig−`
+  0.9649 around a 1.3739 slope σ) — the documented live readout of
+  corner-local sampling scatter, the exact behaviour the estimator
+  comparison in "Probit inversion" predicts.
+- **Implied aperture ENBW**: mean **1.437 GHz** across the grid — the
+  independent physical cross-check ("Implied aperture") lands in the band
+  this DUT's measured regeneration τ (42.6–167 ps, `comparator-regeneration/`)
+  predicts, far from either named failure band (≈60 MHz: the density never
+  seeing the latch's aperture; ≈25 GHz: the source's knot rate leaking
+  through).
+- **Zero-rung guard**: `frac_high_zero` spans **0.3375 … 0.6625**, mean
+  **0.5078** — straddling 0.5 at both grid extremes, the in-record evidence
+  that noise was genuinely injected at every corner ("Negative control").
+
+**The honest outlier structure of the grid.** The three hottest,
+lowest-supply corners carry the three largest slope σ — 2.7104 mV
+(`tt_125c_1.08v`), 2.3795 mV (`ff_125c_1.08v`), 1.9058 mV
+(`sf_125c_1.08v`) — and those same three corners are exactly where the
+per-rung diagnostics pull farthest from the slope number (e.g.
+`tt_125c_1.08v`: `sig+` 2.3851 vs `sig-` 3.1384, two rungs 32 % apart, which
+the slope form cancels and the per-rung form converts into noise). That is
+the signature of corners whose N=80 sample has not fully converged, sitting
+on top of whatever real hot/low-supply PVT effect exists — not a clean
+measurement of either. The grid mean is the defensible summary; per-corner
+rank claims below the sampling floor are not supported at N=80.
+
+## Implications for DR-0002's review
+
+[DR-0002](../../spec/decision-records/) ([issue #12](https://github.com/2AMLogic/sg13g2-comparator/issues/12)
+/ [PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18)) proposes
+ratifying the input-referred-noise row at **Target ≤ 1.0 mV rms, Stretch
+≤ 0.6 mV rms**. This bench hands that proposal's eventual review the number
+it currently has to leave blank — with three honest qualifiers governing how
+it may be read:
+
+1. **Nothing here contradicts a ratified bound, because none exists.** PR
+   #18 is open and deliberately held for a human at the time this record is
+   committed, so this bench files no new decision record — the constraint
+   its own banner states. There is no ratified AR-anything for this
+   measurement to contradict on physics grounds.
+2. **The number exceeds the DRAFT row's Target — and it is still a lower
+   bound.** The slope-σ grid mean is **1.335 mV** against the proposed
+   1.0 mV Target (min 0.889 mV, max 2.710 mV), and the complete figure's
+   regeneration-stage device noise is not even injected yet ("What this
+   bench adds, and does not add"). The honest reading is therefore not
+   "the spec fails"; it is that the draft Target was set when the only
+   measurement was a 0.278 mV band-limited lower bound, and the first
+   whole-latch compliance-path number comes out ~5× that lower bound — in
+   exactly the direction DR-0002's own demotion of the AC number predicts
+   for a strictly-more-complete measurement. Whether the row's numbers
+   need re-derivation, the front end needs re-sizing, or the evidence
+   chain needs the regeneration-noise injection closed before the row is
+   judged is the conversation PR #18 exists to hold — now with real
+   numbers on both sides. No sizing change is proposed or made here.
+3. **The AC bench's number remains consistent, not contradictory.** The
+   `.noise` lower bound (277.8 µV rms over its own 58.7 MHz band) is
+   smaller than the whole-latch figure for the two structural reasons
+   DR-0002's proposal already names (fewer noise sources, narrower
+   integration band, multiplied by the white-only injection argument in
+   "Why white only"). Ordering the two benches `278 µV < 1.335 mV` is
+   expected; inverting them would have been the finding that required a
+   physics re-examination.
 
 ## Provenance
 

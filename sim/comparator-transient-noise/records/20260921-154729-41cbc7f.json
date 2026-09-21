@@ -1,0 +1,962 @@
+{
+  "record_id": "20260921-154729-41cbc7f",
+  "context": {
+    "record_id": "20260921-154729-41cbc7f",
+    "commit": "41cbc7f",
+    "dirty": false,
+    "dirty_paths": [],
+    "pdk": {
+      "path": "/Users/rwalters/share/pdk/ihp-sg13g2",
+      "variant": "ihp-sg13g2",
+      "release_version": "0.3.0",
+      "discovered_via": "search_root:~/share/pdk"
+    },
+    "toolchain": {
+      "pins": {
+        "pdk_release": "0.3.0",
+        "ngspice_min_major": 46,
+        "python_min": "3.9",
+        "openvaf_tag": "v24.0.1mob"
+      },
+      "observed": {
+        "pdk_release": "0.3.0",
+        "ngspice": "ngspice-46 : Circuit level simulation program",
+        "python": "3.14.7",
+        "platform": "macOS-27.0-arm64-arm-64bit-Mach-O"
+      },
+      "drift": []
+    },
+    "dut_id": "comparator-dr0001",
+    "dut_provenance": "schematic",
+    "dut_netlist": "design/comparator.spice",
+    "dut_netlist_sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90",
+    "dut_params": {
+      "dut_ib": 2e-05,
+      "dut_vcm": 0.6
+    }
+  },
+  "testbench": {
+    "name": "comparator-transient-noise",
+    "description": "Input-referred noise floor of the WHOLE comparator (comparator_dut, the real regenerative latch, NOT comparator_dut_analog), measured by transient-noise decision statistics (a 'hit-rate' / probit measurement) over the full PVT grid -- the compliance evidence path CLAUDE.md requires and DR-0002 (issue #12 / PR #18, PROPOSED AND STILL OPEN at the time this bench was built) proposes to ratify, per CLAUDE.md's 'input-referred noise floor from transient-noise runs with seeds and run counts committed'. The injected trnoise() source is calibrated to the SPECTRAL DENSITY of comparator-preamp-noise's own input-referred white noise (36.27 nV/rtHz at the nominal corner), NOT to that bench's band-limited integrated total -- the latch's own aperture, not the reduced sub-model's bandwidth, then sets the noise bandwidth that reaches the decision.",
+    "claim": "sim/dut.json binds design/comparator.spice (id comparator-dr0001, provenance schematic), the ratified topology from spec/decision-records/0001-comparator-topology.md ('DR-0001'). This record substantiates a TRNOISE-injected, decision-statistics sweep over the full PVT grid against the WHOLE latch (comparator_dut, real CLK strobe, real regenerative pair): at each PVT point it measures the probability of a correct decision at +/- a fixed differential overdrive, from which an input-referred 1-sigma decision noise follows by probit inversion (see this experiment's README.md). It is NOT itself the README.md#target-specification Input-referred-noise row ratification act (that is spec/porting-plan.md's separate third step; DR-0002, issue #12 / PR #18, would ratify the SCOPING of the row and name transient noise as its compliance evidence path -- but that PR is OPEN AND UNRATIFIED on main at the time this record is committed, so nothing here is measured against a ratified bound; the requirement this bench actually answers to is CLAUDE.md's own, which is in force today). Unlike comparator-preamp-noise/'s .noise analysis, this bench exercises the ACTUAL regenerative loop -- no loop-broken reduced sub-model, no small-signal DC-operating-point assumption, and no reliance on that sub-model's own noise bandwidth. It remains a LOWER BOUND on the complete figure in one specific, stated way: the DUT's black-box pin contract lets this deck inject noise only at vinp/vinn, so the regenerative pair's own noise sources are not independently sourced (see the notes below).",
+    "experiment": "comparator-transient-noise",
+    "directory": "testbench",
+    "netlist": "tb_transient_noise.spice",
+    "netlist_sha256": "8cd004296a2f6f63ef7196ef19454eaf4e6225f059d28982c92a1b4342157f75",
+    "manifest_sha256": "b8e42b7d0836961feed4d88ce9031543b2554a8282d1ad445018af875cefa728",
+    "nominal_supply_v": 1.2,
+    "supply_tolerance": 0.1
+  },
+  "checks": {
+    "frac_high_zero": {
+      "min": 0.1,
+      "max": 0.9,
+      "description": "NOISE-IS-ACTUALLY-INJECTED GUARD, not a spec bound. At zero applied overdrive, zero mismatch (the plain mos corner set), the ONLY thing that can make a trial decide either way is the injected trnoise() realization -- so frac_high_zero should sit near 0.5 (binomial SEM at N=80 is ~5.6% at p=0.5). If trnoise() ever failed to inject (e.g. a regression that zeroed vn_na), the zero-overdrive rung would instead decide the SAME way on EVERY trial, collapsing frac_high_zero to 0.0 or 1.0 -- well outside this floor/ceiling. THIS IS NOT AN ASSUMPTION, IT WAS RUN: with vn_na forced to 0 at tt_27c_1.20v this deck returns frac_high_zero = 2.3e-8 (LOW on every trial), frac_high_plus = 1.0 and frac_high_minus = 2.3e-8, and this check FAILS as designed -- see this experiment's README.md 'Negative control (actually run)'. THIS IS ALSO THE HARNESS'S SABOTAGE-NEGATIVE-CONTROL SURROGATE FOR THIS BENCH: --sabotage-corners forces every corner to plain mos_tt (sim/harness/corners.py), which does not itself disable trnoise() the way it disables mismatch for comparator-offset-mc/, so this check's real teeth are structural (a broken or zeroed noise source), not sabotage-corner-specific."
+    },
+    "frac_high_plus": {
+      "min": 0.3,
+      "max": 0.999,
+      "description": "SANITY ENVELOPE, not a spec bound. At +od_x (1.0 mV, deliberately chosen near the measured 1-sigma decision noise so the hit rate lands in the informative 0.7-0.95 band rather than saturating) the correct decision is HIGH, so frac_high_plus should sit above 0.5. The floor is loose (0.3) so N=80 sampling variance cannot fail an otherwise-fine point, while still catching a badly broken or inverted-polarity deck (frac_high_plus stuck near 0 across the WHOLE grid). The ceiling is 0.999, not 1.0, on purpose: a saturated frac_high_plus = 1.0 carries no information about sigma (the probit inversion of p=1 is infinite, so sigma would read as exactly 0), so saturation is a measurement failure for this bench and must fail the check rather than silently produce a flattering number."
+    },
+    "frac_high_minus": {
+      "min": 0.001,
+      "max": 0.7,
+      "description": "SANITY ENVELOPE, symmetric with frac_high_plus above: at -od_x the correct decision is LOW, so frac_high_minus (the fraction deciding HIGH, i.e. INCORRECTLY) should sit below 0.5. Ceiling loosened to 0.7 for the same N=80 sampling-variance reason; the 0.001 floor is the mirror of the 0.999 ceiling above -- a saturated frac_high_minus = 0 inverts to an infinite probit and a sigma of exactly 0, which is a measurement failure, not a pass."
+    }
+  },
+  "points": [
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "tt_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.66249948009,
+        "frac_high_plus": 0.7249994864,
+        "frac_high_minus": 0.21250017352
+      },
+      "seconds": 534.257,
+      "deck": "tt_-40c_1.08v.spice",
+      "log": "tt_-40c_1.08v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "tt_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.4874999311,
+        "frac_high_plus": 0.69999952145,
+        "frac_high_minus": 0.18750046522
+      },
+      "seconds": 526.825,
+      "deck": "tt_-40c_1.20v.spice",
+      "log": "tt_-40c_1.20v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "tt_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.59999955657,
+        "frac_high_plus": 0.78749900421,
+        "frac_high_minus": 0.15000048218
+      },
+      "seconds": 530.563,
+      "deck": "tt_-40c_1.32v.spice",
+      "log": "tt_-40c_1.32v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "tt_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.4749995661,
+        "frac_high_plus": 0.76249673168,
+        "frac_high_minus": 0.23750133463
+      },
+      "seconds": 518.469,
+      "deck": "tt_27c_1.08v.spice",
+      "log": "tt_27c_1.08v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "tt_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.57499920003,
+        "frac_high_plus": 0.88749542066,
+        "frac_high_minus": 0.15000192825
+      },
+      "seconds": 507.909,
+      "deck": "tt_27c_1.20v.spice",
+      "log": "tt_27c_1.20v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "tt_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.49999898064,
+        "frac_high_plus": 0.73749692508,
+        "frac_high_minus": 0.2000016382
+      },
+      "seconds": 517.848,
+      "deck": "tt_27c_1.32v.spice",
+      "log": "tt_27c_1.32v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "tt_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.39999874661,
+        "frac_high_plus": 0.66248977287,
+        "frac_high_minus": 0.37500048974
+      },
+      "seconds": 567.011,
+      "deck": "tt_125c_1.08v.spice",
+      "log": "tt_125c_1.08v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "tt_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.62499492,
+        "frac_high_plus": 0.76248922085,
+        "frac_high_minus": 0.16250245707
+      },
+      "seconds": 572.747,
+      "deck": "tt_125c_1.20v.spice",
+      "log": "tt_125c_1.20v.log"
+    },
+    {
+      "corner": "tt",
+      "corner_sections": [
+        "mos_tt"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "tt_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.53749447335,
+        "frac_high_plus": 0.74999182547,
+        "frac_high_minus": 0.20000250419
+      },
+      "seconds": 566.96,
+      "deck": "tt_125c_1.32v.spice",
+      "log": "tt_125c_1.32v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "ff_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.49999996882,
+        "frac_high_plus": 0.76249690944,
+        "frac_high_minus": 0.18750156739
+      },
+      "seconds": 593.85,
+      "deck": "ff_-40c_1.08v.spice",
+      "log": "ff_-40c_1.08v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "ff_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.48749927383,
+        "frac_high_plus": 0.7999967912,
+        "frac_high_minus": 0.26250078526
+      },
+      "seconds": 591.826,
+      "deck": "ff_-40c_1.20v.spice",
+      "log": "ff_-40c_1.20v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "ff_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.5499995322,
+        "frac_high_plus": 0.77499819209,
+        "frac_high_minus": 0.17500110412
+      },
+      "seconds": 588.88,
+      "deck": "ff_-40c_1.32v.spice",
+      "log": "ff_-40c_1.32v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "ff_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.49999777859,
+        "frac_high_plus": 0.74999592337,
+        "frac_high_minus": 0.27500171868
+      },
+      "seconds": 622.733,
+      "deck": "ff_27c_1.08v.spice",
+      "log": "ff_27c_1.08v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "ff_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.49999849887,
+        "frac_high_plus": 0.8249951381,
+        "frac_high_minus": 0.27500109686
+      },
+      "seconds": 612.893,
+      "deck": "ff_27c_1.20v.spice",
+      "log": "ff_27c_1.20v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "ff_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.54999917568,
+        "frac_high_plus": 0.73749667992,
+        "frac_high_minus": 0.21250070631
+      },
+      "seconds": 622.062,
+      "deck": "ff_27c_1.32v.spice",
+      "log": "ff_27c_1.32v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "ff_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.43749516469,
+        "frac_high_plus": 0.68748231998,
+        "frac_high_minus": 0.36249879743
+      },
+      "seconds": 601.535,
+      "deck": "ff_125c_1.08v.spice",
+      "log": "ff_125c_1.08v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "ff_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.33749913485,
+        "frac_high_plus": 0.81248365388,
+        "frac_high_minus": 0.21250206507
+      },
+      "seconds": 607.621,
+      "deck": "ff_125c_1.20v.spice",
+      "log": "ff_125c_1.20v.log"
+    },
+    {
+      "corner": "ff",
+      "corner_sections": [
+        "mos_ff"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "ff_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.43749460525,
+        "frac_high_plus": 0.82498637465,
+        "frac_high_minus": 0.27500067764
+      },
+      "seconds": 599.135,
+      "deck": "ff_125c_1.32v.spice",
+      "log": "ff_125c_1.32v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "ss_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.52500065237,
+        "frac_high_plus": 0.74999987863,
+        "frac_high_minus": 0.22499982613
+      },
+      "seconds": 623.517,
+      "deck": "ss_-40c_1.08v.spice",
+      "log": "ss_-40c_1.08v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "ss_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.5625000543,
+        "frac_high_plus": 0.81249977168,
+        "frac_high_minus": 0.22499983969
+      },
+      "seconds": 619.278,
+      "deck": "ss_-40c_1.20v.spice",
+      "log": "ss_-40c_1.20v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "ss_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.57499992439,
+        "frac_high_plus": 0.83749995199,
+        "frac_high_minus": 0.21249998242
+      },
+      "seconds": 615.039,
+      "deck": "ss_-40c_1.32v.spice",
+      "log": "ss_-40c_1.32v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "ss_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.51249922568,
+        "frac_high_plus": 0.79999999046,
+        "frac_high_minus": 0.21250056426
+      },
+      "seconds": 600.32,
+      "deck": "ss_27c_1.08v.spice",
+      "log": "ss_27c_1.08v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "ss_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.43749957238,
+        "frac_high_plus": 0.8124991747,
+        "frac_high_minus": 0.18750029765
+      },
+      "seconds": 592.008,
+      "deck": "ss_27c_1.20v.spice",
+      "log": "ss_27c_1.20v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "ss_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.51249994517,
+        "frac_high_plus": 0.86249906922,
+        "frac_high_minus": 0.12500061895
+      },
+      "seconds": 593.748,
+      "deck": "ss_27c_1.32v.spice",
+      "log": "ss_27c_1.32v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "ss_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.46249879345,
+        "frac_high_plus": 0.7749944416,
+        "frac_high_minus": 0.15000279467
+      },
+      "seconds": 429.805,
+      "deck": "ss_125c_1.08v.spice",
+      "log": "ss_125c_1.08v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "ss_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.46249762785,
+        "frac_high_plus": 0.73749450863,
+        "frac_high_minus": 0.16250359339
+      },
+      "seconds": 424.936,
+      "deck": "ss_125c_1.20v.spice",
+      "log": "ss_125c_1.20v.log"
+    },
+    {
+      "corner": "ss",
+      "corner_sections": [
+        "mos_ss"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "ss_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.52499836218,
+        "frac_high_plus": 0.81249393093,
+        "frac_high_minus": 0.12500280448
+      },
+      "seconds": 422.234,
+      "deck": "ss_125c_1.32v.spice",
+      "log": "ss_125c_1.32v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "fs_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.50000001624,
+        "frac_high_plus": 0.82499991823,
+        "frac_high_minus": 0.31249995694
+      },
+      "seconds": 443.388,
+      "deck": "fs_-40c_1.08v.spice",
+      "log": "fs_-40c_1.08v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "fs_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.51250013066,
+        "frac_high_plus": 0.78749994383,
+        "frac_high_minus": 0.18750029352
+      },
+      "seconds": 439.841,
+      "deck": "fs_-40c_1.20v.spice",
+      "log": "fs_-40c_1.20v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "fs_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.54999960814,
+        "frac_high_plus": 0.7749995883,
+        "frac_high_minus": 0.15000035091
+      },
+      "seconds": 437.588,
+      "deck": "fs_-40c_1.32v.spice",
+      "log": "fs_-40c_1.32v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "fs_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.56249946261,
+        "frac_high_plus": 0.78749800539,
+        "frac_high_minus": 0.23749984445
+      },
+      "seconds": 541.217,
+      "deck": "fs_27c_1.08v.spice",
+      "log": "fs_27c_1.08v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "fs_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.41249973461,
+        "frac_high_plus": 0.83749801704,
+        "frac_high_minus": 0.22500083712
+      },
+      "seconds": 533.181,
+      "deck": "fs_27c_1.20v.spice",
+      "log": "fs_27c_1.20v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "fs_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.4749987485,
+        "frac_high_plus": 0.78749821354,
+        "frac_high_minus": 0.30000026694
+      },
+      "seconds": 537.581,
+      "deck": "fs_27c_1.32v.spice",
+      "log": "fs_27c_1.32v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "fs_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.44999393633,
+        "frac_high_plus": 0.74998502091,
+        "frac_high_minus": 0.17500102716
+      },
+      "seconds": 527.114,
+      "deck": "fs_125c_1.08v.spice",
+      "log": "fs_125c_1.08v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "fs_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.47499342766,
+        "frac_high_plus": 0.6999874584,
+        "frac_high_minus": 0.20000117295
+      },
+      "seconds": 526.755,
+      "deck": "fs_125c_1.20v.spice",
+      "log": "fs_125c_1.20v.log"
+    },
+    {
+      "corner": "fs",
+      "corner_sections": [
+        "mos_fs"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "fs_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.51249420465,
+        "frac_high_plus": 0.73748683086,
+        "frac_high_minus": 0.17500187545
+      },
+      "seconds": 524.876,
+      "deck": "fs_125c_1.32v.spice",
+      "log": "fs_125c_1.32v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.08,
+      "corner_id": "sf_-40c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.57499992762,
+        "frac_high_plus": 0.68749908238,
+        "frac_high_minus": 0.22500073459
+      },
+      "seconds": 400.701,
+      "deck": "sf_-40c_1.08v.spice",
+      "log": "sf_-40c_1.08v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.2,
+      "corner_id": "sf_-40c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.52499936062,
+        "frac_high_plus": 0.66249902206,
+        "frac_high_minus": 0.15000111473
+      },
+      "seconds": 397.286,
+      "deck": "sf_-40c_1.20v.spice",
+      "log": "sf_-40c_1.20v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": -40.0,
+      "vdd": 1.32,
+      "corner_id": "sf_-40c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.47499947836,
+        "frac_high_plus": 0.86249861051,
+        "frac_high_minus": 0.13750086626
+      },
+      "seconds": 393.113,
+      "deck": "sf_-40c_1.32v.spice",
+      "log": "sf_-40c_1.32v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.08,
+      "corner_id": "sf_27c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.58749786614,
+        "frac_high_plus": 0.84999448107,
+        "frac_high_minus": 0.1625024438
+      },
+      "seconds": 387.935,
+      "deck": "sf_27c_1.08v.spice",
+      "log": "sf_27c_1.08v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.2,
+      "corner_id": "sf_27c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.47499879109,
+        "frac_high_plus": 0.77499695006,
+        "frac_high_minus": 0.32500130874
+      },
+      "seconds": 386.579,
+      "deck": "sf_27c_1.20v.spice",
+      "log": "sf_27c_1.20v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 27.0,
+      "vdd": 1.32,
+      "corner_id": "sf_27c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.52499906969,
+        "frac_high_plus": 0.77499612798,
+        "frac_high_minus": 0.22500119309
+      },
+      "seconds": 386.946,
+      "deck": "sf_27c_1.32v.spice",
+      "log": "sf_27c_1.32v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.08,
+      "corner_id": "sf_125c_1.08v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.52499871184,
+        "frac_high_plus": 0.7124920758,
+        "frac_high_minus": 0.31250267982
+      },
+      "seconds": 191.517,
+      "deck": "sf_125c_1.08v.spice",
+      "log": "sf_125c_1.08v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.2,
+      "corner_id": "sf_125c_1.20v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.41250084632,
+        "frac_high_plus": 0.76249479442,
+        "frac_high_minus": 0.23750407345
+      },
+      "seconds": 189.625,
+      "deck": "sf_125c_1.20v.spice",
+      "log": "sf_125c_1.20v.log"
+    },
+    {
+      "corner": "sf",
+      "corner_sections": [
+        "mos_sf"
+      ],
+      "temp_c": 125.0,
+      "vdd": 1.32,
+      "corner_id": "sf_125c_1.32v",
+      "status": "ok",
+      "measurements": {
+        "frac_high_zero": 0.56249781919,
+        "frac_high_plus": 0.8249937295,
+        "frac_high_minus": 0.22500320525
+      },
+      "seconds": 189.339,
+      "deck": "sf_125c_1.32v.spice",
+      "log": "sf_125c_1.32v.log"
+    }
+  ],
+  "summary": {
+    "frac_high_zero": {
+      "min": 0.33749913485,
+      "max": 0.66249948009,
+      "mean": 0.5077762952291112,
+      "at_min": "ff_125c_1.20v",
+      "at_max": "tt_-40c_1.08v",
+      "spread_pct": 64.0046312310342,
+      "per_axis": {
+        "process": {
+          "weakest": 14.563265410351267,
+          "strongest": 62.16162833757339,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 11.110983772575814,
+          "strongest": 51.219728843047484,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 9.022421601389846,
+          "strongest": 43.199593194178085,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "frac_high_plus": {
+      "min": 0.66248977287,
+      "max": 0.88749542066,
+      "mean": 0.7744397439871111,
+      "at_min": "tt_125c_1.08v",
+      "at_max": "tt_27c_1.20v",
+      "spread_pct": 29.05399026031194,
+      "per_axis": {
+        "process": {
+          "weakest": 10.835977617020497,
+          "strongest": 19.933680658427598,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 3.0767504387535,
+          "strongest": 23.93580801504211,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 4.8128357420144665,
+          "strongest": 27.11862852928843,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    },
+    "frac_high_minus": {
+      "min": 0.12500061895,
+      "max": 0.37500048974,
+      "mean": 0.21555674574599998,
+      "at_min": "ss_27c_1.32v",
+      "at_max": "tt_125c_1.08v",
+      "spread_pct": 115.97868112398852,
+      "per_axis": {
+        "process": {
+          "weakest": 38.461840272392415,
+          "strongest": 82.35243266808244,
+          "varies": true
+        },
+        "temperature": {
+          "weakest": 18.36754411217805,
+          "strongest": 73.68362033180827,
+          "varies": true
+        },
+        "supply": {
+          "weakest": 5.660315731430431,
+          "strongest": 86.43923880774138,
+          "varies": true
+        }
+      },
+      "failures": [],
+      "skipped_checks": []
+    }
+  }
+}
