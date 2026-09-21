@@ -17,11 +17,12 @@
 # anchor measurement carries a `min_spread_pct_by_axis[process]` floor MUST
 # then fail. If it passes sabotaged, corner switching is not taking effect.
 #
+#   0. stdlib-only harness unit tests                (must PASS)
 #   1. environment/OSDI/toolchain/DUT-contract check
 #   2. every bench runs at the nominal point         (must PASS)
 #   3. the anchored benches run sabotaged            (must FAIL)
 #
-# Exit 0 only if all three hold.
+# Exit 0 only if all four hold.
 
 set -uo pipefail
 
@@ -36,6 +37,17 @@ declare -a RESULTS=()
 note() { printf '\n---- %s\n' "$*"; }
 ok()   { RESULTS+=("PASS  $*"); }
 bad()  { RESULTS+=("FAIL  $*"); FAILED=$((FAILED + 1)); }
+
+note "0. harness unit tests (stdlib-only, no PDK, writes nothing)"
+# The harness's own regression suite (issue #41): pure stdlib -- no PDK, no
+# ngspice, no OSDI -- and it writes nothing, so this step is runnable on any
+# host, before the environment check, and can never touch sim/ evidence.
+if PYTHONPATH=sim python3 -m unittest harness.tests.test_corners \
+     harness.tests.test_runner harness.tests.test_testbench -v; then
+  ok "harness unit tests"
+else
+  bad "harness unit tests"
+fi
 
 note "1. environment, OSDI models, toolchain pins and DUT interface contract"
 if "${RUNNER[@]}" --check-env; then ok "environment"; else bad "environment"; fi

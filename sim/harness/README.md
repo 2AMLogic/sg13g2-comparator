@@ -11,6 +11,13 @@ python3 sim/run_corners.py <experiment> --no-write    # run, print, record nothi
 python3 sim/run_corners.py <experiment> --sabotage-corners   # negative control
 ```
 
+The stdlib-only regression tests in `harness/tests/` are executed as step 0 of
+`sim/selftest.sh` (issue #41), or directly:
+
+```
+PYTHONPATH=sim python3 -m unittest harness.tests.test_corners harness.tests.test_runner harness.tests.test_testbench
+```
+
 Ported structurally from
 [`2AMLogic/gf180-comparator`](https://github.com/2AMLogic/gf180-comparator)'s
 `sim/harness/` (itself ported from `2AMLogic/gf180-sar-adc`), per this
