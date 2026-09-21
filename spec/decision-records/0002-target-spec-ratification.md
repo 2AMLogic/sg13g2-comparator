@@ -194,7 +194,7 @@ Stretch missed.
 | **Ratified Target** | ≤ 15 mV, 3σ, input-referred, calibration-free (unchanged from DRAFT) |
 | **Ratified Stretch** | ≤ 8 mV, 3σ (unchanged from DRAFT) |
 | **Ratified statistical basis** | Monte Carlo over SG13G2's shipped per-instance local-mismatch models (`mos_{tt,ff,ss,fs,sf}_mismatch`), seed common across points in both benches so grid movement is a real PVT effect, not sampling noise: the front-end bench runs **N = 200 draws per point, `setseed 20260910`, σ precision ±5 %**; the whole-latch bench runs **N = 60 draws per point, `setseed 20260916`, σ precision ±9.1 %** (its per-draw cost is a full 990 ns / 33-level transient rather than one `dc` sweep — see the bench README's "Why N = 60, not N = 200"). Reported as 1σ and 3σ at **every** point of the 45-point grid; the row is met only if the **worst** point meets it. |
-| **Measured, front end only** — [`sim/comparator-offset-mc/`](../../sim/comparator-offset-mc/) (loop-broken `comparator_dut_analog` reduced sub-model) | 3σ **11.61 mV** (`ss_mismatch_-40c_1.32v`) … **18.10 mV** (`ff_mismatch_125c_1.32v`), mean 14.14 mV; 10 of 45 points exceed 15 mV, all of them hot or hot-and-fast. Record [`20260916-125444-4d0cf7c`](../../sim/comparator-offset-mc/records/20260916-125444-4d0cf7c.md). |
+| **Measured, front end only** — [`sim/comparator-offset-mc/`](../../sim/comparator-offset-mc/) (loop-broken `comparator_dut_analog` reduced sub-model) | 3σ **11.61 mV** (`ss_mismatch_-40c_1.32v`) … **18.10 mV** (`ff_mismatch_125c_1.32v`), mean 14.14 mV; **13 of 45 points exceed 15 mV** — ten at 125 °C plus the three `ff_mismatch_27c_*` points just over the line (15.14–15.16 mV). Record [`20260916-125444-4d0cf7c`](../../sim/comparator-offset-mc/records/20260916-125444-4d0cf7c.md). |
 | **Measured, whole latch** — [`sim/comparator-offset-transient-mc/`](../../sim/comparator-offset-transient-mc/) (un-reduced `comparator_dut`: input pair, tail, cross-coupled regenerative pair, reset devices, isolation inverters, SR latch; real strobe cadence) | 3σ **7.456 mV** (`tt_mismatch_27c_1.32v`) … **10.537 mV** (`tt_mismatch_125c_1.08v`), mean 8.404 mV — **inside the 15 mV Target at 45/45 points**; above the 8 mV Stretch at 27/45. Record [`20260917-060858-ea40b57`](../../sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.md) (one isolated ngspice convergence warning on one corner's worst draw, disclosed and shown benign in the bench README's Records section; all four of the record's checks pass). |
 | **Status** | **Target MET at 45/45 points on the whole-latch measurement; Stretch NOT MET at 27/45 points.** |
 
@@ -212,8 +212,10 @@ regenerative loop's own contribution.
 
 **And the two benches disagree, in the direction the "lower bound" qualifier
 did not predict.** The whole-latch 3σ is *lower* than the front-end-only 3σ
-at **every one of the 45 matched PVT points** — a consistent ~35–45 %
-reduction (means: 8.404 mV vs. 14.14 mV), not just on average. That finding
+at **every one of the 45 matched PVT points** — per-corner reductions
+spanning **28.6 % (`ss_mismatch_-40c_1.08v`) … 56.1 %
+(`ff_mismatch_125c_1.32v`)**, **40.6 % at the grid means** (8.404 mV vs.
+14.142 mV), not just on average. That finding
 was published by the bench itself on landing
 ([`sim/comparator-offset-transient-mc/README.md` → "An observation, not
 (yet) a DR-contradiction"](../../sim/comparator-offset-transient-mc/README.md#an-observation-not-yet-a-dr-contradiction)),
