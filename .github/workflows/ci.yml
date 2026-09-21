@@ -1,0 +1,59 @@
+# CI for sg13g2-comparator.
+#
+# Scope is deliberate and documented: this workflow runs the **tool-light**
+# signoff-parity leg only -- re-rendering this block's `klt signoff`
+# tier-verdict report from `manifests/sg13g2-comparator.json` and requiring
+# it to equal the committed `manifests/t1-signoff-report.json` (the T1
+# verdict of record, issue #37). None of that needs the SG13G2 PDK, only
+# the pinned `klt`.
+#
+# The simulation harness (`sim/`) is NOT run here: it needs a fetched
+# IHP-Open-PDK checkout plus ngspice/OpenVAF (see `sim/toolchain.json` for
+# the pins), which is a real, recurring cost to provision on a hosted
+# runner. That leg stays a local, contributor-run step with its result
+# committed as an append-only record under `sim/*/records/` -- see
+# `sim/README.md`. Do not silently drop this comment if the PDK-heavy leg
+# is ever added -- update `sim/README.md` in the same change.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  signoff-manifest-parity:
+    name: signoff manifest parity (T1 verdict of record, pinned klt)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # Pinned to the exact klt build that froze the committed report --
+      # a different build (different tier doc item set, different grading
+      # rules, different `build` block) is itself a parity divergence.
+      # See manifests/README.md for the freeze/pin contract.
+      - name: Install klt (pinned, see manifests/README.md)
+        run: |
+          python3 -m pip install --disable-pip-version-check \
+            "klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@e8ca621a6961879cec1af60cc932c3b3d58ddcaa"
+          klt --version
+
+      - name: Fresh-render parity check vs committed report
+        run: python3 scripts/check_signoff_report.py
+
+      - name: Render the tier report (text, for the run log)
+        if: always()
+        run: klt signoff --manifest manifests/sg13g2-comparator.json || test $? -eq 3
