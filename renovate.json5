@@ -64,7 +64,7 @@
   "prConcurrentLimit": 5,
 
   // Add release notes and changelogs to PR body for agent review
-  "fetchReleaseNotes": true,
+  "fetchChangeLogs": "all",
 
   // --- Package grouping ---
 
@@ -82,9 +82,9 @@
       "matchUpdateTypes": ["major"]
     },
 
-    // Group all GitHub Actions SHA updates into one PR
-    // AGENTS.md mandates SHA pinning with inline version comments (# vX.Y.Z)
-    // Renovate preserves these comments natively when updating digests
+    // Group all GitHub Actions updates into one PR.
+    // ci.yml currently pins actions by tag (@v4, @v5), so "digest" updates
+    // never fire today; that matcher is forward-compat for SHA pinning.
     {
       "groupName": "github-actions",
       "matchManagers": ["github-actions"],
