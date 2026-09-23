@@ -5,6 +5,8 @@ A dynamic latched comparator on IHP SG13G2 on
 [klayout-tools](https://github.com/2AMLogic/klayout-tools) and the
 open-source xschem + ngspice flow.
 
+![fleet burndown](https://raw.githubusercontent.com/2AMLogic/2am/main/fleet-metrics/charts/sg13g2-comparator.svg)
+
 **Status: just opened.** Nothing is designed yet. The first work is
 the offset and noise measurement methodology — Monte-Carlo mismatch against the PDK's statistical models, if shipped, or a documented sensitivity fallback.
 See [issue #3](https://github.com/2AMLogic/sg13g2-comparator/issues/3) for
