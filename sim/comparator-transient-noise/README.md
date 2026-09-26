@@ -22,7 +22,8 @@ below for why both benches stay committed side by side.
 > the time this bench's evidence was committed (record
 > `20260921-154729-41cbc7f`, 2026-09-21T15:47, roughly 2.5 hours before
 > DR-0002 merged), that ratification had not yet happened** — PR #18 was
-> still open and deliberately held for a human (`loom:operator-only`), so
+> still open and deliberately held for human sign-off
+> (`loom:operator-only`), so
 > everything below that cites DR-0002 was originally written against the
 > *proposal*, not the ratified record. Re-read now, nothing in it needed
 > correction for direction, only tense: the requirement this bench answers
