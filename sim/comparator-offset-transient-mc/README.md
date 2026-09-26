@@ -12,12 +12,19 @@ below for what each of the two experiments now answers, and why **both stay
 committed**.
 
 > **`provenance: schematic` records here substantiate DR-0001's chosen
-> topology's own measured whole-latch offset — not yet a ratified
-> `README.md` number.** That ratification is a separate, later act
-> (`spec/porting-plan.md`'s third step in this chain; see also DR-0002,
-> [#12](https://github.com/2AMLogic/sg13g2-comparator/issues/12) /
-> [PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18), open at
-> the time this experiment was added — "README.md's Measured column" below).
+> topology's own measured whole-latch offset — and that measurement is now
+> also a ratified `README.md` number.** Ratification was a separate, later
+> act (`spec/porting-plan.md`'s third step in this chain):
+> [DR-0002](../../spec/decision-records/0002-target-spec-ratification.md)
+> merged via [PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18)
+> at 2026-09-21T18:24:41Z, closing
+> [#12](https://github.com/2AMLogic/sg13g2-comparator/issues/12), and its
+> Row 1 ratifies the Offset-σ row on this bench's own record. **At the time
+> this experiment was added (record `20260917-060858-ea40b57`, 2026-09-17,
+> four days before that merge) the ratification had not happened yet**, so
+> prose below that was written against an unratified table is date-stamped as
+> such rather than rewritten — see "`README.md`'s Measured column" below for
+> where the number actually landed.
 
 ```bash
 python3 sim/run_corners.py comparator-offset-transient-mc -j 8
@@ -169,16 +176,24 @@ mismatch *sensitivity* (e.g. a diode-connected load's own low intrinsic gain
 means the same device-level current mismatch divides down to a *larger*
 input-referred offset than the same mismatch would produce through the
 regenerative pair's much higher effective decision gain), independent of
-which devices are or are not included. This is flagged here as a genuine,
+which devices are or are not included. This was flagged here as a genuine,
 measured, fully-reproduced (45/45 points, same direction throughout) finding
-worth carrying into DR-0002's eventual review (once
-[PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18) lands) — it is
-**not** filed as a new decision record on its own: DR-0002 is not yet
-merged/ratified on `main` at the time this bench's evidence is committed, so
-there is nothing ratified for this finding to contradict on physics grounds
-yet, and the finding itself is consistent with "different methodology,
-different operating point, different mismatch sensitivity" rather than with
-either bench being wrong.
+worth carrying into DR-0002's eventual review — and it was carried:
+[DR-0002](../../spec/decision-records/0002-target-spec-ratification.md)
+§"Row 1" (merged via
+[PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18) on
+2026-09-21) cites this section by name and adopts exactly this reading
+("different methodology, different operating point, different mismatch
+sensitivity" — "the only reading consistent with two benches that each
+reproduce themselves") rather than re-deriving it, then ratifies the Offset-σ
+row on the whole-latch number (Target MET at 45/45, Stretch missed at 27/45).
+It is still **not** filed as a new decision record on its own: at the time
+this bench's evidence was committed (2026-09-17, four days before DR-0002
+merged) there was no ratified `README.md` number for the finding to
+contradict on physics grounds, and after ratification there is still no
+contradiction to file — DR-0002 ratified the row *with* this finding in hand,
+and the finding is consistent with two differently-scoped benches rather than
+with either bench being wrong.
 
 ## Mismatch is a corner selection, not a fragment parameter
 
@@ -191,19 +206,29 @@ itself.
 ## `README.md`'s Measured column
 
 The issue that scoped this bench (#23) was drafted expecting a "Measured"
-column already present in `README.md`'s target-specification table — that
-column does not exist on `main` yet: it is introduced by
-[DR-0002](../../spec/decision-records/) / [PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18)
-(closes [#12](https://github.com/2AMLogic/sg13g2-comparator/issues/12)),
-which is **open and deliberately held for a human**
-(`loom:operator-only` + `loom:operator-blocked`) at the time this bench was
-built. Rather than block on that merge or edit PR #18's branch, this bench's
-evidence is instead folded into the **existing** Offset-σ row's *Basis* text
-(the pattern every other row already follows — inline evidence narration, no
-separate column) — see `README.md`. **Once PR #18 lands and introduces a real
-Measured column, this bench's number belongs there too** — that follow-up
-edit is out of scope here; a dedicated issue should be filed against that
-gap if it is not picked up automatically once PR #18 merges.
+column already present in `README.md`'s target-specification table. **At the
+time this bench was built (2026-09-17) that column did not exist on `main`**:
+it was introduced by
+[DR-0002](../../spec/decision-records/0002-target-spec-ratification.md) /
+[PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18) (closing
+[#12](https://github.com/2AMLogic/sg13g2-comparator/issues/12)), which was
+then still open and deliberately held for human sign-off
+(`loom:operator-only` + `loom:operator-blocked`). Rather than block on that
+merge or edit PR #18's branch, this bench's evidence was folded into the
+**existing** Offset-σ row's *Basis* text (the pattern every other row
+followed at the time — inline evidence narration, no separate column).
+
+**That anticipated follow-up needs no separate issue: DR-0002 carried it.**
+PR #18 merged on 2026-09-21 and did add the column, as `Measured on the
+DR-0001 schematic`, and this bench's whole-latch figures are recorded in the
+Offset-σ row's Measured cell — 3σ 7.456 mV (`tt_mismatch_27c_1.32v`) …
+10.537 mV (`tt_mismatch_125c_1.08v`), mean 8.404 mV, record
+[`20260917-060858-ea40b57`](records/20260917-060858-ea40b57.md), with the
+ratified verdict **Target MET at 45/45 points, Stretch NOT MET at 27/45**.
+The Basis cell still narrates the evidence path and methodology (what
+`comparator-offset-mc` and this bench each measure, and why both stay
+committed); the measured figures themselves now live in the Measured column,
+as expected — see `README.md` and DR-0002 Row 1.
 
 ## Provenance
 
