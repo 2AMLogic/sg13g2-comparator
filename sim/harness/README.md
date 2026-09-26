@@ -15,7 +15,7 @@ The stdlib-only regression tests in `harness/tests/` are executed as step 0 of
 `sim/selftest.sh` (issue #41), or directly:
 
 ```
-PYTHONPATH=sim python3 -m unittest harness.tests.test_corners harness.tests.test_runner harness.tests.test_testbench
+PYTHONPATH=sim python3 -m unittest discover -t sim -s harness.tests -p 'test_*.py'
 ```
 
 Ported structurally from
