@@ -5,28 +5,32 @@ the real regenerative latch — **not** `comparator_dut_analog`), measured by
 `ngspice` TRNOISE-injected **transient decision statistics** (a "hit-rate" /
 probit measurement) over the full PVT grid.
 
-Backs [`README.md`'s noise row](../../README.md#target-specification-draft--engineering-to-ratify)
+Backs [`README.md`'s noise row](../../README.md#target-specification-ratified--dr-0002)
 via the **compliance evidence path** `CLAUDE.md` names — "the input-referred
 noise floor from transient-noise runs with seeds and run counts committed".
 `sim/comparator-preamp-noise/`'s `.noise` AC analysis remains a **reportable
 lower bound**, not this row's compliance evidence; see "Retain, not retire"
 below for why both benches stay committed side by side.
 
-> **DR-0002 is proposed, not ratified, at the time this bench's evidence is
-> committed.** [Issue #12](https://github.com/2AMLogic/sg13g2-comparator/issues/12)
-> / [PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18) — which
-> would ratify the noise row's scoping, name transient noise as its
-> compliance path, and demote the `.noise` number to a reportable lower
-> bound — is **open** and deliberately held for a human
-> (`loom:operator-only`). Everything below that cites DR-0002 cites a
-> *proposal*. The requirement this bench actually answers to today is
-> `CLAUDE.md`'s own, which is in force regardless. Consequently **nothing
-> here is measured against a ratified bound**, and this bench files no new
-> decision record: there is no ratified DR-0002 claim for it to contradict
-> on physics grounds. What it does instead is hand DR-0002's eventual review
-> a number the proposal currently has to leave blank — see "Implications for
-> DR-0002's review" below, and `comparator-offset-transient-mc/`'s identical
-> handling of the same situation one row over.
+> **DR-0002 is ratified**
+> ([`spec/decision-records/0002-target-spec-ratification.md`](../../spec/decision-records/0002-target-spec-ratification.md),
+> merged via [PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18)
+> at 2026-09-21T18:24:41Z, closing
+> [issue #12](https://github.com/2AMLogic/sg13g2-comparator/issues/12)). It
+> ratifies the noise row's scoping, names transient noise as its compliance
+> path, and demotes the `.noise` number to a reportable lower bound. **At
+> the time this bench's evidence was committed (record
+> `20260921-154729-41cbc7f`, 2026-09-21T15:47, roughly 2.5 hours before
+> DR-0002 merged), that ratification had not yet happened** — PR #18 was
+> still open and deliberately held for a human (`loom:operator-only`), so
+> everything below that cites DR-0002 was originally written against the
+> *proposal*, not the ratified record. Re-read now, nothing in it needed
+> correction for direction, only tense: the requirement this bench answers
+> to is `CLAUDE.md`'s own, which was in force regardless of ratification
+> status, and the proposal it cited is what DR-0002 ultimately ratified
+> unchanged for this row. See "Implications for DR-0002's review" below,
+> and `comparator-offset-transient-mc/`'s identical handling of the same
+> situation one row over.
 
 ```bash
 python3 sim/run_corners.py comparator-transient-noise -j 8
@@ -556,40 +560,49 @@ rank claims below the sampling floor are not supported at N=80.
 
 ## Implications for DR-0002's review
 
-[DR-0002](../../spec/decision-records/) ([issue #12](https://github.com/2AMLogic/sg13g2-comparator/issues/12)
-/ [PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18)) proposes
-ratifying the input-referred-noise row at **Target ≤ 1.0 mV rms, Stretch
-≤ 0.6 mV rms**. This bench hands that proposal's eventual review the number
-it currently has to leave blank — with three honest qualifiers governing how
-it may be read:
+[DR-0002](../../spec/decision-records/0002-target-spec-ratification.md)
+([issue #12](https://github.com/2AMLogic/sg13g2-comparator/issues/12) /
+[PR #18](https://github.com/2AMLogic/sg13g2-comparator/pull/18)) is ratified
+and ratifies the input-referred-noise row at **Target ≤ 1.0 mV rms, Stretch
+≤ 0.6 mV rms** — unchanged from the number this bench's evidence was
+originally measured against. At the time this bench's evidence was committed
+(2026-09-21, before PR #18 merged), DR-0002 was still a proposal and this
+bench handed that proposal's eventual review the number it had to leave
+blank. Re-read now against the ratified record, the same three qualifiers
+still govern how the number may be read:
 
-1. **Nothing here contradicts a ratified bound, because none exists.** PR
-   #18 is open and deliberately held for a human at the time this record is
-   committed, so this bench files no new decision record — the constraint
-   its own banner states. There is no ratified AR-anything for this
-   measurement to contradict on physics grounds.
-2. **The number exceeds the DRAFT row's Target — and it is still a lower
-   bound.** The slope-σ grid mean is **1.335 mV** against the proposed
+1. **The number does not contradict the ratified bound on physics
+   grounds — it misses it arithmetically.** This bench files no new decision
+   record; DR-0002 is the one that ratifies this row, and it does so citing
+   this bench's own measurement (`README.md`'s Measured column records the
+   row **NOT MET on the compliance path**). There is no physics
+   inconsistency for this measurement to expose against the ratified
+   bound — the gap is a real, stated miss, not a contradiction.
+2. **The number exceeds the ratified row's Target — and it is still a lower
+   bound.** The slope-σ grid mean is **1.335 mV** against the ratified
    1.0 mV Target (min 0.889 mV, max 2.710 mV), and the complete figure's
    regeneration-stage device noise is not even injected yet ("What this
    bench adds, and does not add"). The honest reading is therefore not
-   "the spec fails"; it is that the draft Target was set when the only
-   measurement was a 0.278 mV band-limited lower bound, and the first
-   whole-latch compliance-path number comes out ~5× that lower bound — in
-   exactly the direction DR-0002's own demotion of the AC number predicts
-   for a strictly-more-complete measurement. Whether the row's numbers
-   need re-derivation, the front end needs re-sizing, or the evidence
-   chain needs the regeneration-noise injection closed before the row is
-   judged is the conversation PR #18 exists to hold — now with real
-   numbers on both sides. No sizing change is proposed or made here.
+   "the spec fails silently"; it is that the pre-ratification Target was set
+   when the only measurement was a 0.278 mV band-limited lower bound, and
+   the first whole-latch compliance-path number comes out ~5× that lower
+   bound — in exactly the direction DR-0002's own demotion of the AC number
+   predicted for a strictly-more-complete measurement. DR-0002 ratified the
+   row's *scoping* (this bench as compliance path) without re-deriving the
+   Target itself, and per `CLAUDE.md`'s ban on relaxing a bound to make a
+   result pass, the miss is recorded as such rather than hidden. Whether the
+   row's Target needs re-derivation, the front end needs re-sizing, or the
+   evidence chain needs the regeneration-noise injection closed is a design
+   question this testbench does not resolve. No sizing change is proposed
+   or made here.
 3. **The AC bench's number remains consistent, not contradictory.** The
    `.noise` lower bound (277.8 µV rms over its own 58.7 MHz band) is
    smaller than the whole-latch figure for the two structural reasons
-   DR-0002's proposal already names (fewer noise sources, narrower
-   integration band, multiplied by the white-only injection argument in
-   "Why white only"). Ordering the two benches `278 µV < 1.335 mV` is
-   expected; inverting them would have been the finding that required a
-   physics re-examination.
+   DR-0002 names (fewer noise sources, narrower integration band,
+   multiplied by the white-only injection argument in "Why white only").
+   Ordering the two benches `278 µV < 1.335 mV` is expected; inverting
+   them would have been the finding that required a physics
+   re-examination.
 
 ## Provenance
 
