@@ -110,7 +110,8 @@ not taken by this issue) is open — see "Open items".
   block-diagram-level starting point (matching `sim/dut.json`'s existing
   `dut_ib`/`dut_vcm` bias convention), not the output of a gm/Id or
   noise-budget sizing study. `README.md`'s target-specification table is
-  DRAFT/unratified — this issue does not claim any row is met (see
+  ratified ([DR-0002](../spec/decision-records/0002-target-spec-ratification.md))
+  — this note does not claim any row is met on the strength of sizing (see
   `sim/dut/README.md` and `sim/dut.json`'s own `provenance: schematic`
   notes).
 - **RESOLVED (issue #16): the two corner-sensitivity check floors that were

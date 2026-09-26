@@ -72,10 +72,10 @@ row:
 - **Item 3 (DRC clean) and 4 (LVS clean)** — no layout exists, so no DRC or
   LVS run has ever had an input; both render `unmet`/`no_evidence` (blocked
   on gap-to-T1 item 2, layout).
-- **Item 5 (Full corner verification vs a ratified spec)** — two gaps,
-  each alone sufficient: `README.md`'s target-spec table is **DRAFT** (no
-  ratification decision record yet — #12), and verdicts against a draft
-  spec are provisional by construction; and the PVT evidence that does
+- **Item 5 (Full corner verification vs a ratified spec)** — the table is
+  ratified ([`spec/decision-records/0002-target-spec-ratification.md`](../spec/decision-records/0002-target-spec-ratification.md),
+  merged via PR #18, closing #12), so that gap has cleared. Item 5 stays
+  `unmet` on its own remaining, still-true gap: the PVT evidence that does
   exist (`sim/`, 45-corner matrix, per-row records) is in this repo's own
   append-only record format, which no `klt sim` envelope represents.
 - **Item 6 (Statistical claims carry Monte Carlo evidence)** — the
