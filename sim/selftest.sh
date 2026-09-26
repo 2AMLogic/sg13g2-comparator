@@ -42,8 +42,7 @@ note "0. harness unit tests (stdlib-only, no PDK, writes nothing)"
 # The harness's own regression suite (issue #41): pure stdlib -- no PDK, no
 # ngspice, no OSDI -- and it writes nothing, so this step is runnable on any
 # host, before the environment check, and can never touch sim/ evidence.
-if PYTHONPATH=sim python3 -m unittest harness.tests.test_corners \
-     harness.tests.test_runner harness.tests.test_testbench -v; then
+if PYTHONPATH=sim python3 -m unittest discover -t sim -s harness.tests -p 'test_*.py' -v; then
   ok "harness unit tests"
 else
   bad "harness unit tests"
