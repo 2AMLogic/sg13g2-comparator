@@ -7,14 +7,25 @@ open-source xschem + ngspice flow.
 
 ![fleet burndown](https://raw.githubusercontent.com/2AMLogic/2am/main/fleet-metrics/charts/sg13g2-comparator.svg)
 
-**Status: just opened.** Nothing is designed yet. The first work is
-the offset and noise measurement methodology — Monte-Carlo mismatch against the PDK's statistical models, if shipped, or a documented sensitivity fallback.
-See [issue #3](https://github.com/2AMLogic/sg13g2-comparator/issues/3) for
-the honest, artifact-by-artifact gap-to-T1 survey (everything unchecked —
-nothing is built yet) and [`spec/porting-plan.md`](spec/porting-plan.md) for
-what's designed fresh (topology, from the literature and SG13G2's own PDK
-models) versus what's referenced as methodology prior art (testbench
-structure, from `sky130-sar-adc` and `gf180-sar-adc`).
+**Status: designed and measured at the schematic level — spec ratified, no
+layout.** The comparator topology is ratified by
+[DR-0001](spec/decision-records/0001-comparator-topology.md) — a single-tail
+StrongARM latch whose xschem sources and derived netlist live in
+[`design/`](design/) — and the target-specification table below is ratified
+by [DR-0002](spec/decision-records/0002-target-spec-ratification.md) against
+measured records taken on that schematic over a 45-point PVT grid (5 process
+× 3 temperature × 3 supply). Ratified is not met: the input-referred-noise
+row's Target is **not met** on its ratified compliance path, three Stretch
+bounds are missed (offset at 27/45 points, decision time at every `ss` point,
+average power), and the kickback charge clause is consistent, not certified.
+Nothing here is post-layout or silicon — no layout exists. The gap to T1 is
+graded, not hand-read: [issue #3](https://github.com/2AMLogic/sg13g2-comparator/issues/3)
+tracks it as a `klt signoff` manifest with a frozen tier-verdict report,
+re-graded on every CI run.
+[`spec/porting-plan.md`](spec/porting-plan.md) records what was designed
+fresh (topology, from the literature and SG13G2's own PDK models) versus
+what is referenced as methodology prior art (testbench structure, from
+`sky130-sar-adc` and `gf180-sar-adc`).
 
 **Built agent-native.** Every specification, decision record, testbench, and
 line of documentation here is produced by AI agents working from a ratified
