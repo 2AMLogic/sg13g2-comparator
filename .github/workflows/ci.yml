@@ -1,11 +1,12 @@
 # CI for sg13g2-comparator.
 #
-# Scope is deliberate and documented: this workflow runs the **tool-light**
-# signoff-parity leg only -- re-rendering this block's `klt signoff`
-# tier-verdict report from `manifests/sg13g2-comparator.json` and requiring
-# it to equal the committed `manifests/t1-signoff-report.json` (the T1
-# verdict of record, issue #37). None of that needs the SG13G2 PDK, only
-# the pinned `klt`.
+# Scope is deliberate and documented: this workflow runs **tool-light** legs
+# only -- re-rendering this block's `klt signoff` tier-verdict report from
+# `manifests/sg13g2-comparator.json` and requiring it to equal the committed
+# `manifests/t1-signoff-report.json` (the T1 verdict of record, issue #37),
+# and regenerating the committed layout stream and requiring it to be
+# byte-identical (issue #58). None of that needs the SG13G2 PDK, only the
+# pinned `klt`.
 #
 # The simulation harness (`sim/`) is NOT run here: it needs a fetched
 # IHP-Open-PDK checkout plus ngspice/OpenVAF (see `sim/toolchain.json` for
@@ -57,3 +58,30 @@ jobs:
       - name: Render the tier report (text, for the run log)
         if: always()
         run: klt signoff --manifest manifests/sg13g2-comparator.json || test $? -eq 3
+
+  # Layout reproducibility (issue #58): the committed GDS must be exactly what
+  # layout/comparator/generate.py draws from a clean checkout, and that drawing
+  # must still reconcile with design/comparator.spice. Needs only the pinned
+  # klt and the KLayout Python module it brings -- no PDK -- so it belongs to
+  # the same tool-light scope as the leg above. See layout/README.md.
+  layout-reproducibility:
+    name: layout reproducibility (committed GDS regenerates byte-for-byte)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # Same klt pin as the leg above; KLayout pinned to the version that
+      # klt build was tested against (layout/run_flow.sh, KLAYOUT_PIN).
+      - name: Install klt (pinned) + KLayout
+        run: |
+          python3 -m pip install --disable-pip-version-check \
+            "klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@e8ca621a6961879cec1af60cc932c3b3d58ddcaa" \
+            "klayout==0.30.10"
+          klt --version
+
+      - name: Regenerate and verify the committed layout
+        run: KLT_NATIVE=1 layout/run_flow.sh --check

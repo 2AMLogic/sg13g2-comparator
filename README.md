@@ -7,8 +7,8 @@ open-source xschem + ngspice flow.
 
 ![fleet burndown](https://raw.githubusercontent.com/2AMLogic/2am/main/fleet-metrics/charts/sg13g2-comparator.svg)
 
-**Status: designed and measured at the schematic level — spec ratified, no
-layout.** The comparator topology is ratified by
+**Status: designed and measured at the schematic level — spec ratified;
+layout generated, not yet signed off.** The comparator topology is ratified by
 [DR-0001](spec/decision-records/0001-comparator-topology.md) — a single-tail
 StrongARM latch whose xschem sources and derived netlist live in
 [`design/`](design/) — and the target-specification table below is ratified
@@ -18,7 +18,9 @@ measured records taken on that schematic over a 45-point PVT grid (5 process
 row's Target is **not met** on its ratified compliance path, three Stretch
 bounds are missed (offset at 27/45 points, decision time at every `ss` point,
 average power), and the kickback charge clause is consistent, not certified.
-Nothing here is post-layout or silicon — no layout exists. The gap to T1 is
+Nothing here is post-layout or silicon. A generated layout is committed under
+[`layout/`](layout/), but it has no DRC/LVS signoff and no post-layout
+measurement yet. The gap to T1 is
 graded, not hand-read: [issue #3](https://github.com/2AMLogic/sg13g2-comparator/issues/3)
 tracks it as a `klt signoff` manifest with a frozen tier-verdict report,
 re-graded on every CI run.
@@ -134,7 +136,7 @@ injected), the offset row's whole-latch MET verdict covers the differential
 axis only (no whole-latch common-mode sweep exists yet), and the kickback
 charge clause rests on a biased hand estimator until the bench emits Q_kick
 directly. DR-0002's Open items name each of those gaps. Nothing here is
-post-layout; no layout exists.
+post-layout.
 
 ## License
 

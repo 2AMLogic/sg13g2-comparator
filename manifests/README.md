@@ -68,10 +68,14 @@ row:
   artifact), five experiment directories with cold-start invocations
   (`sim/README.md`, item 9's), README/spec/license (item 10's) — but
   verifying them is the grader-visible *gap*, honestly `unmet`, not a
-  defect claim. (For item 2, Layout, no `layout/` exists at all.)
-- **Item 3 (DRC clean) and 4 (LVS clean)** — no layout exists, so no DRC or
-  LVS run has ever had an input; both render `unmet`/`no_evidence` (blocked
-  on gap-to-T1 item 2, layout).
+  defect claim. (For item 2, Layout: since issue #58 the generated stream
+  `layout/comparator/comparator.gds` and the generator that reproduces it
+  are committed — see `layout/README.md`. The row stays uncited until the
+  pinned `klt` includes klayout-tools#2718's artifact-anchored generic
+  evidence; that pin bump is tracked in #65.)
+- **Item 3 (DRC clean) and 4 (LVS clean)** — a layout exists (issue #58),
+  but no `klt drc`/`klt lvs` envelope has been minted against it; both
+  render `unmet`/`no_evidence` until #59 and #60 do.
 - **Item 5 (Full corner verification vs a ratified spec)** — the table is
   ratified ([`spec/decision-records/0002-target-spec-ratification.md`](../spec/decision-records/0002-target-spec-ratification.md),
   merged via PR #18, closing #12), so that gap has cleared. Item 5 stays
@@ -86,7 +90,7 @@ row:
   `klt yield` campaign is minted it gets cited here with a pinned
   `content_hash`.
 - **Item 7 (Post-layout verification)** — an analog block's item 7 accepts
-  a `klt pex` report and nothing else; no layout means no extraction. The
+  a `klt pex` report and nothing else; no `klt pex` run exists yet (#61). The
   item's `body_bias` disclosure duty applies when a `pex` citation first
   appears here, not now.
 - **Item 8 (Characterization report)** — the one item the generic envelope
@@ -96,8 +100,8 @@ row:
   envelope without a real report behind it would be a hand-rolled "yep,
   it's fine" standing in for evidence item 8 never proved, so the row is
   left `unmet`.
-- **Item 11 (Power delivery (structural))** — no layout means no `klt erc`
-  supply run and no supply-carrying LVS compare. The row exists (that is
+- **Item 11 (Power delivery (structural))** — no `klt erc` supply run and no
+  supply-carrying LVS compare exist yet. The row exists (that is
   this manifest's guarantee: the day the checklist has an item, this block
   has a graded row for it) and its closing work is tracked in companion
   issue [#38].
