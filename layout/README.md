@@ -6,6 +6,7 @@ one-command flow that regenerates and checks it (issue #58, T1 item 2).
 | File | What it is |
 |---|---|
 | `comparator/comparator.gds` | **The committed stream.** One flat top cell, `comparator`, 31.46 x 76.00 um, dbu 1 nm. |
+| `comparator/drc_report.json` | **Committed evidence (issue #59, T1 item 3).** The `klt drc --deck sg13g2 --top comparator` JSON envelope for the stream: `status: clean`, 0 violations. Cited by `manifests/sg13g2-comparator.json`. |
 | `comparator/generate.py` | The generator. It draws the stream from a device table that it first reconciles with `design/comparator.spice`. |
 | `comparator/check_stream.py` | Structural smoke test of a stream: top cell, ports, no host paths. |
 | `common_sg13g2.py` | SG13G2 layer table, rule values and drawing primitives (boxes, contacts, vias). |
@@ -74,6 +75,13 @@ The generator alone needs only the `klayout` Python module:
 
    Without these, a `match` in stage 4 could not be told apart from a compare
    that sees nothing.
+
+6. **drc.** `klt drc --deck sg13g2 --top comparator --format json` on the
+   stream, run from the repo root with the repo-relative path, writing the
+   committed `comparator/drc_report.json`. With `--check` it instead requires
+   the committed envelope to be fresh (`klt drc --check`). The stage fails
+   unless `status` is `clean`, and prints the coverage gaps (quoted in
+   `manifests/README.md`).
 
 CI runs `layout/run_flow.sh --check` on every PR. That is the
 `layout-reproducibility` job in `.github/workflows/ci.yml`.
@@ -153,11 +161,12 @@ ratified row.
   results under `sim/` assumed single fingers. This is a layout decision for
   matching, and its electrical cost is #61's to measure.
 - **DRC.** The stream is clean against klt's *curated* `sg13g2` deck at the
-  pinned build: 0 violations, run informally and not committed. That deck
-  covers a subset of the rules: width, space and enclosure for Activ,
-  GatPoly, Cont, Metal1-5 and vias. Rules it does not check were drawn with
-  margin, from IHP's SG13G2 layout rules as cited in `common_sg13g2.py`.
-  These include:
+  pinned build: 0 violations, committed as `comparator/drc_report.json`
+  (stage 6). That deck covers a subset of the rules: width, space and
+  enclosure for Activ, GatPoly, Cont, Metal1-5 and vias. Its stated coverage
+  gaps (layers drawn without rules, skipped rules, deck scope) are quoted in
+  `manifests/README.md`. Rules it does not check were drawn with margin, from
+  IHP's SG13G2 layout rules as cited in `common_sg13g2.py`. These include:
   - Gat.c endcap;
   - Cnt.e and Cnt.f;
   - pSD enclosure;
@@ -165,7 +174,7 @@ ratified row.
   - latch-up tap distance.
 
   None of these has been checked by the PDK's own deck, and there is no
-  density fill or seal ring. DRC closure is #59.
+  density fill or seal ring.
 - **Connectivity.** The `match` in stage 4 is a self-check of this
   generator against the schematic. LVS signoff, with a committed envelope,
   is #60.

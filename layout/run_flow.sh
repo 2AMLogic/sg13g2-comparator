@@ -25,6 +25,14 @@
 #   5. controls      two mutated references (one topology, one W) that MUST
 #                    mismatch, so a `match` in stage 4 is known to mean
 #                    something.
+#   6. drc           `klt drc --deck sg13g2 --top comparator` on the GDS, run
+#                    from the repo root with the repo-relative path so the
+#                    envelope records no host path. Writes the COMMITTED
+#                    layout/comparator/drc_report.json (issue #59, T1 item 3);
+#                    with --check, instead requires the committed envelope to
+#                    be fresh (`klt drc --check`) and `status: clean`. The
+#                    deck's coverage gaps are printed, and are quoted in
+#                    manifests/README.md.
 #
 # Tooling: everything runs on the klayout-tools build this repo pins (see
 # manifests/README.md and .github/workflows/ci.yml), and on the KLayout
@@ -48,7 +56,7 @@ MODE="run"
 case "${1:-}" in
   "") ;;
   --check) MODE="check" ;;
-  -h|--help) sed -n '2,35p' "${BASH_SOURCE[0]}"; exit 0 ;;
+  -h|--help) sed -n '2,45p' "${BASH_SOURCE[0]}"; exit 0 ;;
   *) echo "usage: $0 [--check]" >&2; exit 2 ;;
 esac
 
@@ -156,5 +164,32 @@ control topology-control 's/^XM3 ln lp np vss/XM3 ln ln np vss/' "M3 gate lp -> 
 control parameter-control \
   's/^XM1 np vinp tail vss sg13_lv_nmos w=12u/XM1 np vinp tail vss sg13_lv_nmos w=11.5u/' \
   "M1 W 12u -> 11.5u"
+
+
+say "6. drc (klt drc --deck sg13g2; T1 item 3 evidence)"
+REPORT="${CELL_DIR}/drc_report.json"
+REL_GDS="${GDS#"${REPO}/"}"
+REL_REPORT="${REPORT#"${REPO}/"}"
+cd "${REPO}"  # klt records the input path as given: keep it repo-relative
+if [[ "${MODE}" == "check" ]]; then
+  "${KLT[@]}" drc --check "${REL_REPORT}" > /dev/null
+  echo "  committed ${REL_REPORT} is fresh for ${REL_GDS}"
+else
+  # exit 3 = violations found; the report is still written, then judged below
+  "${KLT[@]}" drc --deck sg13g2 --top "${TOP}" --format json "${REL_GDS}" \
+    > "${WORK}/drc_report.json" || [[ $? -eq 3 ]]
+  cp "${WORK}/drc_report.json" "${REPORT}"
+fi
+"${PY[@]}" - "${REPORT}" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+c = d["coverage"]
+print(f"  status: {d['status']}  violations: {d['violation_count']}  deck: {d['provenance']['deck']['content_hash'][:23]}...")
+print(f"  rules checked: {len(c['rules_checked'])}  skipped: {len(c['rules_skipped'])}")
+print(f"  layers in stream without rules: {', '.join(c['layers_in_stream_without_rules'])}")
+if d["file"].startswith("/"):
+    print(f"  FAIL: envelope embeds a host-absolute path: {d['file']}", file=sys.stderr); sys.exit(1)
+sys.exit(0 if d["status"] == "clean" else 1)
+PY
 
 say "done (${MODE})"
