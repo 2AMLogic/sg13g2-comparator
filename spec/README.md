@@ -46,14 +46,46 @@ rewritten once ratified — a later change supersedes it with a new,
 higher-numbered record rather than editing history in place, the same
 append-only convention [`sim/README.md`](../sim/README.md) uses for evidence.
 
-Ratification flows through the standard two-key mechanism (EE key + market
-key, both installed by the standard tooling); scope-only spec DRs ratified
-with both keys need no per-PR operator statement. Per
-[2AMLogic/2am#372](https://github.com/2AMLogic/2am/issues/372), **neither key
-may be held by the record's author**, the merge commit of the ratifying PR
-*is* the ratification act, and a relax-after-measured-FAIL proposal requires
-the market key's explicit competitiveness finding or escalates to the
-operator. DR-0002 is the worked example of all three.
+Ratification flows through the two-key mechanism (an EE key and a market
+key); scope-only spec DRs ratified with both keys need no per-PR operator
+statement. The two reviewer variants live in this repo, installed as
+generated, Tier-1-clean copies (do not hand-edit; regenerate instead):
+
+- [`ratification/ee-key/`](../ratification/ee-key/) -- the EE-key reviewer
+  (`SKILL.md`, `rubric.md`).
+- [`ratification/market-key/`](../ratification/market-key/) -- the
+  market-key reviewer (`SKILL.md`, `rubric.md`, `comp-table-format.md`) plus
+  its public comparator comp data in `comps/comparator.md`.
+
+Each `MANIFEST.md` lists what was generated. Each key is applied as a PR
+review on the ratifying PR whose body carries one machine-readable marker
+line:
+
+```
+<!-- RATIFY-KEY: <ee|market> verdict=<token> block=<owner/repo>#<N> reviewer=<agent-id> date=<ISO-8601> -->
+```
+
+Fields appear in exactly that order, single-spaced, with no whitespace inside
+a value. `verdict=` is one token from the key's own vocabulary: the EE key
+uses `approve` / `request-changes`; the market key uses `competitive` /
+`adequate-for-catalog` / `uncompetitive` / `escalate`. A marker that drifts
+from this shape counts as "no key posted" (fail closed). The rules:
+
+- **Non-author rule.** Neither key may be held by the record's author (the
+  PR author or the design's authors), and the two keys must be held by two
+  distinct identities. `reviewer=` is self-declared text, so the review's
+  forge-authenticated author is what is checked, not the marker.
+- **The merge is the ratification.** The merge commit of the ratifying PR
+  *is* the ratification act; a key posted after merge ratifies nothing.
+- **Relax-after-measured-FAIL escalation.** A proposal to relax a ratified
+  bound after a measured FAIL requires the market key's explicit
+  `competitive` finding (`adequate-for-catalog` does not clear it); without
+  it the proposal escalates to the operator. Agents never relax the spec to
+  make results pass.
+
+DR-0002 is the worked example of the spec-setting case, but it merged before
+these trees were installed here; whether its two-key ceremony is re-run is
+tracked separately and is not decided by this README.
 
 **Status: the table is ratified.** DR-0002 set every row against measured
 `provenance: schematic` evidence; see
