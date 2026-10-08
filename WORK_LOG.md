@@ -4,8 +4,10 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-08
 
+- **PR #70**: DRC: klt drc on the comparator layout, cite clean report (T1 item 3)
 - **PR #67**: feat(layout): generate and commit the StrongARM comparator GDS (T1 item 2)
 - **PR #66**: Install two-key (RATIFY-KEY) reviewer variants; document convention
+- **Issue #59** (closed): DRC: klt drc on the comparator layout and cite the clean report (T1 item 3)
 - **Issue #58** (closed): layout: draw and commit the StrongARM comparator GDS from design/comparator.spice (T1 item 2)
 - **Issue #19** (closed): Install the two-key (RATIFY-KEY) ratification reviewer variants in this repo
 

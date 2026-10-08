@@ -19,8 +19,9 @@ row's Target is **not met** on its ratified compliance path, three Stretch
 bounds are missed (offset at 27/45 points, decision time at every `ss` point,
 average power), and the kickback charge clause is consistent, not certified.
 Nothing here is post-layout or silicon. A generated layout is committed under
-[`layout/`](layout/), but it has no DRC/LVS signoff and no post-layout
-measurement yet. The gap to T1 is
+[`layout/`](layout/), with a committed clean DRC report against klt's curated
+SG13G2 deck (a subset of the PDK rules; see [`layout/README.md`](layout/README.md)
+for coverage). LVS signoff and post-layout measurement remain pending. The gap to T1 is
 graded, not hand-read: [issue #3](https://github.com/2AMLogic/sg13g2-comparator/issues/3)
 tracks it as a `klt signoff` manifest with a frozen tier-verdict report,
 re-graded on every CI run.
