@@ -17,7 +17,7 @@ _None._
 
 Human-approved issues ready for implementation (`loom:issue`).
 
-_None._
+- **#59**: DRC: klt drc on the comparator layout and cite the clean report (T1 item 3)
 
 ## In Progress
 
@@ -41,7 +41,7 @@ _None._
 
 Issues carrying `loom:curated`.
 
-_None._
+- **#59**: DRC: klt drc on the comparator layout and cite the clean report (T1 item 3) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -57,11 +57,11 @@ _None._
 |------|-------|
 | Operator merge-risk holds | 0 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 0 |
+| Ready (`loom:issue`) | 1 |
 | In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 0 |
+| Curated | 1 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
