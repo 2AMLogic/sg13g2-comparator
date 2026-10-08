@@ -45,17 +45,17 @@ why, is the rest of this document.
 |---|---|---|
 | `block` | `sg13g2-comparator` | **Required** — identifies this block's row in the fleet roll-up (2AMLogic/2am#956), which consumes exactly this file |
 | `kind` | `analog` | confirmed against the block itself, not taken from the filing: the DUT is a single-tail StrongARM dynamic latch (`design/comparator.spice`, DR-0001) on `sg13_lv_nmos`/`sg13_lv_pmos` — a continuous-time-analog comparator with no digital partition, no RTL, no standard cells, and no mixed-signal boundary to declare. The spec rows are offset-σ, input-referred noise, metastability/decision time, and kickback — all analog measurements (`README.md`'s target-spec table). Analog satisfies the Analog column only, which is the column every row below is graded against. |
-| `evidence` | `{}` | every item is deliberately uncited — see "What is deliberately uncited, and why" below |
+| `evidence` | item `3` only | item 3 cites the `klt drc` envelope (below); every other item is deliberately uncited — see "What is deliberately uncited, and why" |
 
 ## What is deliberately uncited, and why
 
-This repo has **no `klt` JSON envelope of any kind committed** — no
-`klt drc`/`lvs`/`sim`/`yield`/`pex`/`erc` run has ever been minted here
-(verified at freeze time: no `*.json` under `sim/`, `design/`, or
-`layout/` carries a `klt` envelope's `schema_version`). There is therefore
-nothing the grader *accepts* to cite, and per [#37]'s own rule — "do not
+The only `klt` JSON envelope committed here is the item 3 DRC report; no
+`klt lvs`/`sim`/`yield`/`pex`/`erc` run has been minted (no other `*.json`
+under `sim/`, `design/`, or `layout/` carries a `klt` envelope's
+`schema_version`). There is therefore nothing else the grader *accepts* to
+cite, and per [#37]'s own rule — "do not
 cite an envelope that does not actually support the item" — nothing is
-borrowed to make a row go green. Every row renders `unmet`/`no_evidence`,
+borrowed to make a row go green. Every other row renders `unmet`/`no_evidence`,
 which is the grader's honest statement that no check backs the claim, per
 row:
 
@@ -73,9 +73,9 @@ row:
   are committed — see `layout/README.md`. The row stays uncited until the
   pinned `klt` includes klayout-tools#2718's artifact-anchored generic
   evidence; that pin bump is tracked in #65.)
-- **Item 3 (DRC clean) and 4 (LVS clean)** — a layout exists (issue #58),
-  but no `klt drc`/`klt lvs` envelope has been minted against it; both
-  render `unmet`/`no_evidence` until #59 and #60 do.
+- **Item 4 (LVS clean)** — a layout exists (issue #58), but no `klt lvs`
+  envelope has been minted against it; the row renders `unmet`/`no_evidence`
+  until #60 does. (Item 3, DRC, is cited: see the next section.)
 - **Item 5 (Full corner verification vs a ratified spec)** — the table is
   ratified ([`spec/decision-records/0002-target-spec-ratification.md`](../spec/decision-records/0002-target-spec-ratification.md),
   merged via PR #18, closing #12), so that gap has cleared. Item 5 stays
@@ -106,6 +106,58 @@ row:
   has a graded row for it) and its closing work is tracked in companion
   issue [#38].
 
+## Item 3 (DRC clean) — cited, with the deck's coverage gaps
+
+Item 3 cites `layout/comparator/drc_report.json`, the `klt drc --deck sg13g2
+--top comparator` envelope for `layout/comparator/comparator.gds` (issue
+#59), pinned by `content_hash`
+`sha256:67e44380bac6f5b2eb52ac80cfc0422856e06a8b12cd7526b36717531655ea41`
+(the GDS's own hash, recorded as `provenance.input.content_hash`). It reads
+`status: clean`, `violation_count: 0`, `rules_checked` 21, against deck
+`sha256:894326a4e37fb24fef2f7ffc6ae1da55a0e262b0f0bc1c09adc4862909278fda`
+(klt `0.5.0+ge8ca621a6961`, KLayout 0.30.10). `layout/run_flow.sh` stage 6
+regenerates it; `--check` requires it fresh (`klt drc --check`). `klt signoff`
+grades item 3 on `status: clean` alone and does not enforce disclosure, so the
+three `coverage` fields of the envelope are quoted verbatim here. This is
+klt's *curated* deck, **not** the foundry's own DRC deck: "clean" means clean
+inside this scope only.
+
+`coverage.layers_in_stream_without_rules` (drawn in the stream, no rule in the
+deck: nSD, pSD, NWell, Metal3 pin, Metal3 text, and the text layer):
+
+```
+7/0, 14/0, 30/2, 30/25, 31/0, 63/0
+```
+
+`coverage.rules_skipped` (22; every one has reason `no_applicable_geometry`
+in `coverage.inapplicable`: this layout draws no Metal4/5, TopMetal or
+Via3/4/TopVia, and the deck's Metal3 enclosure of Via3 has no Via3 to act on):
+
+```
+metal3.enclosing.via3.1, metal4.enclosing.via4.1, metal4.space.1,
+metal4.width.1, metal5.enclosing.topvia1.1, metal5.space.1, metal5.width.1,
+topmetal1.enclosing.topvia1.1, topmetal1.enclosing.topvia2.1,
+topmetal1.space.1, topmetal1.width.1, topmetal2.enclosing.topvia2.1,
+topmetal2.space.1, topmetal2.width.1, topvia1.space.1, topvia1.width.1,
+topvia2.space.1, topvia2.width.1, via3.space.1, via3.width.1, via4.space.1,
+via4.width.1
+```
+
+`coverage.deck_scope` (chapters of the foundry DRM the deck transcribes):
+
+```
+Act, Cnt, Gat, M1, M2, M3, M4, M5, TM1, TM2, TV1, TV2, V1, V2, V3, V4
+```
+
+Consequences stated plainly: NWell and nSD/pSD geometry, Gat.c endcap,
+Cnt.e/Cnt.f, latch-up tap distance, density and seal ring are **not checked**
+by this evidence (see `layout/README.md`, "What this layout is, and is not").
+Also, `layout/comparator/drc_report.json` records its input as the
+repo-relative `layout/comparator/comparator.gds` (run from the repo root); the
+pinned build does not embed a host-absolute path
+([klayout-tools#2659](https://github.com/2AMLogic/klayout-tools/issues/2659)
+did not bite here).
+
 ## Regeneration and freshness
 
 The report is frozen at the pinned `klt` build — `2AMLogic/klayout-tools` @
@@ -122,7 +174,7 @@ diff /tmp/fresh.json manifests/t1-signoff-report.json   # regeneration = update 
 ```
 
 Exit `0` means every T1 item met (this repo is **not** there: exit `3`,
-`tier: null`, `0/11` item rows met at the time of freezing). Exit codes
+`tier: null`, `1/11` item rows met at the time of freezing: item 3). Exit codes
 `0` and `3` are both clean runs; exit `1` is an error and must be fixed,
 not committed around.
 
@@ -148,7 +200,8 @@ not committed around.
 
 | File | What it is |
 |---|---|
-| `sg13g2-comparator.json` | the block manifest — `block`, `kind`, per-item pinned evidence citations (none yet, deliberately — see above). **The stable path a fleet roll-up points at.** |
+| `sg13g2-comparator.json` | the block manifest — `block`, `kind`, per-item pinned evidence citations (item 3 cited; the rest deliberately uncited — see above). **The stable path a fleet roll-up points at.** |
+| `../layout/comparator/drc_report.json` | the cited item 3 evidence (`klt drc` envelope), regenerated by `layout/run_flow.sh` |
 | `t1-signoff-report.json` | `klt signoff --manifest sg13g2-comparator.json --format json` output, frozen at the pinned `klt`; CI diff-checks a fresh render against it |
 | `README.md` | this claim document — kind basis, citation rationale and the disclosure of the uncited rows, the regeneration contract |
 
