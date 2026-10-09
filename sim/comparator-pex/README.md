@@ -149,13 +149,50 @@ reuses everything else byte-for-byte, and the layout covers only the core cell
 - `dut/tb_{regeneration,kickback}.sp` carry the stimulus lines of the committed
   benches verbatim, one `.include`, and the `comparator_dut` wrapper defined
   inline (`XMB` is identical on both legs and is not in the layout, which is a
-  scope limit of the extracted leg). `make_testbenches.py [--check]`.
+  scope limit of the extracted leg). The wrapper is derived from the
+  `.subckt comparator_dut` block of `design/comparator.spice`: header and the
+  `XMB` bias-mirror card verbatim, the core instance re-pinned to the
+  extractor's order (`x1 clk dout doutb ibias vdd vinn vinp vss comparator`).
+  `make_testbenches.py [--check]`.
 - `requests/*.json` are `klt sim` requests built from the benches' `tb.json`
   by `make_requests.py`: the `.meas` cards are the benches' `meas tran` lines
   verbatim; derived quantities (`tau_ps`, `kick_*_mv`, ...) are not requests
   and would be recomputed from the reported raw values in the delta table.
   `*.nominal.json` is one corner (mos_tt, 27 C, 1.20 V); `*.pvt.json` is the
   45-point grid (5 process x 3 supply x 3 temperature).
+  `make_requests.py [--check]`.
+
+### Freshness check (CI) and intentional regeneration
+
+The committed `dut/*.sp` and `requests/*.json` are generated adapter inputs,
+not evidence: they must always equal what the three generators derive from the
+current `design/comparator.spice` (core and `comparator_dut` wrapper),
+`sim/dut.json` (`dut_ib`, `dut_vcm`) and the source benches'
+`sim/comparator-{regeneration,kickback}/testbench/` (stimulus fragment,
+`.options`, `tran` analysis, `meas tran` cards). CI checks this in the
+`harness-unit-tests` job (issue #123). Locally, from the repository root
+(stdlib Python only; no PDK, ngspice, klt or batch submission):
+
+```bash
+python3 sim/comparator-pex/make_reference.py --check
+python3 sim/comparator-pex/make_testbenches.py --check
+python3 sim/comparator-pex/make_requests.py --check     # nominal and PVT
+python3 -m unittest discover -s sim/comparator-pex/tests -p 'test_*.py'
+```
+
+`--check` never writes. On drift it exits non-zero and names each `missing:`
+or `stale:` path. After an intentional source change, regenerate and commit
+the result in the same change:
+
+```bash
+python3 sim/comparator-pex/make_reference.py
+python3 sim/comparator-pex/make_testbenches.py
+python3 sim/comparator-pex/make_requests.py
+```
+
+The check covers only these current generated inputs. `reports/`,
+`layout/comparator/pex_report.json` and any campaign or result envelope are
+append-only evidence and are never regenerated or compared by it.
 
 Reproduce the committed envelope (changes nothing outside `/tmp`):
 

@@ -17,7 +17,9 @@
 # harness's own stdlib-only unit tests (`sim/harness/tests/`, selftest step
 # 0, issue #75), which need no PDK and no installs. Do not silently drop
 # this comment if the PDK-heavy leg is ever added -- update `sim/README.md`
-# in the same change.
+# in the same change. The same job also checks, read-only, that the
+# post-layout `klt pex` adapter inputs in `sim/comparator-pex/` are fresh
+# against their sources (issue #123) -- also stdlib only, no PDK.
 
 name: CI
 
@@ -114,3 +116,22 @@ jobs:
       # append-only; a changed rebuild is rejected before any write.
       - name: Run kltsim grading unit tests
         run: PYTHONPATH=sim python3 -m unittest discover -t sim -s sim/kltsim/tests -p 'test_*.py'
+
+      # Issue #123: the post-layout (klt pex) adapter inputs under
+      # sim/comparator-pex/{dut,requests}/ must equal what their generators
+      # derive from the current schematic (core AND comparator_dut wrapper),
+      # sim/dut.json and the source benches. Check mode is read-only and
+      # stdlib only -- no PDK, ngspice, klt or batch submission. It covers the
+      # current generated inputs only, never reports/ or campaign evidence.
+      # Every generator runs so all stale paths are reported at once.
+      - name: Post-layout input freshness check (sim/comparator-pex)
+        run: |
+          rc=0
+          for gen in make_reference make_testbenches make_requests; do
+            python3 "sim/comparator-pex/$gen.py" --check || rc=1
+          done
+          test -z "$(git status --porcelain)" || { git status --porcelain; rc=1; }
+          exit $rc
+
+      - name: Run post-layout freshness unit tests
+        run: python3 -m unittest discover -s sim/comparator-pex/tests -p 'test_*.py'
