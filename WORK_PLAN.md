@@ -17,14 +17,14 @@ _None._
 
 Human-approved issues ready for implementation (`loom:issue`).
 
-- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
+_None._
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-- **#80**: Bias-point sizing study to found a Target-column power bound for DR-0002 Row 5
-- **#81**: Complete whole-latch transient-noise injection into the regenerative pair (internal-node hook)
+- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
+- **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise)
 
 ## PRs Awaiting Review
 
@@ -43,11 +43,12 @@ _None._
 Issues carrying `loom:curated`.
 
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
-- **#81**: Complete whole-latch transient-noise injection into the regenerative pair (internal-node hook) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-_None._
+- **#107**: Verify saved request and invocation provenance when grading campaigns *(architect)*
+- **#110**: Reserve unique PVT harness run identities before writing evidence *(architect)*
+- **#111**: Reject overflowed measurements and invalid summaries in the PVT harness *(architect)*
 
 ## Epics
 
@@ -59,11 +60,11 @@ _None._
 |------|-------|
 | Operator merge-risk holds | 0 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 1 |
+| Ready (`loom:issue`) | 0 |
 | In Progress (`loom:building`) | 2 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 2 |
-| Architect / Hermit proposals | 0 |
+| Curated | 1 |
+| Architect / Hermit proposals | 3 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
