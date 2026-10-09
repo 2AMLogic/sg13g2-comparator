@@ -1,0 +1,2413 @@
+{
+  "schema": "sg13g2-comparator/klt-corner-grading/1",
+  "spec_source": "spec/decision-records/0002-target-spec-ratification.md",
+  "dut": {
+    "netlist": "design/comparator.spice",
+    "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90",
+    "dut_json_id": "comparator-dr0001",
+    "provenance": "schematic"
+  },
+  "grid_points": 45,
+  "benches": {
+    "regeneration": {
+      "dut_problems": [],
+      "envelopes": [
+        {
+          "tag": "regeneration",
+          "envelope": "regeneration.envelope.json",
+          "envelope_sha256": "385c3985c901dcad172bd3c0df89dfed4424d981f07ad8caf1f7c344111c6bb8",
+          "status": "pass",
+          "corner_count": 45,
+          "passed": 45,
+          "failed": 0,
+          "errored": 0,
+          "input_content_hash": "sha256:f0922672f939f9e8e2260884e768c3c1c46b2ea4cd7a6c034531bcf3ca3ff6e6",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": null,
+          "batch_job": {
+            "job_id": "klt-sim-ed6c53c71252",
+            "instance_type": "m6i.4xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "done",
+            "exit_code": "0",
+            "elapsed_seconds": 112
+          }
+        }
+      ]
+    },
+    "kickback": {
+      "dut_problems": [],
+      "envelopes": [
+        {
+          "tag": "kickback",
+          "envelope": "kickback.envelope.json",
+          "envelope_sha256": "dd78f463f4670098ffdd19b613bacd80ecd2488911376bddeb080cb68af1e9b7",
+          "status": "pass",
+          "corner_count": 45,
+          "passed": 45,
+          "failed": 0,
+          "errored": 0,
+          "input_content_hash": "sha256:0163053bf9b286e0d7ae48e6ec4010f32d3812553d723c80a2b44c9e93892ba0",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": null,
+          "batch_job": {
+            "job_id": "klt-sim-6c0f9b609479",
+            "instance_type": "m7i.4xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "done",
+            "exit_code": "0",
+            "elapsed_seconds": 119
+          }
+        }
+      ]
+    },
+    "offset_mc": {
+      "dut_problems": [],
+      "envelopes": [
+        {
+          "tag": "offset_mc.mos_tt_mismatch",
+          "envelope": "offset_mc.mos_tt_mismatch.envelope.json",
+          "envelope_sha256": "d9aa7b0961a7e77625e24275695eb62836ea3119acc902f6a2e65badb39f471a",
+          "status": "pass",
+          "corner_count": 540,
+          "passed": 540,
+          "failed": 0,
+          "errored": 0,
+          "input_content_hash": "sha256:a946292b5d4533df896693eaed36702446416da6284c3c1f789cc7e929a7f5c1",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": {
+            "n": 60,
+            "seed": 20260916,
+            "vary": "mismatch"
+          },
+          "batch_job": {
+            "job_id": "klt-sim-cf27774a3d4a",
+            "instance_type": "m7i.4xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "done",
+            "exit_code": "0",
+            "elapsed_seconds": 685
+          }
+        },
+        {
+          "tag": "offset_mc.mos_ff_mismatch",
+          "envelope": "offset_mc.mos_ff_mismatch.envelope.json",
+          "envelope_sha256": "ce03d9dba194d0c7c46dd259421674cc05e0f23c4813f46a2635734da1b02bdc",
+          "status": "fail",
+          "corner_count": 540,
+          "passed": 539,
+          "failed": 1,
+          "errored": 0,
+          "input_content_hash": "sha256:a946292b5d4533df896693eaed36702446416da6284c3c1f789cc7e929a7f5c1",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": {
+            "n": 60,
+            "seed": 20260916,
+            "vary": "mismatch"
+          },
+          "batch_job": {
+            "job_id": "klt-sim-6c7cca590f2e",
+            "instance_type": "m6i.4xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "failed",
+            "exit_code": "3",
+            "elapsed_seconds": 637
+          }
+        },
+        {
+          "tag": "offset_mc.mos_ss_mismatch",
+          "envelope": "offset_mc.mos_ss_mismatch.envelope.json",
+          "envelope_sha256": "5dc3dbce516eb904a6e49de51313d1113c99c32be6cca704f985410b3430a1cf",
+          "status": "pass",
+          "corner_count": 540,
+          "passed": 540,
+          "failed": 0,
+          "errored": 0,
+          "input_content_hash": "sha256:a946292b5d4533df896693eaed36702446416da6284c3c1f789cc7e929a7f5c1",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": {
+            "n": 60,
+            "seed": 20260916,
+            "vary": "mismatch"
+          },
+          "batch_job": {
+            "job_id": "klt-sim-4d6595afc30b",
+            "instance_type": "m7i.4xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "done",
+            "exit_code": "0",
+            "elapsed_seconds": 701
+          }
+        },
+        {
+          "tag": "offset_mc.mos_fs_mismatch",
+          "envelope": "offset_mc.mos_fs_mismatch.envelope.json",
+          "envelope_sha256": "b9d3e5024a0defe25488aa4d33400508478b546b33df1a98228c230c84d75fc4",
+          "status": "pass",
+          "corner_count": 540,
+          "passed": 540,
+          "failed": 0,
+          "errored": 0,
+          "input_content_hash": "sha256:a946292b5d4533df896693eaed36702446416da6284c3c1f789cc7e929a7f5c1",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": {
+            "n": 60,
+            "seed": 20260916,
+            "vary": "mismatch"
+          },
+          "batch_job": {
+            "job_id": "klt-sim-f3738a86eef6",
+            "instance_type": "m7i.4xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "done",
+            "exit_code": "0",
+            "elapsed_seconds": 689
+          }
+        },
+        {
+          "tag": "offset_mc.mos_sf_mismatch",
+          "envelope": "offset_mc.mos_sf_mismatch.envelope.json",
+          "envelope_sha256": "f300d905c4ff5c112ba0c2b2663371c5e595130490ff94139e13308fbc9ad17c",
+          "status": "pass",
+          "corner_count": 540,
+          "passed": 540,
+          "failed": 0,
+          "errored": 0,
+          "input_content_hash": "sha256:a946292b5d4533df896693eaed36702446416da6284c3c1f789cc7e929a7f5c1",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": {
+            "n": 60,
+            "seed": 20260916,
+            "vary": "mismatch"
+          },
+          "batch_job": {
+            "job_id": "klt-sim-b4a2c58366c2",
+            "instance_type": "m7i.4xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "done",
+            "exit_code": "0",
+            "elapsed_seconds": 725
+          }
+        }
+      ]
+    },
+    "transient_noise": {
+      "dut_problems": [],
+      "envelopes": [
+        {
+          "tag": "transient_noise.mos_tt",
+          "envelope": "transient_noise.mos_tt.envelope.json",
+          "envelope_sha256": "d290de3e6cad2f4ad9bb4ed5d1bbf0d40922490cd07fe80ce74e34edde6ac242",
+          "status": "pass",
+          "corner_count": 720,
+          "passed": 720,
+          "failed": 0,
+          "errored": 0,
+          "input_content_hash": "sha256:54e52713e6491bfd83dad3583f6c53b938b90aac0717466674c2b3826b01df93",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": {
+            "n": 80,
+            "seed": 20260916,
+            "vary": "mismatch"
+          },
+          "batch_job": {
+            "job_id": "klt-sim-4d1b1ff894ac",
+            "instance_type": "c7i.8xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "done",
+            "exit_code": "0",
+            "elapsed_seconds": 160
+          }
+        },
+        {
+          "tag": "transient_noise.mos_ff",
+          "envelope": "transient_noise.mos_ff.envelope.json",
+          "envelope_sha256": "ba5e356873d9a1a8580b74bb32b438389a1ddba0b8293d33966b4098c7ebb68c",
+          "status": "pass",
+          "corner_count": 720,
+          "passed": 720,
+          "failed": 0,
+          "errored": 0,
+          "input_content_hash": "sha256:54e52713e6491bfd83dad3583f6c53b938b90aac0717466674c2b3826b01df93",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": {
+            "n": 80,
+            "seed": 20260916,
+            "vary": "mismatch"
+          },
+          "batch_job": {
+            "job_id": "klt-sim-36b8f651be7b",
+            "instance_type": "m6i.4xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "done",
+            "exit_code": "0",
+            "elapsed_seconds": 273
+          }
+        },
+        {
+          "tag": "transient_noise.mos_ss",
+          "envelope": "transient_noise.mos_ss.envelope.json",
+          "envelope_sha256": "039492fc325f86541db082cf8629bade53d60abf140c5f6e1c4643ccad78f0a1",
+          "status": "pass",
+          "corner_count": 720,
+          "passed": 720,
+          "failed": 0,
+          "errored": 0,
+          "input_content_hash": "sha256:54e52713e6491bfd83dad3583f6c53b938b90aac0717466674c2b3826b01df93",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": {
+            "n": 80,
+            "seed": 20260916,
+            "vary": "mismatch"
+          },
+          "batch_job": {
+            "job_id": "klt-sim-651b9e5ce79d",
+            "instance_type": "m7i.4xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "done",
+            "exit_code": "0",
+            "elapsed_seconds": 306
+          }
+        },
+        {
+          "tag": "transient_noise.mos_fs",
+          "envelope": "transient_noise.mos_fs.envelope.json",
+          "envelope_sha256": "88034e6afa21b8e5316619d20d5e4735e19ae9b5d8db0fb67e81a6a8c19891c7",
+          "status": "pass",
+          "corner_count": 720,
+          "passed": 720,
+          "failed": 0,
+          "errored": 0,
+          "input_content_hash": "sha256:54e52713e6491bfd83dad3583f6c53b938b90aac0717466674c2b3826b01df93",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": {
+            "n": 80,
+            "seed": 20260916,
+            "vary": "mismatch"
+          },
+          "batch_job": {
+            "job_id": "klt-sim-6bfc59044567",
+            "instance_type": "m7i.4xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "done",
+            "exit_code": "0",
+            "elapsed_seconds": 408
+          }
+        },
+        {
+          "tag": "transient_noise.mos_sf",
+          "envelope": "transient_noise.mos_sf.envelope.json",
+          "envelope_sha256": "ab8dabb3b888f84320b1111593d2377b82ca1f91be47bb23b458cdc32043e7e4",
+          "status": "pass",
+          "corner_count": 720,
+          "passed": 720,
+          "failed": 0,
+          "errored": 0,
+          "input_content_hash": "sha256:54e52713e6491bfd83dad3583f6c53b938b90aac0717466674c2b3826b01df93",
+          "klt_version": "0.5.0+ge8ca621a6961",
+          "engine_version": "46",
+          "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+          "monte_carlo": {
+            "n": 80,
+            "seed": 20260916,
+            "vary": "mismatch"
+          },
+          "batch_job": {
+            "job_id": "klt-sim-f3b08c868517",
+            "instance_type": "c7i.8xlarge",
+            "ami_id": "ami-0e40e3245f1923ac8",
+            "state": "done",
+            "exit_code": "0",
+            "elapsed_seconds": 162
+          }
+        }
+      ]
+    }
+  },
+  "rows": [
+    {
+      "id": "1",
+      "row": "Offset sigma",
+      "sub_bound": "input-referred offset, 3 sigma, calibration-free, at every PVT point",
+      "unit": "mV",
+      "condition": "whole latch (comparator_dut), differential axis at dut_vcm = 0.6 V; no common-mode claim (DR-0002 'What this record does not ratify')",
+      "statistical_basis": "Monte Carlo over SG13G2's shipped per-instance local-mismatch models (mos_<p>_mismatch sections), N = 60 draws per PVT point, base seed 20260916 (DR-0002 Row 1: whole-latch bench N = 60, seed 20260916, sigma precision +/-9.1 %); the row is met only if the WORST point meets it",
+      "target_bound": "<= 15",
+      "stretch_bound": "<= 8",
+      "evidence_kind": "klt_sim",
+      "bench": "offset_mc",
+      "measurement": "vos_mv",
+      "target": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 10.111396877653899,
+            "point": "sf_-40c_1.32v",
+            "corner_id": "mos_sf_mismatch/1.320V/-40C"
+          },
+          "max": {
+            "value": 15.791421972096202,
+            "point": "ff_125c_1.08v",
+            "corner_id": "mos_ff_mismatch/1.080V/125C"
+          }
+        },
+        "binding": {
+          "point": "ff_125c_1.08v",
+          "corner_id": "mos_ff_mismatch/1.080V/125C",
+          "value": 15.791421972096202,
+          "margin": -0.7914219720962024
+        },
+        "points_failing": 9,
+        "failing_points": [
+          "tt_27c_1.32v",
+          "ff_125c_1.08v",
+          "ff_27c_1.32v",
+          "ss_125c_1.08v",
+          "ss_27c_1.32v",
+          "fs_125c_1.08v",
+          "fs_27c_1.32v",
+          "sf_125c_1.08v",
+          "sf_27c_1.32v"
+        ],
+        "verdict": "FAIL"
+      },
+      "stretch": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 10.111396877653899,
+            "point": "sf_-40c_1.32v",
+            "corner_id": "mos_sf_mismatch/1.320V/-40C"
+          },
+          "max": {
+            "value": 15.791421972096202,
+            "point": "ff_125c_1.08v",
+            "corner_id": "mos_ff_mismatch/1.080V/125C"
+          }
+        },
+        "binding": {
+          "point": "ff_125c_1.08v",
+          "corner_id": "mos_ff_mismatch/1.080V/125C",
+          "value": 15.791421972096202,
+          "margin": -7.791421972096202
+        },
+        "points_failing": 45,
+        "failing_points": [
+          "tt_-40c_1.08v",
+          "tt_27c_1.08v",
+          "tt_125c_1.08v",
+          "tt_-40c_1.20v",
+          "tt_27c_1.20v",
+          "tt_125c_1.20v",
+          "tt_-40c_1.32v",
+          "tt_27c_1.32v",
+          "tt_125c_1.32v",
+          "ff_-40c_1.08v",
+          "ff_27c_1.08v",
+          "ff_125c_1.08v",
+          "ff_-40c_1.20v",
+          "ff_27c_1.20v",
+          "ff_125c_1.20v",
+          "ff_-40c_1.32v",
+          "ff_27c_1.32v",
+          "ff_125c_1.32v",
+          "ss_-40c_1.08v",
+          "ss_27c_1.08v",
+          "ss_125c_1.08v",
+          "ss_-40c_1.20v",
+          "ss_27c_1.20v",
+          "ss_125c_1.20v",
+          "ss_-40c_1.32v",
+          "ss_27c_1.32v",
+          "ss_125c_1.32v",
+          "fs_-40c_1.08v",
+          "fs_27c_1.08v",
+          "fs_125c_1.08v",
+          "fs_-40c_1.20v",
+          "fs_27c_1.20v",
+          "fs_125c_1.20v",
+          "fs_-40c_1.32v",
+          "fs_27c_1.32v",
+          "fs_125c_1.32v",
+          "sf_-40c_1.08v",
+          "sf_27c_1.08v",
+          "sf_125c_1.08v",
+          "sf_-40c_1.20v",
+          "sf_27c_1.20v",
+          "sf_125c_1.20v",
+          "sf_-40c_1.32v",
+          "sf_27c_1.32v",
+          "sf_125c_1.32v"
+        ],
+        "verdict": "FAIL"
+      },
+      "target_verdict": "FAIL",
+      "stretch_verdict": "FAIL",
+      "monte_carlo_per_point": [
+        {
+          "point": "tt_-40c_1.08v",
+          "corner_id": "mos_tt_mismatch/1.080V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.40018783333333335,
+          "stddev_bessel": 4.132118048891294,
+          "three_sigma_dr_basis": 12.014925559247665,
+          "three_s_raw": 12.396354146673882,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -11.996166313340549,
+            "high": 12.796541980007216,
+            "status": "pass",
+            "margin": 2.203458019992784
+          }
+        },
+        {
+          "point": "tt_27c_1.08v",
+          "corner_id": "mos_tt_mismatch/1.080V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.10010383333333335,
+          "stddev_bessel": 4.03880067808065,
+          "three_sigma_dr_basis": 11.73074642202246,
+          "three_s_raw": 12.116402034241949,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.016298200908615,
+            "high": 12.216505867575282,
+            "status": "pass",
+            "margin": 2.7834941324247175
+          }
+        },
+        {
+          "point": "tt_125c_1.08v",
+          "corner_id": "mos_tt_mismatch/1.080V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.700047,
+          "stddev_bessel": 5.058256302151824,
+          "three_sigma_dr_basis": 14.821798738398419,
+          "three_s_raw": 15.174768906455471,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -14.474721906455471,
+            "high": 15.87481590645547,
+            "status": "fail",
+            "margin": -0.8748159064554706
+          }
+        },
+        {
+          "point": "tt_-40c_1.20v",
+          "corner_id": "mos_tt_mismatch/1.200V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.24963566666666664,
+          "stddev_bessel": 4.288820055400393,
+          "three_sigma_dr_basis": 12.49146510975798,
+          "three_s_raw": 12.866460166201179,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.616824499534513,
+            "high": 13.116095832867845,
+            "status": "pass",
+            "margin": 1.8839041671321546
+          }
+        },
+        {
+          "point": "tt_27c_1.20v",
+          "corner_id": "mos_tt_mismatch/1.200V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.4997551666666667,
+          "stddev_bessel": 4.372492909238852,
+          "three_sigma_dr_basis": 12.74560489093769,
+          "three_s_raw": 13.117478727716556,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.617723561049889,
+            "high": 13.617233894383222,
+            "status": "pass",
+            "margin": 1.3827661056167777
+          }
+        },
+        {
+          "point": "tt_125c_1.20v",
+          "corner_id": "mos_tt_mismatch/1.200V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": -3.733333333335957e-05,
+          "stddev_bessel": 4.29619299393409,
+          "three_sigma_dr_basis": 12.513867389180133,
+          "three_s_raw": 12.88857898180227,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.888616315135604,
+            "high": 12.888541648468937,
+            "status": "pass",
+            "margin": 2.1113836848643963
+          }
+        },
+        {
+          "point": "tt_-40c_1.32v",
+          "corner_id": "mos_tt_mismatch/1.320V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.15014283333333334,
+          "stddev_bessel": 3.597669535607405,
+          "three_sigma_dr_basis": 10.382559938368898,
+          "three_s_raw": 10.793008606822214,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -10.64286577348888,
+            "high": 10.943151440155548,
+            "status": "pass",
+            "margin": 4.056848559844452
+          }
+        },
+        {
+          "point": "tt_27c_1.32v",
+          "corner_id": "mos_tt_mismatch/1.320V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": -0.24983000000000002,
+          "stddev_bessel": 5.248490630577293,
+          "three_sigma_dr_basis": 15.396034781995981,
+          "three_s_raw": 15.745471891731878,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -15.995301891731877,
+            "high": 15.495641891731879,
+            "status": "fail",
+            "margin": -0.9953018917318772
+          }
+        },
+        {
+          "point": "tt_125c_1.32v",
+          "corner_id": "mos_tt_mismatch/1.320V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.05008333333333332,
+          "stddev_bessel": 4.98613229439231,
+          "three_sigma_dr_basis": 14.603917625968041,
+          "three_s_raw": 14.958396883176931,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -14.908313549843598,
+            "high": 15.008480216510264,
+            "status": "fail",
+            "margin": -0.008480216510264427
+          }
+        },
+        {
+          "point": "ff_-40c_1.08v",
+          "corner_id": "mos_ff_mismatch/1.080V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.4497,
+          "stddev_bessel": 4.089749443885203,
+          "three_sigma_dr_basis": 11.885939047747554,
+          "three_s_raw": 12.269248331655607,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -11.819548331655607,
+            "high": 12.718948331655607,
+            "status": "pass",
+            "margin": 2.281051668344393
+          }
+        },
+        {
+          "point": "ff_27c_1.08v",
+          "corner_id": "mos_ff_mismatch/1.080V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.149844,
+          "stddev_bessel": 4.0372067623607695,
+          "three_sigma_dr_basis": 11.72588974074701,
+          "three_s_raw": 12.111620287082308,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -11.961776287082309,
+            "high": 12.261464287082308,
+            "status": "pass",
+            "margin": 2.7385357129176917
+          }
+        },
+        {
+          "point": "ff_125c_1.08v",
+          "corner_id": "mos_ff_mismatch/1.080V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.6996621666666666,
+          "stddev_bessel": 5.379591145500378,
+          "three_sigma_dr_basis": 15.791421972096202,
+          "three_s_raw": 16.138773436501136,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -15.43911126983447,
+            "high": 16.838435603167802,
+            "status": "fail",
+            "margin": -1.8384356031678024
+          }
+        },
+        {
+          "point": "ff_-40c_1.20v",
+          "corner_id": "mos_ff_mismatch/1.200V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.10017283333333332,
+          "stddev_bessel": 4.330436303616723,
+          "three_sigma_dr_basis": 12.617892273679574,
+          "three_s_raw": 12.991308910850169,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.891136077516835,
+            "high": 13.091481744183502,
+            "status": "pass",
+            "margin": 1.9085182558164977
+          }
+        },
+        {
+          "point": "ff_27c_1.20v",
+          "corner_id": "mos_ff_mismatch/1.200V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.40012149999999996,
+          "stddev_bessel": 4.452003392317843,
+          "three_sigma_dr_basis": 12.986914865205854,
+          "three_s_raw": 13.356010176953529,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.95588867695353,
+            "high": 13.756131676953528,
+            "status": "pass",
+            "margin": 1.2438683230464722
+          }
+        },
+        {
+          "point": "ff_125c_1.20v",
+          "corner_id": "mos_ff_mismatch/1.200V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.24978549999999997,
+          "stddev_bessel": 4.252938861011259,
+          "three_sigma_dr_basis": 12.382418069834856,
+          "three_s_raw": 12.758816583033777,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.509031083033777,
+            "high": 13.008602083033777,
+            "status": "pass",
+            "margin": 1.991397916966223
+          }
+        },
+        {
+          "point": "ff_-40c_1.32v",
+          "corner_id": "mos_ff_mismatch/1.320V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.2998123333333334,
+          "stddev_bessel": 3.5880897115073602,
+          "three_sigma_dr_basis": 10.353179793365467,
+          "three_s_raw": 10.764269134522081,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -10.464456801188748,
+            "high": 11.064081467855415,
+            "status": "pass",
+            "margin": 3.9359185321445853
+          }
+        },
+        {
+          "point": "ff_27c_1.32v",
+          "corner_id": "mos_ff_mismatch/1.320V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": -0.4001046666666666,
+          "stddev_bessel": 5.268072649714767,
+          "three_sigma_dr_basis": 15.45510972357214,
+          "three_s_raw": 15.804217949144302,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -16.20432261581097,
+            "high": 15.404113282477635,
+            "status": "fail",
+            "margin": -1.2043226158109697
+          }
+        },
+        {
+          "point": "ff_125c_1.32v",
+          "corner_id": "mos_ff_mismatch/1.320V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.04980483333333334,
+          "stddev_bessel": 4.798935482336908,
+          "three_sigma_dr_basis": 14.037933202866608,
+          "three_s_raw": 14.396806447010725,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -14.347001613677392,
+            "high": 14.446611280344058,
+            "status": "pass",
+            "margin": 0.5533887196559419
+          }
+        },
+        {
+          "point": "ss_-40c_1.08v",
+          "corner_id": "mos_ss_mismatch/1.080V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.49920900000000007,
+          "stddev_bessel": 4.230622746824012,
+          "three_sigma_dr_basis": 12.3145764892509,
+          "three_s_raw": 12.691868240472036,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.192659240472036,
+            "high": 13.191077240472037,
+            "status": "pass",
+            "margin": 1.808922759527963
+          }
+        },
+        {
+          "point": "ss_27c_1.08v",
+          "corner_id": "mos_ss_mismatch/1.080V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.04978633333333337,
+          "stddev_bessel": 3.8857483246667863,
+          "three_sigma_dr_basis": 11.26394710469909,
+          "three_s_raw": 11.65724497400036,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -11.607458640667026,
+            "high": 11.707031307333693,
+            "status": "pass",
+            "margin": 3.2929686926663067
+          }
+        },
+        {
+          "point": "ss_125c_1.08v",
+          "corner_id": "mos_ss_mismatch/1.080V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.8000151666666666,
+          "stddev_bessel": 5.192231051191213,
+          "three_sigma_dr_basis": 15.226275976326079,
+          "three_s_raw": 15.576693153573638,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -14.776677986906972,
+            "high": 16.376708320240304,
+            "status": "fail",
+            "margin": -1.3767083202403043
+          }
+        },
+        {
+          "point": "ss_-40c_1.20v",
+          "corner_id": "mos_ss_mismatch/1.200V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.19989783333333333,
+          "stddev_bessel": 4.291480766973725,
+          "three_sigma_dr_basis": 12.49954973124043,
+          "three_s_raw": 12.874442300921176,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.674544467587843,
+            "high": 13.07434013425451,
+            "status": "pass",
+            "margin": 1.9256598657454909
+          }
+        },
+        {
+          "point": "ss_27c_1.20v",
+          "corner_id": "mos_ss_mismatch/1.200V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.6501333333333333,
+          "stddev_bessel": 4.281703804177415,
+          "three_sigma_dr_basis": 12.469841181039957,
+          "three_s_raw": 12.845111412532244,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.194978079198911,
+            "high": 13.495244745865577,
+            "status": "pass",
+            "margin": 1.5047552541344231
+          }
+        },
+        {
+          "point": "ss_125c_1.20v",
+          "corner_id": "mos_ss_mismatch/1.200V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.00010916666666661948,
+          "stddev_bessel": 4.296230926160267,
+          "three_sigma_dr_basis": 12.513982639928376,
+          "three_s_raw": 12.888692778480802,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.888583611814136,
+            "high": 12.888801945147469,
+            "status": "pass",
+            "margin": 2.1111980548525313
+          }
+        },
+        {
+          "point": "ss_-40c_1.32v",
+          "corner_id": "mos_ss_mismatch/1.320V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.2000615,
+          "stddev_bessel": 3.509316593947991,
+          "three_sigma_dr_basis": 10.111401048595825,
+          "three_s_raw": 10.527949781843972,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -10.327888281843972,
+            "high": 10.728011281843973,
+            "status": "pass",
+            "margin": 4.271988718156027
+          }
+        },
+        {
+          "point": "ss_27c_1.32v",
+          "corner_id": "mos_ss_mismatch/1.320V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": -0.2501911666666667,
+          "stddev_bessel": 5.24846640292258,
+          "three_sigma_dr_basis": 15.395961688250354,
+          "three_s_raw": 15.74539920876774,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -15.995590375434407,
+            "high": 15.495208042101073,
+            "status": "fail",
+            "margin": -0.9955903754344071
+          }
+        },
+        {
+          "point": "ss_125c_1.32v",
+          "corner_id": "mos_ss_mismatch/1.320V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.09985999999999999,
+          "stddev_bessel": 4.798291751227546,
+          "three_sigma_dr_basis": 14.035985644392774,
+          "three_s_raw": 14.394875253682638,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -14.295015253682639,
+            "high": 14.494735253682638,
+            "status": "pass",
+            "margin": 0.5052647463173621
+          }
+        },
+        {
+          "point": "fs_-40c_1.08v",
+          "corner_id": "mos_fs_mismatch/1.080V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.4503295,
+          "stddev_bessel": 4.163733123577245,
+          "three_sigma_dr_basis": 12.111133749187676,
+          "three_s_raw": 12.491199370731735,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.040869870731735,
+            "high": 12.941528870731736,
+            "status": "pass",
+            "margin": 2.0584711292682645
+          }
+        },
+        {
+          "point": "fs_27c_1.08v",
+          "corner_id": "mos_fs_mismatch/1.080V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.15021866666666667,
+          "stddev_bessel": 3.9992677383942303,
+          "three_sigma_dr_basis": 11.610261005840652,
+          "three_s_raw": 11.99780321518269,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -11.847584548516023,
+            "high": 12.148021881849358,
+            "status": "pass",
+            "margin": 2.851978118150642
+          }
+        },
+        {
+          "point": "fs_125c_1.08v",
+          "corner_id": "mos_fs_mismatch/1.080V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.650682,
+          "stddev_bessel": 5.1840895520889,
+          "three_sigma_dr_basis": 15.201705255795614,
+          "three_s_raw": 15.552268656266701,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -14.901586656266701,
+            "high": 16.2029506562667,
+            "status": "fail",
+            "margin": -1.202950656266701
+          }
+        },
+        {
+          "point": "fs_-40c_1.20v",
+          "corner_id": "mos_fs_mismatch/1.200V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.2496298333333333,
+          "stddev_bessel": 4.359374071418305,
+          "three_sigma_dr_basis": 12.705772676496487,
+          "three_s_raw": 13.078122214254915,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.828492380921581,
+            "high": 13.327752047588248,
+            "status": "pass",
+            "margin": 1.6722479524117517
+          }
+        },
+        {
+          "point": "fs_27c_1.20v",
+          "corner_id": "mos_fs_mismatch/1.200V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.6497976666666666,
+          "stddev_bessel": 4.3872701489683035,
+          "three_sigma_dr_basis": 12.790466501900976,
+          "three_s_raw": 13.16181044690491,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.512012780238244,
+            "high": 13.811608113571577,
+            "status": "pass",
+            "margin": 1.1883918864284233
+          }
+        },
+        {
+          "point": "fs_125c_1.20v",
+          "corner_id": "mos_fs_mismatch/1.200V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.10043666666666666,
+          "stddev_bessel": 4.400258082744102,
+          "three_sigma_dr_basis": 12.829890883151736,
+          "three_s_raw": 13.200774248232307,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -13.10033758156564,
+            "high": 13.301210914898974,
+            "status": "pass",
+            "margin": 1.6987890851010263
+          }
+        },
+        {
+          "point": "fs_-40c_1.32v",
+          "corner_id": "mos_fs_mismatch/1.320V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.25028833333333333,
+          "stddev_bessel": 3.549295155924393,
+          "three_sigma_dr_basis": 10.234150698481775,
+          "three_s_raw": 10.647885467773179,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -10.397597134439845,
+            "high": 10.898173801106513,
+            "status": "pass",
+            "margin": 4.101826198893487
+          }
+        },
+        {
+          "point": "fs_27c_1.32v",
+          "corner_id": "mos_fs_mismatch/1.320V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": -0.249863,
+          "stddev_bessel": 5.2484908728226545,
+          "three_sigma_dr_basis": 15.396035512839303,
+          "three_s_raw": 15.745472618467964,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -15.995335618467964,
+            "high": 15.495609618467965,
+            "status": "fail",
+            "margin": -0.9953356184679638
+          }
+        },
+        {
+          "point": "fs_125c_1.32v",
+          "corner_id": "mos_fs_mismatch/1.320V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.15036566666666665,
+          "stddev_bessel": 4.9840666781676966,
+          "three_sigma_dr_basis": 14.59767610868014,
+          "three_s_raw": 14.95220003450309,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -14.801834367836422,
+            "high": 15.102565701169757,
+            "status": "fail",
+            "margin": -0.10256570116975716
+          }
+        },
+        {
+          "point": "sf_-40c_1.08v",
+          "corner_id": "mos_sf_mismatch/1.080V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.35026750000000006,
+          "stddev_bessel": 4.209873051748238,
+          "three_sigma_dr_basis": 12.251482577212798,
+          "three_s_raw": 12.629619155244713,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.279351655244714,
+            "high": 12.979886655244712,
+            "status": "pass",
+            "margin": 2.0201133447552877
+          }
+        },
+        {
+          "point": "sf_27c_1.08v",
+          "corner_id": "mos_sf_mismatch/1.080V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.10032133333333329,
+          "stddev_bessel": 4.038796019968926,
+          "three_sigma_dr_basis": 11.730732228834396,
+          "three_s_raw": 12.116388059906777,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.016066726573444,
+            "high": 12.21670939324011,
+            "status": "pass",
+            "margin": 2.7832906067598895
+          }
+        },
+        {
+          "point": "sf_125c_1.08v",
+          "corner_id": "mos_sf_mismatch/1.080V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.5996476666666666,
+          "stddev_bessel": 5.190209343142328,
+          "three_sigma_dr_basis": 15.220174646728958,
+          "three_s_raw": 15.570628029426985,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -14.970980362760319,
+            "high": 16.17027569609365,
+            "status": "fail",
+            "margin": -1.1702756960936505
+          }
+        },
+        {
+          "point": "sf_-40c_1.20v",
+          "corner_id": "mos_sf_mismatch/1.200V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.24998700000000001,
+          "stddev_bessel": 4.2888368109967,
+          "three_sigma_dr_basis": 12.49151602262668,
+          "three_s_raw": 12.8665104329901,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.6165234329901,
+            "high": 13.116497432990101,
+            "status": "pass",
+            "margin": 1.8835025670098986
+          }
+        },
+        {
+          "point": "sf_27c_1.20v",
+          "corner_id": "mos_sf_mismatch/1.200V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.39992099999999997,
+          "stddev_bessel": 4.347991494425786,
+          "three_sigma_dr_basis": 12.671208143466469,
+          "three_s_raw": 13.043974483277358,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.644053483277357,
+            "high": 13.443895483277359,
+            "status": "pass",
+            "margin": 1.556104516722641
+          }
+        },
+        {
+          "point": "sf_125c_1.20v",
+          "corner_id": "mos_sf_mismatch/1.200V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.09942566666666669,
+          "stddev_bessel": 4.113577173294394,
+          "three_sigma_dr_basis": 11.958487649855268,
+          "three_s_raw": 12.340731519883182,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -12.241305853216515,
+            "high": 12.440157186549849,
+            "status": "pass",
+            "margin": 2.5598428134501514
+          }
+        },
+        {
+          "point": "sf_-40c_1.32v",
+          "corner_id": "mos_sf_mismatch/1.320V/-40C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.2002036666666667,
+          "stddev_bessel": 3.5093152360108935,
+          "three_sigma_dr_basis": 10.111396877653899,
+          "three_s_raw": 10.52794570803268,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -10.327742041366013,
+            "high": 10.728149374699347,
+            "status": "pass",
+            "margin": 4.271850625300653
+          }
+        },
+        {
+          "point": "sf_27c_1.32v",
+          "corner_id": "mos_sf_mismatch/1.320V/27C",
+          "n": 60,
+          "errored": 0,
+          "mean": -0.29976333333333344,
+          "stddev_bessel": 5.303673047950655,
+          "three_sigma_dr_basis": 15.56249298878846,
+          "three_s_raw": 15.911019143851965,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -16.210782477185298,
+            "high": 15.611255810518632,
+            "status": "fail",
+            "margin": -1.2107824771852975
+          }
+        },
+        {
+          "point": "sf_125c_1.32v",
+          "corner_id": "mos_sf_mismatch/1.320V/125C",
+          "n": 60,
+          "errored": 0,
+          "mean": 0.09988166666666666,
+          "stddev_bessel": 4.923786334634087,
+          "three_sigma_dr_basis": 14.415494998153724,
+          "three_s_raw": 14.771359003902262,
+          "klt_sigma_window": {
+            "k": 3.0,
+            "low": -14.671477337235595,
+            "high": 14.871240670568929,
+            "status": "pass",
+            "margin": 0.12875932943107138
+          }
+        }
+      ],
+      "klt_window_fail_points": [
+        "tt_125c_1.08v",
+        "tt_27c_1.32v",
+        "tt_125c_1.32v",
+        "ff_125c_1.08v",
+        "ff_27c_1.32v",
+        "ss_125c_1.08v",
+        "ss_27c_1.32v",
+        "fs_125c_1.08v",
+        "fs_27c_1.32v",
+        "fs_125c_1.32v",
+        "sf_125c_1.08v",
+        "sf_27c_1.32v"
+      ],
+      "klt_window_note": "klt's own per-corner window (|mean| + 3 x Bessel sample sigma, raw quantized values) is a stricter statistic than DR-0002's; reported, not graded. 33/45 points pass it."
+    },
+    {
+      "id": "2",
+      "row": "Input-referred noise",
+      "sub_bound": "differential, input-referred, total integrated rms; compliance path = whole-latch transient-noise decision statistics with seeds and run counts committed",
+      "unit": "mV rms",
+      "condition": "TRNOISE-injected transient decision statistics on comparator_dut, N = 80 trials per rung per PVT point, 3 rungs; DR-designated statistic = grid-wide mean of the per-point two-rung probit-slope sigma (+/-13 % per-corner scatter at N = 80)",
+      "statistical_basis": "transient-noise decision statistics (DR-0002 Row 2); the .noise figure on the reduced sub-model is a reportable lower bound only, never compliance",
+      "target_bound": "<= 1",
+      "stretch_bound": "<= 0.6",
+      "evidence_kind": "klt_sim",
+      "bench": "transient_noise",
+      "measurement": "hit_plus / hit_minus (hit_zero = injection guard)",
+      "target": {
+        "statistic": "grid-wide mean of the per-point two-rung probit-slope sigma",
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 0.9160693862377082,
+            "point": "ss_125c_1.32v",
+            "corner_id": "mos_ss/1.320V/125C"
+          },
+          "max": {
+            "value": 1.887130326417645,
+            "point": "sf_-40c_1.20v",
+            "corner_id": "mos_sf/1.200V/-40C"
+          }
+        },
+        "grid_mean": 1.3332255976060086,
+        "binding": {
+          "point": "grid-wide mean (DR-designated statistic)",
+          "corner_id": null,
+          "value": 1.3332255976060086,
+          "margin": -0.33322559760600856
+        },
+        "worst_point": {
+          "value": 1.887130326417645,
+          "point": "sf_-40c_1.20v",
+          "corner_id": "mos_sf/1.200V/-40C"
+        },
+        "points_failing": null,
+        "verdict": "FAIL"
+      },
+      "stretch": {
+        "statistic": "grid-wide mean of the per-point two-rung probit-slope sigma",
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 0.9160693862377082,
+            "point": "ss_125c_1.32v",
+            "corner_id": "mos_ss/1.320V/125C"
+          },
+          "max": {
+            "value": 1.887130326417645,
+            "point": "sf_-40c_1.20v",
+            "corner_id": "mos_sf/1.200V/-40C"
+          }
+        },
+        "grid_mean": 1.3332255976060086,
+        "binding": {
+          "point": "grid-wide mean (DR-designated statistic)",
+          "corner_id": null,
+          "value": 1.3332255976060086,
+          "margin": -0.7332255976060086
+        },
+        "worst_point": {
+          "value": 1.887130326417645,
+          "point": "sf_-40c_1.20v",
+          "corner_id": "mos_sf/1.200V/-40C"
+        },
+        "points_failing": null,
+        "verdict": "FAIL"
+      },
+      "target_verdict": "FAIL",
+      "stretch_verdict": "FAIL",
+      "monte_carlo_per_point": [
+        {
+          "point": "tt_-40c_1.08v",
+          "corner_id": "mos_tt/1.080V/-40C",
+          "sigma": 1.5196205138931764,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7125,
+          "p_minus": 0.225,
+          "p_zero": 0.45,
+          "samples_sharing_a_draw_with_another_point": 35
+        },
+        {
+          "point": "tt_27c_1.08v",
+          "corner_id": "mos_tt/1.080V/27C",
+          "sigma": 1.248818306224824,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7625,
+          "p_minus": 0.1875,
+          "p_zero": 0.475,
+          "samples_sharing_a_draw_with_another_point": 23
+        },
+        {
+          "point": "tt_125c_1.08v",
+          "corner_id": "mos_tt/1.080V/125C",
+          "sigma": 1.4535697443919282,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8125,
+          "p_minus": 0.3125,
+          "p_zero": 0.525,
+          "samples_sharing_a_draw_with_another_point": 31
+        },
+        {
+          "point": "tt_-40c_1.20v",
+          "corner_id": "mos_tt/1.200V/-40C",
+          "sigma": 1.3468859828840778,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.725,
+          "p_minus": 0.1875,
+          "p_zero": 0.4875,
+          "samples_sharing_a_draw_with_another_point": 26
+        },
+        {
+          "point": "tt_27c_1.20v",
+          "corner_id": "mos_tt/1.200V/27C",
+          "sigma": 1.3607455833727637,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7625,
+          "p_minus": 0.225,
+          "p_zero": 0.5,
+          "samples_sharing_a_draw_with_another_point": 29
+        },
+        {
+          "point": "tt_125c_1.20v",
+          "corner_id": "mos_tt/1.200V/125C",
+          "sigma": 1.482602218505602,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.75,
+          "p_minus": 0.25,
+          "p_zero": 0.4625,
+          "samples_sharing_a_draw_with_another_point": 30
+        },
+        {
+          "point": "tt_-40c_1.32v",
+          "corner_id": "mos_tt/1.320V/-40C",
+          "sigma": 1.0953765179049615,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8,
+          "p_minus": 0.1625,
+          "p_zero": 0.475,
+          "samples_sharing_a_draw_with_another_point": 37
+        },
+        {
+          "point": "tt_27c_1.32v",
+          "corner_id": "mos_tt/1.320V/27C",
+          "sigma": 1.4400328656642924,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.75,
+          "p_minus": 0.2375,
+          "p_zero": 0.5125,
+          "samples_sharing_a_draw_with_another_point": 39
+        },
+        {
+          "point": "tt_125c_1.32v",
+          "corner_id": "mos_tt/1.320V/125C",
+          "sigma": 1.2376077713946376,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8625,
+          "p_minus": 0.3,
+          "p_zero": 0.55,
+          "samples_sharing_a_draw_with_another_point": 28
+        },
+        {
+          "point": "ff_-40c_1.08v",
+          "corner_id": "mos_ff/1.080V/-40C",
+          "sigma": 1.5720182311300765,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.75,
+          "p_minus": 0.275,
+          "p_zero": 0.4125,
+          "samples_sharing_a_draw_with_another_point": 26
+        },
+        {
+          "point": "ff_27c_1.08v",
+          "corner_id": "mos_ff/1.080V/27C",
+          "sigma": 1.6623116160892262,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7625,
+          "p_minus": 0.3125,
+          "p_zero": 0.45,
+          "samples_sharing_a_draw_with_another_point": 30
+        },
+        {
+          "point": "ff_125c_1.08v",
+          "corner_id": "mos_ff/1.080V/125C",
+          "sigma": 1.389485827810363,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8,
+          "p_minus": 0.275,
+          "p_zero": 0.5625,
+          "samples_sharing_a_draw_with_another_point": 22
+        },
+        {
+          "point": "ff_-40c_1.20v",
+          "corner_id": "mos_ff/1.200V/-40C",
+          "sigma": 1.273685531959646,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7375,
+          "p_minus": 0.175,
+          "p_zero": 0.5,
+          "samples_sharing_a_draw_with_another_point": 32
+        },
+        {
+          "point": "ff_27c_1.20v",
+          "corner_id": "mos_ff/1.200V/27C",
+          "sigma": 1.1869975773936958,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8125,
+          "p_minus": 0.2125,
+          "p_zero": 0.4,
+          "samples_sharing_a_draw_with_another_point": 30
+        },
+        {
+          "point": "ff_125c_1.20v",
+          "corner_id": "mos_ff/1.200V/125C",
+          "sigma": 1.5720182311300765,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.725,
+          "p_minus": 0.25,
+          "p_zero": 0.65,
+          "samples_sharing_a_draw_with_another_point": 34
+        },
+        {
+          "point": "ff_-40c_1.32v",
+          "corner_id": "mos_ff/1.320V/-40C",
+          "sigma": 1.0978540055072237,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8125,
+          "p_minus": 0.175,
+          "p_zero": 0.45,
+          "samples_sharing_a_draw_with_another_point": 63
+        },
+        {
+          "point": "ff_27c_1.32v",
+          "corner_id": "mos_ff/1.320V/27C",
+          "sigma": 1.3538410950647335,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7375,
+          "p_minus": 0.2,
+          "p_zero": 0.425,
+          "samples_sharing_a_draw_with_another_point": 28
+        },
+        {
+          "point": "ff_125c_1.32v",
+          "corner_id": "mos_ff/1.320V/125C",
+          "sigma": 1.6717375403845527,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7375,
+          "p_minus": 0.2875,
+          "p_zero": 0.475,
+          "samples_sharing_a_draw_with_another_point": 35
+        },
+        {
+          "point": "ss_-40c_1.08v",
+          "corner_id": "mos_ss/1.080V/-40C",
+          "sigma": 1.242947020440961,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.75,
+          "p_minus": 0.175,
+          "p_zero": 0.45,
+          "samples_sharing_a_draw_with_another_point": 16
+        },
+        {
+          "point": "ss_27c_1.08v",
+          "corner_id": "mos_ss/1.080V/27C",
+          "sigma": 1.2429470204409612,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.825,
+          "p_minus": 0.25,
+          "p_zero": 0.5375,
+          "samples_sharing_a_draw_with_another_point": 15
+        },
+        {
+          "point": "ss_125c_1.08v",
+          "corner_id": "mos_ss/1.080V/125C",
+          "sigma": 1.2853563998299495,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7625,
+          "p_minus": 0.2,
+          "p_zero": 0.4125,
+          "samples_sharing_a_draw_with_another_point": 40
+        },
+        {
+          "point": "ss_-40c_1.20v",
+          "corner_id": "mos_ss/1.200V/-40C",
+          "sigma": 1.3191646399316188,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8,
+          "p_minus": 0.25,
+          "p_zero": 0.5125,
+          "samples_sharing_a_draw_with_another_point": 47
+        },
+        {
+          "point": "ss_27c_1.20v",
+          "corner_id": "mos_ss/1.200V/27C",
+          "sigma": 1.4262036600793357,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7125,
+          "p_minus": 0.2,
+          "p_zero": 0.475,
+          "samples_sharing_a_draw_with_another_point": 18
+        },
+        {
+          "point": "ss_125c_1.20v",
+          "corner_id": "mos_ss/1.200V/125C",
+          "sigma": 1.6191804461862302,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.75,
+          "p_minus": 0.2875,
+          "p_zero": 0.55,
+          "samples_sharing_a_draw_with_another_point": 45
+        },
+        {
+          "point": "ss_-40c_1.32v",
+          "corner_id": "mos_ss/1.320V/-40C",
+          "sigma": 1.127209467064757,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8125,
+          "p_minus": 0.1875,
+          "p_zero": 0.5,
+          "samples_sharing_a_draw_with_another_point": 64
+        },
+        {
+          "point": "ss_27c_1.32v",
+          "corner_id": "mos_ss/1.320V/27C",
+          "sigma": 0.9897715278508089,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.85,
+          "p_minus": 0.1625,
+          "p_zero": 0.4375,
+          "samples_sharing_a_draw_with_another_point": 19
+        },
+        {
+          "point": "ss_125c_1.32v",
+          "corner_id": "mos_ss/1.320V/125C",
+          "sigma": 0.9160693862377082,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8625,
+          "p_minus": 0.1375,
+          "p_zero": 0.5125,
+          "samples_sharing_a_draw_with_another_point": 30
+        },
+        {
+          "point": "fs_-40c_1.08v",
+          "corner_id": "mos_fs/1.080V/-40C",
+          "sigma": 1.7192969816524446,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.6875,
+          "p_minus": 0.25,
+          "p_zero": 0.5625,
+          "samples_sharing_a_draw_with_another_point": 23
+        },
+        {
+          "point": "fs_27c_1.08v",
+          "corner_id": "mos_fs/1.080V/27C",
+          "sigma": 1.5720182311300765,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.725,
+          "p_minus": 0.25,
+          "p_zero": 0.55,
+          "samples_sharing_a_draw_with_another_point": 30
+        },
+        {
+          "point": "fs_125c_1.08v",
+          "corner_id": "mos_fs/1.080V/125C",
+          "sigma": 1.472233805144022,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7125,
+          "p_minus": 0.2125,
+          "p_zero": 0.3875,
+          "samples_sharing_a_draw_with_another_point": 30
+        },
+        {
+          "point": "fs_-40c_1.20v",
+          "corner_id": "mos_fs/1.200V/-40C",
+          "sigma": 1.6540172711315742,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.775,
+          "p_minus": 0.325,
+          "p_zero": 0.5375,
+          "samples_sharing_a_draw_with_another_point": 43
+        },
+        {
+          "point": "fs_27c_1.20v",
+          "corner_id": "mos_fs/1.200V/27C",
+          "sigma": 1.1834289293631737,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.775,
+          "p_minus": 0.175,
+          "p_zero": 0.5,
+          "samples_sharing_a_draw_with_another_point": 36
+        },
+        {
+          "point": "fs_125c_1.20v",
+          "corner_id": "mos_fs/1.200V/125C",
+          "sigma": 1.2199599504034078,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7875,
+          "p_minus": 0.2,
+          "p_zero": 0.5,
+          "samples_sharing_a_draw_with_another_point": 32
+        },
+        {
+          "point": "fs_-40c_1.32v",
+          "corner_id": "mos_fs/1.320V/-40C",
+          "sigma": 1.6717375403845527,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7125,
+          "p_minus": 0.2625,
+          "p_zero": 0.4,
+          "samples_sharing_a_draw_with_another_point": 27
+        },
+        {
+          "point": "fs_27c_1.32v",
+          "corner_id": "mos_fs/1.320V/27C",
+          "sigma": 1.2176103579934299,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8125,
+          "p_minus": 0.225,
+          "p_zero": 0.525,
+          "samples_sharing_a_draw_with_another_point": 32
+        },
+        {
+          "point": "fs_125c_1.32v",
+          "corner_id": "mos_fs/1.320V/125C",
+          "sigma": 1.242947020440961,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.75,
+          "p_minus": 0.175,
+          "p_zero": 0.5375,
+          "samples_sharing_a_draw_with_another_point": 7
+        },
+        {
+          "point": "sf_-40c_1.08v",
+          "corner_id": "mos_sf/1.080V/-40C",
+          "sigma": 1.0978540055072237,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8125,
+          "p_minus": 0.175,
+          "p_zero": 0.5,
+          "samples_sharing_a_draw_with_another_point": 34
+        },
+        {
+          "point": "sf_27c_1.08v",
+          "corner_id": "mos_sf/1.080V/27C",
+          "sigma": 1.1834289293631741,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.825,
+          "p_minus": 0.225,
+          "p_zero": 0.55,
+          "samples_sharing_a_draw_with_another_point": 28
+        },
+        {
+          "point": "sf_125c_1.08v",
+          "corner_id": "mos_sf/1.080V/125C",
+          "sigma": 1.18818294989389,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8,
+          "p_minus": 0.2,
+          "p_zero": 0.5,
+          "samples_sharing_a_draw_with_another_point": 19
+        },
+        {
+          "point": "sf_-40c_1.20v",
+          "corner_id": "mos_sf/1.200V/-40C",
+          "sigma": 1.887130326417645,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.75,
+          "p_minus": 0.35,
+          "p_zero": 0.5125,
+          "samples_sharing_a_draw_with_another_point": 37
+        },
+        {
+          "point": "sf_27c_1.20v",
+          "corner_id": "mos_sf/1.200V/27C",
+          "sigma": 1.0953765179049615,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8375,
+          "p_minus": 0.2,
+          "p_zero": 0.4125,
+          "samples_sharing_a_draw_with_another_point": 21
+        },
+        {
+          "point": "sf_125c_1.20v",
+          "corner_id": "mos_sf/1.200V/125C",
+          "sigma": 1.3191646399316188,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.75,
+          "p_minus": 0.2,
+          "p_zero": 0.5375,
+          "samples_sharing_a_draw_with_another_point": 28
+        },
+        {
+          "point": "sf_-40c_1.32v",
+          "corner_id": "mos_sf/1.320V/-40C",
+          "sigma": 1.0953765179049615,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.8,
+          "p_minus": 0.1625,
+          "p_zero": 0.475,
+          "samples_sharing_a_draw_with_another_point": 39
+        },
+        {
+          "point": "sf_27c_1.32v",
+          "corner_id": "mos_sf/1.320V/27C",
+          "sigma": 1.026627521765834,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.7875,
+          "p_minus": 0.125,
+          "p_zero": 0.5625,
+          "samples_sharing_a_draw_with_another_point": 33
+        },
+        {
+          "point": "sf_125c_1.32v",
+          "corner_id": "mos_sf/1.320V/125C",
+          "sigma": 1.0147016671692437,
+          "problem": null,
+          "n": 80.0,
+          "p_plus": 0.825,
+          "p_minus": 0.15,
+          "p_zero": 0.6375,
+          "samples_sharing_a_draw_with_another_point": 30
+        }
+      ],
+      "retained_record": {
+        "path": "sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md",
+        "format": "this repo's append-only record format (not a klt envelope)",
+        "recorded_value": "grid-wide mean implied 1-sigma decision noise 1.335 mV (per-point 0.889 ... 2.710 mV), 45/45 points, N = 80 per rung",
+        "recorded_verdict_target": "NOT MET",
+        "recorded_verdict_stretch": "NOT MET",
+        "binding": "grid-wide mean (the DR-designated statistic); worst single point tt_125c_1.08v (2.710 mV)"
+      },
+      "tool_gap": "2AMLogic/klayout-tools#2960 (no gradeable population statistic over two measurements / per-corner populations); #2963 (the Monte-Carlo seed contract does not cover TRNOISE: draws are pid-seeded, so separate batch jobs can share noise streams); see also #2482 (one analysis per corner)",
+      "notes": [
+        "1401/3600 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated)."
+      ]
+    },
+    {
+      "id": "3a",
+      "row": "Decision time vs overdrive",
+      "sub_bound": "decision time at 50 mV overdrive, 1.2 V core, at every PVT point",
+      "unit": "ns",
+      "condition": "33.3 MHz strobe, delay measured on the second strobe (output must flip a latch holding the opposite answer), thresholds supply-normalized",
+      "statistical_basis": "deterministic corner matrix, mismatch off (plain mos_<p> sections)",
+      "target_bound": "<= 1.5",
+      "stretch_bound": "<= 0.8",
+      "evidence_kind": "klt_sim",
+      "bench": "regeneration",
+      "measurement": "td_od50_ns",
+      "target": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 0.611212,
+            "point": "ff_-40c_1.08v",
+            "corner_id": "mos_ff/vsup=1.080_vsupa=1.080V/-40C"
+          },
+          "max": {
+            "value": 0.894737,
+            "point": "ss_125c_1.32v",
+            "corner_id": "mos_ss/vsup=1.320_vsupa=1.320V/125C"
+          }
+        },
+        "binding": {
+          "point": "ss_125c_1.32v",
+          "corner_id": "mos_ss/vsup=1.320_vsupa=1.320V/125C",
+          "value": 0.894737,
+          "margin": 0.605263
+        },
+        "points_failing": 0,
+        "failing_points": [],
+        "verdict": "PASS"
+      },
+      "stretch": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 0.611212,
+            "point": "ff_-40c_1.08v",
+            "corner_id": "mos_ff/vsup=1.080_vsupa=1.080V/-40C"
+          },
+          "max": {
+            "value": 0.894737,
+            "point": "ss_125c_1.32v",
+            "corner_id": "mos_ss/vsup=1.320_vsupa=1.320V/125C"
+          }
+        },
+        "binding": {
+          "point": "ss_125c_1.32v",
+          "corner_id": "mos_ss/vsup=1.320_vsupa=1.320V/125C",
+          "value": 0.894737,
+          "margin": -0.09473699999999996
+        },
+        "points_failing": 10,
+        "failing_points": [
+          "ss_-40c_1.08v",
+          "ss_27c_1.08v",
+          "ss_125c_1.08v",
+          "ss_-40c_1.20v",
+          "ss_27c_1.20v",
+          "ss_125c_1.20v",
+          "ss_-40c_1.32v",
+          "ss_27c_1.32v",
+          "ss_125c_1.32v",
+          "sf_125c_1.32v"
+        ],
+        "verdict": "FAIL"
+      },
+      "target_verdict": "PASS",
+      "stretch_verdict": "FAIL"
+    },
+    {
+      "id": "3b",
+      "row": "Decision time vs overdrive (metastability)",
+      "sub_bound": "regeneration time constant tau, worst PVT point, tau = (t(0.1 mV) - t(1 mV)) / ln 10",
+      "unit": "ps",
+      "condition": "extracted from the (1 mV, 0.1 mV) delay pair of the regeneration bench",
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "target_bound": "<= 250",
+      "stretch_bound": "not specified",
+      "evidence_kind": "klt_sim",
+      "bench": "regeneration",
+      "measurement": "tau_ps",
+      "target": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 44.1491,
+            "point": "ff_-40c_1.32v",
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/-40C"
+          },
+          "max": {
+            "value": 171.442,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C"
+          }
+        },
+        "binding": {
+          "point": "ss_-40c_1.08v",
+          "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C",
+          "value": 171.442,
+          "margin": 78.55799999999999
+        },
+        "points_failing": 0,
+        "failing_points": [],
+        "verdict": "PASS"
+      },
+      "stretch": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 44.1491,
+            "point": "ff_-40c_1.32v",
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/-40C"
+          },
+          "max": {
+            "value": 171.442,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C"
+          }
+        },
+        "verdict": "NOT SPECIFIED"
+      },
+      "target_verdict": "PASS",
+      "stretch_verdict": "NOT SPECIFIED"
+    },
+    {
+      "id": "3c",
+      "row": "Decision time vs overdrive (metastability)",
+      "sub_bound": "decision time at 0.1 mV overdrive, worst PVT point",
+      "unit": "ns",
+      "condition": "same bench and strobe as 3a",
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "target_bound": "<= 2",
+      "stretch_bound": "not specified",
+      "evidence_kind": "klt_sim",
+      "bench": "regeneration",
+      "measurement": "td_od01_ns",
+      "target": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 0.936105,
+            "point": "ff_-40c_1.32v",
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/-40C"
+          },
+          "max": {
+            "value": 1.76873,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C"
+          }
+        },
+        "binding": {
+          "point": "ss_-40c_1.08v",
+          "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C",
+          "value": 1.76873,
+          "margin": 0.2312700000000001
+        },
+        "points_failing": 0,
+        "failing_points": [],
+        "verdict": "PASS"
+      },
+      "stretch": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 0.936105,
+            "point": "ff_-40c_1.32v",
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/-40C"
+          },
+          "max": {
+            "value": 1.76873,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C"
+          }
+        },
+        "verdict": "NOT SPECIFIED"
+      },
+      "target_verdict": "PASS",
+      "stretch_verdict": "NOT SPECIFIED"
+    },
+    {
+      "id": "4a",
+      "row": "Kickback",
+      "sub_bound": "peak transient injected charge per decision edge, per side: Q_kick = max_t |integral of i_kick dt'| over 30 ... 45 ns, referenced to the node's pre-decision level at 29 ns",
+      "unit": "fC",
+      "condition": "branch A of the kickback bench: input node driven from an ideal source through R_src = 1 kohm with C_in = 100 fF to ground; NOT the net settled charge on the floating branch (a different, ~8x smaller quantity)",
+      "statistical_basis": "deterministic corner matrix, mismatch off; worst side (max of + and - input) per point",
+      "target_bound": "<= 25",
+      "stretch_bound": "<= 8",
+      "evidence_kind": "klt_sim",
+      "bench": "kickback",
+      "measurement": "qkick_fc",
+      "target": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 12.1894,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/1.080V/-40C"
+          },
+          "max": {
+            "value": 15.9692,
+            "point": "ff_125c_1.32v",
+            "corner_id": "mos_ff/1.320V/125C"
+          }
+        },
+        "binding": {
+          "point": "ff_125c_1.32v",
+          "corner_id": "mos_ff/1.320V/125C",
+          "value": 15.9692,
+          "margin": 9.0308
+        },
+        "points_failing": 0,
+        "failing_points": [],
+        "verdict": "PASS"
+      },
+      "stretch": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 12.1894,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/1.080V/-40C"
+          },
+          "max": {
+            "value": 15.9692,
+            "point": "ff_125c_1.32v",
+            "corner_id": "mos_ff/1.320V/125C"
+          }
+        },
+        "binding": {
+          "point": "ff_125c_1.32v",
+          "corner_id": "mos_ff/1.320V/125C",
+          "value": 15.9692,
+          "margin": -7.969200000000001
+        },
+        "points_failing": 45,
+        "failing_points": [
+          "tt_-40c_1.08v",
+          "tt_27c_1.08v",
+          "tt_125c_1.08v",
+          "tt_-40c_1.20v",
+          "tt_27c_1.20v",
+          "tt_125c_1.20v",
+          "tt_-40c_1.32v",
+          "tt_27c_1.32v",
+          "tt_125c_1.32v",
+          "ff_-40c_1.08v",
+          "ff_27c_1.08v",
+          "ff_125c_1.08v",
+          "ff_-40c_1.20v",
+          "ff_27c_1.20v",
+          "ff_125c_1.20v",
+          "ff_-40c_1.32v",
+          "ff_27c_1.32v",
+          "ff_125c_1.32v",
+          "ss_-40c_1.08v",
+          "ss_27c_1.08v",
+          "ss_125c_1.08v",
+          "ss_-40c_1.20v",
+          "ss_27c_1.20v",
+          "ss_125c_1.20v",
+          "ss_-40c_1.32v",
+          "ss_27c_1.32v",
+          "ss_125c_1.32v",
+          "fs_-40c_1.08v",
+          "fs_27c_1.08v",
+          "fs_125c_1.08v",
+          "fs_-40c_1.20v",
+          "fs_27c_1.20v",
+          "fs_125c_1.20v",
+          "fs_-40c_1.32v",
+          "fs_27c_1.32v",
+          "fs_125c_1.32v",
+          "sf_-40c_1.08v",
+          "sf_27c_1.08v",
+          "sf_125c_1.08v",
+          "sf_-40c_1.20v",
+          "sf_27c_1.20v",
+          "sf_125c_1.20v",
+          "sf_-40c_1.32v",
+          "sf_27c_1.32v",
+          "sf_125c_1.32v"
+        ],
+        "verdict": "FAIL"
+      },
+      "target_verdict": "PASS",
+      "stretch_verdict": "FAIL"
+    },
+    {
+      "id": "4b",
+      "row": "Kickback",
+      "sub_bound": "signal-dependent differential residue at the input nodes at the end of a 30 ns decision cycle, against a non-charge-restoring source",
+      "unit": "uV",
+      "condition": "branches B and C (1 Gohm / 1 pF, RC = 1 ms): difference between the settled differential input displacement at a 1 mV and a 100 mV input, 29 ns -> 55 ns (DR-0002 key kick_sigdep)",
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "target_bound": "<= 100",
+      "stretch_bound": "<= 30",
+      "evidence_kind": "klt_sim",
+      "bench": "kickback",
+      "measurement": "kick_sigdep_uv",
+      "target": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 1.20509,
+            "point": "fs_125c_1.32v",
+            "corner_id": "mos_fs/1.320V/125C"
+          },
+          "max": {
+            "value": 7.97479,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/1.080V/-40C"
+          }
+        },
+        "binding": {
+          "point": "ss_-40c_1.08v",
+          "corner_id": "mos_ss/1.080V/-40C",
+          "value": 7.97479,
+          "margin": 92.02521
+        },
+        "points_failing": 0,
+        "failing_points": [],
+        "verdict": "PASS"
+      },
+      "stretch": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 1.20509,
+            "point": "fs_125c_1.32v",
+            "corner_id": "mos_fs/1.320V/125C"
+          },
+          "max": {
+            "value": 7.97479,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/1.080V/-40C"
+          }
+        },
+        "binding": {
+          "point": "ss_-40c_1.08v",
+          "corner_id": "mos_ss/1.080V/-40C",
+          "value": 7.97479,
+          "margin": 22.02521
+        },
+        "points_failing": 0,
+        "failing_points": [],
+        "verdict": "PASS"
+      },
+      "target_verdict": "PASS",
+      "stretch_verdict": "PASS"
+    },
+    {
+      "id": "4c",
+      "row": "Kickback",
+      "sub_bound": "peak single-ended excursion into the stated 1 kohm / 100 fF drive -- a REPORTING requirement, deliberately unbounded until a driving stage is named",
+      "unit": "mV",
+      "condition": "branch A, v(apa) - v(asp), max |.| over 30 ... 45 ns",
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "target_bound": "not specified",
+      "stretch_bound": "not specified",
+      "evidence_kind": "klt_sim",
+      "bench": "kickback",
+      "measurement": "kick_1k_peak_mv",
+      "target": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 48.2095,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/1.080V/-40C"
+          },
+          "max": {
+            "value": 71.1901,
+            "point": "ff_27c_1.32v",
+            "corner_id": "mos_ff/1.320V/27C"
+          }
+        },
+        "verdict": "NOT SPECIFIED"
+      },
+      "stretch": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 48.2095,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/1.080V/-40C"
+          },
+          "max": {
+            "value": 71.1901,
+            "point": "ff_27c_1.32v",
+            "corner_id": "mos_ff/1.320V/27C"
+          }
+        },
+        "verdict": "NOT SPECIFIED"
+      },
+      "target_verdict": "NOT SPECIFIED",
+      "stretch_verdict": "NOT SPECIFIED",
+      "report_verdict": "REPORTED"
+    },
+    {
+      "id": "5a",
+      "row": "Supply / power",
+      "sub_bound": "1.2 V +/-10 % LV core, -40 ... 125 C: every implemented bench exercised over the full grid, with the supply and temperature verified as applied",
+      "unit": null,
+      "condition": "supply 1.08 / 1.20 / 1.32 V, temperature -40 / 27 / 125 C, process tt/ff/ss/fs/sf",
+      "statistical_basis": "coverage of the ratified grid",
+      "target_bound": "full grid exercised",
+      "stretch_bound": "not specified",
+      "evidence_kind": "coverage",
+      "target_verdict": "PASS",
+      "stretch_verdict": "NOT SPECIFIED",
+      "benches_fully_covered": [
+        "regeneration",
+        "kickback",
+        "offset_mc",
+        "transient_noise"
+      ],
+      "coverage_problems": []
+    },
+    {
+      "id": "5b",
+      "row": "Supply / power",
+      "sub_bound": "average power at 33.3 MHz, INCLUDING the tail-bias reference branch",
+      "unit": "uW",
+      "condition": "instance A of the regeneration bench on its own supply (core + its own dut_ib reference branch), average supply power over one full 30 ns cycle (30 ... 60 ns) containing one decision that flips the held output",
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "target_bound": "not specified",
+      "stretch_bound": "<= 20",
+      "evidence_kind": "klt_sim",
+      "bench": "regeneration",
+      "measurement": "p_avg_uw",
+      "target": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 26.8007,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C"
+          },
+          "max": {
+            "value": 37.0517,
+            "point": "ff_125c_1.32v",
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/125C"
+          }
+        },
+        "verdict": "NOT SPECIFIED"
+      },
+      "stretch": {
+        "points_expected": 45,
+        "points_valid": 45,
+        "points_missing_or_invalid": [],
+        "range": {
+          "min": {
+            "value": 26.8007,
+            "point": "ss_-40c_1.08v",
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C"
+          },
+          "max": {
+            "value": 37.0517,
+            "point": "ff_125c_1.32v",
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/125C"
+          }
+        },
+        "binding": {
+          "point": "ff_125c_1.32v",
+          "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/125C",
+          "value": 37.0517,
+          "margin": -17.051699999999997
+        },
+        "points_failing": 45,
+        "failing_points": [
+          "tt_-40c_1.08v",
+          "tt_27c_1.08v",
+          "tt_125c_1.08v",
+          "tt_-40c_1.20v",
+          "tt_27c_1.20v",
+          "tt_125c_1.20v",
+          "tt_-40c_1.32v",
+          "tt_27c_1.32v",
+          "tt_125c_1.32v",
+          "ff_-40c_1.08v",
+          "ff_27c_1.08v",
+          "ff_125c_1.08v",
+          "ff_-40c_1.20v",
+          "ff_27c_1.20v",
+          "ff_125c_1.20v",
+          "ff_-40c_1.32v",
+          "ff_27c_1.32v",
+          "ff_125c_1.32v",
+          "ss_-40c_1.08v",
+          "ss_27c_1.08v",
+          "ss_125c_1.08v",
+          "ss_-40c_1.20v",
+          "ss_27c_1.20v",
+          "ss_125c_1.20v",
+          "ss_-40c_1.32v",
+          "ss_27c_1.32v",
+          "ss_125c_1.32v",
+          "fs_-40c_1.08v",
+          "fs_27c_1.08v",
+          "fs_125c_1.08v",
+          "fs_-40c_1.20v",
+          "fs_27c_1.20v",
+          "fs_125c_1.20v",
+          "fs_-40c_1.32v",
+          "fs_27c_1.32v",
+          "fs_125c_1.32v",
+          "sf_-40c_1.08v",
+          "sf_27c_1.08v",
+          "sf_125c_1.08v",
+          "sf_-40c_1.20v",
+          "sf_27c_1.20v",
+          "sf_125c_1.20v",
+          "sf_-40c_1.32v",
+          "sf_27c_1.32v",
+          "sf_125c_1.32v"
+        ],
+        "verdict": "FAIL"
+      },
+      "target_verdict": "NOT SPECIFIED",
+      "stretch_verdict": "FAIL"
+    }
+  ],
+  "t1_item5": {
+    "all_target_rows_pass": false,
+    "blocking_sub_bounds": [
+      {
+        "id": "1",
+        "sub_bound": "input-referred offset, 3 sigma, calibration-free, at every PVT point",
+        "target_verdict": "FAIL"
+      },
+      {
+        "id": "2",
+        "sub_bound": "differential, input-referred, total integrated rms; compliance path = whole-latch transient-noise decision statistics with seeds and run counts committed",
+        "target_verdict": "FAIL"
+      }
+    ]
+  },
+  "campaign": "full_w6_l034"
+}
