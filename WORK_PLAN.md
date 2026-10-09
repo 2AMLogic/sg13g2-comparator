@@ -17,13 +17,14 @@ _None._
 
 Human-approved issues ready for implementation (`loom:issue`).
 
-_None._
+- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-_None._
+- **#80**: Bias-point sizing study to found a Target-column power bound for DR-0002 Row 5
+- **#81**: Complete whole-latch transient-noise injection into the regenerative pair (internal-node hook)
 
 ## PRs Awaiting Review
 
@@ -41,7 +42,8 @@ _None._
 
 Issues carrying `loom:curated`.
 
-_None._
+- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
+- **#81**: Complete whole-latch transient-noise injection into the regenerative pair (internal-node hook) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -57,11 +59,11 @@ _None._
 |------|-------|
 | Operator merge-risk holds | 0 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 0 |
+| Ready (`loom:issue`) | 1 |
+| In Progress (`loom:building`) | 2 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 0 |
+| Curated | 2 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
