@@ -163,11 +163,11 @@ corner claims.
   `smoke/kickback-timestep-ff-1p32-125.*`, run under the campaign's same
   `reltol=1e-4`. The direct value is 2.2× the DR's peak-voltage × C_in
   estimate (14.3 fC), inside the 1.3 … 2.9× bias DR-0002 derived for that
-  estimator. **Not done:** the known-charge injection fixture (bipolar pulses
-  with cancelling net charge) that
-  [#78](https://github.com/2AMLogic/sg13g2-comparator/issues/78) proposes for
-  certifying the instrument. The 4a FAIL rests on the convergence check and
-  the consistency with the DR's own bias analysis, not on that fixture. The
+  estimator. **Known-charge fixture (done, issue
+  [#78](https://github.com/2AMLogic/sg13g2-comparator/issues/78)):** the
+  same instrument block, driven by ideal currents of analytic charge, reads
+  back to within 0.0002 fC, including a zero-net bipolar case; see
+  [Q_kick instrument validation](#q_kick-instrument-validation-issue-78). The
   tiny residue (4b) moved 7 % at that corner under the tighter step
   (2.28 → 2.12 µV), which is 40× under its bound.
 - **`offset_mc`** (from `comparator-offset-transient-mc/`) covers Row 1. One
@@ -190,6 +190,68 @@ corner claims.
   slope σ = 2·od / (Φ⁻¹(p+) − Φ⁻¹(p−)), then the grid-wide mean. The
   zero-overdrive rung is the noise-injection guard; its fractions land in
   0.400 … 0.575 at every point, inside the original's 0.1 … 0.9 check.
+
+## Q_kick instrument validation (issue #78)
+
+Evidence is under
+[`campaigns/20261009-issue78/`](campaigns/20261009-issue78/), appended beside
+the campaign (nothing under `20261009-d73a9ac/` was touched). Client: the
+CI-pinned klt `0.5.0+ge8ca621a6961`.
+
+**Known-charge fixture.**
+[`benches/kickback_fixture.circuit.spice`](benches/kickback_fixture.circuit.spice)
+drives the kickback bench's own ammeter + 1 pF integrator block (and the
+1 kohm / 100 fF source network) from ideal PWL currents of analytic charge,
+with no DUT. The measure strings come from the same template as the real
+bench (`qkick_measurements` in `sim/kltsim/benches.py`; a unit test pins
+both to the strings in the submitted campaign request). One unit, local
+backend; `python3 sim/run_klt_corner_verification.py fixture --campaign <id>`.
+
+| case | injected | expected Q | measured Q | expected net v(q) | measured net v(q) |
+|---|---|---|---|---|---|
+| a | +10 fC at 33 ns, with +7 fC at 20 ns (before the 29 ns reference) and +4 fC at 50 ns (after the window) | 10 fC | 9.9999 fC | -10 fC | -9.9998 fC |
+| b | -10 fC at 33 ns | 10 fC | 10.0000 fC | +10 fC | +9.9999 fC |
+| c | **bipolar** +20 fC (31 ... 36 ns) then -20 fC (38 ... 43 ns) | 20 fC | 19.9999 fC | 0 fC | +0.0001 fC |
+| d | +10 fC as 1 uA for 10 ns into the restoring 1 kohm / 100 fF node | 10 fC | 10.0000 fC | -10 fC | -9.9999 fC |
+
+Tolerance 0.02 fC (200x looser than the observed error). Case c has zero
+net charge and a 20 fC peak: the deliberately wrong end-of-window estimator
+|q(45 ns) - q(29 ns)| reads 0.0001 fC there and fails, and the instrument
+does not, so the instrument measures the peak and not the net. Case d: peak
+node volts x C_in reads 0.1000 fC for the 10 fC actually delivered, because the
+source resistor restores the node while the pulse is on; the instrument reads
+the full 10 fC. Case a shows the 29 ns reference and the 45 ns window edge
+are enforced (a reference at 19 ns or a window to 60 ns would give 17 fC /
+14 fC; checked in the unit test). Full table and per-case signed values:
+[`fixture/kickback_fixture.check.md`](campaigns/20261009-issue78/fixture/kickback_fixture.check.md).
+
+**Sign convention correction.** The fixture shows that charge pushed INTO the
+pin node makes v(q) FALL (the ammeter's positive terminal is the source
+network side, so i(vk) < 0 for that direction). The header of
+`benches/kickback.circuit.spice` says v(q) rises; it was left unedited
+because the submitted campaign bodies embed that file's hash. The sign never
+enters the graded number, which is an absolute value.
+
+**Decisions unchanged.** One-corner A/B at `mos_tt / 1.2 V / 27 C` on the
+batch fleet (this host's ngspice 42 cannot load the PDK's OSDI v0.4 models):
+the bench with and without the ammeters and integrators
+([`ab/ab.json`](campaigns/20261009-issue78/ab/ab.json); jobs
+`klt-sim-664f084f5cc4` with, `klt-sim-ee516621175d` without). `dout_1k_end`,
+`dout_float_small_end` and `dout_float_big_end` are 1.0 in both arms,
+bit-identical; the branch-A peak excursion differs by 0.02 mV of 115.8 mV
+(0.02 %), the same order as the timestep convergence figure.
+
+**Timestep convergence.** Not redone: the fixture found no defect. See the
+`smoke/kickback-timestep-ff-1p32-125.*` re-run cited above (+0.03 %).
+
+**Harness bench.** Not ported: `sim/comparator-kickback/testbench/` stays as
+the historical harness measurement (its README now points here). A `checks:`
+entry of 25 fC would turn that bench red at 39/45 points, which is the honest
+result already recorded here; the harness runs on the host's ngspice, which
+cannot load the PDK's OSDI models, so a port could not be validated locally,
+and a second grid would duplicate this campaign. The 45-point Q_kick result
+remains `20261009-d73a9ac`; 4a is still **NOT MET** (binding `ff_125c_1.32v`,
+30.87 / 31.46 fC per side). No bound, DUT or decision record was changed.
 
 ## Limitations and disclosures
 

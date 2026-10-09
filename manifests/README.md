@@ -206,8 +206,10 @@ are in that README. **Two Targets fail:**
 - **Row 4a, peak injected charge Q_kick per side**: measured directly for the
   first time, **23.6 … 31.5 fC**, with **39/45 points over the 25 fC Target**
   (binding `ff_125c_1.32v`). DR-0002 left this clause "CONSISTENT, NOT
-  CERTIFIED". The instrument is timestep-converged, but #78's known-charge
-  fixture has not been run.
+  CERTIFIED". The instrument is timestep-converged and
+  passes #78's known-charge fixture (unipolar, negative, bipolar and
+  restoring-resistor injections read back to 0.002 fC; campaign
+  `20261009-issue78`), so the FAIL stands on a validated instrument.
 
 Rows 1, 3a, 3b, 3c and 4b meet their Targets at 45/45 points, and the supply
 and temperature grid (5a) is fully exercised. Row 5's power has no Target

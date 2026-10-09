@@ -1,0 +1,89 @@
+{
+  "ok": true,
+  "tolerance_fc": 0.02,
+  "end_window_estimator_fails_bipolar": true,
+  "corner_id": "mos_tt/1.200V/27C",
+  "cases": [
+    {
+      "case": "a",
+      "what": "unipolar +10 fC (+7 fC before 29 ns and +4 fC after 45 ns excluded)",
+      "expected_peak_fc": 10.0,
+      "measured_peak_fc": 9.99985,
+      "expected_net_fc": -10.0,
+      "measured_net_fc": -9.99982,
+      "measured_pos_fc": 2.79998e-05,
+      "measured_neg_fc": -9.99985,
+      "expected_sign": -1,
+      "measured_sign": -1,
+      "end_window_estimator_fc": 9.99982,
+      "end_window_estimator_ok": true,
+      "checks": {
+        "peak": true,
+        "net": true,
+        "sign": true
+      },
+      "ok": true
+    },
+    {
+      "case": "b",
+      "what": "unipolar -10 fC",
+      "expected_peak_fc": 10.0,
+      "measured_peak_fc": 9.99995,
+      "expected_net_fc": 10.0,
+      "measured_net_fc": 9.99993,
+      "measured_pos_fc": 9.99995,
+      "measured_neg_fc": 0.0,
+      "expected_sign": 1,
+      "measured_sign": 1,
+      "end_window_estimator_fc": 9.99993,
+      "end_window_estimator_ok": true,
+      "checks": {
+        "peak": true,
+        "net": true,
+        "sign": true
+      },
+      "ok": true
+    },
+    {
+      "case": "c",
+      "what": "bipolar +20 fC then -20 fC, net 0",
+      "expected_peak_fc": 20.0,
+      "measured_peak_fc": 19.9999,
+      "expected_net_fc": 0.0,
+      "measured_net_fc": 0.000139999,
+      "measured_pos_fc": 0.000139999,
+      "measured_neg_fc": -19.9999,
+      "expected_sign": -1,
+      "measured_sign": -1,
+      "end_window_estimator_fc": 0.000139999,
+      "end_window_estimator_ok": false,
+      "checks": {
+        "peak": true,
+        "net": true,
+        "sign": true
+      },
+      "ok": true
+    },
+    {
+      "case": "d",
+      "what": "+10 fC through a restoring 1 kohm / 100 fF node (V x C_in reads ~0.1 fC)",
+      "expected_peak_fc": 10.0,
+      "measured_peak_fc": 9.99995,
+      "expected_net_fc": -10.0,
+      "measured_net_fc": -9.99993,
+      "measured_pos_fc": 0.0,
+      "measured_neg_fc": -9.99995,
+      "expected_sign": -1,
+      "measured_sign": -1,
+      "end_window_estimator_fc": 9.99993,
+      "end_window_estimator_ok": true,
+      "checks": {
+        "peak": true,
+        "net": true,
+        "sign": true
+      },
+      "ok": true,
+      "vc_estimator_fc": 0.1
+    }
+  ]
+}
