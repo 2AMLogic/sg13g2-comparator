@@ -216,6 +216,7 @@ python3 sim/run_corners.py <experiment-slug> -j 8
 ```
 
 A re-run mints a **new** record; it never overwrites one already committed.
+This is enforced, not assumed: see "Run-identity reservation" below.
 `sim/` is an evidence trail, not a status page.
 
 ## Pinned toolchain
@@ -268,7 +269,42 @@ sim/<experiment-slug>/
   netlist-snapshots/<record-id>.spice   DUT + fragment exactly as simulated
 ```
 
-`<record-id>` is `<UTC-YYYYmmdd-HHMMSS>-<short-sha>`.
+`<record-id>` is `<UTC-YYYYmmdd-HHMMSS>-<short-sha>-<token>`, where `<token>`
+is 6 random hex digits (issue #110). Records minted before #110 have no
+token (`<UTC-YYYYmmdd-HHMMSS>-<short-sha>`) and keep their IDs unchanged.
+
+### Run-identity reservation (issue #110)
+
+Every `run_corners.py` run **exclusively reserves** its record ID before it
+writes any deck or log (`harness/report.py` `reserve_run`):
+
+1. A candidate ID is minted from the timestamp, commit and a fresh token.
+2. The candidate is skipped if **any** member of its bundle already exists:
+   `records/<id>.md`, `records/<id>.json`, `netlist-snapshots/<id>.spice`
+   or `corners/<id>/`. Orphans left by a crashed run (logs without a
+   record, or a stray snapshot) occupy the ID the same as a finished record.
+3. The ID is claimed with an atomic `mkdir` of `corners/<id>/` (evidence
+   runs only), then of a private scratch dir `sim/.work/<slug>/<id>/`. If
+   either already exists, another run owns it. This run undoes only the
+   empty directory it just created and retries with a new token. After 32
+   failed attempts it refuses with exit code 5 and simulates nothing.
+
+After reservation:
+
+- Each raw log is created with exclusive mode before the point's deck is
+  written or ngspice starts, so an existing log is never replaced.
+- `write_record` checks the record, JSON twin and snapshot before writing
+  any of them, then creates each one exclusively. If any already exists, it
+  raises `EvidenceCollision` (exit 5). The existing bundle stays
+  byte-identical.
+- Cleanup removes only this run's own scratch dir. It never touches another
+  run's scratch, nor this run's `corners/<id>/` logs.
+
+**Recovery is always a new run ID.** If a run is refused or crashes, do not
+delete, edit or reuse the occupied bundle. Re-run the command and a fresh ID
+is reserved. An interrupted run's partial `corners/<id>/` stays as an
+append-only trace of the attempt. Commit it as such or leave it uncommitted,
+but never write into it again.
 
 ## Record format
 

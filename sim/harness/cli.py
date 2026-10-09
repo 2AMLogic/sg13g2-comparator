@@ -17,7 +17,6 @@ equivalent step.
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
 from pathlib import Path
 
@@ -210,12 +209,22 @@ def main(argv: list[str] | None = None) -> int:
     points = corners_mod.build_grid(corner_list, temperatures, supplies)
 
     write = not (args.no_write or sabotaged)
-    rid = report_mod.record_id()
     # Captured BEFORE the run writes anything, so the flag describes the tree
     # this record was produced from rather than the tree the run left behind.
     dirty_at_start = report_mod.dirty_paths()
-    workdir = WORK_DIR / tb.experiment / rid
-    log_dir = (tb.experiment_dir / "corners" / rid) if write else workdir
+    # Issue #110: exclusively reserve this run's identity (evidence log dir +
+    # private scratch dir) before any deck or log is written. A collision is
+    # retried with a fresh token; existing evidence is never touched.
+    try:
+        reservation = report_mod.reserve_run(
+            tb.experiment_dir, WORK_DIR / tb.experiment, write
+        )
+    except report_mod.ReservationFailed as exc:
+        print(f"RUN IDENTITY NOT RESERVED -- refusing to simulate: {exc}", file=sys.stderr)
+        return 5
+    rid = reservation.rid
+    workdir = reservation.workdir
+    log_dir = reservation.log_dir
 
     banner_bits = [
         f"experiment sim/{tb.experiment}",
@@ -239,14 +248,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  [{done[0]:3d}/{len(points)}] {flag} {result.point.corner_id} "
               f"({result.seconds:.1f}s)" + (f" -- {result.message}" if result.message else ""))
 
-    results = runner_mod.run_grid(
-        tb, pdk, dut, points, workdir,
-        jobs=max(1, args.jobs),
-        timeout_s=args.timeout,
-        on_result=_progress,
-        log_dir=log_dir,
-        num_threads=args.num_threads,
-    )
+    try:
+        results = runner_mod.run_grid(
+            tb, pdk, dut, points, workdir,
+            jobs=max(1, args.jobs),
+            timeout_s=args.timeout,
+            on_result=_progress,
+            log_dir=log_dir,
+            num_threads=args.num_threads,
+            exclusive_logs=write,
+        )
+    except BaseException:
+        # Only this run's private scratch is removed; any logs already in
+        # corners/<rid>/ stay as an orphan that keeps the id occupied.
+        reservation.release_scratch()
+        raise
 
     summaries = report_mod.summarize(tb, results)
     completed = len(report_mod.usable_points(results, tb.measure))
@@ -295,7 +311,7 @@ def main(argv: list[str] | None = None) -> int:
         # Under sabotage a FAIL is the desired outcome: it proves the per-axis
         # process-sensitivity checks would have caught a runner stuck on typical.
         print("  (sabotage run: FAIL is the expected, correct outcome)")
-        shutil.rmtree(workdir, ignore_errors=True)
+        reservation.release_scratch()
         return 0 if not passed else 4
 
     if write:
@@ -308,11 +324,16 @@ def main(argv: list[str] | None = None) -> int:
             "toolchain": chain.as_dict(),
             **dut.provenance_record(),
         }
-        path = report_mod.write_record(tb, results, summaries, context, dut.netlist)
+        try:
+            path = report_mod.write_record(tb, results, summaries, context, dut.netlist)
+        except report_mod.EvidenceCollision as exc:
+            reservation.release_scratch()
+            print(f"EVIDENCE NOT WRITTEN: {exc}", file=sys.stderr)
+            return 5
         print(f"  record: {path.relative_to(REPO_ROOT)}")
         print(f"  logs:   sim/{tb.experiment}/corners/{rid}/")
     else:
         print("  (--no-write: no evidence record minted)")
-    shutil.rmtree(workdir, ignore_errors=True)
+    reservation.release_scratch()
 
     return 0 if passed else 1
