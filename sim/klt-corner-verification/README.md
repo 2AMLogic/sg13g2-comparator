@@ -480,6 +480,22 @@ sha256 covers the modified text, so `provenance.input.content_hash` pins it.
 never graded against a hand-edited netlist. `build --screen` rewrites each request to the
 reduced screening grid below. `sizesweep` tabulates (no simulator needed).
 
+**Validated screening reduction (issue #122).** `sizesweep` no longer trusts a screening
+envelope at face value. Per candidate and bench it (1) loads the saved
+request/invocation/envelope chain via `kltsim.grade.load_campaign` with the explicit
+screening grid (`sizesweep.screen_corners`; every other request field is still compared to
+the bench contract, and the default full-grid check is unchanged), (2) runs the grader's DUT
+check (body = today's DUT plus its declared geometry; envelope content hash = body hash), and
+(3) requires one candidate geometry across both bench bodies. Each metric then counts a point
+only if the corner status is `pass`/`fail` (not `error` or absent), the supply/temperature
+probes match the corner, the value is finite and unique, the PVT key is not duplicated, and
+the metric's required decision gates (listed in the report) are present, finite, unique and
+inside the bench's gate limits. The report publishes expected (18) / present / valid points
+per bench and per metric with rejection reasons (`sizesweep.json` has them all). A
+worst-of-screen cell, and the binding-point charge (`ff_125c_1.32v`), are numbers only when
+valid; otherwise they read `unavailable (valid/expected)`. Existing reports are never
+overwritten: re-tabulating a committed campaign needs `sizesweep --report-name <fresh stem>`.
+
 **Stage 1, screening** (`scr_<name>/`): kickback and regeneration benches, 18 points
 (tt/ff/ss x 1.08/1.32 V x -40/27/125 C, deterministic, mismatch off, one draw per point;
 includes the binding corner `ff_125c_1.32v`). These are **screening values, not 45-point

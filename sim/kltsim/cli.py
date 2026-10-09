@@ -539,8 +539,12 @@ def cmd_ibsweep(args) -> int:
 
 
 def cmd_sizesweep(args) -> int:
-    result = sizesweep_mod.run(args.campaign, CAMPAIGNS_DIR)
-    print((CAMPAIGNS_DIR / args.campaign / "sizesweep.md").read_text(encoding="utf-8"))
+    try:
+        result = sizesweep_mod.run(args.campaign, CAMPAIGNS_DIR, args.report_name)
+    except FileExistsError as exc:
+        print(f"sizesweep: {exc}", file=sys.stderr)
+        return 1
+    print((CAMPAIGNS_DIR / args.campaign / f"{args.report_name}.md").read_text(encoding="utf-8"))
     return 0 if result["screen"] or result["full"] else 1
 
 
@@ -623,6 +627,8 @@ def main(argv: list[str] | None = None) -> int:
 
     sz = sub.add_parser("sizesweep", help="tabulate an input-pair sizing study (issue #92)")
     sz.add_argument("--campaign", required=True)
+    sz.add_argument("--report-name", default="sizesweep",
+                    help="output stem; an existing different report is never overwritten")
     sz.set_defaults(func=cmd_sizesweep)
 
     g = sub.add_parser("grade", help="grade a campaign's committed envelopes")
