@@ -119,6 +119,37 @@ Re-grading the committed campaign needs no simulator:
 Rules tests (stdlib only, also run in CI and in `sim/selftest.sh`):
 `PYTHONPATH=sim python3 -m unittest discover -t sim -s sim/kltsim/tests -p 'test_*.py'`.
 
+### Provenance chain checked by `grade`
+
+`grade` (via `kltsim.grade.load_campaign`) validates, for every saved
+`<tag>.envelope.json`, the companion files before any row can be graded:
+
+- `<tag>.invocation.json` and `<tag>.request.json` must exist and parse as JSON objects;
+- the invocation's `request_sha256` and `envelope_sha256` must be bare lowercase
+  64-hex SHA-256 values equal to the hashes of the saved request and envelope
+  **bytes** (no re-serialisation);
+- the request must name `<bench>.body.spice` and its `corners`, `analysis`,
+  `monte_carlo`, `measurements` (order-insensitive) and `netlist_source` must equal what
+  `build.compose_request` produces for that part (a split request is compared with
+  its own process slice only).
+
+Any failure rejects the whole bench: rows resting on it get `REJECTED_EVIDENCE`
+(never PASS), coverage rows list the reason, and the failing part tag and check
+are printed in `grading.md`/`grading.json` (`chain_problems`). The checked hashes
+are recorded per envelope under `benches.<bench>.envelopes[].chain_checked`.
+In-memory grading (unit tests) carries no chain and is unaffected.
+
+This detects accidental drift or edits after submission; it does not
+authenticate the fleet run, and a coherent rewrite of request, envelope and
+invocation together is not detected.
+
+Historical audit (read-only, 2026-10-09): `campaigns/20261009-d73a9ac`, the
+graded campaign, has request + invocation + envelope for all 16 parts and its
+chain validates. `20261009-issue78/80/81` hold exploratory records that
+`grade` does not load; their layouts differ (per-`ib` or `smoke/` sub-directories
+and `attempts.jsonl`), so they are not covered by this check and no metadata was
+generated for them.
+
 Evidence is append-only. `run` refuses to overwrite an existing envelope, so
 a re-run uses a **new** campaign id. The Monte-Carlo benches are split into
 one request per process corner, so each fits one batch job and can be retried
