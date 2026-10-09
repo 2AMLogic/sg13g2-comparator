@@ -5,9 +5,10 @@ Ported from ``2AMLogic/gf180-comparator``'s ``sim/harness/report.py``
 (``min`` / ``max`` / ``min_spread_pct`` / ``max_spread_pct`` and their
 per-axis variants), the per-axis sensitivity guard, the
 grid/spread/per-axis table layout of an evidence record, the DUT provenance
-banner, and the ``<UTC-timestamp>-<short-sha>`` record-id convention. The
-only change from gf180-comparator's version is cosmetic: the PDK provenance
-dict this module reads back (``harness/pdk.py``'s ``Pdk.provenance()``) uses
+banner, and the ``<UTC-timestamp>-<short-sha>`` record-id prefix (issue #110
+appends a random token and enforces uniqueness by exclusive reservation, see
+``reserve_run``). The only other change from gf180-comparator's version is
+cosmetic: the PDK provenance dict this module reads back (``harness/pdk.py``'s ``Pdk.provenance()``) uses
 SG13G2-appropriate key names (``release_version`` -- there is no
 "open_pdks" concept here) instead of gf180-comparator's
 ``open_pdks_version``.
@@ -25,6 +26,10 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import re
+import secrets
+import shutil
 import statistics
 import subprocess
 from dataclasses import dataclass, field
@@ -320,9 +325,141 @@ def dirty_paths() -> list[str]:
     return offenders
 
 
-def record_id(now: datetime | None = None) -> str:
+def new_token() -> str:
+    """Random per-run uniqueness suffix (24 bits; collisions are retried)."""
+    return secrets.token_hex(3)
+
+
+def record_id(
+    now: datetime | None = None,
+    commit: str | None = None,
+    token: str | None = None,
+) -> str:
+    """``<UTC-YYYYmmdd-HHMMSS>-<short-sha>-<token>``.
+
+    The timestamp/commit prefix is kept for readability and sort order; the
+    token makes two runs started in the same second on the same commit pick
+    different ids. Uniqueness is only *enforced* by ``reserve_run``'s
+    exclusive directory creation, never by this function alone. Historical
+    records minted before issue #110 carry no token and keep their ids.
+    """
     now = now or datetime.now(timezone.utc)
-    return f"{now.strftime('%Y%m%d-%H%M%S')}-{git_short_sha()}"
+    commit = commit if commit is not None else git_short_sha()
+    token = token if token is not None else new_token()
+    return f"{now.strftime('%Y%m%d-%H%M%S')}-{commit}-{token}"
+
+
+_RID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+class EvidenceCollision(FileExistsError):
+    """A record identity is already occupied; nothing was written."""
+
+
+class ReservationFailed(RuntimeError):
+    """No unique run identity could be reserved within the retry budget."""
+
+
+def _check_rid(rid: str) -> None:
+    if not _RID_RE.match(rid):
+        raise ValueError(f"invalid record id {rid!r}")
+
+
+def bundle_paths(experiment_dir: Path, rid: str) -> dict[str, Path]:
+    """Every evidence path a record identity owns (the 'bundle')."""
+    _check_rid(rid)
+    return {
+        "record": experiment_dir / "records" / f"{rid}.md",
+        "json": experiment_dir / "records" / f"{rid}.json",
+        "snapshot": experiment_dir / "netlist-snapshots" / f"{rid}.spice",
+        "logs": experiment_dir / "corners" / rid,
+    }
+
+
+def occupied_members(experiment_dir: Path, rid: str) -> list[str]:
+    """Bundle members that already exist for ``rid``.
+
+    Any member counts -- an orphan log directory or snapshot left by a
+    crashed run occupies the identity exactly as a finished record does.
+    """
+    return [
+        name for name, path in bundle_paths(experiment_dir, rid).items()
+        if os.path.lexists(path)
+    ]
+
+
+@dataclass
+class Reservation:
+    """A run identity exclusively owned by the invoking process.
+
+    ``workdir`` is scratch created by this reservation and by nothing else,
+    so ``release_scratch`` can only ever remove this run's files. ``log_dir``
+    is the evidence directory ``corners/<rid>/`` for an evidence-writing run
+    (kept), or ``workdir`` itself for a ``--no-write`` run (discarded).
+    """
+
+    rid: str
+    workdir: Path
+    log_dir: Path
+    write: bool
+
+    def release_scratch(self) -> None:
+        shutil.rmtree(self.workdir, ignore_errors=True)
+
+
+def reserve_run(
+    experiment_dir: Path,
+    work_root: Path,
+    write: bool,
+    now: datetime | None = None,
+    commit: str | None = None,
+    token_factory=new_token,
+    attempts: int = 32,
+) -> Reservation:
+    """Exclusively reserve a fresh run identity BEFORE anything is simulated.
+
+    The claim is an atomic ``os.mkdir`` -- of ``corners/<rid>/`` for an
+    evidence-writing run, then of the scratch ``<work_root>/<rid>/`` -- which
+    fails if the path exists, so two concurrent runs can never both own one
+    id. A candidate whose bundle has ANY member present (record, JSON twin,
+    snapshot, or log directory, including orphans) is skipped. On any
+    collision the half-claim is undone (``os.rmdir`` of the directory this
+    call just created, which only succeeds while it is empty) and a new
+    token is tried. Nothing pre-existing is touched.
+    """
+    now = now or datetime.now(timezone.utc)
+    commit = commit if commit is not None else git_short_sha()
+    work_root.mkdir(parents=True, exist_ok=True)
+    tried: list[str] = []
+    for _ in range(max(1, attempts)):
+        rid = record_id(now, commit, token_factory())
+        tried.append(rid)
+        if occupied_members(experiment_dir, rid):
+            continue
+        log_dir = bundle_paths(experiment_dir, rid)["logs"]
+        if write:
+            log_dir.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.mkdir(log_dir)
+            except FileExistsError:
+                continue
+            # A non-reserving writer may have dropped a member in between.
+            if set(occupied_members(experiment_dir, rid)) - {"logs"}:
+                os.rmdir(log_dir)
+                continue
+        workdir = work_root / rid
+        try:
+            os.mkdir(workdir)
+        except FileExistsError:
+            if write:
+                os.rmdir(log_dir)
+            continue
+        return Reservation(rid=rid, workdir=workdir,
+                           log_dir=log_dir if write else workdir, write=write)
+    raise ReservationFailed(
+        f"could not reserve a unique run identity after {len(tried)} attempts "
+        f"(last tried {tried[-1]!r})"
+    )
 
 
 def _fmt(value: float) -> str:
@@ -519,18 +656,27 @@ def write_record(
     context: dict,
     dut_netlist: Path,
 ) -> Path:
-    """Write the markdown record, its JSON twin, and the netlist snapshot."""
+    """Write the markdown record, its JSON twin, and the netlist snapshot.
+
+    Append-only: if the record, JSON twin or snapshot for this id already
+    exists, raise ``EvidenceCollision`` BEFORE writing any member, so the
+    existing bundle stays byte-identical. Each file is then created with
+    exclusive mode (``"x"``), so a concurrent writer racing past the
+    pre-check still cannot overwrite a member. The ``corners/<rid>/`` log
+    directory is expected to exist (``reserve_run`` creates it).
+    """
     experiment_dir = tb.experiment_dir
     rid = context["record_id"]
+    paths = bundle_paths(experiment_dir, rid)
+    taken = [m for m in occupied_members(experiment_dir, rid) if m != "logs"]
+    if taken:
+        raise EvidenceCollision(
+            f"record id {rid} is already occupied ({', '.join(taken)}); "
+            "refusing to overwrite evidence -- re-run to mint a new id"
+        )
 
-    records_dir = experiment_dir / "records"
-    records_dir.mkdir(parents=True, exist_ok=True)
-    record_path = records_dir / f"{rid}.md"
-    record_path.write_text(render_record(tb, results, summaries, context))
-
-    snapshots_dir = experiment_dir / "netlist-snapshots"
-    snapshots_dir.mkdir(parents=True, exist_ok=True)
-    (snapshots_dir / f"{rid}.spice").write_text(
+    record_text = render_record(tb, results, summaries, context)
+    snapshot_text = (
         f"* Netlist snapshot for record {rid} -- exactly what was simulated.\n"
         f"* DUT: {context['dut_id']} ({context['dut_provenance']}), "
         f"{context['dut_netlist']}\n"
@@ -540,9 +686,7 @@ def write_record(
         + "\n* ---------------- TESTBENCH FRAGMENT ----------------\n"
         + tb.netlist.read_text()
     )
-
-    json_path = records_dir / f"{rid}.json"
-    json_path.write_text(
+    json_text = (
         json.dumps(
             {
                 "record_id": rid,
@@ -576,4 +720,16 @@ def write_record(
         )
         + "\n"
     )
-    return record_path
+
+    paths["record"].parent.mkdir(parents=True, exist_ok=True)
+    paths["snapshot"].parent.mkdir(parents=True, exist_ok=True)
+    for member, text in (("record", record_text), ("snapshot", snapshot_text),
+                         ("json", json_text)):
+        try:
+            with open(paths[member], "x", encoding="utf-8") as fh:
+                fh.write(text)
+        except FileExistsError as exc:
+            raise EvidenceCollision(
+                f"record id {rid}: {member} appeared concurrently; refusing to overwrite"
+            ) from exc
+    return paths["record"]

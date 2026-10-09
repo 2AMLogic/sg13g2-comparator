@@ -265,6 +265,7 @@ def run_point(
     timeout_s: int = DEFAULT_TIMEOUT_S,
     log_dir: Path | None = None,
     num_threads: int = 0,
+    exclusive_logs: bool = False,
 ) -> PointResult:
     """Simulate one PVT point. Never raises for simulation failure.
 
@@ -273,12 +274,22 @@ def run_point(
     ``<corner-id>.log``; that is the ``sim/<slug>/corners/<record-id>/``
     directory from ``sim/README.md``. It defaults to ``workdir`` so a
     throwaway run does not touch the evidence tree.
+
+    ``exclusive_logs`` (set by the CLI for evidence-writing runs, issue
+    #110) refuses to replace an existing ``<corner-id>.log``: the log file is
+    created with ``open(..., "x")`` BEFORE the deck is written or ngspice is
+    launched, and a ``FileExistsError`` propagates instead of overwriting
+    evidence.
     """
     workdir.mkdir(parents=True, exist_ok=True)
     log_dir = workdir if log_dir is None else log_dir
     log_dir.mkdir(parents=True, exist_ok=True)
     deck_path = workdir / f"{point.corner_id}.spice"
     log_path = log_dir / f"{point.corner_id}.log"
+    if exclusive_logs:
+        # Claim the log name first; raises FileExistsError if occupied.
+        with open(log_path, "x", encoding="utf-8"):
+            pass
     deck_path.write_text(compose_deck(tb, pdk, dut, point, num_threads=num_threads))
 
     started = time.monotonic()
@@ -365,6 +376,7 @@ def run_grid(
     on_result=None,
     log_dir: Path | None = None,
     num_threads: int = 0,
+    exclusive_logs: bool = False,
 ) -> list[PointResult]:
     """Run every PVT point; results come back in grid order regardless of jobs."""
     results: list[PointResult | None] = [None] * len(points)
@@ -373,7 +385,7 @@ def run_grid(
         index, point = index_point
         result = run_point(
             tb, pdk, dut, point, workdir, timeout_s=timeout_s, log_dir=log_dir,
-            num_threads=num_threads,
+            num_threads=num_threads, exclusive_logs=exclusive_logs,
         )
         results[index] = result
         if on_result is not None:
