@@ -88,9 +88,20 @@ row:
   `klt yield` campaign is minted it gets cited here with a pinned
   `content_hash`.
 - **Item 7 (Post-layout verification)** — an analog block's item 7 accepts
-  a `klt pex` report and nothing else; no `klt pex` run exists yet (#61). The
-  item's `body_bias` disclosure duty applies when a `pex` citation first
-  appears here, not now.
+  a `klt pex` report and nothing else. A `klt pex` run was attempted for
+  #61 and is committed at `sim/comparator-pex/reports/pex.attempt-20261009.json`,
+  but it is `status: error` (all 30 `delta[]` rows errored, `nothing_checked:
+  true`): neither this host (ngspice-42 cannot load the OSDI v0.4 PSP103
+  models) nor the batch fleet (runner klt 0.5.0 vs client 0.7.0, no OSDI
+  preload) could run the simulation leg. An errored envelope is not
+  evidence, so it is **not cited** and the row stays `unmet`. The
+  extraction half is real: `body_bias.status: "biased"` (0 unbiased devices),
+  `extraction.model` is the quasi-static lumped-RC model (vertical-overlap
+  coupling only, no lateral coupling or distributed RC). Details, the
+  not-run rows and what closes the gap: `sim/comparator-pex/README.md`.
+  When a passing envelope exists it gets cited here with a pinned
+  `content_hash`, with `extraction.model` and the `body_bias` disclosure
+  quoted verbatim.
 - **Item 8 (Characterization report)** — the one item the generic envelope
   (`"kind": "generic"`) may satisfy. No aggregated, current
   characterization artifact exists yet (the tracker's item 8 is honestly
