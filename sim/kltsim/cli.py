@@ -128,7 +128,7 @@ def cmd_fleet_smoke(args) -> int:
     return _submit(final_request, out_dir, tag, args)
 
 
-def _submit(request_path: Path, out_dir: Path, tag: str, args) -> int:
+def _submit(request_path: Path, out_dir: Path, tag: str, args, extra: dict | None = None) -> int:
     """Run ``klt sim`` on one committed request and keep what it printed.
 
     Every attempt -- including a refused submission (e.g. the shared batch
@@ -137,6 +137,7 @@ def _submit(request_path: Path, out_dir: Path, tag: str, args) -> int:
     that produced a graded envelope (klt sim exit 0 / 3 / 4) writes
     ``<tag>.envelope.json`` + ``<tag>.invocation.json``; those are
     append-only (``--force`` exists for scratch use, not for evidence).
+    ``extra`` is merged into the invocation record (and the attempt log).
     """
     envelope_path = out_dir / f"{tag}.envelope.json"
     if envelope_path.exists() and not args.force:
@@ -165,6 +166,9 @@ def _submit(request_path: Path, out_dir: Path, tag: str, args) -> int:
         "stderr_tail": proc.stderr[-4000:],
         "envelope_sha256": build_mod.sha256_bytes(proc.stdout.encode("utf-8")),
     }
+    if extra:
+        # caller-side metadata (e.g. the issue #79 common-mode condition)
+        invocation.update(extra)
     with (out_dir / "attempts.jsonl").open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(invocation, sort_keys=True) + "\n")
     if proc.stderr.strip():
