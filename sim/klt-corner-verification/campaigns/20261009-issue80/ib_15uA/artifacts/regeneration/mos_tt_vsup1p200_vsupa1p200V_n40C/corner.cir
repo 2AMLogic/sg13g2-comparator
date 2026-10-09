@@ -1,0 +1,34 @@
+* klt sim -- generated corner deck, do not edit
+.lib /opt/pdk/ihp-sg13g2/libs.tech/ngspice/models/cornerMOSlv.lib mos_tt
+.include /var/tmp/eda-job-klt-sim-47e362ac480a/inputs/netlist.cir
+.temp -40
+.meas tran vdd_meas find v(vdd) at=25n
+.meas tran vdda_meas find v(vdda) at=25n
+.meas tran temp_meas find v(tcheck) at=1n
+.meas tran td_a trig v(clkn) val=0.5 rise=2 targ v(dan) val=0.5 rise=1 td=35n
+.meas tran td_b trig v(clkn) val=0.5 rise=2 targ v(dbn) val=0.5 rise=1 td=35n
+.meas tran td_c trig v(clkn) val=0.5 rise=2 targ v(dcn) val=0.5 rise=1 td=35n
+.meas tran dout_od50_first find v(dan) at=18n
+.meas tran dout_od1_first find v(dbn) at=18n
+.meas tran dout_od01_first find v(dcn) at=18n
+.meas tran dout_od50_end find v(dan) at=55n
+.meas tran dout_od1_end find v(dbn) at=55n
+.meas tran dout_od01_end find v(dcn) at=55n
+.meas tran td_od50_ns param='td_a*1e9'
+.meas tran td_od1_ns param='td_b*1e9'
+.meas tran td_od01_ns param='td_c*1e9'
+.meas tran tau_ps param='(td_c-td_b)/2.302585093*1e12'
+.meas tran resolve_decades param='td_b/((td_c-td_b)/2.302585093)'
+.meas tran i_stat avg i(vsupa) from=25n to=29n
+.meas tran i_static_ua param='abs(i_stat)*1e6'
+.meas tran p_avg avg par('-v(vdda)*i(vsupa)') from=30n to=60n
+.meas tran p_avg_uw param='p_avg*1e6'
+.meas tran vref_v find v(ibna) at=5n
+.meas tran tmid_eval_v find v(xa.x1.tmid) at=10.4n
+.control
+alter vsup=1.2
+alter vsupa=1.2
+tran 5p 60n
+quit
+.endc
+.end
