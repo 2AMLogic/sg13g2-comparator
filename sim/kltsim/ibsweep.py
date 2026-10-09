@@ -271,7 +271,7 @@ def render_markdown(result: dict) -> str:
 def run(campaign: str, campaigns_dir: Path) -> dict:
     cdir = campaigns_dir / campaign
     result = sweep(cdir)
-    (cdir / "ibsweep.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    (cdir / "ibsweep.json").write_text(grade_mod.dumps_strict(result, indent=2) + "\n", encoding="utf-8")
     (cdir / "ibsweep.md").write_text(render_markdown(result), encoding="utf-8")
     return result
 

@@ -365,7 +365,7 @@ def _last_attempt_refused_at_cap(out_dir: Path) -> bool:
 def cmd_grade(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     result = grade_mod.grade_campaign(out_dir)
-    (out_dir / "grading.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    (out_dir / "grading.json").write_text(grade_mod.dumps_strict(result, indent=2) + "\n", encoding="utf-8")
     (out_dir / "grading.md").write_text(grade_mod.render_markdown(result), encoding="utf-8")
     print(grade_mod.render_summary(result))
     return 0
