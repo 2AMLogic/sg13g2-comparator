@@ -55,6 +55,14 @@ they differ from DR-0002's. The same directory holds the issue #80 `dut_ib` bias
 noise and power against bias, the basis for a later Row 5 power bound. It
 proposes no bound.
 
+**Whole-latch offset across a common-mode band (issue #79).**
+[`comparator-offset-cm-band/`](comparator-offset-cm-band/) runs the whole-latch
+offset staircase at `dut_vcm` − 50 mV, `dut_vcm` and `dut_vcm` + 50 mV as three
+paired `klt sim` campaigns on the batch fleet (same seeds, same draws per
+point). It is **characterization**: DR-0002 ratifies the offset row at
+`dut_vcm` only and no whole-latch common-mode range, so nothing there is a
+compliance verdict.
+
 Plus one supporting confirmation, not a spec-row bench:
 
 ```

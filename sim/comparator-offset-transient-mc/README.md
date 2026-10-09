@@ -92,6 +92,12 @@ draw), one `tran` covering every level.
   ±50 mV common-mode sweep has no analogue here yet — a named, not-yet-specified
   extension, kept out of scope here so the transient grid (33 levels × 60
   draws × 45 PVT points) stays inside the harness's per-point timeout.
+  *Added later (issue #79):* this axis is now characterized, outside this
+  bench and without touching its record, by
+  [`comparator-offset-cm-band/`](../comparator-offset-cm-band/): the same
+  staircase at `dut_vcm` − 50 mV, `dut_vcm` and `dut_vcm` + 50 mV as three
+  paired `klt sim` campaigns. It is characterization only; DR-0002 ratifies
+  no whole-latch common-mode range.
 - **Layout-induced systematic offset.** This is a schematic-level record; no
   layout exists yet.
 - **Dynamic (regeneration-noise-driven) metastability spread.** This bench's
