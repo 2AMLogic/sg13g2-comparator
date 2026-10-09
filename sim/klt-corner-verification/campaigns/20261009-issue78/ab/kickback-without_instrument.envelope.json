@@ -1,0 +1,510 @@
+{
+  "schema_version": 3,
+  "netlist": {
+    "path": "sim/klt-corner-verification/campaigns/20261009-issue78/ab/kickback-without_instrument.body.spice",
+    "scope": "repo"
+  },
+  "status": "pass",
+  "corner_count": 1,
+  "passed": 1,
+  "failed": 0,
+  "errored": 0,
+  "metrics": {
+    "sim__corner__count": 1,
+    "sim__corner__passed_count": 1,
+    "sim__corner__failed_count": 0,
+    "sim__corner__errored_count": 0
+  },
+  "environment": {
+    "engine": "ngspice",
+    "engine_version": "46",
+    "models_lib": {
+      "path": null,
+      "scope": "external"
+    },
+    "models_lib_sha256": "03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+    "netlist_sha256": "328f74223d679262e03ac90ae68dcdacfe91648463aa9102a21753546e6f41cc",
+    "netlist_source": "schematic",
+    "remote": {
+      "provider": "aws-batch-fleet",
+      "job_id": "klt-sim-ee516621175d",
+      "bucket": "2am-batch-jobs-221082181346",
+      "region": "us-east-1",
+      "instance_id": "i-0cf9b7158964c4a71",
+      "instance_type": "c7i.8xlarge",
+      "availability_zone": "us-east-1d",
+      "ami_id": "ami-0e40e3245f1923ac8",
+      "lifecycle": "spot",
+      "spot": true,
+      "state": "done",
+      "exit_code": "0",
+      "concurrency": "2",
+      "physical_cores": "16",
+      "elapsed_seconds": 11
+    }
+  },
+  "coverage": {
+    "corners_simulated": 1,
+    "measurements_declared": 18,
+    "measurements_with_limits": 4,
+    "unrecognized_limit_keys": [],
+    "schema_version": 1,
+    "known": true,
+    "checked": [
+      "limit:[0,\"mos_tt/1.200V/27C\",\"dout_1k_end\",\"min\"]",
+      "limit:[0,\"mos_tt/1.200V/27C\",\"dout_float_big_end\",\"min\"]",
+      "limit:[0,\"mos_tt/1.200V/27C\",\"dout_float_small_end\",\"min\"]",
+      "limit:[0,\"mos_tt/1.200V/27C\",\"kick_sigdep_uv\",\"max\"]",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"ad_neg\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"ad_pos\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"bc0\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"bc1\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"bd0\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"bd1\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"cd0\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"cd1\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"kick_1k_neg_mv\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"kick_1k_peak_mv\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"kick_1k_pos_mv\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"kick_cm_uv\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"temp_meas\"]/observation",
+      "measurement:[0,\"mos_tt/1.200V/27C\",\"vdd_meas\"]/observation"
+    ],
+    "skipped": [],
+    "inapplicable": [
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"ad_neg\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"ad_pos\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"bc0\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"bc1\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"bd0\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"bd1\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"cd0\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"cd1\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"kick_1k_neg_mv\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"kick_1k_peak_mv\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"kick_1k_pos_mv\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"kick_cm_uv\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"temp_meas\"]/limits",
+        "reason": "characterization_without_limits"
+      },
+      {
+        "id": "measurement:[0,\"mos_tt/1.200V/27C\",\"vdd_meas\"]/limits",
+        "reason": "characterization_without_limits"
+      }
+    ],
+    "unknown": [],
+    "nothing_checked": false,
+    "nothing_checked_reasons": []
+  },
+  "provenance": {
+    "klt_version": "0.5.0+ge8ca621a6961",
+    "klayout_version": "0.30.12",
+    "pdk": {
+      "name": "ihp-sg13g2",
+      "source": "search root: ~/share/pdk",
+      "version": null
+    },
+    "deck": {
+      "name": "cornerMOSlv.lib",
+      "content_hash": "sha256:03d505847c880d233b341be115a1e5460edf4d8e9b3e8a7df791a52fa4455d67",
+      "released": false
+    },
+    "input": {
+      "content_hash": "sha256:328f74223d679262e03ac90ae68dcdacfe91648463aa9102a21753546e6f41cc",
+      "role": "netlist"
+    }
+  },
+  "measurements": [
+    {
+      "name": "vdd_meas",
+      "unit": "V",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 1.2,
+        "margin": null
+      }
+    },
+    {
+      "name": "temp_meas",
+      "unit": "C",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 27.0,
+        "margin": null
+      }
+    },
+    {
+      "name": "ad_pos",
+      "unit": "V",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 0.115798,
+        "margin": null
+      }
+    },
+    {
+      "name": "ad_neg",
+      "unit": "V",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": -0.0357886,
+        "margin": null
+      }
+    },
+    {
+      "name": "kick_1k_peak_mv",
+      "unit": "mV",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 115.798,
+        "margin": null
+      }
+    },
+    {
+      "name": "kick_1k_pos_mv",
+      "unit": "mV",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 115.798,
+        "margin": null
+      }
+    },
+    {
+      "name": "kick_1k_neg_mv",
+      "unit": "mV",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": -35.7886,
+        "margin": null
+      }
+    },
+    {
+      "name": "bd0",
+      "unit": "V",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 0.000994594,
+        "margin": null
+      }
+    },
+    {
+      "name": "bd1",
+      "unit": "V",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 0.00099491,
+        "margin": null
+      }
+    },
+    {
+      "name": "cd0",
+      "unit": "V",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 0.0994542,
+        "margin": null
+      }
+    },
+    {
+      "name": "cd1",
+      "unit": "V",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 0.0994455,
+        "margin": null
+      }
+    },
+    {
+      "name": "kick_sigdep_uv",
+      "unit": "uV",
+      "limits": {
+        "max": 100.0
+      },
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 9.04429,
+        "margin": 90.95571
+      }
+    },
+    {
+      "name": "bc0",
+      "unit": "V",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 0.00105557,
+        "margin": null
+      }
+    },
+    {
+      "name": "bc1",
+      "unit": "V",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 0.000311661,
+        "margin": null
+      }
+    },
+    {
+      "name": "kick_cm_uv",
+      "unit": "uV",
+      "limits": null,
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": -743.905,
+        "margin": null
+      }
+    },
+    {
+      "name": "dout_1k_end",
+      "unit": "V/V",
+      "limits": {
+        "min": 0.9
+      },
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 1.0,
+        "margin": 0.09999999999999998
+      }
+    },
+    {
+      "name": "dout_float_small_end",
+      "unit": "V/V",
+      "limits": {
+        "min": 0.9
+      },
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 1.0,
+        "margin": 0.09999999999999998
+      }
+    },
+    {
+      "name": "dout_float_big_end",
+      "unit": "V/V",
+      "limits": {
+        "min": 0.9
+      },
+      "status": "pass",
+      "worst_case": {
+        "corner_id": "mos_tt/1.200V/27C",
+        "value": 1.0,
+        "margin": 0.09999999999999998
+      }
+    }
+  ],
+  "corners": [
+    {
+      "corner_id": "mos_tt/1.200V/27C",
+      "process": "mos_tt",
+      "supply_v": {
+        "vsup": 1.2
+      },
+      "temperature_c": 27,
+      "status": "pass",
+      "runtime_s": 5.694,
+      "measurements": [
+        {
+          "name": "vdd_meas",
+          "value": 1.2,
+          "unit": "V",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "temp_meas",
+          "value": 27.0,
+          "unit": "C",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "ad_pos",
+          "value": 0.115798,
+          "unit": "V",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "ad_neg",
+          "value": -0.0357886,
+          "unit": "V",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "kick_1k_peak_mv",
+          "value": 115.798,
+          "unit": "mV",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "kick_1k_pos_mv",
+          "value": 115.798,
+          "unit": "mV",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "kick_1k_neg_mv",
+          "value": -35.7886,
+          "unit": "mV",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "bd0",
+          "value": 0.000994594,
+          "unit": "V",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "bd1",
+          "value": 0.00099491,
+          "unit": "V",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "cd0",
+          "value": 0.0994542,
+          "unit": "V",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "cd1",
+          "value": 0.0994455,
+          "unit": "V",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "kick_sigdep_uv",
+          "value": 9.04429,
+          "unit": "uV",
+          "status": "pass",
+          "margin": 90.95571
+        },
+        {
+          "name": "bc0",
+          "value": 0.00105557,
+          "unit": "V",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "bc1",
+          "value": 0.000311661,
+          "unit": "V",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "kick_cm_uv",
+          "value": -743.905,
+          "unit": "uV",
+          "status": "pass",
+          "margin": null
+        },
+        {
+          "name": "dout_1k_end",
+          "value": 1.0,
+          "unit": "V/V",
+          "status": "pass",
+          "margin": 0.09999999999999998
+        },
+        {
+          "name": "dout_float_small_end",
+          "value": 1.0,
+          "unit": "V/V",
+          "status": "pass",
+          "margin": 0.09999999999999998
+        },
+        {
+          "name": "dout_float_big_end",
+          "value": 1.0,
+          "unit": "V/V",
+          "status": "pass",
+          "margin": 0.09999999999999998
+        }
+      ],
+      "diagnostics": [],
+      "artifacts": {
+        "log": "sim/klt-corner-verification/campaigns/20261009-issue78/ab/artifacts/kickback-without_instrument/mos_tt_1p200V_27C/ngspice.log",
+        "raw": null,
+        "waveform": null,
+        "deck": "sim/klt-corner-verification/campaigns/20261009-issue78/ab/artifacts/kickback-without_instrument/mos_tt_1p200V_27C/corner.cir"
+      },
+      "monte_carlo": null
+    }
+  ]
+}

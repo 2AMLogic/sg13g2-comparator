@@ -70,6 +70,7 @@ class Bench:
     hosts: int = 1
     split_by_process: bool = False
     monte_carlo: dict | None = None
+    has_dut: bool = True  # False: a DUT-free instrument-validation fixture
     probes: dict = field(default_factory=dict)  # corner-application probes
 
     def measurement(self, name: str) -> Meas:
@@ -128,6 +129,37 @@ REGENERATION = Bench(
 )
 
 
+def qkick_measurements(node: str, side: str) -> tuple[Meas, ...]:
+    """The Q_kick measure strings for one integrator node (DR-0002 Row 4):
+    q at the 29 ns pre-decision reference, its max/min over 30 ... 45 ns, and
+    ``max(|max - q29|, |min - q29|)`` converted to fC (1 pF integrator: 1 V
+    = 1000 fC). One template serves the real kickback bench (nodes ``qp`` /
+    ``qn``) and the known-charge fixture, so the validated strings ARE the
+    graded strings."""
+    return (
+        Meas(f"{node}29", f".meas tran {node}29 find v({node}) at=29n", "V"),
+        Meas(f"{node}max", f".meas tran {node}max max v({node}) from=30n to=45n", "V"),
+        Meas(f"{node}min", f".meas tran {node}min min v({node}) from=30n to=45n", "V"),
+        Meas(
+            f"qkick_{side}_fc",
+            f".meas tran qkick_{side}_fc param='max(abs({node}max-{node}29),abs({node}min-{node}29))*1e3'",
+            "fC",
+        ),
+    )
+
+
+def qkick_fixture_measurements(node: str, side: str) -> tuple[Meas, ...]:
+    """Fixture-only extras for one case: q at the window end, the signed
+    excursions, the net (end-of-window) charge and the peak-volts x C_in
+    estimator DR-0002 Row 4 (b) calls biased."""
+    return (
+        Meas(f"{node}end", f".meas tran {node}end find v({node}) at=45n", "V"),
+        Meas(f"qpos_{side}_fc", f".meas tran qpos_{side}_fc param='({node}max-{node}29)*1e3'", "fC"),
+        Meas(f"qneg_{side}_fc", f".meas tran qneg_{side}_fc param='({node}min-{node}29)*1e3'", "fC"),
+        Meas(f"qnet_{side}_fc", f".meas tran qnet_{side}_fc param='({node}end-{node}29)*1e3'", "fC"),
+    )
+
+
 KICKBACK = Bench(
     name="kickback",
     circuit="kickback.circuit.spice",
@@ -151,14 +183,8 @@ KICKBACK = Bench(
         Meas("kick_1k_pos_mv", ".meas tran kick_1k_pos_mv param='ad_pos*1e3'", "mV"),
         Meas("kick_1k_neg_mv", ".meas tran kick_1k_neg_mv param='ad_neg*1e3'", "mV"),
         # -- branch A: direct Q_kick (DR-0002 Row 4 definition) -------------
-        Meas("qp29", ".meas tran qp29 find v(qp) at=29n", "V"),
-        Meas("qpmax", ".meas tran qpmax max v(qp) from=30n to=45n", "V"),
-        Meas("qpmin", ".meas tran qpmin min v(qp) from=30n to=45n", "V"),
-        Meas("qn29", ".meas tran qn29 find v(qn) at=29n", "V"),
-        Meas("qnmax", ".meas tran qnmax max v(qn) from=30n to=45n", "V"),
-        Meas("qnmin", ".meas tran qnmin min v(qn) from=30n to=45n", "V"),
-        Meas("qkick_p_fc", ".meas tran qkick_p_fc param='max(abs(qpmax-qp29),abs(qpmin-qp29))*1e3'", "fC"),
-        Meas("qkick_n_fc", ".meas tran qkick_n_fc param='max(abs(qnmax-qn29),abs(qnmin-qn29))*1e3'", "fC"),
+        *qkick_measurements("qp", "p"),
+        *qkick_measurements("qn", "n"),
         Meas("qkick_fc", ".meas tran qkick_fc param='max(qkick_p_fc,qkick_n_fc)'", "fC", {"max": 25.0}, "spec"),
         # -- branches B/C: signal-dependent differential residue ------------
         Meas("bd0", ".meas tran bd0 find v(bd) at=29n", "V"),
@@ -175,6 +201,56 @@ KICKBACK = Bench(
         Meas("dout_float_big_end", ".meas tran dout_float_big_end find v(dcn) at=55n", "V/V", {"min": 0.9}, "gate"),
     ),
     probes={"supply": ("vdd_meas",), "temperature": "temp_meas"},
+)
+
+
+#: Known-charge validation of the Q_kick instrument (issue #78). Each case
+#: injects an analytic charge through the same ammeter+integrator block;
+#: ``q_fc`` is the expected peak |q(t)-q(29 ns)| over 30 ... 45 ns; ``net_fc``
+#: the expected end-of-window net, in the instrument's own v(q) x 1000
+#: convention; ``sign`` the expected sign of the dominant v(q) excursion.
+#: SIGN: charge pushed INTO the pin node (the DUT driving its input node)
+#: makes v(q) FALL -- the ammeter's positive terminal is the source-network
+#: side, so i(vk) is negative for that direction, and Bq* integrates +i(vk)
+#: onto q. (kickback.circuit.spice's header says the opposite; the sign never
+#: enters the graded absolute value.) ``FIXTURE_TOL_FC`` is the stated
+#: tolerance on each compared quantity.
+FIXTURE_TOL_FC = 0.02
+FIXTURE_CASES = {
+    "a": {"node": "qa", "q_fc": 10.0, "net_fc": -10.0, "sign": -1,
+          "what": "unipolar +10 fC (+7 fC before 29 ns and +4 fC after 45 ns excluded)"},
+    "b": {"node": "qb", "q_fc": 10.0, "net_fc": 10.0, "sign": +1,
+          "what": "unipolar -10 fC"},
+    "c": {"node": "qc", "q_fc": 20.0, "net_fc": 0.0, "sign": -1,
+          "what": "bipolar +20 fC then -20 fC, net 0"},
+    "d": {"node": "qd", "q_fc": 10.0, "net_fc": -10.0, "sign": -1,
+          "what": "+10 fC through a restoring 1 kohm / 100 fF node (V x C_in reads ~0.1 fC)"},
+}
+
+KICKBACK_FIXTURE = Bench(
+    name="kickback_fixture",
+    circuit="kickback_fixture.circuit.spice",
+    description=(
+        "Known-charge validation of the Q_kick instrument: unipolar, "
+        "negative, bipolar (zero net, nonzero peak) and restoring-resistor "
+        "injections through the kickback bench's own ammeter+integrator "
+        "block -- DR-0002 Row 4 instrument validation (issue #78). No DUT."
+    ),
+    process_sections=("mos_tt",),
+    supply_keys=("vsup",),
+    analysis={"kind": "tran", "args": "5p 60n"},
+    timeout_s=300,
+    has_dut=False,
+    measurements=tuple(
+        m
+        for case, spec in FIXTURE_CASES.items()
+        for m in (*qkick_measurements(spec["node"], case), *qkick_fixture_measurements(spec["node"], case))
+    ) + (
+        # case d only: the biased estimator DR-0002 Row 4 (b) discusses,
+        # peak node volts x C_in (100 fF: 1 V = 100 fC).
+        Meas("vpk_d_v", ".meas tran vpk_d_v max v(apd) from=30n to=45n", "V"),
+        Meas("vcest_d_fc", ".meas tran vcest_d_fc param='vpk_d_v*100'", "fC"),
+    ),
 )
 
 
@@ -294,3 +370,7 @@ TRANSIENT_NOISE = Bench(
 
 
 BENCHES: dict[str, Bench] = {b.name: b for b in (REGENERATION, KICKBACK, OFFSET_MC, TRANSIENT_NOISE)}
+
+#: Instrument-validation fixtures. Deliberately NOT in BENCHES: they carry no
+#: DUT and no spec row, so the campaign builder and grader never see them.
+FIXTURE_BENCHES: dict[str, Bench] = {KICKBACK_FIXTURE.name: KICKBACK_FIXTURE}

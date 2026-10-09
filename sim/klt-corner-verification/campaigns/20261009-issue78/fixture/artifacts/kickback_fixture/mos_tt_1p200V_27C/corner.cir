@@ -1,0 +1,44 @@
+* klt sim -- generated corner deck, do not edit
+.lib /home/ubuntu/share/pdk/ihp-sg13g2/libs.tech/ngspice/models/cornerMOSlv.lib mos_tt
+.include /home/ubuntu/GitHub/sg13g2-comparator/.loom/worktrees/issue-78/sim/klt-corner-verification/campaigns/20261009-issue78/fixture/kickback_fixture.body.spice
+.temp 27
+.meas tran qa29 find v(qa) at=29n
+.meas tran qamax max v(qa) from=30n to=45n
+.meas tran qamin min v(qa) from=30n to=45n
+.meas tran qkick_a_fc param='max(abs(qamax-qa29),abs(qamin-qa29))*1e3'
+.meas tran qaend find v(qa) at=45n
+.meas tran qpos_a_fc param='(qamax-qa29)*1e3'
+.meas tran qneg_a_fc param='(qamin-qa29)*1e3'
+.meas tran qnet_a_fc param='(qaend-qa29)*1e3'
+.meas tran qb29 find v(qb) at=29n
+.meas tran qbmax max v(qb) from=30n to=45n
+.meas tran qbmin min v(qb) from=30n to=45n
+.meas tran qkick_b_fc param='max(abs(qbmax-qb29),abs(qbmin-qb29))*1e3'
+.meas tran qbend find v(qb) at=45n
+.meas tran qpos_b_fc param='(qbmax-qb29)*1e3'
+.meas tran qneg_b_fc param='(qbmin-qb29)*1e3'
+.meas tran qnet_b_fc param='(qbend-qb29)*1e3'
+.meas tran qc29 find v(qc) at=29n
+.meas tran qcmax max v(qc) from=30n to=45n
+.meas tran qcmin min v(qc) from=30n to=45n
+.meas tran qkick_c_fc param='max(abs(qcmax-qc29),abs(qcmin-qc29))*1e3'
+.meas tran qcend find v(qc) at=45n
+.meas tran qpos_c_fc param='(qcmax-qc29)*1e3'
+.meas tran qneg_c_fc param='(qcmin-qc29)*1e3'
+.meas tran qnet_c_fc param='(qcend-qc29)*1e3'
+.meas tran qd29 find v(qd) at=29n
+.meas tran qdmax max v(qd) from=30n to=45n
+.meas tran qdmin min v(qd) from=30n to=45n
+.meas tran qkick_d_fc param='max(abs(qdmax-qd29),abs(qdmin-qd29))*1e3'
+.meas tran qdend find v(qd) at=45n
+.meas tran qpos_d_fc param='(qdmax-qd29)*1e3'
+.meas tran qneg_d_fc param='(qdmin-qd29)*1e3'
+.meas tran qnet_d_fc param='(qdend-qd29)*1e3'
+.meas tran vpk_d_v max v(apd) from=30n to=45n
+.meas tran vcest_d_fc param='vpk_d_v*100'
+.control
+alter vsup=1.2
+tran 5p 60n
+quit
+.endc
+.end

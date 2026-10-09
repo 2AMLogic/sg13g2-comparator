@@ -34,8 +34,9 @@ import time
 from pathlib import Path
 
 from . import build as build_mod
+from . import fixture as fixture_mod
 from . import grade as grade_mod
-from .benches import BENCHES
+from .benches import BENCHES, FIXTURE_BENCHES
 
 CAMPAIGNS_DIR = build_mod.EXPERIMENT_DIR / "campaigns"
 
@@ -95,6 +96,106 @@ def cmd_smoke(args) -> int:
     return 0
 
 
+def cmd_fixture(args) -> int:
+    """Run the DUT-free known-charge fixture as ONE local unit (a single
+    corner, no grid), keep its request/body/envelope/invocation in
+    ``campaigns/ID/fixture/``, and write the measured-vs-analytic table."""
+    bench = FIXTURE_BENCHES[args.bench]
+    out_dir = _campaign_dir(args.campaign) / "fixture"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    body_name = f"{bench.name}.body.spice"
+    (out_dir / body_name).write_text(build_mod.compose_fixture_body(bench), encoding="utf-8")
+    request_path = out_dir / f"{bench.name}.request.json"
+    request_path.write_text(
+        json.dumps(build_mod.compose_fixture_request(bench, body_name), indent=2) + "\n",
+        encoding="utf-8")
+    # Same append-only submit path as the campaign; the request pins
+    # backend=local and a single unit, which host policy allows.
+    code = _submit(request_path, out_dir, bench.name, args, backend="local")
+    if code:
+        return code
+    env = json.loads((out_dir / f"{bench.name}.envelope.json").read_text(encoding="utf-8"))
+    report = fixture_mod.check_envelope(bench, env)
+    (out_dir / f"{bench.name}.check.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    (out_dir / f"{bench.name}.check.md").write_text(fixture_mod.render_markdown(report), encoding="utf-8")
+    print(fixture_mod.render_markdown(report))
+    return 0 if report["ok"] else 2
+
+
+_AMMETER_LINES = ("vkp ", "vkn ", "Bqp ", "Cqp ", "Rqp ", "Bqn ", "Cqn ", "Rqn ")
+
+
+def strip_instrument(body: str) -> str:
+    """The kickback body with the Q_kick instrument removed and the DUT pins
+    wired straight to the source network (apa_pin -> apa, ana_pin -> ana):
+    the pre-#62 circuit, for the decisions-unchanged A/B."""
+    kept = []
+    for line in body.split("\n"):
+        if line.startswith(_AMMETER_LINES):
+            continue
+        if line.startswith("Xa "):
+            line = line.replace("apa_pin", "apa").replace("ana_pin", "ana")
+        kept.append(line)
+    return "\n".join(kept)
+
+
+def cmd_ab(args) -> int:
+    """Decisions-unchanged A/B (issue #78): the kickback bench with and
+    without the 0 V ammeters + integrators, ONE corner each, submitted to
+    the batch fleet like every DUT run (this host's ngspice 42 cannot load
+    the PDK's OSDI v0.4 models, so the DUT cannot run locally at all). Writes request/body/envelope per arm and
+    ``ab.json`` comparing every dout_* / probe measurement."""
+    bench = BENCHES["kickback"]
+    out_dir = _campaign_dir(args.campaign) / "ab"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    base = build_mod.compose_body(bench, build_mod.BATCH_OSDI_DIR)
+    arms = {"with_instrument": base, "without_instrument": strip_instrument(base)}
+    envs = {}
+    for arm, body in arms.items():
+        body_name = f"kickback-{arm}.body.spice"
+        (out_dir / body_name).write_text(body, encoding="utf-8")
+        request = build_mod.compose_request(bench, body_name, "batch")
+        request["_comment"].append(
+            f"DECISIONS A/B arm `{arm}` (issue #78): one unit, {args.process} / {args.supply} V / "
+            f"{args.temperature} C, batch. Not spec evidence.")
+        request["corners"]["process"] = [args.process]
+        request["corners"]["supply_v"] = {k: [args.supply] for k in bench.supply_keys}
+        request["corners"]["temperature_c"] = [args.temperature]
+        if arm == "without_instrument":
+            # the q* measurements have no node to read; keep the decision ones
+            request["measurements"] = [m for m in request["measurements"]
+                                       if not m["name"].startswith(("qp", "qn", "qkick"))]
+        request_path = out_dir / f"kickback-{arm}.request.json"
+        request_path.write_text(json.dumps(request, indent=2) + "\n", encoding="utf-8")
+        code = _submit(request_path, out_dir, f"kickback-{arm}", args)
+        if code:
+            return code
+        envs[arm] = json.loads((out_dir / f"kickback-{arm}.envelope.json").read_text(encoding="utf-8"))
+
+    def values(env):
+        return {m["name"]: m["value"] for m in env["corners"][0]["measurements"]}
+
+    a, b = values(envs["with_instrument"]), values(envs["without_instrument"])
+    rows = []
+    for name in sorted(set(a) & set(b)):
+        va, vb = a[name], b[name]
+        rows.append({"measurement": name, "with": va, "without": vb,
+                     "abs_diff": None if va is None or vb is None else abs(va - vb)})
+    decisions = [r for r in rows if r["measurement"].startswith("dout_")]
+    result = {
+        "corner": f"{args.process}/{args.supply:.3f}V/{args.temperature:g}C",
+        "decisions_identical": bool(decisions) and all(
+            r["with"] is not None and r["with"] == r["without"] for r in decisions),
+        "decision_measurements": [r["measurement"] for r in decisions],
+        "rows": rows,
+    }
+    (out_dir / "ab.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({k: v for k, v in result.items() if k != "rows"}, indent=1))
+    for r in rows:
+        print(f"{r['measurement']:24s} with={r['with']!r:>14} without={r['without']!r:>14} diff={r['abs_diff']}")
+    return 0 if result["decisions_identical"] else 2
+
+
 def cmd_fleet_smoke(args) -> int:
     """A deliberately tiny batch job: proves the fleet path (image OSDI dir,
     model resolution, section switching, MC seeding) before a campaign.
@@ -128,7 +229,7 @@ def cmd_fleet_smoke(args) -> int:
     return _submit(final_request, out_dir, tag, args)
 
 
-def _submit(request_path: Path, out_dir: Path, tag: str, args) -> int:
+def _submit(request_path: Path, out_dir: Path, tag: str, args, backend: str | None = None) -> int:
     """Run ``klt sim`` on one committed request and keep what it printed.
 
     Every attempt -- including a refused submission (e.g. the shared batch
@@ -146,7 +247,16 @@ def _submit(request_path: Path, out_dir: Path, tag: str, args) -> int:
     artifacts = out_dir / "artifacts" / tag
     rel_request = request_path.relative_to(build_mod.REPO_ROOT)
     rel_artifacts = artifacts.relative_to(build_mod.REPO_ROOT)
-    cmd = [args.klt, "sim", str(rel_request), "--format", "json", "-o", str(rel_artifacts)]
+    # A local-backend run needs an ABSOLUTE -o: with a repo-relative one the
+    # pinned klt (0.7.0) ends every unit in an `error` envelope with no
+    # ngspice.log and "produced no value" for every measurement (the same
+    # request passes with an absolute path; 2AMLogic/klayout-tools#2966). The batch backend is unaffected.
+    out_arg = str(artifacts) if backend == "local" else str(rel_artifacts)
+    cmd = [args.klt, "sim", str(rel_request), "--format", "json", "-o", out_arg]
+    if backend:
+        # KLT_SIM_BACKEND=batch is exported on dispatch hosts; a one-unit
+        # fixture must say so explicitly to stay local.
+        cmd += ["--backend", backend]
     started = _dt.datetime.now(_dt.timezone.utc)
     print("$ " + " ".join(cmd), file=sys.stderr)
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False,
@@ -271,6 +381,22 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--klt", default=default_klt)
     f.add_argument("--force", action="store_true")
     f.set_defaults(func=cmd_fleet_smoke)
+
+    x = sub.add_parser("fixture", help="run the DUT-free known-charge Q_kick fixture (one local unit)")
+    x.add_argument("--campaign", required=True)
+    x.add_argument("--bench", default="kickback_fixture", choices=sorted(FIXTURE_BENCHES))
+    x.add_argument("--klt", default=default_klt)
+    x.add_argument("--force", action="store_true")
+    x.set_defaults(func=cmd_fixture)
+
+    ab = sub.add_parser("ab", help="decisions-unchanged A/B of the kickback instrument (two one-corner batch requests)")
+    ab.add_argument("--campaign", required=True)
+    ab.add_argument("--process", default="mos_tt")
+    ab.add_argument("--supply", type=float, default=1.2)
+    ab.add_argument("--temperature", type=float, default=27)
+    ab.add_argument("--klt", default=default_klt)
+    ab.add_argument("--force", action="store_true")
+    ab.set_defaults(func=cmd_ab)
 
     g = sub.add_parser("grade", help="grade a campaign's committed envelopes")
     g.add_argument("--campaign", required=True)
