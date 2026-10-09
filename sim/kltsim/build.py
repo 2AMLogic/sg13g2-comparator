@@ -266,7 +266,7 @@ def part_tags(bench: Bench) -> list[str]:
     return [f"{bench.name}.{section}" for section in bench.process_sections]
 
 
-def write_bench_inputs(
+def plan_bench_inputs(
     bench: Bench,
     out_dir: Path,
     *,
@@ -274,8 +274,11 @@ def write_bench_inputs(
     osdi_dir: str | None = None,
     split: bool = True,
     param_overrides: dict | None = None,
-) -> tuple[Path, list[Path]]:
-    """Write ``<bench>.body.spice`` and its request(s) into out_dir.
+) -> tuple[Path, list[Path], list[tuple[Path, bytes]]]:
+    """Compose (without writing) ``<bench>.body.spice`` and its request(s).
+
+    Returns ``(body_path, request_paths, files)`` where ``files`` is every
+    ``(destination, bytes)`` pair, body first.
 
     ``target`` is ``batch`` (the committed campaign form: OSDI from the
     batch image, ``backend: batch``) or ``local`` (a single-corner smoke
@@ -289,22 +292,90 @@ def write_bench_inputs(
         osdi_dir = BATCH_OSDI_DIR
     elif not osdi_dir:
         raise BuildError("a local build needs --osdi-dir (this host's PDK OSDI directory)")
-    out_dir.mkdir(parents=True, exist_ok=True)
     body_name = f"{bench.name}.body.spice"
     body_path = out_dir / body_name
-    body_path.write_text(
-        compose_body(bench, osdi_dir, param_overrides=param_overrides), encoding="utf-8")
+    files: list[tuple[Path, bytes]] = [(
+        body_path,
+        compose_body(bench, osdi_dir, param_overrides=param_overrides).encode("utf-8"),
+    )]
     backend = "batch" if target == "batch" else "local"
     requests: list[Path] = []
     if split and bench.split_by_process:
         for tag, section in zip(part_tags(bench), bench.process_sections):
             request = compose_request(bench, body_name, backend, processes=(section,))
-            path = out_dir / f"{tag}.request.json"
-            path.write_text(json.dumps(request, indent=2) + "\n", encoding="utf-8")
-            requests.append(path)
+            requests.append(out_dir / f"{tag}.request.json")
+            files.append((requests[-1], (json.dumps(request, indent=2) + "\n").encode("utf-8")))
     else:
         request = compose_request(bench, body_name, backend)
-        path = out_dir / f"{bench.name}.request.json"
-        path.write_text(json.dumps(request, indent=2) + "\n", encoding="utf-8")
-        requests.append(path)
+        requests.append(out_dir / f"{bench.name}.request.json")
+        files.append((requests[-1], (json.dumps(request, indent=2) + "\n").encode("utf-8")))
+    return body_path, requests, files
+
+
+def commit_inputs(files: list[tuple[Path, bytes]]) -> list[Path]:
+    """Append-only write of a complete, precomputed input set.
+
+    Preflight first: every destination that already exists must hold exactly
+    the proposed bytes, else the whole set is rejected (``BuildError`` naming
+    each conflicting input and pointing at a new campaign ID) before ANY file
+    is touched. Identical files are reused without a write; absent files are
+    created with exclusive creation (``x``), so a concurrent writer cannot be
+    clobbered between check and write. Returns the paths newly created.
+    """
+    proposed: dict[Path, bytes] = {}
+    conflicts: list[str] = []
+    for path, data in files:
+        if path in proposed and proposed[path] != data:
+            conflicts.append(f"{path}: selected benches propose two different contents")
+        proposed.setdefault(path, data)
+    for path, data in proposed.items():
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            conflicts.append(f"{path}: exists and is not a regular file")
+        elif path.exists() and path.read_bytes() != data:
+            conflicts.append(f"{path}: existing content differs from the proposed content")
+    if conflicts:
+        raise BuildError(
+            "refusing to rebuild: campaign inputs are append-only evidence and "
+            "nothing was written. Conflicting input(s):\n  "
+            + "\n  ".join(conflicts)
+            + "\nThe DUT, its parameters or a bench definition changed since this "
+            "campaign's inputs were built. Rebuild under a NEW campaign ID "
+            "(`build --campaign <new-id>`) instead of replacing these files."
+        )
+    created: list[Path] = []
+    for path, data in proposed.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(path, "xb") as handle:
+                handle.write(data)
+        except FileExistsError:
+            # Lost a race (or an identical file was already present): safe
+            # only if the winner wrote the same bytes.
+            if path.read_bytes() != data:
+                raise BuildError(
+                    f"{path}: created concurrently with different content; "
+                    "use a NEW campaign ID") from None
+            continue
+        created.append(path)
+    return created
+
+
+def write_bench_inputs(
+    bench: Bench,
+    out_dir: Path,
+    *,
+    target: str,
+    osdi_dir: str | None = None,
+    split: bool = True,
+    param_overrides: dict | None = None,
+) -> tuple[Path, list[Path]]:
+    """Write a bench's inputs, OVERWRITING (disposable smoke directories and
+    the fleet-smoke scratch path only). Campaign builds use
+    :func:`plan_bench_inputs` + :func:`commit_inputs` instead."""
+    body_path, requests, files = plan_bench_inputs(
+        bench, out_dir, target=target, osdi_dir=osdi_dir, split=split,
+        param_overrides=param_overrides)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for path, data in files:
+        path.write_bytes(data)
     return body_path, requests
