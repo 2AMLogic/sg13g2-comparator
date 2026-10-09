@@ -653,6 +653,11 @@ the three experiment READMEs are re-pointed at the renamed section.
 
 ## Open items
 
+> **Later status:** the common-mode sweep, direct Q_kick and power-bound-study
+> items below have since been worked; their outcome is recorded in
+> [`0003-evidence-state-update-rows-1-4-5.md`](0003-evidence-state-update-rows-1-4-5.md).
+> The list below is left as drafted (records are append-only).
+
 - **A Target-column average power bound**, founded on a gm/Id or bias-point
   sizing study (not on the current carried-over `dut_ib`).
 - **Regeneration-stage noise injection.** The whole-latch offset and
