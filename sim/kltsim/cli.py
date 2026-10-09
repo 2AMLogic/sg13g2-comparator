@@ -23,6 +23,7 @@ netlist resolves against it.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import datetime as _dt
 import json
 import os
@@ -36,7 +37,8 @@ from pathlib import Path
 from . import build as build_mod
 from . import fixture as fixture_mod
 from . import grade as grade_mod
-from .benches import BENCHES, FIXTURE_BENCHES
+from . import ibsweep as ibsweep_mod
+from .benches import BENCHES, BIAS_PROBES, FIXTURE_BENCHES
 
 CAMPAIGNS_DIR = build_mod.EXPERIMENT_DIR / "campaigns"
 
@@ -50,11 +52,24 @@ def _klt_version(klt: str) -> str:
     return (out.stdout or out.stderr).strip()
 
 
+def _parse_overrides(items) -> dict:
+    overrides = {}
+    for item in items or []:
+        key, _, value = item.partition("=")
+        overrides[key] = float(value)
+    return overrides
+
+
 def cmd_build(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     names = args.bench or list(BENCHES)
+    overrides = _parse_overrides(args.dut_param)
     for name in names:
-        body, requests = build_mod.write_bench_inputs(BENCHES[name], out_dir, target="batch")
+        bench = BENCHES[name]
+        if args.bias_probes and name == "regeneration":
+            bench = dataclasses.replace(bench, measurements=bench.measurements + BIAS_PROBES)
+        body, requests = build_mod.write_bench_inputs(
+            bench, out_dir, target="batch", param_overrides=overrides or None)
         print(f"wrote {body.relative_to(build_mod.REPO_ROOT)}")
         for request in requests:
             print(f"wrote {request.relative_to(build_mod.REPO_ROOT)}")
@@ -204,8 +219,11 @@ def cmd_fleet_smoke(args) -> int:
     bench = BENCHES[args.bench]
     out_dir = _campaign_dir(args.campaign) / "smoke"
     tag = args.tag or bench.name
+    overrides = _parse_overrides(args.dut_param)
+    if args.bias_probes and bench.name == "regeneration":
+        bench = dataclasses.replace(bench, measurements=bench.measurements + BIAS_PROBES)
     body, (request_path, *rest) = build_mod.write_bench_inputs(
-        bench, out_dir, target="batch", split=False)
+        bench, out_dir, target="batch", split=False, param_overrides=overrides or None)
     request = json.loads(request_path.read_text(encoding="utf-8"))
     request["_comment"].append(
         f"FLEET SMOKE `{tag}`: a reduced grid for verifying the batch path, "
@@ -335,6 +353,12 @@ def cmd_grade(args) -> int:
     return 0
 
 
+def cmd_ibsweep(args) -> int:
+    result = ibsweep_mod.run(args.campaign, CAMPAIGNS_DIR)
+    print((CAMPAIGNS_DIR / args.campaign / "ibsweep.md").read_text(encoding="utf-8"))
+    return 0 if result["points"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     default_klt = shutil.which("klt") or "klt"
     ap = argparse.ArgumentParser(prog="run_klt_corner_verification.py", description=__doc__,
@@ -344,6 +368,10 @@ def main(argv: list[str] | None = None) -> int:
     b = sub.add_parser("build", help="write batch-form bodies + requests for a campaign")
     b.add_argument("--campaign", required=True)
     b.add_argument("--bench", action="append", choices=sorted(BENCHES))
+    b.add_argument("--dut-param", action="append", metavar="NAME=VALUE",
+                   help="override a sim/dut.json param in the emitted body only (issue #80 sweep)")
+    b.add_argument("--bias-probes", action="store_true",
+                   help="append the mirror/headroom probes to the regeneration bench")
     b.set_defaults(func=cmd_build)
 
     s = sub.add_parser("smoke", help="run ONE corner of a bench locally (scratch dir)")
@@ -377,6 +405,8 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--supply", type=float, default=1.2)
     f.add_argument("--temperature", type=float, default=27)
     f.add_argument("--n", type=int, default=4)
+    f.add_argument("--dut-param", action="append", metavar="NAME=VALUE")
+    f.add_argument("--bias-probes", action="store_true")
     f.add_argument("--analysis-args", help="override the bench's tran args (convergence probe)")
     f.add_argument("--klt", default=default_klt)
     f.add_argument("--force", action="store_true")
@@ -397,6 +427,10 @@ def main(argv: list[str] | None = None) -> int:
     ab.add_argument("--klt", default=default_klt)
     ab.add_argument("--force", action="store_true")
     ab.set_defaults(func=cmd_ab)
+
+    ib = sub.add_parser("ibsweep", help="tabulate a dut_ib sweep campaign (issue #80)")
+    ib.add_argument("--campaign", required=True)
+    ib.set_defaults(func=cmd_ibsweep)
 
     g = sub.add_parser("grade", help="grade a campaign's committed envelopes")
     g.add_argument("--campaign", required=True)

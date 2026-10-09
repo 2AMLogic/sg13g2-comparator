@@ -253,6 +253,131 @@ and a second grid would duplicate this campaign. The 45-point Q_kick result
 remains `20261009-d73a9ac`; 4a is still **NOT MET** (binding `ff_125c_1.32v`,
 30.87 / 31.46 fC per side). No bound, DUT or decision record was changed.
 
+## Bias-point sweep of `dut_ib` (issue #80)
+
+Issue [#80](https://github.com/2AMLogic/sg13g2-comparator/issues/80).
+DR-0002 ratifies no Target-column power bound (Row 5), and its Open items
+ask for a bias-point sizing study to found one. This sweep supplies that
+evidence. It **proposes no bound** and changes no spec row, no DUT and not
+`sim/dut.json` (its default stays `dut_ib` = 20 µA). A follow-up decision
+record, filed separately, would use this table as its basis.
+
+Evidence is under
+[`campaigns/20261009-issue80/`](campaigns/20261009-issue80/). Each
+`ib_<X>uA/` subdirectory is a normal campaign directory (bodies, requests,
+envelopes, invocations, `attempts.jsonl`, per-corner `artifacts/` with deck
+and `ngspice.log`). Nothing under `20261009-d73a9ac/` was touched. The
+generated table is
+[`ibsweep.md`](campaigns/20261009-issue80/ibsweep.md) (machine form:
+`ibsweep.json`). Client: the CI-pinned klt `0.5.0+ge8ca621a6961`, batch
+backend.
+
+**What changes between bias points.** Only the emitted `.param dut_ib=…`
+line in each body changes. Each body's header states the override (`OVERRIDE
+(issue #80 sweep; sim/dut.json untouched): dut_ib=…`), and the override is
+part of the hashed netlist that each envelope's
+`provenance.input.content_hash` covers. The DUT is inlined byte for byte as
+in the issue #62 campaign. The tail current is 4 × `dut_ib`, set by the fixed
+4:1 mirror (`XMB` 10u/0.5u → `XMT` 40u/0.5u). Tail width was not swept.
+
+**Coverage.**
+
+- **Regeneration bench** (Rows 3a/3b/3c and 5b): seven values, `dut_ib` ∈
+  {2.5, 5, 7.5, 10, 15, 20, 40} µA, each a full 45-point `klt sim` corner
+  request with 45/45 points valid. At 20 µA every measurement matches the issue
+  #62 envelope exactly at all 45 points. The bodies differ only by the
+  override header and the two added probes.
+- **Monte-Carlo benches** (Row 1 offset, N = 60, and Row 2 noise, N = 80
+  per rung): run only for the two best candidate currents below the
+  baseline, 15 µA and 10 µA, as the issue specifies. At 20 µA they are taken
+  from campaign `20261009-d73a9ac`, whose bodies were built with the same
+  `dut_ib` = 20 µA, so they already are the 20 µA measurement.
+- **Not swept:** kickback (Row 4) was not run at any bias.
+
+| `dut_ib` (µA) | 3a t_d @ 50 mV ≤ 1.5 ns | 3b τ ≤ 250 ps | 3c t_d @ 0.1 mV ≤ 2.0 ns | 1 offset 3σ ≤ 15 mV | 2 noise grid mean ≤ 1.0 mV | 5b power, worst point (no Target; Stretch ≤ 20 µW) |
+|---|---|---|---|---|---|---|
+| 2.5 | 2.564 ns FAIL | 389.6 ps FAIL | 4.357 ns FAIL | not swept | not swept | 18.69 µW |
+| 5 | 1.764 ns FAIL | 255.5 ps FAIL | 3.025 ns FAIL | not swept | not swept | 20.58 µW |
+| 7.5 | 1.416 ns PASS | 210.2 ps PASS | 2.474 ns FAIL (9/45) | not swept | not swept | 23.27 µW |
+| 10 | 1.212 ns PASS | 190.2 ps PASS | 2.169 ns FAIL (2/45) | 11.31 mV PASS | 1.074 mV FAIL | 26.22 µW |
+| 15 | 0.984 ns PASS | 173.8 ps PASS | 1.838 ns PASS | 11.89 mV **INCOMPLETE** (44/45; see below) | 1.238 mV FAIL | 32.41 µW |
+| 20 (baseline) | 0.850 ns PASS | 167.3 ps PASS | 1.662 ns PASS | 12.09 mV PASS | 1.289 mV FAIL | 38.78 µW |
+| 40 | 0.637 ns PASS | 160.3 ps PASS | 1.389 ns PASS | not swept | not swept | 64.75 µW |
+
+Worst PVT point of 45 throughout, except Row 2, which is the DR-designated
+grid-wide mean. Read the table as follows:
+
+- **No swept value meets every ratified Target.** Row 2 (noise) fails at all
+  three biases where it was measured, which matches the baseline verdict.
+  Among the rows that do pass at 20 µA, 3c is the first to fail as the bias
+  falls: it fails at 10 µA (2/45 points, `ss` at 1.08 V, −40 and 27 °C) and below. 3a
+  and 3b hold down to 7.5 µA.
+- **15 µA Row 1 is INCOMPLETE, not PASS.** One of 60 mismatch draws at
+  `ff_-40c_1.08v` (sample 12) ended in ngspice "Timestep too small", with
+  the trouble node on the tail drain (`xa.x1.tmid`). That leaves 59 usable
+  draws against the ratified N = 60, and the grader does not round this
+  up. The other 44 points are all ≤ 11.89 mV. The pinned klt cannot re-run
+  one Monte-Carlo unit with its recorded seeds
+  ([klayout-tools#2973](https://github.com/2AMLogic/klayout-tools/issues/2973)),
+  so completing that point would mean resubmitting the whole 540-unit
+  `mos_ff` request under a new campaign id. That was not done.
+- **Row 2 falls as the bias falls** (1.289 → 1.238 → 1.074 mV). This is
+  plausible for a StrongARM latch, where slower integration narrows the
+  noise bandwidth, but each value carries the probit statistic's N = 80
+  sampling error. The TRNOISE streams are also pid-seeded across jobs
+  (klayout-tools#2963; see Limitations), so the per-bias differences are not
+  claimed as a trend.
+- **Power** is klt's full 30 ns-cycle average on instance A's supply,
+  including the reference branch. It is the same instrument as the issue
+  #62 campaign, so it reads higher than DR-0002's harness record (see "Power
+  reads higher"). Compare bias points with each other, not with the 22.9 …
+  29.5 µW DR figure. Only 2.5 µA lands under the ≤ 20 µW Stretch, and it
+  fails Rows 3a/3b/3c.
+
+**Mirror and headroom screening.** Two probes are added to each
+regeneration body: `vref_v`, the diode-connected reference's Vgs, and
+`tmid_eval_v`, the tail drain voltage early in evaluation. The tail current
+itself is not probed, so the 4:1 ratio is never measured directly. A value
+is **flagged** when the tail drain drops below 0.1 V (near triode, so the
+current falls below 4×) or when tail Vds / reference Vds leaves 0.5 … 2
+(the mirror gain departs from 4 by CLM/DIBL). Weak inversion (reference Vgs
+< 0.3 V) is a note only, because a fixed W/L ratio still sets 4:1 at equal
+Vgs. Results:
+
+- 40 µA is the only value with a near-triode point (1/45), and it has the
+  largest Vds mismatch (28/45 points). Its comparison is the least
+  like-for-like.
+- Every value has some Vds-ratio flags: 20/45 points at 2.5 µA, falling to
+  2/45 at 15 µA, and 7/45 at the 20 µA baseline. The flagged points sit at
+  the extremes of the 0.23 … 5.27 ratio range in `ibsweep.md`.
+- Weak inversion covers 21/45 points at 20 µA and 42/45 at 2.5 µA.
+
+The per-value table in `ibsweep.md` lists the flags next to the met / failed
+/ incomplete / not-swept Target rows.
+
+**Reproducing.**
+
+```bash
+C=<new-id>
+for ib in 2.5 5 7.5 10 15 20 40; do
+  python3 sim/run_klt_corner_verification.py build --campaign $C/ib_${ib}uA \
+      --bench regeneration --bench offset_mc --bench transient_noise \
+      --dut-param dut_ib=${ib}e-6 --bias-probes
+done
+# one klt sim request at a time (each goes to the batch fleet):
+python3 sim/run_klt_corner_verification.py run --campaign $C/ib_10uA --bench regeneration --klt .venv/bin/klt
+python3 sim/run_klt_corner_verification.py run --campaign $C/ib_10uA --bench offset_mc --klt .venv/bin/klt --retry-refused 30 --retry-wait 60
+# ... likewise per bias / bench; then tabulate (no simulator needed):
+python3 sim/run_klt_corner_verification.py ibsweep --campaign $C
+```
+
+The 20 µA Monte-Carlo reuse is coded in `sim/kltsim/ibsweep.py`
+(`REUSE_MC`). A new campaign either runs those benches at 20 µA or points
+`REUSE_MC` at its own baseline. `run` refuses to overwrite an envelope. A
+run interrupted part-way through can be resumed with `--skip-existing`
+(or `--part <tag>`), and the interruption stays visible in
+`attempts.jsonl`.
+
 ## Limitations and disclosures
 
 - **Noise draws are independent but not reproducible.** ngspice-46's TRNOISE

@@ -129,6 +129,20 @@ REGENERATION = Bench(
 )
 
 
+#: Mirror/headroom indicators for the issue #80 bias-point sweep, appended to
+#: the regeneration bench of a swept-bias campaign only (``build
+#: --bias-probes``); the issue #62 campaign's request is untouched. Instance
+#: A's bias branch: ``ibna`` is the diode-connected reference's Vgs (the
+#: gate voltage XMT mirrors); ``tmid`` is the drain of the tail device XMT.
+#: The flattened node name ``xa.x1.tmid`` (instance order, outermost first)
+#: was confirmed by a one-corner fleet smoke (the ``x1.xa.tmid`` ordering
+#: yields no value); that smoke is committed under ``campaigns/20261009-issue80/smoke/``.
+BIAS_PROBES = (
+    Meas("vref_v", ".meas tran vref_v find v(ibna) at=5n", "V"),
+    Meas("tmid_eval_v", ".meas tran tmid_eval_v find v(xa.x1.tmid) at=10.4n", "V"),
+)
+
+
 def qkick_measurements(node: str, side: str) -> tuple[Meas, ...]:
     """The Q_kick measure strings for one integrator node (DR-0002 Row 4):
     q at the 29 ns pre-decision reference, its max/min over 30 ... 45 ns, and
