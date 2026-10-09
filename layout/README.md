@@ -63,18 +63,58 @@ The generator alone needs only the `klayout` Python module:
      `Metal3.text` (30/25) label of the same name, and there are no other pins;
    - no text looks like a host path;
    - every shape is a box.
-4. **connectivity self-check.** `klt extract --deck sg13g2` followed by
-   `klt lvs` against the schematic, with `combine_devices` folding fingers.
-   The result at the time of writing is `match`: 24/24 devices, 18/18 nets
-   and 8/8 pins. This runs in a temp dir and **nothing from it is
-   committed**. It checks the generator. It is **not** the LVS signoff
-   evidence #60 owns.
+4. **lvs.** `klt extract --deck sg13g2 --top comparator --pins <8 ports>`
+   followed by `klt lvs` against the `.subckt comparator` block cut verbatim
+   out of `design/comparator.spice` (never edited by hand), with
+   `combine_devices` folding fingers and `reference.form: subckt-call`,
+   `reference.deck: sg13g2`. This is the T1 item 4 evidence. It writes, all
+   under `layout/comparator/` and all derived:
+
+   | file | content |
+   |---|---|
+   | `lvs_extracted.spice` | the extracted netlist (layout side) |
+   | `lvs_reference.spice` | the cut-out comparator subcircuit (reference side) |
+   | `lvs_request.json` | the `klt.lvs.request/1` document; netlist paths are relative to the request file, so nothing is host-absolute |
+   | `lvs_report.json` | the `klt lvs` envelope that the manifest cites |
+
+   Result: `status: match`, engine `klayout` 0.30.10, 24/24 devices, 18/18
+   nets, 8/8 pins (`vinp vinn clk vbias dout doutb vdd vss`, including the
+   independent `vbias` pin and `vdd`/`vss`, each with an identical
+   layout/reference entry in `net_correspondence`, which is what #38 cites),
+   0 mismatches, 0 warnings.
+
+   Limits of the verdict, stated plainly:
+   - `power_connectivity.status` is `unchecked`: with `subckt-call` the
+     reference carries its own power pins, which take part in the ordinary
+     compare, so the signal-only power check does not apply. This is **not** a
+     geometric power-grid verification; `vdd`/`vss` are verified only as
+     compared nets with matching device connectivity.
+   - `body_verification.status` is `unchecked` (pre-extracted netlist form, so
+     no deck establishes the tap convention). Body connections are not
+     verified by this evidence.
+   - ERC and post-layout (parasitic) simulation are separate work (#38, #61).
+   - `provenance.input.content_hash` (the value the manifest pins) is the
+     hash of the extracted netlist only. The tool does not tie it to the GDS
+     or to `design/comparator.spice`, so `--check` proves those links itself
+     (below).
+
+   With `--check` the stage requires, in order: a fresh extraction and a fresh
+   reference cut to be byte-identical (`cmp`) to the committed
+   `lvs_extracted.spice` / `lvs_reference.spice` / `lvs_request.json` (so a
+   changed GDS, schematic subcircuit or request fails); `klt lvs --check`
+   (netlist hashes still match the envelope); a fresh run of the committed
+   request to equal the committed envelope; and the verdict to be a complete
+   match (non-empty, no `error` envelope, `status: match`, engine named,
+   power verdict not `mismatch`, zero mismatches, 8/8 pins, 24/24 devices,
+   all nets, the eight pins corresponding by name, no host path). An empty or
+   error envelope fails.
 5. **controls.** Two deliberately wrong references must give `mismatch`:
    - M3's gate rewired, which `klt lvs` reports as `device.unmatched`;
    - M1's W at 11.5u instead of 12u, which it reports as `device.property`.
 
    Without these, a `match` in stage 4 could not be told apart from a compare
-   that sees nothing.
+   that sees nothing. They run in a temp dir; nothing from them is committed,
+   and an empty or error report does not count as a mismatch.
 
 6. **drc.** `klt drc --deck sg13g2 --top comparator --format json` on the
    stream, run from the repo root with the repo-relative path, writing the
@@ -175,9 +215,8 @@ ratified row.
 
   None of these has been checked by the PDK's own deck, and there is no
   density fill or seal ring.
-- **Connectivity.** The `match` in stage 4 is a self-check of this
-  generator against the schematic. LVS signoff, with a committed envelope,
-  is #60.
+- **Connectivity.** Stage 4 is the committed LVS evidence (#60); see its
+  limits above (power and body verdicts `unchecked`).
 - **Bodies.** NMOS bodies are the substrate, tied to vss by five p-tap bars.
   PMOS bodies are one NWell, tied to vdd by two n-tap bars. There are no
   guard rings around the input pair or the latch.
@@ -202,7 +241,13 @@ ratified row.
   generically as
   [2AMLogic/klayout-tools#2852](https://github.com/2AMLogic/klayout-tools/issues/2852).
   `run_flow.sh` works around it by cutting the `.subckt comparator` block
-  into its own temp file.
+  into the committed `lvs_reference.spice`, derived deterministically from
+  `design/comparator.spice` on every run and compared byte-for-byte in
+  `--check`.
+- `klt lvs --check --rerun` cannot replay a `subckt-call` report (the
+  envelope does not echo `reference.form`); the flow uses cheap `--check`
+  plus its own fresh-run comparison instead. Filed generically as
+  [2AMLogic/klayout-tools#2907](https://github.com/2AMLogic/klayout-tools/issues/2907).
 
 ## Manifest citation (T1 item 2)
 

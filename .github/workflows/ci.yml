@@ -61,7 +61,9 @@ jobs:
 
   # Layout reproducibility (issue #58): the committed GDS must be exactly what
   # layout/comparator/generate.py draws from a clean checkout, and that drawing
-  # must still reconcile with design/comparator.spice. Needs only the pinned
+  # must still reconcile with design/comparator.spice. It also covers the
+  # committed LVS evidence (issue #60): extraction, reference cut, request and
+  # envelope freshness plus the match verdict. Needs only the pinned
   # klt and the KLayout Python module it brings -- no PDK -- so it belongs to
   # the same tool-light scope as the leg above. See layout/README.md.
   layout-reproducibility:

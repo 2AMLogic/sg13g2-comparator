@@ -21,7 +21,8 @@ average power), and the kickback charge clause is consistent, not certified.
 Nothing here is post-layout or silicon. A generated layout is committed under
 [`layout/`](layout/), with a committed clean DRC report against klt's curated
 SG13G2 deck (a subset of the PDK rules; see [`layout/README.md`](layout/README.md)
-for coverage). LVS signoff and post-layout measurement remain pending. The gap to T1 is
+for coverage), and a committed `match` LVS report against the schematic subcircuit
+(power and body verdicts `unchecked`; see the same README). Post-layout measurement remains pending. The gap to T1 is
 graded, not hand-read: [issue #3](https://github.com/2AMLogic/sg13g2-comparator/issues/3)
 tracks it as a `klt signoff` manifest with a frozen tier-verdict report,
 re-graded on every CI run.

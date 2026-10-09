@@ -45,12 +45,12 @@ why, is the rest of this document.
 |---|---|---|
 | `block` | `sg13g2-comparator` | **Required** — identifies this block's row in the fleet roll-up (2AMLogic/2am#956), which consumes exactly this file |
 | `kind` | `analog` | confirmed against the block itself, not taken from the filing: the DUT is a single-tail StrongARM dynamic latch (`design/comparator.spice`, DR-0001) on `sg13_lv_nmos`/`sg13_lv_pmos` — a continuous-time-analog comparator with no digital partition, no RTL, no standard cells, and no mixed-signal boundary to declare. The spec rows are offset-σ, input-referred noise, metastability/decision time, and kickback — all analog measurements (`README.md`'s target-spec table). Analog satisfies the Analog column only, which is the column every row below is graded against. |
-| `evidence` | item `3` only | item 3 cites the `klt drc` envelope (below); every other item is deliberately uncited — see "What is deliberately uncited, and why" |
+| `evidence` | items `3` and `4` | item 3 cites the `klt drc` envelope and item 4 the `klt lvs` envelope (below); every other item is deliberately uncited — see "What is deliberately uncited, and why" |
 
 ## What is deliberately uncited, and why
 
-The only `klt` JSON envelope committed here is the item 3 DRC report; no
-`klt lvs`/`sim`/`yield`/`pex`/`erc` run has been minted (no other `*.json`
+The `klt` JSON envelopes committed here are the item 3 DRC report and the item 4 LVS report; no
+`klt sim`/`yield`/`pex`/`erc` run has been minted (no other `*.json`
 under `sim/`, `design/`, or `layout/` carries a `klt` envelope's
 `schema_version`). There is therefore nothing else the grader *accepts* to
 cite, and per [#37]'s own rule — "do not
@@ -73,9 +73,7 @@ row:
   are committed — see `layout/README.md`. The row stays uncited until the
   pinned `klt` includes klayout-tools#2718's artifact-anchored generic
   evidence; that pin bump is tracked in #65.)
-- **Item 4 (LVS clean)** — a layout exists (issue #58), but no `klt lvs`
-  envelope has been minted against it; the row renders `unmet`/`no_evidence`
-  until #60 does. (Item 3, DRC, is cited: see the next section.)
+- **Item 4 (LVS clean)** — cited since #60; see "Item 4" below.
 - **Item 5 (Full corner verification vs a ratified spec)** — the table is
   ratified ([`spec/decision-records/0002-target-spec-ratification.md`](../spec/decision-records/0002-target-spec-ratification.md),
   merged via PR #18, closing #12), so that gap has cleared. Item 5 stays
@@ -158,6 +156,30 @@ pinned build does not embed a host-absolute path
 ([klayout-tools#2659](https://github.com/2AMLogic/klayout-tools/issues/2659)
 did not bite here).
 
+## Item 4 (LVS clean) — cited, with the verdict's limits
+
+Item 4 cites `layout/comparator/lvs_report.json`, the `klt lvs` envelope
+(issue #60) comparing `layout/comparator/comparator.gds` (extracted with
+`klt extract --deck sg13g2`) against the `.subckt comparator` block of
+`design/comparator.spice`, pinned by `content_hash`
+`sha256:6970e7e51951f876f68536d37d37adf16e5ff121862c9ee60a8be94ff6a3bf0b`.
+That is the tool-defined value, `provenance.input.content_hash`, and it is
+the hash of the **extracted netlist** (`layout/comparator/lvs_extracted.spice`),
+not of the GDS or the schematic. The tool does not bind it to either, so
+`layout/run_flow.sh --check` (run in CI) re-derives both links and fails on a
+changed GDS, schematic subcircuit or request; see `layout/README.md`, stage 4.
+
+The envelope reads `status: match` (engine `klayout` 0.30.10, klt
+`0.5.0+ge8ca621a6961`), 24/24 devices, 18/18 nets, 8/8 pins including
+`vdd`/`vss` and the independent `vbias`, 0 mismatches, 0 warnings.
+`power_connectivity.status` is `unchecked`, which `klt signoff` accepts: with
+`reference.form: subckt-call` the supply pins take part in the ordinary
+compare, so the signal-only power check does not apply. That is **not** a
+geometric power-grid verification. `body_verification` is also `unchecked`.
+ERC (#38) and post-layout simulation (#61) are separate work. The reference is
+cut out of the schematic netlist as a workaround for
+[klayout-tools#2852](https://github.com/2AMLogic/klayout-tools/issues/2852).
+
 ## Regeneration and freshness
 
 The report is frozen at the pinned `klt` build — `2AMLogic/klayout-tools` @
@@ -174,7 +196,7 @@ diff /tmp/fresh.json manifests/t1-signoff-report.json   # regeneration = update 
 ```
 
 Exit `0` means every T1 item met (this repo is **not** there: exit `3`,
-`tier: null`, `1/11` item rows met at the time of freezing: item 3). Exit codes
+`tier: null`, `2/11` item rows met at the time of freezing: items 3 and 4). Exit codes
 `0` and `3` are both clean runs; exit `1` is an error and must be fixed,
 not committed around.
 
@@ -200,8 +222,9 @@ not committed around.
 
 | File | What it is |
 |---|---|
-| `sg13g2-comparator.json` | the block manifest — `block`, `kind`, per-item pinned evidence citations (item 3 cited; the rest deliberately uncited — see above). **The stable path a fleet roll-up points at.** |
+| `sg13g2-comparator.json` | the block manifest — `block`, `kind`, per-item pinned evidence citations (items 3 and 4 cited; the rest deliberately uncited — see above). **The stable path a fleet roll-up points at.** |
 | `../layout/comparator/drc_report.json` | the cited item 3 evidence (`klt drc` envelope), regenerated by `layout/run_flow.sh` |
+| `../layout/comparator/lvs_report.json` | the cited item 4 evidence (`klt lvs` envelope), with its derived inputs `lvs_extracted.spice`, `lvs_reference.spice`, `lvs_request.json`, regenerated by `layout/run_flow.sh` |
 | `t1-signoff-report.json` | `klt signoff --manifest sg13g2-comparator.json --format json` output, frozen at the pinned `klt`; CI diff-checks a fresh render against it |
 | `README.md` | this claim document — kind basis, citation rationale and the disclosure of the uncited rows, the regeneration contract |
 
