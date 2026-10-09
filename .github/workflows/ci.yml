@@ -8,13 +8,16 @@
 # byte-identical (issue #58). None of that needs the SG13G2 PDK, only the
 # pinned `klt`.
 #
-# The simulation harness (`sim/`) is NOT run here: it needs a fetched
-# IHP-Open-PDK checkout plus ngspice/OpenVAF (see `sim/toolchain.json` for
-# the pins), which is a real, recurring cost to provision on a hosted
-# runner. That leg stays a local, contributor-run step with its result
-# committed as an append-only record under `sim/*/records/` -- see
-# `sim/README.md`. Do not silently drop this comment if the PDK-heavy leg
-# is ever added -- update `sim/README.md` in the same change.
+# The PDK-dependent benches under `sim/` are NOT run here: they need a
+# fetched IHP-Open-PDK checkout plus ngspice/OpenVAF (see
+# `sim/toolchain.json` for the pins), which is a real, recurring cost to
+# provision on a hosted runner. That leg stays a local, contributor-run step
+# with its result committed as an append-only record under
+# `sim/*/records/` -- see `sim/README.md`. What IS run here is the
+# harness's own stdlib-only unit tests (`sim/harness/tests/`, selftest step
+# 0, issue #75), which need no PDK and no installs. Do not silently drop
+# this comment if the PDK-heavy leg is ever added -- update `sim/README.md`
+# in the same change.
 
 name: CI
 
@@ -87,3 +90,20 @@ jobs:
 
       - name: Regenerate and verify the committed layout
         run: KLT_NATIVE=1 layout/run_flow.sh --check
+
+  # Harness unit tests (issue #75): the same command as `sim/selftest.sh`
+  # step 0. Pure stdlib -- no PDK, no ngspice, no installs -- so it belongs
+  # to the same tool-light scope as the legs above. The PDK-dependent
+  # selftest steps stay local (see sim/README.md).
+  harness-unit-tests:
+    name: harness unit tests (stdlib only, no PDK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Run sim harness unit tests
+        run: PYTHONPATH=sim python3 -m unittest discover -t sim -s harness.tests -p 'test_*.py'

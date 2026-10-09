@@ -215,6 +215,18 @@ un-ignores `sim/*/corners/**/*.log` for this reason), so a reader can check a
 number against the tool's own output rather than against a table somebody
 transcribed.
 
+## What CI runs
+
+PDK-dependent benches are not run in CI: they need the IHP-Open-PDK
+checkout plus ngspice/OpenVAF, so they stay contributor-run with their
+results committed as records. The harness's own unit tests
+(`sim/harness/tests/`, pure stdlib, no PDK) do run in CI as the
+`harness-unit-tests` job in `.github/workflows/ci.yml`; locally:
+
+```bash
+PYTHONPATH=sim python3 -m unittest discover -t sim -s harness.tests -p 'test_*.py'
+```
+
 ## Rules
 
 - **No claim without a testbench.** A number that is not in a record under
