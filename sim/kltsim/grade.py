@@ -258,7 +258,16 @@ def check_dut(bench: BenchEvidence, dut: DutReference) -> list[str]:
         problems.append("netlist body embeds no DUT block")
     else:
         embedded_sha = hashlib.sha256(embedded.encode("utf-8")).hexdigest()
-        reference_sha = hashlib.sha256(dut.netlist_bytes).hexdigest()
+        reference_bytes = dut.netlist_bytes
+        geometry = build_mod.extract_geometry(bench.body_text)
+        if geometry:
+            # issue #92 sizing candidate: today's DUT + the declared geometry
+            try:
+                reference_bytes = build_mod.apply_geometry(
+                    dut.netlist_bytes.decode("utf-8"), geometry).encode("utf-8")
+            except build_mod.BuildError as exc:
+                problems.append(f"declared geometry override is not applicable: {exc}")
+        reference_sha = hashlib.sha256(reference_bytes).hexdigest()
         if declared_sha != embedded_sha:
             problems.append("embedded DUT block does not match its own declared sha256")
         if embedded_sha != reference_sha:

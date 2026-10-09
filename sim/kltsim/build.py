@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from harness import internal_noise as internal_noise_mod
@@ -126,8 +127,72 @@ def compose_fixture_request(bench: Bench, netlist_name: str) -> dict:
     return request
 
 
+#: Marker of a body header line that declares structural (geometry)
+#: overrides applied to the inlined DUT (issue #92). ``kltsim.grade``
+#: re-applies exactly these to today's design/comparator.spice and requires
+#: the embedded DUT to equal the result, so a sizing candidate is accepted
+#: as "today's DUT plus the stated geometry" and nothing else.
+GEOMETRY_MARKER = "*   GEOMETRY OVERRIDE (issue #92 sizing study; design/comparator.spice untouched):"
+
+#: instance fields the sizing study may override. Only instances of the
+#: top-level `comparator` subcircuit (the DR-0001 latch), never the bias
+#: mirror or the dut wrapper.
+GEOMETRY_FIELDS = ("w", "l")
+
+
+def parse_geometry(items) -> dict:
+    """``["XM1.w=16u", ...]`` -> ``{"XM1.w": "16u"}`` (values kept verbatim)."""
+    out = {}
+    for item in items or []:
+        key, sep, value = item.partition("=")
+        if not sep or "." not in key or not value:
+            raise BuildError(f"geometry override {item!r}: expected INSTANCE.field=VALUE")
+        out[key.strip()] = value.strip()
+    return out
+
+
+def apply_geometry(dut_text: str, geometry: dict) -> str:
+    """Return ``dut_text`` with ``INSTANCE.w|l=VALUE`` applied to instances of
+    the ``comparator`` subcircuit. Refuses unknown instances/fields, so a
+    typo cannot silently leave the DUT unchanged."""
+    lines = dut_text.split("\n")
+    in_top = False
+    remaining = dict(geometry)
+    for index, line in enumerate(lines):
+        if line.startswith(".subckt "):
+            in_top = line.split()[1] == "comparator"
+        elif line.startswith(".ends"):
+            in_top = False
+        if not in_top or not line.startswith("X"):
+            continue
+        inst = line.split()[0]
+        for key in [k for k in remaining if k.split(".", 1)[0] == inst]:
+            field = key.split(".", 1)[1]
+            if field not in GEOMETRY_FIELDS:
+                raise BuildError(f"geometry override {key!r}: field must be one of {GEOMETRY_FIELDS}")
+            new, count = re.subn(rf"(\s{field}=)\S+", rf"\g<1>{remaining[key]}", line, count=1)
+            if count != 1:
+                raise BuildError(f"geometry override {key!r}: instance has no {field}= field")
+            line = new
+            del remaining[key]
+        lines[index] = line
+    if remaining:
+        raise BuildError(
+            f"geometry override of {sorted(remaining)}: no such instance in `.subckt comparator`")
+    return "\n".join(lines)
+
+
+def extract_geometry(body_text: str) -> dict:
+    """The geometry overrides a body declares (``{}`` when none)."""
+    for line in body_text.split("\n"):
+        if line.startswith(GEOMETRY_MARKER):
+            return parse_geometry(line[len(GEOMETRY_MARKER):].split())
+    return {}
+
+
 def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
-                 param_overrides: dict | None = None) -> str:
+                 param_overrides: dict | None = None,
+                 geometry_overrides: dict | None = None) -> str:
     """``param_overrides`` replaces named ``sim/dut.json`` operating-point
     parameters in the emitted ``.param`` lines only (issue #80's bias-point
     sweep). The file itself is never edited, and each override is stated in
@@ -139,7 +204,10 @@ def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
             raise BuildError(f"override of {key!r}: not a sim/dut.json param")
     params.update(param_overrides or {})
     dut_path: Path = binding["_netlist_path"]
-    dut_bytes = dut_path.read_bytes()
+    base_bytes = dut_path.read_bytes()
+    dut_bytes = base_bytes
+    if geometry_overrides:
+        dut_bytes = apply_geometry(base_bytes.decode("utf-8"), geometry_overrides).encode("utf-8")
     dut_text = dut_bytes.decode("utf-8")
     circuit_path = BENCH_DIR / bench.circuit
     circuit_text = circuit_path.read_text(encoding="utf-8")
@@ -163,6 +231,10 @@ def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
             "*   OVERRIDE (issue #80 sweep; sim/dut.json untouched): "
             + ", ".join(f"{k}={v!r}" for k, v in sorted(param_overrides.items()))
         )
+    if geometry_overrides:
+        lines.append(GEOMETRY_MARKER + " "
+                     + " ".join(f"{k}={v}" for k, v in sorted(geometry_overrides.items())))
+        lines.append(f"*   base DUT (unmodified) sha256={sha256_bytes(base_bytes)}")
     lines += [
         "*",
         "* klt sim netlist-body convention: no .lib / .temp / analysis / .end here --",
@@ -274,6 +346,7 @@ def plan_bench_inputs(
     osdi_dir: str | None = None,
     split: bool = True,
     param_overrides: dict | None = None,
+    geometry_overrides: dict | None = None,
 ) -> tuple[Path, list[Path], list[tuple[Path, bytes]]]:
     """Compose (without writing) ``<bench>.body.spice`` and its request(s).
 
@@ -296,7 +369,8 @@ def plan_bench_inputs(
     body_path = out_dir / body_name
     files: list[tuple[Path, bytes]] = [(
         body_path,
-        compose_body(bench, osdi_dir, param_overrides=param_overrides).encode("utf-8"),
+        compose_body(bench, osdi_dir, param_overrides=param_overrides,
+                     geometry_overrides=geometry_overrides).encode("utf-8"),
     )]
     backend = "batch" if target == "batch" else "local"
     requests: list[Path] = []
@@ -368,13 +442,14 @@ def write_bench_inputs(
     osdi_dir: str | None = None,
     split: bool = True,
     param_overrides: dict | None = None,
+    geometry_overrides: dict | None = None,
 ) -> tuple[Path, list[Path]]:
     """Write a bench's inputs, OVERWRITING (disposable smoke directories and
     the fleet-smoke scratch path only). Campaign builds use
     :func:`plan_bench_inputs` + :func:`commit_inputs` instead."""
     body_path, requests, files = plan_bench_inputs(
         bench, out_dir, target=target, osdi_dir=osdi_dir, split=split,
-        param_overrides=param_overrides)
+        param_overrides=param_overrides, geometry_overrides=geometry_overrides)
     out_dir.mkdir(parents=True, exist_ok=True)
     for path, data in files:
         path.write_bytes(data)

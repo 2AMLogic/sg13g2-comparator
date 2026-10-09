@@ -1,0 +1,37 @@
+* klt sim -- generated corner deck, do not edit
+.lib /opt/pdk/ihp-sg13g2/libs.tech/ngspice/models/cornerMOSlv.lib mos_ff
+.include /var/tmp/eda-job-klt-sim-00839f0c7372/inputs/netlist.cir
+.temp 125
+.meas tran vdd_meas find v(vdd) at=25n
+.meas tran temp_meas find v(tcheck) at=1n
+.meas tran ad_pos max v(ad) from=30n to=45n
+.meas tran ad_neg min v(ad) from=30n to=45n
+.meas tran kick_1k_peak_mv param='max(abs(ad_pos),abs(ad_neg))*1e3'
+.meas tran kick_1k_pos_mv param='ad_pos*1e3'
+.meas tran kick_1k_neg_mv param='ad_neg*1e3'
+.meas tran qp29 find v(qp) at=29n
+.meas tran qpmax max v(qp) from=30n to=45n
+.meas tran qpmin min v(qp) from=30n to=45n
+.meas tran qkick_p_fc param='max(abs(qpmax-qp29),abs(qpmin-qp29))*1e3'
+.meas tran qn29 find v(qn) at=29n
+.meas tran qnmax max v(qn) from=30n to=45n
+.meas tran qnmin min v(qn) from=30n to=45n
+.meas tran qkick_n_fc param='max(abs(qnmax-qn29),abs(qnmin-qn29))*1e3'
+.meas tran qkick_fc param='max(qkick_p_fc,qkick_n_fc)'
+.meas tran bd0 find v(bd) at=29n
+.meas tran bd1 find v(bd) at=55n
+.meas tran cd0 find v(cd) at=29n
+.meas tran cd1 find v(cd) at=55n
+.meas tran kick_sigdep_uv param='abs((cd1-cd0)-(bd1-bd0))*1e6'
+.meas tran bc0 find v(bc) at=29n
+.meas tran bc1 find v(bc) at=55n
+.meas tran kick_cm_uv param='(bc1-bc0)*1e6'
+.meas tran dout_1k_end find v(dan) at=55n
+.meas tran dout_float_small_end find v(dbn) at=55n
+.meas tran dout_float_big_end find v(dcn) at=55n
+.control
+alter vsup=1.32
+tran 5p 60n
+quit
+.endc
+.end

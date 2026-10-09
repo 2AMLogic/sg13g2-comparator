@@ -456,6 +456,125 @@ run interrupted part-way through can be resumed with `--skip-existing`
 (or `--part <tag>`), and the interruption stays visible in
 `attempts.jsonl`.
 
+## Joint input-pair sizing study (issue #92)
+
+Issue [#92](https://github.com/2AMLogic/sg13g2-comparator/issues/92). Two ratified
+Target rows fail on the committed design: Row 4a (Q_kick 31.46 fC/side at
+`ff_125c_1.32v` against <= 25 fC) and Row 2 (grid-wide mean noise 1.289 mV rms against
+<= 1.0 mV). This study sweeps structural parameters of the **existing DR-0001 topology**
+and records which rows each candidate meets. It **proposes no schematic change** and
+changes no spec row, no ratified Target, not `design/comparator.spice` and not
+`sim/dut.json`. Adopting any candidate is a follow-up issue plus a decision record.
+Evidence: [`campaigns/20261009-issue92/`](campaigns/20261009-issue92/); generated table
+[`sizesweep.md`](campaigns/20261009-issue92/sizesweep.md) (machine form `sizesweep.json`).
+Client: the CI-pinned klt `0.5.0+ge8ca621a6961`, batch backend (job ids in each
+envelope's `environment.remote`).
+
+**How a candidate is built.** `build --geometry INST.FIELD=VALUE` (new, `sim/kltsim/build.py`)
+rewrites the `w=` / `l=` of the named instance of `.subckt comparator` in the DUT text
+**inlined into the generated body only**. The body header states the override
+(`GEOMETRY OVERRIDE ...`) and the unmodified file's sha256; the DUT block's own declared
+sha256 covers the modified text, so `provenance.input.content_hash` pins it.
+`kltsim.grade` accepts such a body only if its embedded DUT equals today's
+`design/comparator.spice` with exactly the declared overrides applied, so a candidate is
+never graded against a hand-edited netlist. `build --screen` rewrites each request to the
+reduced screening grid below. `sizesweep` tabulates (no simulator needed).
+
+**Stage 1, screening** (`scr_<name>/`): kickback and regeneration benches, 18 points
+(tt/ff/ss x 1.08/1.32 V x -40/27/125 C, deterministic, mismatch off, one draw per point;
+includes the binding corner `ff_125c_1.32v`). These are **screening values, not 45-point
+verdicts and not sigmas**. `base` reproduces the issue #62 binding value (31.46 fC) at that
+corner exactly.
+
+| candidate (override on `XM1`/`XM2` unless noted) | Q_kick @ `ff_125c_1.32v` (Row 4a <= 25 fC) | t_d 0.1 mV worst (<= 2.0 ns) |
+|---|---|---|
+| base (12u / 0.34u) | 31.46 | 1.662 |
+| w8_l034 (8u / 0.34u) | 21.20 | 1.705 |
+| w6_l034 (6u / 0.34u) | 15.97 | 1.769 |
+| w8_l020 (8u / 0.20u) | 15.10 | 1.754 |
+| w12_l020 (12u / 0.20u) | 22.47 | 1.678 |
+| w12_l050 (12u / 0.50u) | 41.42 | 1.721 |
+| w18_l034 (18u / 0.34u) | 46.55 | 1.677 |
+| w12_l034_rst6 (`XM9`/`XM10` reset 3u -> 6u) | 30.91 | 1.686 |
+| w12_l034_sw20 (`XMSW` 40u -> 20u) | 29.46 | 1.481 |
+
+Q_kick tracks input-pair width roughly linearly (C_gd path) and rises with length.
+Reset-device and tail-switch width move it by only 2 to 6 %, so they cannot close Row 4
+alone. `w12_l020` also passes the binding corner in screening and was **not** taken to the
+full grid (3 finalists were chosen by expected Row 1 mismatch margin); it is open work.
+
+**Stage 2, finalists** (`full_<name>/`): the complete 45-point grid for every bench,
+graded by `kltsim.grade`, with Monte Carlo offset N = 60 per point (base seed 20260916) and
+transient-noise N = 80 per rung (seeds and run counts are in each committed request).
+
+| candidate | Target rows met (45/45 valid unless noted) | Target rows failed | Row 4a Q_kick @ binding `ff_125c_1.32v` | Row 2 noise (grid mean) | Row 1 offset 3 sigma (worst pt) |
+|---|---|---|---|---|---|
+| baseline `20261009-d73a9ac` (12u / 0.34u) | 1, 3a, 3b, 3c, 4b, 5a | **2, 4a** | 31.46 fC | 1.289 mV | 12.09 mV |
+| **w8_l034** (8u / 0.34u) | **1, 3a, 3b, 3c, 4a, 4b**, 5a | **2** | **21.20 fC (PASS)** | 1.338 mV (FAIL) | 13.93 mV (PASS) |
+| w6_l034 (6u / 0.34u) | 3a, 3b, 3c, 4a, 4b, 5a | 1, 2 | 15.97 fC | 1.333 mV | 15.79 mV (FAIL, 9/45 pts) |
+| w8_l020 (8u / 0.20u) | 3a, 3b, 3c, 4a, 4b | 1, 2 (5a INCOMPLETE) | 15.10 fC | 1.265 mV | 17.98 mV (FAIL, 19/45 pts; 44/45 valid) |
+
+Findings, stated without extrapolation beyond the measured candidates:
+
+- **Row 4a closes by input-pair sizing inside DR-0001.** `w8_l034` meets Row 4a at 45/45
+  points (worst 21.20 fC) while Rows 1, 3a, 3b, 3c and 4b still pass. Row 1's margin is
+  thin (13.93 against 15 mV; MC sigma precision at N = 60 is about +/-9 %).
+- **Row 2 does not close for any candidate.** Grid-wide mean noise is 1.27 to 1.34 mV for
+  every geometry run, so the input pair's W and L (6 to 12 um, 0.20 to 0.34 um) is not
+  the lever on this row. (The #80 sweep reached 1.074 mV only at `dut_ib` = 10 uA, which
+  fails Row 3c.) The differences among 1.265, 1.289, 1.333 and 1.338 mV are not claimed as
+  a trend: per-corner scatter is about 13 % at N = 80 and the TRNOISE streams are
+  pid-seeded across jobs (klayout-tools#2963). No candidate meets Row 2, so no candidate
+  meets all Target rows and T1 item 5 stays open.
+- **Smaller pair trades Row 1 for Row 4.** 6u fails Row 1 (15.79 mV); 8u/0.20u fails it
+  worse (17.98 mV). Row 1 and Row 4a are the two rows this knob trades against each other.
+- **`w8_l020` Row 1 and Row 5a are INCOMPLETE as well as failing.** One of the 60 draws at
+  `ff_27c_1.32v` errored (59 usable), so offset has 44/45 valid points and the coverage
+  row 5a is INCOMPLETE. The pinned klt cannot re-run a single Monte-Carlo unit
+  (klayout-tools#2973).
+- **Row 2 would need a different lever** (bias current, integration time, a noise
+  contribution from the latch devices or a topology change). Which of those is acceptable is
+  an operator decision (relax Row 2, re-open DR-0001, or accept a bias trade against Row 3c).
+  This study does not make it.
+
+**Layout consequence.** The committed GDS is generated from `design/comparator.spice` and
+refuses to draw on a schematic mismatch. Adopting `w8_l034` means changing `XM1`/`XM2` to
+`w=8u` in the schematic, regenerating the layout, and re-running DRC, LVS and the
+extracted-netlist (PEX) comparison. None of that is done here.
+
+**Not done (remaining work for #92).** Row 2 is open for every candidate, so the issue
+is not closed. Not run: `w12_l020` (and other L/W combinations, `XMSW`/reset combined with a
+narrower pair) on the full grid; any bias-point or latch-device lever for Row 2; the
+Monte-Carlo-complete re-run of `ff_27c_1.32v` for `w8_l020`; the #81 whole-latch noise
+decomposition for the finalists (the noise here is the compliance statistic of the
+`transient_noise` bench, as in `20261009-d73a9ac`).
+
+**Fleet disclosures.** The shared Spot fleet refused a number of submissions during the
+run with `batch-fleet-provision.sh launch failed (exit 1): error: no capacity in any of
+the 30 pools after 3 attempt(s)`; every refusal is in the relevant `attempts.jsonl`, and the
+unit was simply resubmitted later under the same append-only rules (the driver's built-in
+cap retry only matches the `BATCH_MAX_CONCURRENT_INSTANCES` message). Nothing was
+run locally. Both klt gaps met here (no first-class design-parameter sweep axis, so each
+geometry is its own body and request; refusals with no client-side queue) are already open
+as klayout-tools#2725 and #2869.
+
+**Reproducing.**
+
+```bash
+C=<new-id>
+python3 sim/run_klt_corner_verification.py build --campaign $C/scr_w8_l034 \
+    --bench kickback --bench regeneration --screen \
+    --geometry XM1.w=8u --geometry XM2.w=8u
+python3 sim/run_klt_corner_verification.py build --campaign $C/full_w8_l034 \
+    --bench regeneration --bench kickback --bench offset_mc --bench transient_noise \
+    --bias-probes --geometry XM1.w=8u --geometry XM2.w=8u
+# one klt sim request at a time per bench (each goes to the batch fleet):
+python3 sim/run_klt_corner_verification.py run --campaign $C/full_w8_l034 --bench kickback --klt .venv/bin/klt
+# ... likewise per bench / part; then tabulate (no simulator needed):
+python3 sim/run_klt_corner_verification.py sizesweep --campaign $C
+python3 sim/run_klt_corner_verification.py grade --campaign $C/full_w8_l034
+```
+
 ## Limitations and disclosures
 
 - **Noise draws are independent but not reproducible.** ngspice-46's TRNOISE

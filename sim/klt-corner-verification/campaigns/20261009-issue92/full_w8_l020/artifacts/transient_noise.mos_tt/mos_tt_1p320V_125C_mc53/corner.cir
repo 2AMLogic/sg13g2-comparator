@@ -1,0 +1,28 @@
+* klt sim -- generated corner deck, do not edit
+.options seed=920344970
+.param mc_sample_index=53
+.param mc_process_seed=305479891
+.param mc_mismatch_seed=1093950419
+.lib /opt/pdk/ihp-sg13g2/libs.tech/ngspice/models/cornerMOSlv.lib mos_tt
+.include /var/tmp/eda-job-klt-sim-560387141006/inputs/netlist.cir
+.temp 125
+.meas tran vdd_meas find v(vdd) at=0.5n
+.meas tran temp_meas find v(tcheck) at=0.5n
+.meas tran vn0_a find v(vd0) at=0.5n
+.meas tran vn0_b find v(vd0) at=2.5n
+.meas tran vn1_a find v(vd1) at=0.5n
+.meas tran d_zero find v(dn0) at=5n
+.meas tran d_plus find v(dn1) at=5n
+.meas tran d_minus find v(dn2) at=5n
+.meas tran res_zero param='abs(d_zero-0.5)'
+.meas tran res_plus param='abs(d_plus-0.5)'
+.meas tran res_minus param='abs(d_minus-0.5)'
+.meas tran hit_zero find v(h0) at=5n
+.meas tran hit_plus find v(h1) at=5n
+.meas tran hit_minus find v(h2) at=5n
+.control
+alter vsup=1.32
+tran 20p 5.1n 0 20p
+quit
+.endc
+.end

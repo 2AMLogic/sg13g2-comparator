@@ -39,6 +39,7 @@ from . import build as build_mod
 from . import fixture as fixture_mod
 from . import grade as grade_mod
 from . import ibsweep as ibsweep_mod
+from . import sizesweep as sizesweep_mod
 from . import noise_full as noise_full_mod
 from .benches import ALL_BENCHES, BENCHES, BIAS_PROBES, FIXTURE_BENCHES
 
@@ -100,6 +101,7 @@ def cmd_build(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     names = args.bench or list(BENCHES)
     overrides = _parse_overrides(args.dut_param)
+    geometry = build_mod.parse_geometry(getattr(args, "geometry", None)) or None
     # Compose EVERY selected bench's inputs before writing anything, then
     # commit them append-only: a conflict in any bench changes no file.
     planned: list[tuple[Path, bytes]] = []
@@ -108,7 +110,11 @@ def cmd_build(args) -> int:
         if args.bias_probes and name == "regeneration":
             bench = dataclasses.replace(bench, measurements=bench.measurements + BIAS_PROBES)
         planned += build_mod.plan_bench_inputs(
-            bench, out_dir, target="batch", param_overrides=overrides or None)[2]
+            bench, out_dir, target="batch", param_overrides=overrides or None,
+            geometry_overrides=geometry)[2]
+    if getattr(args, "screen", False):
+        planned = [(path, sizesweep_mod.screen_request(data) if path.name.endswith(".request.json") else data)
+                   for path, data in planned]
     try:
         created = set(build_mod.commit_inputs(planned))
     except build_mod.BuildError as exc:
@@ -532,6 +538,12 @@ def cmd_ibsweep(args) -> int:
     return 0 if result["points"] else 1
 
 
+def cmd_sizesweep(args) -> int:
+    result = sizesweep_mod.run(args.campaign, CAMPAIGNS_DIR)
+    print((CAMPAIGNS_DIR / args.campaign / "sizesweep.md").read_text(encoding="utf-8"))
+    return 0 if result["screen"] or result["full"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     default_klt = shutil.which("klt") or "klt"
     ap = argparse.ArgumentParser(prog="run_klt_corner_verification.py", description=__doc__,
@@ -543,6 +555,10 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--bench", action="append", choices=sorted(ALL_BENCHES))
     b.add_argument("--dut-param", action="append", metavar="NAME=VALUE",
                    help="override a sim/dut.json param in the emitted body only (issue #80 sweep)")
+    b.add_argument("--geometry", action="append", metavar="INST.FIELD=VALUE",
+                   help="override a MOS w/l in the inlined DUT body only (issue #92 sizing study)")
+    b.add_argument("--screen", action="store_true",
+                   help="reduced screening grid (tt/ff/ss x 1.08/1.32 V x -40/27/125 C), issue #92")
     b.add_argument("--bias-probes", action="store_true",
                    help="append the mirror/headroom probes to the regeneration bench")
     b.set_defaults(func=cmd_build)
@@ -604,6 +620,10 @@ def main(argv: list[str] | None = None) -> int:
     ib = sub.add_parser("ibsweep", help="tabulate a dut_ib sweep campaign (issue #80)")
     ib.add_argument("--campaign", required=True)
     ib.set_defaults(func=cmd_ibsweep)
+
+    sz = sub.add_parser("sizesweep", help="tabulate an input-pair sizing study (issue #92)")
+    sz.add_argument("--campaign", required=True)
+    sz.set_defaults(func=cmd_sizesweep)
 
     g = sub.add_parser("grade", help="grade a campaign's committed envelopes")
     g.add_argument("--campaign", required=True)
