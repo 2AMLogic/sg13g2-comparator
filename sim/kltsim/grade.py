@@ -36,6 +36,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import NormalDist
@@ -49,6 +50,7 @@ GAP = "GAP"
 NOT_SPECIFIED = "NOT SPECIFIED"
 REPORTED = "REPORTED"
 INVALID_DUT = "INVALID_DUT"
+REJECTED_EVIDENCE = "REJECTED_EVIDENCE"
 
 SUPPLY_TOL_V = 1e-3
 TEMP_TOL_C = 0.01
@@ -197,6 +199,10 @@ class BenchEvidence:
     envelopes: list[tuple[str, dict]]          # (tag, envelope json)
     body_text: str | None                      # committed body, or None
     envelope_files: dict[str, str] = field(default_factory=dict)  # tag -> sha256
+    # Saved request/invocation chain (issue #107). Empty for in-memory fixtures;
+    # `load_campaign` fills it. Any chain problem rejects the bench's evidence.
+    chain_problems: list[str] = field(default_factory=list)
+    chain_checked: dict[str, dict] = field(default_factory=dict)  # tag -> checked hashes
 
 
 @dataclass
@@ -809,6 +815,7 @@ def _provenance(bench: BenchEvidence) -> list[dict]:
             "tag": tag,
             "envelope": f"{tag}.envelope.json",
             "envelope_sha256": bench.envelope_files.get(tag),
+            "chain_checked": bench.chain_checked.get(tag),
             "status": env.get("status"),
             "corner_count": env.get("corner_count"),
             "passed": env.get("passed"), "failed": env.get("failed"), "errored": env.get("errored"),
@@ -852,6 +859,9 @@ def grade(rows_spec: dict, benches: dict[str, BenchEvidence], dut: DutReference)
             covered, why = [], []
             for name in ev["benches"]:
                 bench = benches.get(name)
+                if bench is not None and bench.chain_problems:
+                    why.append(f"{name}: rejected evidence ({bench.chain_problems[0]})")
+                    continue
                 if bench is None or not bench.envelopes:
                     why.append(f"{name}: no envelope")
                     continue
@@ -881,6 +891,13 @@ def grade(rows_spec: dict, benches: dict[str, BenchEvidence], dut: DutReference)
         bench = benches.get(bench_name)
         entry["bench"] = bench_name
         entry["measurement"] = ev["measurement"]
+        if bench is not None and bench.chain_problems:
+            entry.update({"target_verdict": REJECTED_EVIDENCE, "stretch_verdict": REJECTED_EVIDENCE,
+                          "chain_problems": list(bench.chain_problems)})
+            if row.get("reporting_requirement"):
+                entry["report_verdict"] = REJECTED_EVIDENCE
+            rows_out.append(entry)
+            continue
         if bench is None or not bench.envelopes:
             entry.update({"target_verdict": INCOMPLETE if row.get("target") else NOT_SPECIFIED,
                           "stretch_verdict": INCOMPLETE if row.get("stretch") else NOT_SPECIFIED,
@@ -958,7 +975,8 @@ def grade(rows_spec: dict, benches: dict[str, BenchEvidence], dut: DutReference)
                 "dut_json_id": dut.dut_json.get("id"),
                 "provenance": dut.dut_json.get("provenance")},
         "grid_points": len(grid_keys(grid)),
-        "benches": {name: {"dut_problems": dut_problems[name], "envelopes": _provenance(b)}
+        "benches": {name: {"dut_problems": dut_problems[name], "chain_problems": list(b.chain_problems),
+                           "envelopes": _provenance(b)}
                     for name, b in benches.items()},
         "rows": rows_out,
         "t1_item5": {
@@ -982,6 +1000,93 @@ def _expected_n(rows_spec: dict, bench_name: str) -> int:
     return int((bench.monte_carlo or {}).get("n", 0))
 
 
+_HEX64 = re.compile(r"[0-9a-f]{64}")
+
+
+def _load_json_file(path: Path, what: str, tag: str, problems: list[str]):
+    """Read a JSON object companion; append an actionable problem and return None on failure."""
+    if not path.is_file():
+        problems.append(f"{tag}: {what} {path.name} is missing")
+        return None, None
+    raw = path.read_bytes()
+    try:
+        data = json.loads(raw)
+    except (ValueError, UnicodeDecodeError) as exc:
+        problems.append(f"{tag}: {what} {path.name} is not valid JSON ({exc})")
+        return raw, None
+    if not isinstance(data, dict):
+        problems.append(f"{tag}: {what} {path.name} is not a JSON object")
+        return raw, None
+    return raw, data
+
+
+def _expected_request(bench, tag: str) -> dict:
+    """The request `build` would compose for this part (batch form), minus prose."""
+    body_name = f"{bench.name}.body.spice"
+    processes = None
+    if bench.split_by_process:
+        processes = (tag[len(bench.name) + 1:],)
+    request = build_mod.compose_request(bench, body_name, "batch", processes=processes)
+    request.pop("_comment", None)
+    return request
+
+
+def _brief(value) -> str:
+    text = json.dumps(value, sort_keys=True)
+    return text if len(text) <= 120 else text[:117] + "..."
+
+
+def _by_name(measurements):
+    if not isinstance(measurements, list) or not all(
+            isinstance(m, dict) and "name" in m for m in measurements):
+        return measurements
+    return sorted(measurements, key=lambda m: str(m["name"]))
+
+
+def check_request_semantics(bench, tag: str, request: dict) -> list[str]:
+    """Reasons a saved request cannot support grading this part (empty = ok)."""
+    expected = _expected_request(bench, tag)
+    problems = []
+    if request.get("netlist") != expected["netlist"]:
+        problems.append(f"{tag}: request names body {request.get('netlist')!r}, "
+                        f"expected {expected['netlist']!r}")
+    for key in ("netlist_source", "corners", "analysis", "monte_carlo", "measurements"):
+        got, want = request.get(key), expected.get(key)
+        if key == "measurements":  # order is not part of the contract
+            got, want = _by_name(got), _by_name(want)
+        if got != want:
+            problems.append(f"{tag}: request {key} {_brief(request.get(key))} does not match the "
+                            f"bench contract {_brief(expected.get(key))}")
+    return problems
+
+
+def check_chain(bench, tag: str, campaign_dir: Path, envelope_sha: str,
+                problems: list[str]) -> dict:
+    """Validate <tag>.request.json / <tag>.invocation.json against the envelope bytes."""
+    checked: dict = {"envelope_sha256": envelope_sha}
+    _, inv = _load_json_file(campaign_dir / f"{tag}.invocation.json", "invocation", tag, problems)
+    req_raw, req = _load_json_file(campaign_dir / f"{tag}.request.json", "request", tag, problems)
+    if req_raw is not None:
+        checked["request_sha256"] = hashlib.sha256(req_raw).hexdigest()
+    if inv is not None:
+        for field_name, actual in (("request_sha256", checked.get("request_sha256")),
+                                   ("envelope_sha256", envelope_sha)):
+            saved = inv.get(field_name)
+            if not isinstance(saved, str) or not _HEX64.fullmatch(saved):
+                problems.append(f"{tag}: invocation {field_name} is missing or not a "
+                                f"64-char lowercase hex sha256 ({saved!r})")
+            elif actual is not None and saved != actual:
+                problems.append(f"{tag}: {field_name} mismatch: invocation records "
+                                f"{saved[:12]}..., file bytes hash to {actual[:12]}...")
+            else:
+                checked[f"invocation_{field_name}"] = saved
+        if inv.get("tag") not in (None, tag):
+            problems.append(f"{tag}: invocation names tag {inv.get('tag')!r}")
+    if req is not None:
+        problems.extend(check_request_semantics(bench, tag, req))
+    return checked
+
+
 def load_campaign(campaign_dir: Path) -> dict[str, BenchEvidence]:
     from .benches import BENCHES
 
@@ -990,17 +1095,30 @@ def load_campaign(campaign_dir: Path) -> dict[str, BenchEvidence]:
         body_path = campaign_dir / f"{name}.body.spice"
         envelopes: list[tuple[str, dict]] = []
         shas: dict[str, str] = {}
+        problems: list[str] = []
+        checked: dict[str, dict] = {}
         for tag in build_mod.part_tags(bench):
             path = campaign_dir / f"{tag}.envelope.json"
             if path.is_file():
                 raw = path.read_bytes()
-                envelopes.append((tag, json.loads(raw)))
                 shas[tag] = hashlib.sha256(raw).hexdigest()
+                try:
+                    envelope = json.loads(raw)
+                except (ValueError, UnicodeDecodeError) as exc:
+                    problems.append(f"{tag}: envelope {path.name} is not valid JSON ({exc})")
+                    continue
+                if not isinstance(envelope, dict):
+                    problems.append(f"{tag}: envelope {path.name} is not a JSON object")
+                    continue
+                envelopes.append((tag, envelope))
+                checked[tag] = check_chain(bench, tag, campaign_dir, shas[tag], problems)
         benches[name] = BenchEvidence(
             name=name,
             envelopes=envelopes,
             body_text=body_path.read_text(encoding="utf-8") if body_path.is_file() else None,
             envelope_files=shas,
+            chain_problems=problems,
+            chain_checked=checked,
         )
     return benches
 
@@ -1120,6 +1238,8 @@ def render_markdown(result: dict) -> str:
         if r.get("coverage_problems"):
             for p in r["coverage_problems"]:
                 lines.append(f"- **{r['id']}** -- {p}")
+        if r.get("chain_problems"):
+            lines.append(f"- **{r['id']}** -- rejected evidence: {'; '.join(r['chain_problems'])}")
         if r.get("dut_problems"):
             lines.append(f"- **{r['id']}** -- wrong DUT: {'; '.join(r['dut_problems'])}")
     lines += ["", "## Evidence", ""]

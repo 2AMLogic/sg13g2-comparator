@@ -917,6 +917,128 @@ class DuplicateEvidenceTests(unittest.TestCase):
             out.append(sorted(row["notes"]))
         self.assertEqual(out[0], out[1])
 
+class CampaignChainTests(unittest.TestCase):
+    """Saved request/invocation provenance at the loading boundary (issue #107)."""
+
+    SRC = build.EXPERIMENT_DIR / "campaigns" / "20261009-d73a9ac"
+    SPLIT = "offset_mc.mos_tt_mismatch"
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = Path(self._tmp.name)
+        for f in self.SRC.iterdir():
+            if f.is_file() and f.suffix in (".json", ".spice") and f.name not in (
+                    "grading.json",):
+                shutil.copy(f, self.dir / f.name)
+
+    def _load(self, bench="offset_mc"):
+        return grade.load_campaign(self.dir)[bench]
+
+    def _edit_invocation(self, tag, **changes):
+        path = self.dir / f"{tag}.invocation.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data.update(changes)
+        path.write_text(json.dumps(data), encoding="utf-8")
+
+    def _edit_request(self, tag, mutate):
+        path = self.dir / f"{tag}.request.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        mutate(data)
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    def _assert_rejected(self, bench, needle):
+        ev = self._load(bench)
+        self.assertTrue(any(needle in p for p in ev.chain_problems), ev.chain_problems)
+        return ev
+
+    def test_intact_chain_reports_checked_hashes(self):
+        for bench in BENCHES:
+            ev = self._load(bench)
+            self.assertEqual(ev.chain_problems, [], bench)
+            for tag, _ in ev.envelopes:
+                checked = ev.chain_checked[tag]
+                self.assertEqual(checked["request_sha256"], checked["invocation_request_sha256"])
+                self.assertEqual(checked["envelope_sha256"], ev.envelope_files[tag])
+
+    def test_mutated_request_is_rejected_with_unchanged_body(self):
+        body_before = (self.dir / "offset_mc.body.spice").read_bytes()
+        path = self.dir / f"{self.SPLIT}.request.json"
+        path.write_bytes(path.read_bytes() + b" ")  # whitespace only: bytes, not semantics
+        self._assert_rejected("offset_mc", f"{self.SPLIT}: request_sha256 mismatch")
+        self.assertEqual(body_before, (self.dir / "offset_mc.body.spice").read_bytes())
+
+    def test_substituted_envelope_with_stale_invocation_hash(self):
+        path = self.dir / f"{self.SPLIT}.envelope.json"
+        path.write_bytes(path.read_bytes() + b"\n")
+        self._assert_rejected("offset_mc", f"{self.SPLIT}: envelope_sha256 mismatch")
+
+    def test_bad_invocation_hash_fields(self):
+        for bad in ("nothex", "A" * 64, None):
+            self._edit_invocation(self.SPLIT, request_sha256=bad)
+            self._assert_rejected("offset_mc", "request_sha256 is missing or not")
+        self._edit_invocation(self.SPLIT, envelope_sha256=5)
+        self._assert_rejected("offset_mc", "envelope_sha256 is missing or not")
+
+    def test_missing_and_malformed_companions(self):
+        (self.dir / "regeneration.invocation.json").unlink()
+        self._assert_rejected("regeneration", "invocation regeneration.invocation.json is missing")
+        (self.dir / "regeneration.request.json").unlink()
+        self._assert_rejected("regeneration", "request regeneration.request.json is missing")
+        (self.dir / "kickback.invocation.json").write_text("{not json", encoding="utf-8")
+        self._assert_rejected("kickback", "is not valid JSON")
+        (self.dir / "kickback.request.json").write_text("[]", encoding="utf-8")
+        self._assert_rejected("kickback", "is not a JSON object")
+        (self.dir / "transient_noise.mos_tt.envelope.json").write_text("oops", encoding="utf-8")
+        ev = self._load("transient_noise")
+        self.assertTrue(any("envelope" in p and "not valid JSON" in p for p in ev.chain_problems))
+
+    def test_semantic_request_mismatches(self):
+        self._edit_request("regeneration", lambda d: d.update(netlist="other.body.spice"))
+        self._assert_rejected("regeneration", "request names body 'other.body.spice'")
+
+    def _resign(self, tag):
+        self._edit_invocation(tag, request_sha256=hashlib.sha256(
+            (self.dir / f"{tag}.request.json").read_bytes()).hexdigest())
+
+    def test_wrong_grid_and_run_count_even_when_rehashed(self):
+        self._edit_request(self.SPLIT, lambda d: d["corners"].update(temperature_c=[27]))
+        self._resign(self.SPLIT)
+        self._assert_rejected("offset_mc", "request corners")
+        self.setUp()
+        self._edit_request(self.SPLIT, lambda d: d["monte_carlo"].update(n=5))
+        self._resign(self.SPLIT)
+        self._assert_rejected("offset_mc", "request monte_carlo")
+
+    def test_split_request_must_match_its_own_slice(self):
+        other = "offset_mc.mos_ss_mismatch"
+        data = (self.dir / f"{other}.request.json").read_bytes()
+        (self.dir / f"{self.SPLIT}.request.json").write_bytes(data)
+        self._resign(self.SPLIT)
+        self._assert_rejected("offset_mc", "request corners")
+
+    def test_rejected_chain_blocks_met_rows_and_is_reported(self):
+        (self.dir / "regeneration.request.json").write_bytes(b"{}")
+        benches = grade.load_campaign(self.dir)
+        result = grade.grade(_spec([_row("3a")]), benches, grade.load_dut_reference())
+        row = result["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.REJECTED_EVIDENCE)
+        self.assertFalse(result["t1_item5"]["all_target_rows_pass"])
+        self.assertTrue(result["benches"]["regeneration"]["chain_problems"])
+        self.assertIn("rejected evidence", grade.render_markdown(result))
+
+    def test_in_memory_evidence_needs_no_companions(self):
+        body = _body("regeneration")
+        ev = _evidence("regeneration", regeneration_envelope(body), body)
+        self.assertEqual(ev.chain_problems, [])
+        row = grade.grade(_spec([_row("3a")]), {"regeneration": ev},
+                          grade.load_dut_reference())["rows"][0]
+        self.assertNotEqual(row["target_verdict"], grade.REJECTED_EVIDENCE)
+
 
 if __name__ == "__main__":
     unittest.main()
