@@ -47,6 +47,7 @@ installed checkout while building this harness (issue #8):
 
 from __future__ import annotations
 
+import math
 import re
 import shutil
 import subprocess
@@ -194,6 +195,9 @@ class PointResult:
     status: str                                   # "ok" | "failed" | "error"
     measurements: dict[str, float] = field(default_factory=dict)
     missing: list[str] = field(default_factory=list)
+    #: Names whose printed value overflowed / was non-finite (raw text kept
+    #: here; the value is never placed in ``measurements``).
+    invalid: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     seconds: float = 0.0
     deck: str = ""
@@ -213,6 +217,8 @@ class PointResult:
         )
         if self.missing:
             record["missing_measurements"] = self.missing
+        if self.invalid:
+            record["invalid_measurements"] = dict(self.invalid)
         if self.warnings:
             record["warnings"] = self.warnings
         if self.message:
@@ -220,16 +226,34 @@ class PointResult:
         return record
 
 
-def parse_measurements(text: str) -> dict[str, float]:
+def parse_measurements_checked(text: str) -> tuple[dict[str, float], dict[str, str]]:
+    """Return ``(finite measurements, {name: raw text} for non-finite ones)``.
+
+    ``float("-1e999")`` is ``-inf``; the regex accepts it, so finiteness is
+    checked here rather than trusted.
+    """
     found: dict[str, float] = {}
+    invalid: dict[str, str] = {}
     for line in text.splitlines():
         match = _MEAS_RE.match(line)
         if match:
+            name, raw = match.group(1), match.group(2)
             try:
-                found[match.group(1)] = float(match.group(2))
+                value = float(raw)
             except ValueError:  # pragma: no cover - regex already constrains this
                 continue
-    return found
+            if math.isfinite(value):
+                found[name] = value
+                invalid.pop(name, None)
+            else:
+                invalid[name] = raw
+                found.pop(name, None)
+    return found, invalid
+
+
+def parse_measurements(text: str) -> dict[str, float]:
+    """Finite measurements only (see ``parse_measurements_checked``)."""
+    return parse_measurements_checked(text)[0]
 
 
 def run_point(
@@ -285,8 +309,9 @@ def run_point(
     elapsed = time.monotonic() - started
     log_path.write_text(output)
 
-    measurements = parse_measurements(output)
+    measurements, invalid = parse_measurements_checked(output)
     missing = [name for name in tb.measure if name not in measurements]
+    invalid = {n: raw for n, raw in invalid.items() if n in tb.measure}
 
     # Computed unconditionally, mirroring gf180-comparator's fix (#7): a
     # non-fatal ngspice error (non-zero exit, or an Error/Fatal/doAnalyses:
@@ -306,11 +331,16 @@ def run_point(
             status="failed",
             measurements=measurements,
             missing=missing,
+            invalid=invalid,
             warnings=warnings,
             seconds=elapsed,
             deck=deck_path.name,
             log=log_path.name,
-            message=first_error or errors or f"ngspice exit {returncode}, no measurements parsed",
+            message=(
+                ("non-finite measurement(s): " + ", ".join(f"{n}={r}" for n, r in invalid.items()))
+                if invalid
+                else first_error or errors or f"ngspice exit {returncode}, no measurements parsed"
+            ),
         )
 
     return PointResult(
