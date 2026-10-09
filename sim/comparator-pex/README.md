@@ -32,8 +32,20 @@ text below it is kept as the record of the earlier attempt. The same
     flips to +0.1 mV), so it resolved to the opposite side at -0.1 mV and
     never makes the rising transition the measure waits for. This is
     consistent with an extracted systematic offset larger than 0.1 mV at
-    this corner (the input pair sees 5.6 % more ground C on `vinn`), but one
-    run cannot size it: offset sigma needs the MC bench, which was not run.
+    this corner (in the extracted netlist `vinn` carries 0.197 fF, 6.0 %, more
+    lumped ground C than `vinp`: `Cvinn` 3.4536 fF vs `Cvinp` 3.2566 fF,
+    `layout/comparator/comparator.pex.spice` lines 630 and 640). That asymmetry
+    is a candidate cause, not a measured one; one run cannot size the offset:
+    offset sigma needs the MC bench, which was not run.
+  - `dc_first` reads `pass` at +30126069 % in the delta table, but it is **not
+    a meaningful delta** and must not be read as a pass. It is the same
+    flipped-decision artifact as `td_c`. The row samples the decision node
+    before the input flip (`.meas tran dc_first find v(dcn) at=18n`): the
+    schematic sits at ~0 (3.32e-6) and the extracted netlist has already
+    resolved high (0.99999). The percentage is a logic-level flip divided by
+    a near-zero denominator. The `pass` status only means both legs produced
+    a value; the request sets no limit on this row. It is the same
+    observation as the `td_c` finding, not separate evidence.
   - Kickback is smaller but not eliminated: `ad_pos` -8.0 %, `ad_neg`
     -14.1 %, `apmax` -1.3 %; `bc1` -79.6 % (a tiny-magnitude current row).
   - Rows with no change beyond 0.1 %: supply, end-state, bias current
@@ -67,8 +79,10 @@ results; the layout is the one whose `content_hash` is pinned by items 3 and 4):
   (2.39 fF).
 - Per-net lumped C (fF), from `klt extract --parasitics`: `vinp` 3.26,
   `vinn` 3.45, `ln` 17.27, `lp` 17.11, `tail` 7.64, `clk` 15.14,
-  `dout` 6.54, `doutb` 6.71. The input pair sees 0.19 fF (5.6 %) more
-  ground capacitance on `vinn` than on `vinp`. That is an observation about the
+  `dout` 6.54, `doutb` 6.71. The input pair sees 0.197 fF (6.0 %, relative
+  to `vinp`) more ground capacitance on `vinn` than on `vinp` (`Cvinn vinn
+  vsubs 3.453621e-15` vs `Cvinp vinp vsubs 3.256586e-15`,
+  `layout/comparator/comparator.pex.spice` lines 630 and 640). That is an observation about the
   extracted netlist; what it costs in offset or kickback is exactly the
   measurement that did not run.
 - Extraction warnings carried by the envelope: layer 63/0 (26 shapes) is outside

@@ -30,3 +30,10 @@
 | kickback.nominal.da_end | tt/1.200V/27C | 1 | 1 | +0.000 | pass |
 | kickback.nominal.db_end | tt/1.200V/27C | 1 | 1 | +0.000 | pass |
 | kickback.nominal.dc_end | tt/1.200V/27C | 1 | 1 | +0.000 | pass |
+
+Note (hand-added after generation, PR #113 review): the `dc_first` row is **not
+a meaningful delta and is not a pass**. It samples `v(dcn)` at 18 ns, before
+the input flip. The extracted latch has already resolved to the opposite side
+(0.99999 vs the schematic's ~0). That is the same flipped decision that leaves
+`td_c` with no value. The `pass` status only records that both legs produced
+a value (no limit is set on the row). See `../README.md`, "Findings".
