@@ -85,20 +85,28 @@ row:
   `klt yield` campaign is minted it gets cited here with a pinned
   `content_hash`.
 - **Item 7 (Post-layout verification)** — an analog block's item 7 accepts
-  a `klt pex` report and nothing else. A `klt pex` run was attempted for
-  #61 and is committed at `sim/comparator-pex/reports/pex.attempt-20261009.json`,
-  but it is `status: error` (all 30 `delta[]` rows errored, `nothing_checked:
-  true`): neither this host (ngspice-42 cannot load the OSDI v0.4 PSP103
-  models) nor the batch fleet (runner klt 0.5.0 vs client 0.7.0, no OSDI
-  preload) could run the simulation leg. An errored envelope is not
-  evidence, so it is **not cited** and the row stays `unmet`. The
-  extraction half is real: `body_bias.status: "biased"` (0 unbiased devices),
-  `extraction.model` is the quasi-static lumped-RC model (vertical-overlap
-  coupling only, no lateral coupling or distributed RC). Details, the
-  not-run rows and what closes the gap: `sim/comparator-pex/README.md`.
-  When a passing envelope exists it gets cited here with a pinned
-  `content_hash`, with `extraction.model` and the `body_bias` disclosure
-  quoted verbatim.
+  a `klt pex` report and nothing else. It is **cited** (since #61) at
+  `layout/comparator/pex_report.json`, `content_hash` pinned to the layout
+  revision, and it renders `unmet` / `check_failed`, deliberately: the
+  envelope is `status: error` (29 of 30 `delta[]` rows pass, 0 fail, 1
+  errored, `nothing_checked: false`). The one errored row is
+  `regeneration.nominal.td_c`, the 0.1 mV-overdrive decision delay: on the
+  extracted netlist that case never produces the post-flip rise the
+  `.meas` waits for (its output is already high before the flip, i.e. it
+  decided the other way at -0.1 mV), so the measurement has no value. That
+  is a recorded post-layout finding, not a tooling failure, and the request
+  was not edited to hide it. The run is **one corner only** (tt, 1.20 V,
+  27 C, deterministic transient, no Monte Carlo, no sigma): the 45-point PVT
+  grids and the offset-sigma / noise Monte Carlo rows were not run because
+  the batch fleet refused the submit (`batch_no_capacity`, no capacity in
+  any of 30 pools) and host rules forbid a local grid. Extraction half:
+  `body_bias.status: "biased"` (0 unbiased devices); `extraction.model` is
+  the quasi-static lumped-RC model (single series R per net, net-to-ground
+  C plus vertical-overlap coupling; no lateral coupling without
+  `--critical-net`, no fringe shielding, no distributed RC) quoted in full
+  in the envelope. Per-row deltas: `sim/comparator-pex/reports/delta-nominal-20261009.{md,json}`;
+  discussion and what closes the gap: `sim/comparator-pex/README.md`. The
+  earlier errored attempt (`pex.attempt-20261009.json`) is kept as history.
 - **Item 8 (Characterization report)** — the one item the generic envelope
   (`"kind": "generic"`) may satisfy. No aggregated, current
   characterization artifact exists yet (the tracker's item 8 is honestly
@@ -320,7 +328,7 @@ diff /tmp/fresh.json manifests/t1-signoff-report.json   # regeneration = update 
 ```
 
 Exit `0` means every T1 item met (this repo is **not** there: exit `3`,
-`tier: null`, `3/11` item rows met at the time of freezing: items 3, 4 and 11). Exit codes
+`tier: null`, `3/11` item rows met at the time of freezing: items 3, 4 and 11; item 7 is cited but renders `unmet`). Exit codes
 `0` and `3` are both clean runs; exit `1` is an error and must be fixed,
 not committed around.
 
