@@ -275,7 +275,10 @@ class TargetStretchTests(unittest.TestCase):
             c["process"] = "mos_tt"  # every corner claims tt: a collapsed grid
         row = self._grade(env, [_row("3a")])["rows"][0]
         self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
-        self.assertEqual(row["target"]["points_valid"], 9)
+        # The 9 surviving tt points each collide (issue #102): ambiguous, so
+        # none of the 45 points is a usable value.
+        self.assertEqual(row["target"]["points_valid"], 0)
+        self.assertTrue(any("ambiguous duplicate" in n for n in row["notes"]))
 
     def test_supply_not_applied_is_untrusted(self):
         env = regeneration_envelope(self.body)
@@ -768,6 +771,151 @@ class NonFiniteEvidenceTests(unittest.TestCase):
                 m["monte_carlo"]["by_corner"][0]["mean"] = float("nan")
         text = grade.dumps_strict(self._noise(env))
         json.loads(text, parse_constant=lambda c: self.fail(f"non-standard constant {c}"))
+
+
+class DuplicateEvidenceTests(unittest.TestCase):
+    """Issue #102: a repeated PVT point or population summary is ambiguous
+    evidence -- diagnosed, never selected by envelope order."""
+
+    P0, V0, T0 = PROCESSES[0], SUPPLIES_V[0], TEMPERATURES_C[0]
+
+    def setUp(self):
+        self.dut = grade.load_dut_reference()
+        self.body = _body("regeneration")
+
+    def _bench(self, envs, name="regeneration", body=None):
+        return grade.BenchEvidence(name=name, envelopes=envs, body_text=body or self.body)
+
+    def _grade(self, envs, rows=None):
+        return grade.grade(_spec(rows or [_row("3a")]),
+                           {"regeneration": self._bench(envs)}, self.dut)
+
+    def _partial(self, td50, only=None):
+        """An envelope holding only the given process (or everything)."""
+        env = regeneration_envelope(self.body, td50=td50)
+        if only is not None:
+            env["corners"] = [c for c in env["corners"] if c["process"] == f"mos_{only}"
+                              or c["process"] == only]
+            env["corner_count"] = len(env["corners"])
+        return env
+
+    def _point_env(self, value):
+        """Envelope with only the (P0, V0, T0) point, at td_od50_ns = value."""
+        env = self._partial(lambda p, v, t: value)
+        env["corners"] = [c for c in env["corners"]
+                          if c["corner_id"].endswith(f"{self.V0:.3f}V/{self.T0:g}C")
+                          and c["process"].endswith(self.P0)]
+        env["corner_count"] = len(env["corners"])
+        self.assertEqual(len(env["corners"]), 1)
+        return env
+
+    def _td_bound(self, envs):
+        row = self._grade(envs)["rows"][0]
+        return row
+
+    def test_fail_then_pass_across_envelopes_never_selected(self):
+        full = self._partial(lambda p, v, t: 0.7)
+        bad = self._point_env(5.0)  # clearly failing duplicate of one point
+        for envs in ([("a", full), ("b", bad)], [("b", bad), ("a", full)]):
+            row = self._grade(envs)["rows"][0]
+            self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+            self.assertEqual(row["target"]["points_valid"], 44)
+            why = [m["why"] for m in row["target"]["points_missing_or_invalid"]]
+            self.assertEqual(len(why), 1)
+            self.assertIn("a:", why[0])
+            self.assertIn("b:", why[0])
+
+    def test_pass_then_fail_same_as_fail_then_pass(self):
+        full = self._partial(lambda p, v, t: 0.7)
+        bad = self._point_env(5.0)
+        fwd = self._grade([("a", full), ("b", bad)])["rows"][0]
+        rev = self._grade([("b", bad), ("a", full)])["rows"][0]
+        self.assertEqual(fwd["target_verdict"], rev["target_verdict"])
+        self.assertEqual(fwd["stretch_verdict"], rev["stretch_verdict"])
+        self.assertEqual(sorted(fwd["notes"]), sorted(rev["notes"]))
+        self.assertTrue(any("ambiguous duplicate" in n for n in fwd["notes"]))
+
+    def test_duplicate_within_one_envelope_is_diagnosed(self):
+        env = self._partial(lambda p, v, t: 0.7)
+        env["corners"].append(copy.deepcopy(env["corners"][0]))
+        row = self._grade([("only", env)])["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+        self.assertTrue(any("ambiguous duplicate" in n for n in row["notes"]))
+        self.assertIn("only:", row["target"]["points_missing_or_invalid"][0]["why"])
+
+    def test_identical_looking_duplicate_is_still_rejected(self):
+        a = self._partial(lambda p, v, t: 0.7)
+        b = self._point_env(0.7)
+        row = self._grade([("a", a), ("b", b)])["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+
+    def test_unambiguous_failure_still_fails_with_collision_present(self):
+        full = self._partial(lambda p, v, t: 5.0 if p == "ss" else 0.7)
+        dup = self._point_env(0.7)  # collides at the (non-failing) first point
+        for envs in ([("a", full), ("b", dup)], [("b", dup), ("a", full)]):
+            row = self._grade(envs)["rows"][0]
+            self.assertEqual(row["target_verdict"], grade.FAIL)
+            self.assertTrue(any("ambiguous duplicate" in n for n in row["notes"]))
+
+    def test_disjoint_process_partitions_grade_normally(self):
+        parts = [(p, self._partial(lambda pp, v, t: 0.7, only=p)) for p in PROCESSES]
+        for envs in (parts, parts[::-1]):
+            row = self._grade(envs)["rows"][0]
+            self.assertEqual(row["target_verdict"], grade.PASS)
+            self.assertEqual(row["target"]["points_valid"], 45)
+            self.assertNotIn("notes", row)
+
+    # -- population summaries ------------------------------------------------
+
+    def _offset_grade(self, envs, rows=None):
+        ev = grade.BenchEvidence(name="offset_mc", envelopes=envs, body_text=_body("offset_mc"))
+        return grade.grade(_spec(rows or [_row("1")]), {"offset_mc": ev}, self.dut)
+
+    def test_duplicate_offset_summary_cannot_change_statistic(self):
+        body = _body("offset_mc")
+        good = offset_envelope(body, stddev=lambda p, v, t: 2.5)
+        other = offset_envelope(body, stddev=lambda p, v, t: 9.0)  # would FAIL if picked
+        # Keep only the summaries (drop the sample corners) in the second envelope.
+        other["corners"] = []
+        summaries = []
+        for envs in ([("a", good), ("b", other)], [("b", other), ("a", good)]):
+            row = self._offset_grade(envs)["rows"][0]
+            self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+            self.assertEqual(row["target"]["points_valid"], 0)
+            self.assertTrue(all("duplicate population summary" in m["why"]
+                                for m in row["target"]["points_missing_or_invalid"]))
+            summaries.append(sorted(row["notes"]))
+        self.assertEqual(summaries[0], summaries[1])
+
+    def test_offset_partitions_with_distinct_summaries_grade(self):
+        body = _body("offset_mc")
+        env = offset_envelope(body)
+        halves = []
+        for keep in (lambda p: p == PROCESSES[0], lambda p: p != PROCESSES[0]):
+            e = copy.deepcopy(env)
+            e["corners"] = [c for c in e["corners"] if keep(c["process"].split("_")[1])]
+            e["measurements"][0]["monte_carlo"]["by_corner"] = [
+                b for b in e["measurements"][0]["monte_carlo"]["by_corner"]
+                if keep(b["corner_id"].split("/")[0].split("_")[1])]
+            halves.append(e)
+        row = self._offset_grade([("a", halves[0]), ("b", halves[1])])["rows"][0]
+        self.assertEqual(row["target"]["points_valid"], 45)
+
+    def test_duplicate_noise_summary_is_incomplete_in_either_order(self):
+        body = _body("transient_noise")
+        a = noise_envelope(body)
+        b = noise_envelope(body, kplus=lambda p, v, t: 50)
+        b["corners"] = []
+        out = []
+        for envs in ([("a", a), ("b", b)], [("b", b), ("a", a)]):
+            ev = grade.BenchEvidence(name="transient_noise", envelopes=envs, body_text=body)
+            row = grade.grade(_spec([_row("2")]), {"transient_noise": ev}, self.dut)["rows"][0]
+            self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+            self.assertEqual(row["target"]["points_valid"], 0)
+            self.assertTrue(all("duplicate population summary" in (d["problem"] or "")
+                                for d in row["monte_carlo_per_point"]))
+            out.append(sorted(row["notes"]))
+        self.assertEqual(out[0], out[1])
 
 
 if __name__ == "__main__":
