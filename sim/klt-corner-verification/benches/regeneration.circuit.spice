@@ -1,0 +1,73 @@
+* ---- bench: regeneration (klt sim port of sim/comparator-regeneration) --
+*
+* Circuit is sim/comparator-regeneration/testbench/tb_regeneration.spice's,
+* carried over element for element, with ONE structural change forced by
+* klt sim's supply axis: klt sim sweeps supply by `alter vsup=<V>` /
+* `alter vsupa=<V>` in its generated .control block, which changes those
+* two sources' DC values and nothing else. The original deck's clock was
+* `pulse(0 {vdd_val} ...)`, i.e. its amplitude was the .param, which `alter`
+* does not reach. Here the clock is a unit pulse scaled by the live supply
+* node (Bclk), so the strobe swings rail to rail at every supply corner,
+* exactly as the harness deck's {vdd_val} clock did. Everything else
+* (overdrive ladder, PWL input flip at t_flip, per-instance bias sources,
+* supply-normalized probes, solver options) is unchanged.
+*
+* Supply sources: vsup (instances B, C, the clock reference) and vsupa
+* (instance A alone, so its supply current -- core plus its own tail-bias
+* reference branch iba -- can be integrated for the power row). The
+* request sweeps both keys together by index.
+
+.options reltol=1e-4 vntol=1e-9 abstol=1e-13
+
+.param dv_big=50m
+.param dv_mid=1m
+.param dv_tiny=0.1m
+.param t_flip=20n
+.param c_route=10f
+
+* ---- supplies (DC value is a placeholder; klt sim alters it per corner) --
+vsup  vdd  0 dc 1.2
+vsupa vdda 0 dc 1.2
+
+* ---- clock: two strobes, decision measured on the second --------------
+* unit pulse identical in timing to the original `pulse(0 {vdd_val} 10n
+* 100p 100p 10n 30n)`, scaled by the altered supply.
+vclku clku 0 pulse(0 1 10n 100p 100p 10n 30n)
+Bclk  clk  0 v = 'v(clku)*v(vdd)'
+
+* ---- common mode ------------------------------------------------------
+vcm cm 0 dc {dut_vcm}
+
+* ---- A: 50 mV overdrive, on its own supply ----------------------------
+vsa  sa 0 pwl(0 {-dv_big} {t_flip} {-dv_big} {t_flip+1n} {dv_big})
+Eapa apa cm sa 0 0.5
+Eana ana cm sa 0 -0.5
+iba  vdda ibna dc {dut_ib}
+Xa   apa ana clk ibna douta doutba vdda 0 comparator_dut
+
+* ---- B: 1 mV overdrive --------------------------------------------------
+vsb  sb 0 pwl(0 {-dv_mid} {t_flip} {-dv_mid} {t_flip+1n} {dv_mid})
+Eapb apb cm sb 0 0.5
+Eanb anb cm sb 0 -0.5
+ibb  vdd ibnb dc {dut_ib}
+Xb   apb anb clk ibnb doutb doutbb vdd 0 comparator_dut
+
+* ---- C: 0.1 mV overdrive (tau lever arm / metastability probe) ----------
+vsc  sc 0 pwl(0 {-dv_tiny} {t_flip} {-dv_tiny} {t_flip+1n} {dv_tiny})
+Eapc apc cm sc 0 0.5
+Eanc anc cm sc 0 -0.5
+ibc  vdd ibnc dc {dut_ib}
+Xc   apc anc clk ibnc doutc doutbc vdd 0 comparator_dut
+
+* ---- supply-normalized probes ------------------------------------------
+Bclkn clkn 0 v = 'v(clk)/v(vdd)'
+Bdan  dan  0 v = 'v(douta)/v(vdda)'
+Bdbn  dbn  0 v = 'v(doutb)/v(vdd)'
+Bdcn  dcn  0 v = 'v(doutc)/v(vdd)'
+
+* ---- corner-application probes (not in the original deck) --------------
+* These exist so the grading adapter can prove, per corner, that klt sim's
+* supply `alter` and `.temp` card actually reached the circuit: tcheck reads
+* ngspice's own simulation temperature, and the request measures v(vdd)/
+* v(vdda) directly.
+Btchk tcheck 0 v = 'temper'
