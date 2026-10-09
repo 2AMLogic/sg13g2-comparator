@@ -1,0 +1,34 @@
+.subckt comparator vinp vinn clk vbias dout doutb vdd vss
+*.iopin vinp
+*.iopin vinn
+*.iopin clk
+*.iopin vbias
+*.iopin dout
+*.iopin doutb
+*.iopin vdd
+*.iopin vss
+XMT tmid vbias vss vss sg13_lv_nmos w=40u l=0.5u ng=1 m=1
+XMSW tail clk tmid vss sg13_lv_nmos w=40u l=0.13u ng=1 m=1
+XM1 np vinp tail vss sg13_lv_nmos w=12u l=0.34u ng=1 m=1
+XM2 nn vinn tail vss sg13_lv_nmos w=12u l=0.34u ng=1 m=1
+XM3 ln lp np vss sg13_lv_nmos w=3u l=0.13u ng=1 m=1
+XM4 lp ln nn vss sg13_lv_nmos w=3u l=0.13u ng=1 m=1
+XM5 ln lp vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM6 lp ln vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM7 ln clk vdd vdd sg13_lv_pmos w=6u l=0.13u ng=1 m=1
+XM8 lp clk vdd vdd sg13_lv_pmos w=6u l=0.13u ng=1 m=1
+XM9 np clk vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM10 nn clk vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIAP lnb ln vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIAN lnb ln vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMIBP lpb lp vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIBN lpb lp vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNAP1 na lnb vdd vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNAP2 doutb dout na vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNAN1 doutb lnb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNAN2 doutb dout vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNBP1 nb lpb vdd vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNBP2 dout doutb nb vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNBN1 dout lpb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNBN2 dout doutb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+.ends

@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "engine": "klayout",
+  "layout": "lvs_extracted.spice",
+  "reference": "lvs_reference.spice",
+  "top": "COMPARATOR",
+  "reference_top": "COMPARATOR",
+  "parameter_tolerance": null,
+  "options": {
+    "combine_devices": true,
+    "combine_devices_per_circuit": null,
+    "flatten_layout": false,
+    "flatten_reference": false,
+    "netgen_setup": null,
+    "parameter_tolerance": null,
+    "compare_parameters": null,
+    "power_connectivity": null,
+    "supply_nets": [
+      "GND",
+      "VCC",
+      "VDD",
+      "VGND",
+      "VPWR",
+      "VSS"
+    ]
+  },
+  "hints_applied": null,
+  "status": "match",
+  "power_connectivity": {
+    "status": "unchecked",
+    "reason": "reference.form is 'subckt-call', whose reference netlist carries its own power/ground pins and nets -- they take part in the ordinary compare, so this check (which exists to cover the signal-only 'gate-level-verilog' form) does not apply",
+    "power_pins": [],
+    "power_pins_derivation": null,
+    "instance_count": 0,
+    "expected_nets": null,
+    "unchecked_expected_pins": [],
+    "findings": [],
+    "finding_count": 0
+  },
+  "body_verification": {
+    "status": "unchecked",
+    "reason": "no request.layout.deck was given (the pre-extracted request.layout.netlist form), so nothing establishes this layout's substrate/well-tap convention and no synthesized body net can be told apart from a real one -- this run verified nothing about the device bodies either way",
+    "device_classes": [],
+    "device_count": 0,
+    "findings": [],
+    "finding_count": 0
+  },
+  "mismatch_count": 0,
+  "error_count": 0,
+  "category_counts": {},
+  "category_error_counts": {},
+  "counts": {
+    "nets": {
+      "layout": 18,
+      "reference": 18,
+      "matched": 18
+    },
+    "devices": {
+      "layout": 24,
+      "reference": 24,
+      "matched": 24
+    },
+    "pins": {
+      "layout": 8,
+      "reference": 8,
+      "matched": 8
+    }
+  },
+  "device_classes": null,
+  "environment": {
+    "engine": "klayout",
+    "engine_version": "0.30.10",
+    "layout_sha256": "6970e7e51951f876f68536d37d37adf16e5ff121862c9ee60a8be94ff6a3bf0b",
+    "reference_sha256": "387cc38d2cb99d859628fbbaf6c47c2cf556dec47cb87ba3e5a2a1b292636698",
+    "extracted_netlist": null
+  },
+  "provenance": {
+    "klt_version": "0.5.0+ge8ca621a6961",
+    "klayout_version": "0.30.10",
+    "pdk": null,
+    "deck": null,
+    "input": {
+      "content_hash": "sha256:6970e7e51951f876f68536d37d37adf16e5ff121862c9ee60a8be94ff6a3bf0b",
+      "role": "netlist"
+    },
+    "klayout_version_mismatch": false
+  },
+  "mismatches": [],
+  "net_correspondence": [
+    {
+      "layout": "CLK",
+      "reference": "CLK",
+      "pin": true
+    },
+    {
+      "layout": "DOUT",
+      "reference": "DOUT",
+      "pin": true
+    },
+    {
+      "layout": "DOUTB",
+      "reference": "DOUTB",
+      "pin": true
+    },
+    {
+      "layout": "LN",
+      "reference": "LN",
+      "pin": false
+    },
+    {
+      "layout": "LNB",
+      "reference": "LNB",
+      "pin": false
+    },
+    {
+      "layout": "LP",
+      "reference": "LP",
+      "pin": false
+    },
+    {
+      "layout": "LPB",
+      "reference": "LPB",
+      "pin": false
+    },
+    {
+      "layout": "\\$25",
+      "reference": "NA",
+      "pin": false
+    },
+    {
+      "layout": "\\$26",
+      "reference": "NB",
+      "pin": false
+    },
+    {
+      "layout": "NN",
+      "reference": "NN",
+      "pin": false
+    },
+    {
+      "layout": "NP",
+      "reference": "NP",
+      "pin": false
+    },
+    {
+      "layout": "TAIL",
+      "reference": "TAIL",
+      "pin": false
+    },
+    {
+      "layout": "TMID",
+      "reference": "TMID",
+      "pin": false
+    },
+    {
+      "layout": "VBIAS",
+      "reference": "VBIAS",
+      "pin": true
+    },
+    {
+      "layout": "VDD",
+      "reference": "VDD",
+      "pin": true
+    },
+    {
+      "layout": "VINN",
+      "reference": "VINN",
+      "pin": true
+    },
+    {
+      "layout": "VINP",
+      "reference": "VINP",
+      "pin": true
+    },
+    {
+      "layout": "VSS",
+      "reference": "VSS",
+      "pin": true
+    }
+  ]
+}
