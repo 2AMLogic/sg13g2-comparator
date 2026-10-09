@@ -125,6 +125,61 @@ analysis). That is a known, named consequence of the topology decision,
 recorded here so the decision record can *weigh* it rather than discover it.
 It is not a reason to fake a front end.
 
+### Optional internal-noise hook (issue #81)
+
+The pin contract above is a black box: a testbench fragment can drive
+`vinp`/`vinn`, so noise it injects there never includes the latch's own
+devices. The hook below lets a testbench request noise sources on **named
+internal devices** without changing the three subckts, their pin order, or
+`design/comparator.spice` (so the contract stays identical to
+`gf180-comparator`'s, and `dut_netlist_sha256` in every existing record is
+unchanged).
+
+**Off by default.** It exists only when a testbench manifest (`tb.json`)
+carries an `internal_noise` block. With the key absent the composed deck is
+byte-identical to what it was before the hook (`sim/harness/tests/
+test_internal_noise.py`), so no existing bench or `sim/selftest.sh` changes.
+
+```jsonc
+"internal_noise": {
+  "subckt": "comparator",       // subckt that holds the devices (design/comparator.spice)
+  "inner": "x1",                // instance name of that subckt inside comparator_dut
+  "instances": ["x0","x1","x2"],// comparator_dut instances in the testbench fragment
+  "ts": 2e-11,                  // TRNOISE time step (s)
+  "scale": 1.0,                 // multiplies every density; 0 = the negative control
+  "rails": {"vdd": "vdd", "vss": "0"},   // top-level nets for the subckt's supply pins
+  "devices": {"XM3": {"g": 3.5e-4, "gamma": 1.0, "phase": "evaluate"}}
+}
+```
+
+Mechanics (`sim/harness/internal_noise.py`, a pure function of the block and
+the DUT text): for each instance and device it emits a white TRNOISE voltage
+source (1 V standing for 1 A) and a behavioural current source across the
+device's drain/source, addressed hierarchically (`x0.x1.ln`). PSP103 OSDI
+devices have no TRNOISE parameter, so a parallel channel-noise current is the
+only handle. Names are checked against the DUT netlist (unknown devices are
+refused), and a terminal that is a *pin* of the inner subckt must be mapped in
+`rails`, because a pin's flattened name is the parent's net, not
+`x0.x1.<pin>`.
+
+Density and its stated error. The one-sided current density is
+`sqrt(4 k T gamma g)` A/rtHz (white only, as in the existing bench's "Why
+white only"), `T` follows the live corner temperature (`temper`), and
+`NA = S/sqrt(2 TS)` by the density relation in
+`sim/comparator-transient-noise/README.md` "NA/TS calibration". `g` is **one
+stated conductance per device**, not a time-varying quantity: the latch's bias
+sweeps through the whole decision. Calibration approach: a noise-free transient
+at the nominal corner; for the cross-coupled devices the time-weighted mean
+`|gm|` over the regeneration-onset window (1 mV < |v(ln) - v(lp)| < 100 mV, the
+window in which the input difference is still being amplified); for the reset
+devices the triode drain-source conductance at the end of reset. The same `g`
+is used at every PVT point (as the existing bench uses one input density at
+every point); the corner-to-corner spread of the calibration quantity is given
+in `sim/comparator-transient-noise-full/README.md` "Density calibration".
+Phase gating (`phase`: `always` | `evaluate` | `reset`) multiplies the current
+by `v(clk)/v(vdd)` or `1 - v(clk)/v(vdd)`, so a device is noisy only while it
+conducts.
+
 ## Swapping in the real design
 
 **Done as of DR-0001's schematic-implementation issue** (`design/comparator.spice`,

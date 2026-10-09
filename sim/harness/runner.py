@@ -55,6 +55,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import internal_noise as internal_noise_mod
 from . import pdk as pdk_mod
 from .corners import PvtPoint
 from .dut import Dut
@@ -153,6 +154,14 @@ def compose_deck(
         "",
         "* ---- testbench ------------------------------------------------------",
         f'.include "{tb.netlist}"',
+    ]
+    if tb.internal_noise:
+        # Optional hook (issue #81); absent key => nothing emitted, deck unchanged.
+        lines += [""]
+        lines += internal_noise_mod.emit_internal_noise(
+            tb.internal_noise, dut.netlist.read_text()
+        )
+    lines += [
         "",
         "* ---- measurement ----------------------------------------------------",
         ".control",

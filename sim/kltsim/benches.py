@@ -72,6 +72,11 @@ class Bench:
     monte_carlo: dict | None = None
     has_dut: bool = True  # False: a DUT-free instrument-validation fixture
     probes: dict = field(default_factory=dict)  # corner-application probes
+    #: Extra ``.param`` lines the body emits ahead of the circuit (issue #81).
+    params: dict = field(default_factory=dict)
+    #: Optional internal-noise hook block (sim/harness/internal_noise.py);
+    #: the body appends its emitted sources after the circuit. None = off.
+    internal_noise: dict | None = None
 
     def measurement(self, name: str) -> Meas:
         for m in self.measurements:
@@ -369,7 +374,131 @@ TRANSIENT_NOISE = Bench(
 )
 
 
+# --------------------------------------------------------------------------- #
+# Issue #81: whole-latch noise with the regenerative pair's own noise injected
+# --------------------------------------------------------------------------- #
+
+#: Internal-noise block (sim/harness/internal_noise.py). The densities are
+#: 4kT*gamma*g with g one stated conductance per device, calibrated in
+#: sim/comparator-transient-noise-full/README.md ("Density calibration").
+#: `scale` multiplies every internal NA (0 = the negative control).
+def _internal_noise_block(scale: float) -> dict:
+    return {
+        "subckt": "comparator",
+        "inner": "x1",
+        "instances": ["x0", "x1", "x2"],
+        "ts": 2e-11,
+        "scale": scale,
+        "rails": {"vdd": "vdd", "vss": "0"},
+        "clk_node": "clk",
+        "vdd_node": "vdd",
+        "devices": {name: dict(spec) for name, spec in INTERNAL_NOISE_DEVICES.items()},
+    }
+
+
+#: Cross-coupled pair (noise generated in the evaluate phase) and the four
+#: reset devices (noise generated in the reset phase). One stated conductance
+#: per device, from a noise-free transient of the latch at tt / 1.20 V / 27 C
+#: (README "Density calibration"): the time-weighted mean |gm| over the
+#: regeneration-onset window (1 mV < |v(ln)-v(lp)| < 100 mV), symmetrized per
+#: pair, for XM3-XM6; the triode drain-source conductance at t = 0.9 ns (end
+#: of reset) for XM7-XM10. gamma = 1 (short-channel, stated, not derived).
+INTERNAL_NOISE_DEVICES: dict[str, dict] = {
+    "XM3": {"g": 0.35e-3, "gamma": 1.0, "phase": "evaluate"},
+    "XM4": {"g": 0.35e-3, "gamma": 1.0, "phase": "evaluate"},
+    "XM5": {"g": 0.063e-3, "gamma": 1.0, "phase": "evaluate"},
+    "XM6": {"g": 0.063e-3, "gamma": 1.0, "phase": "evaluate"},
+    "XM7": {"g": 2.97e-3, "gamma": 1.0, "phase": "reset"},
+    "XM8": {"g": 2.97e-3, "gamma": 1.0, "phase": "reset"},
+    "XM9": {"g": 1.51e-3, "gamma": 1.0, "phase": "reset"},
+    "XM10": {"g": 1.51e-3, "gamma": 1.0, "phase": "reset"},
+}
+
+
+def _noise_full(name: str, desc: str, fe_scale: float, internal: dict | None,
+                internal_probes: bool = False) -> Bench:
+    import dataclasses
+
+    base = TRANSIENT_NOISE
+    extra: dict = {}
+    if internal_probes:
+        # Front-end source off => v(vd0) is identically 0 in every sample, so
+        # the Row 2 raw-draw independence gate cannot see anything. Probe the
+        # injected INTERNAL source values instead (Vinz_<inst>_<dev>, the TRNOISE
+        # source of XM3 in the x0 / x1 instances, as the hook names them).
+        meas = tuple(
+            Meas("vn0_a", ".meas tran vn0_a find v(inz_x0_xm3) at=0.5n", "V", role="noiseprobe")
+            if m.name == "vn0_a" else
+            Meas("vn0_b", ".meas tran vn0_b find v(inz_x0_xm3) at=2.5n", "V", role="noiseprobe")
+            if m.name == "vn0_b" else
+            Meas("vn1_a", ".meas tran vn1_a find v(inz_x1_xm3) at=0.5n", "V", role="noiseprobe")
+            if m.name == "vn1_a" else m
+            for m in base.measurements
+        )
+        extra["measurements"] = meas
+    return dataclasses.replace(
+        base,
+        name=name,
+        circuit="transient_noise_full.circuit.spice",
+        description=desc,
+        params={"fe_scale": fe_scale},
+        internal_noise=internal,
+        **extra,
+    )
+
+
+NOISE_FULL_BENCHES: dict[str, Bench] = {
+    b.name: b
+    for b in (
+        _noise_full(
+            "tn_full_fe",
+            "Issue #81 config A: front-end (input-referred) noise only; no internal sources. "
+            "Reproduces the transient_noise bench (issue #62).",
+            1.0, None),
+        _noise_full(
+            "tn_full_int",
+            "Issue #81 config B, FIRST ATTEMPT (superseded by tn_full_int_probed): "
+            "regenerative-pair internal noise only (front-end source off). Its "
+            "independence probes read the OFF front-end source, so the Row 2 gate "
+            "rejects every point; kept as the committed record of that attempt.",
+            0.0, _internal_noise_block(1.0)),
+        _noise_full(
+            "tn_full_int_probed",
+            "Issue #81 config B (as graded): identical to tn_full_int, but the raw-draw "
+            "independence probes read the injected internal sources (v(inz_*)) because "
+            "the front-end source they read in tn_full_int is off (probes identically 0).",
+            0.0, _internal_noise_block(1.0), internal_probes=True),
+        _noise_full(
+            "tn_full_int_x8",
+            "Issue #81 sensitivity (NOT a spec config): internal noise only, every internal "
+            "density scaled x8, so the +/-od_x rungs are no longer saturated and the "
+            "internal term can be MEASURED; sigma_int(1x) is read as sigma(8x)/8 under "
+            "the linear-scaling assumption checked by the x4 run.",
+            0.0, _internal_noise_block(8.0), internal_probes=True),
+        _noise_full(
+            "tn_full_int_x4",
+            "Issue #81 sensitivity (NOT a spec config): as tn_full_int_x8 at x4, the "
+            "linearity check of the x8 read-out.",
+            0.0, _internal_noise_block(4.0), internal_probes=True),
+        _noise_full(
+            "tn_full_both",
+            "Issue #81 config C: front-end plus regenerative-pair internal noise (complete injection).",
+            1.0, _internal_noise_block(1.0)),
+        _noise_full(
+            "tn_full_zero",
+            "Issue #81 negative control: both sources present, internal density scaled to zero; "
+            "must reproduce config A's statistics.",
+            1.0, _internal_noise_block(0.0)),
+    )
+}
+
+
 BENCHES: dict[str, Bench] = {b.name: b for b in (REGENERATION, KICKBACK, OFFSET_MC, TRANSIENT_NOISE)}
+
+#: Every bench `build`/`run`/`smoke` can target. NOISE_FULL_BENCHES (issue #81)
+#: are deliberately NOT in BENCHES: they are an appended evidence trail next to
+#: the DR-0002 campaign, never part of its grading.
+ALL_BENCHES: dict[str, Bench] = {**BENCHES, **NOISE_FULL_BENCHES}
 
 #: Instrument-validation fixtures. Deliberately NOT in BENCHES: they carry no
 #: DUT and no spec row, so the campaign builder and grader never see them.

@@ -186,6 +186,11 @@ ngspice 46 on the runner. This route does not unblock the local row, and it is
 not the `osdi_preload` request form the pex leg uses. Adapting the pex leg to
 it is #61's call.
 
+The same route ran the issue #81 whole-latch noise campaign
+([`comparator-transient-noise-full/`](comparator-transient-noise-full/)): the
+internal-noise hook it uses is documented in
+[`dut/README.md`](dut/README.md) "Optional internal-noise hook".
+
 **If a preflight fails:** record the failure verbatim as an append-only
 attempt, as the committed pex attempt does. Do not relax the spec, do not pass
 `--allow-toolchain-drift` to manufacture evidence, and do not fall back to a

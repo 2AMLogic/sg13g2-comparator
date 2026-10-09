@@ -36,7 +36,8 @@ from pathlib import Path
 from . import build as build_mod
 from . import fixture as fixture_mod
 from . import grade as grade_mod
-from .benches import BENCHES, FIXTURE_BENCHES
+from . import noise_full as noise_full_mod
+from .benches import ALL_BENCHES, BENCHES, FIXTURE_BENCHES
 
 CAMPAIGNS_DIR = build_mod.EXPERIMENT_DIR / "campaigns"
 
@@ -54,7 +55,7 @@ def cmd_build(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     names = args.bench or list(BENCHES)
     for name in names:
-        body, requests = build_mod.write_bench_inputs(BENCHES[name], out_dir, target="batch")
+        body, requests = build_mod.write_bench_inputs(ALL_BENCHES[name], out_dir, target="batch")
         print(f"wrote {body.relative_to(build_mod.REPO_ROOT)}")
         for request in requests:
             print(f"wrote {request.relative_to(build_mod.REPO_ROOT)}")
@@ -62,7 +63,7 @@ def cmd_build(args) -> int:
 
 
 def cmd_smoke(args) -> int:
-    bench = BENCHES[args.bench]
+    bench = ALL_BENCHES[args.bench]
     work = Path(args.work or tempfile.mkdtemp(prefix=f"kltsim-smoke-{bench.name}-"))
     body, (request_path, *rest) = build_mod.write_bench_inputs(
         bench, work, target="local", osdi_dir=args.osdi_dir, split=False
@@ -201,7 +202,7 @@ def cmd_fleet_smoke(args) -> int:
     model resolution, section switching, MC seeding) before a campaign.
     Its inputs and envelope are committed under campaigns/ID/smoke/ as the
     verification record; it is never graded as spec evidence."""
-    bench = BENCHES[args.bench]
+    bench = ALL_BENCHES[args.bench]
     out_dir = _campaign_dir(args.campaign) / "smoke"
     tag = args.tag or bench.name
     body, (request_path, *rest) = build_mod.write_bench_inputs(
@@ -293,7 +294,7 @@ def _submit(request_path: Path, out_dir: Path, tag: str, args, backend: str | No
 
 def cmd_run(args) -> int:
     out_dir = _campaign_dir(args.campaign)
-    bench = BENCHES[args.bench]
+    bench = ALL_BENCHES[args.bench]
     tags = build_mod.part_tags(bench)
     if args.part:
         tags = [tag for tag in tags if tag in args.part]
@@ -335,6 +336,18 @@ def cmd_grade(args) -> int:
     return 0
 
 
+def cmd_noise_full(args) -> int:
+    """Issue #81: per-config probit sigmas + quadrature split for a campaign."""
+    out_dir = _campaign_dir(args.campaign)
+    result = noise_full_mod.analyse(out_dir)
+    result["campaign"] = out_dir.name
+    (out_dir / "noise_full.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    text = noise_full_mod.render_markdown(result)
+    (out_dir / "noise_full.md").write_text(text, encoding="utf-8")
+    print(text)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     default_klt = shutil.which("klt") or "klt"
     ap = argparse.ArgumentParser(prog="run_klt_corner_verification.py", description=__doc__,
@@ -343,11 +356,11 @@ def main(argv: list[str] | None = None) -> int:
 
     b = sub.add_parser("build", help="write batch-form bodies + requests for a campaign")
     b.add_argument("--campaign", required=True)
-    b.add_argument("--bench", action="append", choices=sorted(BENCHES))
+    b.add_argument("--bench", action="append", choices=sorted(ALL_BENCHES))
     b.set_defaults(func=cmd_build)
 
     s = sub.add_parser("smoke", help="run ONE corner of a bench locally (scratch dir)")
-    s.add_argument("--bench", required=True, choices=sorted(BENCHES))
+    s.add_argument("--bench", required=True, choices=sorted(ALL_BENCHES))
     s.add_argument("--osdi-dir", required=True)
     s.add_argument("--process")
     s.add_argument("--supply", type=float, default=1.2)
@@ -358,7 +371,7 @@ def main(argv: list[str] | None = None) -> int:
 
     r = sub.add_parser("run", help="submit one bench of a built campaign via klt sim")
     r.add_argument("--campaign", required=True)
-    r.add_argument("--bench", required=True, choices=sorted(BENCHES))
+    r.add_argument("--bench", required=True, choices=sorted(ALL_BENCHES))
     r.add_argument("--klt", default=default_klt)
     r.add_argument("--part", action="append", help="only these request parts (tags)")
     r.add_argument("--skip-existing", action="store_true",
@@ -371,7 +384,7 @@ def main(argv: list[str] | None = None) -> int:
 
     f = sub.add_parser("fleet-smoke", help="submit a tiny reduced-grid batch job (verification)")
     f.add_argument("--campaign", required=True)
-    f.add_argument("--bench", required=True, choices=sorted(BENCHES))
+    f.add_argument("--bench", required=True, choices=sorted(ALL_BENCHES))
     f.add_argument("--tag")
     f.add_argument("--process", action="append")
     f.add_argument("--supply", type=float, default=1.2)
@@ -401,6 +414,10 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("grade", help="grade a campaign's committed envelopes")
     g.add_argument("--campaign", required=True)
     g.set_defaults(func=cmd_grade)
+
+    nf = sub.add_parser("noise-full", help="issue #81: analyse the tn_full_* configurations of a campaign")
+    nf.add_argument("--campaign", required=True)
+    nf.set_defaults(func=cmd_noise_full)
 
     args = ap.parse_args(argv)
     return args.func(args)
