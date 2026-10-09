@@ -343,8 +343,10 @@ def per_corner_values(bench: BenchEvidence, measurement: str, unit: str | None,
                       grid: dict, gates: list[str]) -> tuple[list[CornerValue], list[str]]:
     """One CornerValue per expected grid point (in grid order) + notes."""
     notes: list[str] = []
-    seen: dict[tuple, dict] = {}
-    duplicates: set[tuple] = set()
+    # Every placement of a deterministic PVT point, in any envelope. A repeated
+    # key is ambiguous evidence: no result is selected (never first/last/worst),
+    # so the verdict cannot depend on envelope order.
+    seen: dict[tuple, list[tuple[str, dict]]] = {}
     for tag, env in bench.envelopes:
         for corner in env.get("corners") or []:
             if corner.get("monte_carlo") is not None:
@@ -352,14 +354,25 @@ def per_corner_values(bench: BenchEvidence, measurement: str, unit: str | None,
             key = _corner_key(corner)
             if key is None:
                 continue
-            if key in seen:
-                duplicates.add(key)
-            seen[key] = corner
-    if duplicates:
-        notes.append(f"{len(duplicates)} grid point(s) reported more than once; last kept")
+            seen.setdefault(key, []).append((tag, corner))
+    collisions = {k: sorted(f"{t}:{c.get('corner_id')}" for t, c in v)
+                  for k, v in seen.items() if len(v) > 1}
+    if collisions:
+        grid_set = {(k[0], round(k[1], 6), k[2]) for k in grid_keys(grid)}
+        for k in sorted(collisions, key=str):
+            notes.append(f"ambiguous duplicate result for {key_label(k)}"
+                         f"{'' if k in grid_set else ' (outside the grid)'}: "
+                         f"{'; '.join(collisions[k])}; no result selected")
     out: list[CornerValue] = []
     for key in grid_keys(grid):
-        corner = seen.get((key[0], round(key[1], 6), key[2]))
+        k = (key[0], round(key[1], 6), key[2])
+        if k in collisions:
+            ids = sorted({str(c.get("corner_id")) for _, c in seen[k]})
+            out.append(CornerValue(
+                key, None, " | ".join(ids),
+                "ambiguous duplicate PVT result, no value selected: " + "; ".join(collisions[k])))
+            continue
+        corner = seen[k][0][1] if k in seen else None
         if corner is None:
             out.append(CornerValue(key, None, None, "grid point not in any envelope"))
             continue
@@ -449,6 +462,30 @@ def three_sigma_dr_basis(n: int, stddev: float, step: float) -> float | None:
     return 3.0 * math.sqrt(max(var_pop - step * step / 12.0, 0.0))
 
 
+def _index_populations(bench: BenchEvidence, names: tuple[str, ...]
+                       ) -> tuple[dict[str, dict[str, dict]], dict[str, dict[str, list[str]]]]:
+    """measurement name -> base corner id -> klt's by_corner entry, plus
+    measurement name -> base corner id -> sorted envelope tags of EVERY
+    repeated summary. A repeated summary is ambiguous: it is left out of the
+    index (no winner by iteration order) and reported as a collision."""
+    found: dict[str, dict[str, list[tuple[str, dict]]]] = {name: {} for name in names}
+    for tag, env in bench.envelopes:
+        for m in env.get("measurements") or []:
+            if m.get("name") in found and m.get("monte_carlo"):
+                for entry in m["monte_carlo"].get("by_corner") or []:
+                    found[m["name"]].setdefault(entry["corner_id"], []).append(
+                        (tag, dict(entry, _unit=m.get("unit"))))
+    index = {name: {cid: v[0][1] for cid, v in per.items() if len(v) == 1}
+             for name, per in found.items()}
+    collisions = {name: {cid: sorted(t for t, _ in v) for cid, v in per.items() if len(v) > 1}
+                  for name, per in found.items()}
+    return index, collisions
+
+
+def _collision_text(name: str, cid: str, tags: list[str]) -> str:
+    return f"{name} summary for {cid} reported {len(tags)} times ({', '.join(tags)})"
+
+
 def mc_per_corner(bench: BenchEvidence, measurement: str, unit: str | None, grid: dict,
                   expected_n: int, step: float, gates: list[str]) -> tuple[list[CornerValue], list[dict], list[str]]:
     notes: list[str] = []
@@ -464,19 +501,20 @@ def mc_per_corner(bench: BenchEvidence, measurement: str, unit: str | None, grid
             problem = _corner_problems(corner, bench.name, gates)
             if problem:
                 sample_problems.setdefault(key, []).append(f"{corner['corner_id']}: {problem}")
-    by_corner: dict[str, dict] = {}
-    for tag, env in bench.envelopes:
-        for m in env.get("measurements") or []:
-            if m.get("name") != measurement or not m.get("monte_carlo"):
-                continue
-            src_unit = m.get("unit")
-            for entry in m["monte_carlo"].get("by_corner") or []:
-                by_corner[entry["corner_id"]] = dict(entry, _unit=src_unit)
+    pops, pop_collisions = _index_populations(bench, (measurement,))
+    by_corner, dup_summaries = pops[measurement], pop_collisions[measurement]
+    for cid in sorted(dup_summaries):
+        notes.append("ambiguous duplicate population summary, no statistic selected: "
+                     + _collision_text(measurement, cid, dup_summaries[cid]))
     details: list[dict] = []
     out: list[CornerValue] = []
     for key in grid_keys(grid):
         k = (key[0], round(key[1], 6), key[2])
         base = base_ids.get(k)
+        if base in dup_summaries:
+            out.append(CornerValue(key, None, base, "ambiguous duplicate population summary: "
+                                   + _collision_text(measurement, base, dup_summaries[base])))
+            continue
         entry = by_corner.get(base) if base else None
         if entry is None:
             out.append(CornerValue(key, None, base, "no Monte-Carlo population for this grid point"))
@@ -554,17 +592,6 @@ def probit_slope_sigma(p_plus: float, p_minus: float, od_x: float) -> float:
     return 2.0 * od_x / dz
 
 
-def _mc_populations(bench: BenchEvidence, names: tuple[str, ...]) -> dict[str, dict[str, dict]]:
-    """measurement name -> base corner id -> klt's by_corner entry."""
-    out: dict[str, dict[str, dict]] = {name: {} for name in names}
-    for tag, env in bench.envelopes:
-        for m in env.get("measurements") or []:
-            if m.get("name") in out and m.get("monte_carlo"):
-                for entry in m["monte_carlo"].get("by_corner") or []:
-                    out[m["name"]][entry["corner_id"]] = entry
-    return out
-
-
 def _mc_samples(bench: BenchEvidence) -> dict[tuple, list[dict]]:
     """grid key -> that point's Monte-Carlo sample corners."""
     samples: dict[tuple, list[dict]] = {}
@@ -596,7 +623,12 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
     spec = _bench_spec(bench.name)
     gates = [m.name for m in spec.measurements if m.role == "gate"] if spec else []
     indep = tuple((spec.probes.get("independence") if spec else None) or ())
-    pops = _mc_populations(bench, (plus, minus, zero))
+    pops, pop_collisions = _index_populations(bench, (plus, minus, zero))
+    notes: list[str] = []
+    for name in (plus, minus, zero):
+        for cid in sorted(pop_collisions[name]):
+            notes.append("ambiguous duplicate population summary, no statistic selected: "
+                         + _collision_text(name, cid, pop_collisions[name][cid]))
     samples = _mc_samples(bench)
     # Raw draw -> the grid points it appears at, across ALL envelopes: a draw
     # repeated at a different point (a different batch job) shares one noise
@@ -623,6 +655,12 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
             continue
         base = corners[0]["corner_id"].rsplit("/mc", 1)[0]
         point["corner_id"] = base
+        dup = [_collision_text(name, base, pop_collisions[name][base])
+               for name in (plus, minus, zero) if base in pop_collisions[name]]
+        if dup:
+            point["problem"] = "ambiguous duplicate population summary: " + "; ".join(dup)
+            details.append(point)
+            continue
         entries = {name: pops[name].get(base) for name in (plus, minus, zero)}
         if any(e is None for e in entries.values()):
             missing = [name for name, e in entries.items() if e is None]
@@ -674,7 +712,6 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
                 point["sigma"] = None
                 point["problem"] = str(exc)
         details.append(point)
-    notes: list[str] = []
     shared = sum(d.get("samples_sharing_a_draw_with_another_point", 0) for d in details)
     total = sum(len(c) for c in samples.values())
     if shared:
