@@ -24,6 +24,7 @@ matrix.
 from __future__ import annotations
 
 import json
+import math
 import statistics
 import subprocess
 from dataclasses import dataclass, field
@@ -46,6 +47,54 @@ _SLICE_KEY = {
 }
 
 
+def invalid_measurements(result: PointResult, names) -> list[str]:
+    """Required measurements on ``result`` that are non-finite (NaN / +-inf)
+    or not a real number. Defensive: ``run_point`` already rejects these, but
+    a ``PointResult`` can be built directly."""
+    bad = []
+    for name in names:
+        if name in result.measurements:
+            v = result.measurements[name]
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+                bad.append(name)
+    return bad
+
+
+def usable_points(results: list[PointResult], names) -> list[PointResult]:
+    """Points that are ``ok`` AND carry only finite required measurements."""
+    return [r for r in results if r.status == "ok" and not invalid_measurements(r, names)]
+
+
+def point_message(result: PointResult, names) -> str:
+    if result.message:
+        return result.message
+    bad = invalid_measurements(result, names)
+    if bad:
+        return "non-finite measurement(s): " + ", ".join(f"{n}={result.measurements[n]!r}" for n in bad)
+    return ""
+
+
+def _strict_point(result: PointResult, names) -> dict:
+    """``as_dict`` with any non-finite measurement moved out of the numeric
+    field (raw value kept as text under ``invalid_measurements``)."""
+    record = result.as_dict()
+    bad = {
+        n: v for n, v in result.measurements.items()
+        if isinstance(v, float) and not math.isfinite(v)
+    }
+    if bad:
+        record["measurements"] = {n: v for n, v in result.measurements.items() if n not in bad}
+        record.setdefault("invalid_measurements", {}).update({n: repr(v) for n, v in bad.items()})
+    return record
+
+
+def _json_num(value):
+    """Finite numbers pass through; NaN/inf become null (strict JSON)."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
 def spread_pct(values: list[float]) -> float:
     """Peak-to-peak as a percentage of the mean magnitude.
 
@@ -56,9 +105,12 @@ def spread_pct(values: list[float]) -> float:
     if len(values) < 2:
         return 0.0
     lo, hi = min(values), max(values)
-    mean = statistics.fmean(values)
-    denom = abs(mean) if abs(mean) > 1e-30 else 1e-30
-    return (hi - lo) / denom * 100.0
+    try:
+        mean = statistics.fmean(values)
+        denom = abs(mean) if abs(mean) > 1e-30 else 1e-30
+        return (hi - lo) / denom * 100.0
+    except (OverflowError, ValueError):
+        return math.inf
 
 
 @dataclass
@@ -130,20 +182,42 @@ def swept_axes(results: list[PointResult]) -> set[str]:
 
 
 def summarize(tb: Testbench, results: list[PointResult]) -> dict[str, MeasurementSummary]:
-    ok = [r for r in results if r.status == "ok"]
+    ok = usable_points(results, tb.measure)
     swept = swept_axes(results)
     summaries: dict[str, MeasurementSummary] = {}
     for name in tb.measure:
         values = {r.point.corner_id: r.measurements[name] for r in ok if name in r.measurements}
         summary = MeasurementSummary(name=name, values=values)
+        for r in results:
+            if r.status == "ok" and name in invalid_measurements(r, [name]):
+                summary.failures.append(
+                    f"non-finite measurement {r.measurements[name]!r} at "
+                    f"`{r.point.corner_id}` rejected"
+                )
+            elif name in r.invalid:
+                summary.failures.append(
+                    f"non-finite measurement {r.invalid[name]} at `{r.point.corner_id}` rejected"
+                )
         if values:
             summary.minimum = min(values.values())
             summary.maximum = max(values.values())
-            summary.mean = statistics.fmean(values.values())
+            try:
+                summary.mean = statistics.fmean(values.values())
+            except (OverflowError, ValueError):
+                summary.mean = math.inf
             summary.at_min = min(values, key=lambda k: values[k])
             summary.at_max = max(values, key=lambda k: values[k])
             summary.spread = spread_pct(list(values.values()))
             summary.axes = per_axis_spreads(ok, name)
+            derived = {"mean": summary.mean, "spread": summary.spread}
+            for ax in summary.axes.values():
+                derived[f"{ax.name} weakest"] = ax.weakest
+                derived[f"{ax.name} strongest"] = ax.strongest
+            for label, v in derived.items():
+                if not math.isfinite(v):
+                    summary.failures.append(
+                        f"derived {label} is non-finite (arithmetic overflow); result invalid"
+                    )
         summaries[name] = summary
 
     for name, spec in tb.checks.items():
@@ -273,8 +347,8 @@ def render_record(
     context: dict,
 ) -> str:
     """Render the markdown evidence record (sim/README.md 'Record format')."""
-    ok = [r for r in results if r.status == "ok"]
     names = list(tb.measure)
+    ok = usable_points(results, names)
     corners = sorted({r.point.corner.name for r in results}, key=lambda c: [
         r.point.index for r in results if r.point.corner.name == c
     ][0])
@@ -349,11 +423,12 @@ def render_record(
     sep = "  |---|" + "---|" * (len(names) + 1)
     lines += [header, sep]
     for result in results:
-        if result.status != "ok":
+        if result not in ok:
             cells = " | ".join("—" for _ in names)
+            status = result.status if result.status != "ok" else "invalid"
             lines.append(
                 f"  | `{result.point.corner_id}` | {cells} | "
-                f"**{result.status.upper()}**: {result.message} |"
+                f"**{status.upper()}**: {point_message(result, names)} |"
             )
             continue
         cells = " | ".join(_fmt(result.measurements[n]) for n in names)
@@ -413,11 +488,11 @@ def render_record(
         for name, reasons in failures.items():
             for reason in reasons:
                 lines.append(f"  - `{name}`: {reason}")
-    incomplete = [r for r in results if r.status != "ok"]
+    incomplete = [r for r in results if r not in ok]
     if incomplete:
         lines.append(f"- **Incomplete points**: {len(incomplete)}")
         for r in incomplete:
-            lines.append(f"  - `{r.point.corner_id}`: {r.status} — {r.message}")
+            lines.append(f"  - `{r.point.corner_id}`: {r.status if r.status != 'ok' else 'invalid'} — {point_message(r, names)}")
 
     lines += [
         "",
@@ -474,17 +549,18 @@ def write_record(
                 "context": context,
                 "testbench": tb.provenance(),
                 "checks": tb.checks,
-                "points": [r.as_dict() for r in results],
+                "points": [_strict_point(r, tb.measure) for r in results],
                 "summary": {
                     name: {
-                        "min": s.minimum,
-                        "max": s.maximum,
-                        "mean": s.mean,
+                        "min": _json_num(s.minimum),
+                        "max": _json_num(s.maximum),
+                        "mean": _json_num(s.mean),
                         "at_min": s.at_min,
                         "at_max": s.at_max,
-                        "spread_pct": s.spread,
+                        "spread_pct": _json_num(s.spread),
                         "per_axis": {
-                            a: {"weakest": ax.weakest, "strongest": ax.strongest,
+                            a: {"weakest": _json_num(ax.weakest),
+                                "strongest": _json_num(ax.strongest),
                                 "varies": ax.varies}
                             for a, ax in s.axes.items()
                         },
@@ -496,6 +572,7 @@ def write_record(
                 },
             },
             indent=2,
+            allow_nan=False,
         )
         + "\n"
     )

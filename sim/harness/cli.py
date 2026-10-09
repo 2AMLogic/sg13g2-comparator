@@ -249,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     summaries = report_mod.summarize(tb, results)
-    completed = sum(1 for r in results if r.status == "ok")
+    completed = len(report_mod.usable_points(results, tb.measure))
     failures = {n: s.failures for n, s in summaries.items() if s.failures}
 
     print("-" * 78)
