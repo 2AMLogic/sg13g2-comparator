@@ -26,6 +26,7 @@ import argparse
 import dataclasses
 import datetime as _dt
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -202,6 +203,69 @@ def strip_instrument(body: str) -> str:
     return "\n".join(kept)
 
 
+_AB_OK_STATUS = ("pass", "fail", "ok")  # a measurement-level gate fail is not an invalid control
+
+
+def _finite(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _expected_decisions(request: dict) -> set[str]:
+    return {m["name"] for m in request.get("measurements") or []
+            if str(m.get("name", "")).startswith("dout_")}
+
+
+def validate_ab_envelope(env, request: dict, expected_names, arm: str) -> list[str]:
+    """Why this arm's envelope cannot support a decisions-unchanged verdict
+    (issue #106). Every message is prefixed ``<arm>: <field>``; empty means
+    valid. Pure: the expectation comes from the arm's own generated request."""
+    if not isinstance(env, dict):
+        return [f"{arm}: envelope is not an object"]
+    diags = []
+    status = env.get("status")
+    if status not in _AB_OK_STATUS:
+        diags.append(f"{arm}: status {status!r} is not one of {list(_AB_OK_STATUS)}")
+    corners = env.get("corners")
+    if not isinstance(corners, list) or len(corners) != 1:
+        n = len(corners) if isinstance(corners, list) else None
+        diags.append(f"{arm}: corners must hold exactly one entry, found {n}")
+        return diags
+    corner = corners[0]
+    if not isinstance(corner, dict):
+        return diags + [f"{arm}: corners[0] is not an object"]
+    if corner.get("status") == "error":
+        codes = ",".join(sorted({str(d.get("code", "?")) for d in corner.get("diagnostics") or []
+                                 if isinstance(d, dict)}))
+        diags.append(f"{arm}: corners[0].status is error ({codes or 'no diagnostic'})")
+    req = request.get("corners") or {}
+    want_p = (req.get("process") or [None])[0]
+    if corner.get("process") != want_p:
+        diags.append(f"{arm}: corners[0].process {corner.get('process')!r} != requested {want_p!r}")
+    want_t = (req.get("temperature_c") or [None])[0]
+    got_t = corner.get("temperature_c")
+    if not _finite(got_t) or not _finite(want_t) or abs(got_t - want_t) > 1e-9:
+        diags.append(f"{arm}: corners[0].temperature_c {got_t!r} != requested {want_t!r}")
+    got_s = corner.get("supply_v")
+    got_s = got_s if isinstance(got_s, dict) else {}
+    for key, vals in (req.get("supply_v") or {}).items():
+        got = got_s.get(key)
+        if not _finite(got) or abs(got - vals[0]) > 1e-9:
+            diags.append(f"{arm}: corners[0].supply_v.{key} {got!r} != requested {vals[0]!r}")
+    count = {}
+    for m in corner.get("measurements") or []:
+        if isinstance(m, dict):
+            count.setdefault(m.get("name"), []).append(m)
+    for name in sorted(expected_names):
+        ms = count.get(name, [])
+        if not ms:
+            diags.append(f"{arm}: {name} missing")
+        elif len(ms) > 1:
+            diags.append(f"{arm}: {name} duplicated ({len(ms)} entries)")
+        elif not _finite(ms[0].get("value")):
+            diags.append(f"{arm}: {name} value {ms[0].get('value')!r} is not a finite number")
+    return diags
+
+
 def cmd_ab(args) -> int:
     """Decisions-unchanged A/B (issue #78): the kickback bench with and
     without the 0 V ammeters + integrators, ONE corner each, submitted to
@@ -215,6 +279,7 @@ def cmd_ab(args) -> int:
     # Compose BOTH arms before writing or submitting anything, so a conflict
     # in the second arm leaves the first untouched (issue #105).
     planned = []
+    requests = {}
     for arm, body in arms.items():
         body_name = f"kickback-{arm}.body.spice"
         request = build_mod.compose_request(bench, body_name, "batch")
@@ -228,6 +293,7 @@ def cmd_ab(args) -> int:
             # the q* measurements have no node to read; keep the decision ones
             request["measurements"] = [m for m in request["measurements"]
                                        if not m["name"].startswith(("qp", "qn", "qkick"))]
+        requests[arm] = request
         planned += [(out_dir / body_name, body.encode("utf-8")),
                     (out_dir / f"kickback-{arm}.request.json", _json_bytes(request))]
     if not _commit_planned(planned, args, "ab"):
@@ -240,27 +306,56 @@ def cmd_ab(args) -> int:
             return code
         envs[arm] = json.loads((out_dir / f"kickback-{arm}.envelope.json").read_text(encoding="utf-8"))
 
+    expected = {arm: _expected_decisions(requests[arm]) for arm in arms}
+    diagnostics = []
+    if not expected["with_instrument"]:
+        diagnostics.append("with_instrument: request.measurements has no dout_* decision")
+    if expected["with_instrument"] != expected["without_instrument"]:
+        diagnostics.append(
+            "harness: requested dout_* sets differ between arms: with_instrument="
+            f"{sorted(expected['with_instrument'])} without_instrument="
+            f"{sorted(expected['without_instrument'])}")
+    for arm in arms:
+        diagnostics += validate_ab_envelope(envs[arm], requests[arm], expected[arm], arm)
+
     def values(env):
-        return {m["name"]: m["value"] for m in env["corners"][0]["measurements"]}
+        out = {}
+        corners = env.get("corners") if isinstance(env, dict) else None
+        for corner in (corners if isinstance(corners, list) else [])[:1]:
+            for m in (corner.get("measurements") or []) if isinstance(corner, dict) else []:
+                if isinstance(m, dict) and "name" in m:
+                    out.setdefault(m["name"], m.get("value"))
+        return out
 
     a, b = values(envs["with_instrument"]), values(envs["without_instrument"])
     rows = []
-    for name in sorted(set(a) & set(b)):
-        va, vb = a[name], b[name]
+    for name in sorted(set(a) | set(b)):
+        va, vb = a.get(name), b.get(name)
         rows.append({"measurement": name, "with": va, "without": vb,
-                     "abs_diff": None if va is None or vb is None else abs(va - vb)})
-    decisions = [r for r in rows if r["measurement"].startswith("dout_")]
+                     "abs_diff": abs(va - vb) if _finite(va) and _finite(vb) else None})
+    wanted = sorted(expected["with_instrument"] | expected["without_instrument"])
+    by_name = {r["measurement"]: r for r in rows}
     result = {
         "corner": f"{args.process}/{args.supply:.3f}V/{args.temperature:g}C",
-        "decisions_identical": bool(decisions) and all(
-            r["with"] is not None and r["with"] == r["without"] for r in decisions),
-        "decision_measurements": [r["measurement"] for r in decisions],
+        "decisions_identical": False,
+        "decision_measurements": wanted,
         "rows": rows,
     }
+    if diagnostics:
+        result["control_status"] = "incomplete"
+        result["diagnostics"] = diagnostics
+    else:
+        result["control_status"] = "complete"
+        result["decisions_identical"] = all(
+            by_name[n]["with"] == by_name[n]["without"] for n in wanted)
     (out_dir / "ab.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({k: v for k, v in result.items() if k != "rows"}, indent=1))
     for r in rows:
         print(f"{r['measurement']:24s} with={r['with']!r:>14} without={r['without']!r:>14} diff={r['abs_diff']}")
+    if diagnostics:
+        print("A/B control INCOMPLETE (decisions_identical=false):", file=sys.stderr)
+        for d in diagnostics:
+            print(f"  {d}", file=sys.stderr)
     return 0 if result["decisions_identical"] else 2
 
 

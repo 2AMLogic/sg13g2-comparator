@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
+import json
 import os
 import subprocess
 import tempfile
@@ -20,8 +21,8 @@ def _snapshot(root: Path) -> dict:
             for p in sorted(root.rglob("*")) if p.is_file()}
 
 
-# The mocked envelope has no dout_* measurements, so ``ab`` reports its
-# "decisions not identical" status (2) after a submission that did run.
+# The default mocked envelope is an incomplete control (issue #106), so ``ab``
+# reports its "incomplete or differing" status (2) after a submission that ran.
 AB_RAN = 2
 
 
@@ -134,6 +135,135 @@ class AbTests(HelperBase):
         code, _ = self.run_ab(temperature=85, force=True)
         self.assertEqual(code, AB_RAN)
         self.assertIn("85", (out / "kickback-with_instrument.request.json").read_text())
+
+
+DECISIONS = ("dout_1k_end", "dout_float_small_end", "dout_float_big_end")
+
+
+def good_env(names=DECISIONS, value=1.0, **over):
+    corner = {"process": "mos_tt", "supply_v": {"vsup": 1.2}, "temperature_c": 27,
+              "status": "pass",
+              "measurements": [{"name": n, "value": value, "status": "pass"} for n in names]}
+    env = {"status": "pass", "corners": [corner]}
+    env.update(over)
+    return env
+
+
+class AbControlTests(HelperBase):
+    """Issue #106: both arm envelopes must be valid and complete."""
+
+    def run_ab_with(self, with_env, without_env=None):
+        envs = {"with_instrument": with_env,
+                "without_instrument": good_env() if without_env is None else without_env}
+        self.envs = envs
+
+        def fake(cmd, **kw):
+            if "--version" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, "klt test\n", "")
+            self.calls += 1
+            arm = "with_instrument" if "with_instrument" in " ".join(map(str, cmd)) else "without_instrument"
+            return subprocess.CompletedProcess(cmd, 0, json.dumps(envs[arm]) + "\n", "")
+
+        self.fake_run = fake
+        self.n = getattr(self, "n", 0) + 1  # fresh campaign: inputs are append-only
+        camp = f"c{self.n}"
+        code, err = self.invoke(cli.cmd_ab, campaign=camp, process="mos_tt", supply=1.2, temperature=27)
+        out = self.root / camp / "ab"
+        return code, err, json.loads((out / "ab.json").read_text()), out
+
+    def assert_incomplete(self, res, *needles):
+        code, err, ab, out = res
+        self.assertEqual(code, 2)
+        self.assertFalse(ab["decisions_identical"])
+        self.assertEqual(ab["control_status"], "incomplete")
+        text = "\n".join(ab["diagnostics"])
+        for n in needles:
+            self.assertIn(n, text)
+            self.assertIn(n, err)
+        for arm in ("with_instrument", "without_instrument"):
+            self.assertTrue((out / f"kickback-{arm}.envelope.json").exists())
+
+    def test_valid_identical_passes(self):
+        code, _, ab, _ = self.run_ab_with(good_env())
+        self.assertEqual(code, 0)
+        self.assertTrue(ab["decisions_identical"])
+        self.assertEqual(ab["control_status"], "complete")
+        self.assertEqual(ab["decision_measurements"], sorted(DECISIONS))
+
+    def test_differing_decision_fails(self):
+        env = good_env()
+        env["corners"][0]["measurements"][1]["value"] = 0.0
+        code, _, ab, _ = self.run_ab_with(env)
+        self.assertEqual(code, 2)
+        self.assertFalse(ab["decisions_identical"])
+        self.assertEqual(ab["control_status"], "complete")
+
+    def test_gate_fail_status_is_still_valid_control(self):
+        env = good_env(status="fail")
+        env["corners"][0]["measurements"][0]["status"] = "fail"
+        self.assertEqual(self.run_ab_with(env, good_env(status="fail"))[0], 0)
+
+    def test_missing_decision_in_with_arm(self):
+        env = good_env(DECISIONS[:2])
+        self.assert_incomplete(self.run_ab_with(env), "with_instrument: dout_float_big_end missing")
+
+    def test_missing_decision_in_without_arm(self):
+        env = good_env(DECISIONS[1:])
+        self.assert_incomplete(self.run_ab_with(good_env(), env), "without_instrument: dout_1k_end missing")
+
+    def test_single_surviving_equal_row_is_not_identical(self):
+        self.assert_incomplete(self.run_ab_with(good_env(DECISIONS[:1]), good_env(DECISIONS[:1])),
+                               "dout_float_small_end missing")
+
+    def test_empty_envelope(self):
+        self.assert_incomplete(self.run_ab_with({}), "with_instrument: status", "corners must hold exactly one")
+
+    def test_empty_corner_measurements(self):
+        self.assert_incomplete(self.run_ab_with(good_env(())), "with_instrument: dout_1k_end missing")
+
+    def test_wrong_corner(self):
+        for field, val in (("process", "mos_ff"), ("temperature_c", 85), ("supply_v", {"vsup": 1.5})):
+            env = good_env()
+            env["corners"][0][field] = val
+            key = "supply_v.vsup" if field == "supply_v" else field
+            self.assert_incomplete(self.run_ab_with(good_env(), env), f"without_instrument: corners[0].{key}")
+
+    def test_multi_corner(self):
+        env = good_env()
+        env["corners"].append(good_env()["corners"][0])
+        self.assert_incomplete(self.run_ab_with(env), "with_instrument: corners must hold exactly one")
+
+    def test_errored(self):
+        env = good_env()
+        env["corners"][0]["status"] = "error"
+        self.assert_incomplete(self.run_ab_with(good_env(), env), "without_instrument: corners[0].status is error")
+        self.assert_incomplete(self.run_ab_with(good_env(status="error")), "with_instrument: status")
+
+    def test_duplicate_measurement(self):
+        env = good_env()
+        env["corners"][0]["measurements"].append({"name": "dout_1k_end", "value": 1.0})
+        self.assert_incomplete(self.run_ab_with(env), "with_instrument: dout_1k_end duplicated")
+
+    def test_null_nan_inf_values(self):
+        for bad in (None, float("nan"), float("inf"), float("-inf"), True, "1"):
+            env = good_env()
+            env["corners"][0]["measurements"][2]["value"] = bad
+            self.assert_incomplete(self.run_ab_with(good_env(), env),
+                                   "without_instrument: dout_float_big_end value")
+
+    def test_nan_in_both_arms_not_identical(self):
+        envs = []
+        for _ in range(2):
+            e = good_env()
+            e["corners"][0]["measurements"][0]["value"] = float("nan")
+            envs.append(e)
+        self.assert_incomplete(self.run_ab_with(*envs), "dout_1k_end value")
+
+    def test_validator_is_pure_and_request_derived(self):
+        req = {"corners": {"process": ["mos_tt"], "supply_v": {"vsup": [1.2]}, "temperature_c": [27]}}
+        self.assertEqual(cli.validate_ab_envelope(good_env(), req, {"dout_1k_end"}, "x"), [])
+        self.assertEqual(cli.validate_ab_envelope(good_env(), req, {"dout_new"}, "x"),
+                         ["x: dout_new missing"])
 
 
 class FleetSmokeTests(HelperBase):

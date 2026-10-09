@@ -156,6 +156,21 @@ the command under a new `--campaign <new-id>` (or, for `fleet-smoke`, a new
 `--tag`). `--force` remains the explicit scratch-only override that replaces
 inputs and envelope; never use it on committed evidence.
 
+**A/B control semantics (issue #106).** `ab` only certifies "decisions
+unchanged" when both arm envelopes are valid for the request that produced
+them: exactly one corner, matching the requested process, supply and
+temperature; envelope and corner status not `error`; every requested `dout_*`
+measurement present exactly once, with a finite numeric value, in each arm. The
+expected set comes from each arm's generated request, and the full set is
+compared, not the observed intersection. Otherwise `ab.json` carries
+`decisions_identical: false`, `control_status: "incomplete"` and a
+`diagnostics` list naming the arm and field, and the exit code is 2 (same as a
+differing decision); the arm envelopes stay on disk. A valid run has
+`control_status: "complete"`. Controls certified before this rule on a partial
+envelope (e.g. one surviving equal `dout_*` row) may now be downgraded to
+incomplete when re-evaluated. The committed evidence under `campaigns/` is not
+rewritten.
+
 ### Toolchain and provenance actually used
 
 | | |
