@@ -1,0 +1,84 @@
+* ---- bench: kickback_fixture (known-charge validation of the Q_kick instrument)
+*
+* Issue #78. The Q_kick instrument of kickback.circuit.spice (0 V ammeter
+* at a branch-A DUT pin -> behavioural current source -> 1 pF integrator
+* node; Q = max_t |q(t) - q(29 ns)|, t in [30 ns, 45 ns]) is here driven by
+* an ideal current source with a KNOWN, analytic charge instead of the DUT.
+* The instrument block (vk* / Bq* / Cq* / Rq*), the 1 kohm / 100 fF source
+* network and the measure expressions (generated from the same template in
+* sim/kltsim/benches.py) are the real bench's, element for element. There is
+* no DUT, so the result does not depend on process, supply or temperature:
+* one unit is enough. The fixture asserts the INSTRUMENT, not the DUT.
+*
+* Every pulse is a trapezoid with 100 ps edges whose flat top runs from
+* t0+0.1 ns to t1: its charge is exactly I * (t1 - t0) (area of the
+* trapezoid = amplitude x (top + edge)), so each is a round number of fC.
+* Iinj 0 pin pushes current from ground INTO the pin node; it then flows
+* pin -> apa through the ammeter, i.e. the "DUT pushes charge into apa"
+* direction of the real bench. The instrument must read the injected
+* charge, not the node voltage, so the source network restores (Rsrc to a
+* 0 V source) while the pulse is still on.
+*
+*   a  unipolar +10 fC at 33 ns, preceded by +7 fC at 20 ns (BEFORE the 29 ns
+*      reference: must not count) and followed by +4 fC at 50 ns (AFTER the
+*      window: must not count).               expect: Q = 10 fC, sign +
+*   b  unipolar -10 fC at 33 ns.              expect: Q = 10 fC, sign -
+*   c  BIPOLAR +20 fC (4 uA, 31 ... 36 ns) then -20 fC (38 ... 43 ns): net charge 0, peak 20.
+*                                             expect: Q = 20 fC, net 0
+*      (an end-of-window |q(45)-q(29)| estimator reads 0 here)
+*   d  RESTORATION: +10 fC delivered as 1 uA, 33 ... 43 ns, into the 1 kohm /
+*      100 fF node (tau = 100 ps). The node never rises more than ~1 mV, so
+*      V x C_in reads ~0.1 fC; the instrument still reads the full 10 fC.
+*
+* PWL units: amperes, seconds.
+
+.options reltol=1e-4 vntol=1e-9 abstol=1e-15 chgtol=1e-16
+
+.param rsrc=1k
+.param cin=100f
+
+* klt sim applies the supply corner with `alter vsup=<V>`, which errors if
+* the deck has no such source. The fixture has no DUT and nothing uses this
+* node; it only gives the corner mechanism something to alter.
+vsup vdd 0 dc 1.2
+Rvdd vdd 0 1meg
+
+* ---- case a -------------------------------------------------------------
+vsa  sa 0 dc 0
+Rap  sa apa {rsrc}
+Cap  apa 0 {cin}
+vka  apa apa_pin dc 0
+Iinja 0 apa_pin pwl(0 0 20n 0 20.1n 1u 27n 1u 27.1n 0 33n 0 33.1n 1u 43n 1u 43.1n 0 50n 0 50.1n 1u 54n 1u 54.1n 0)
+Bqa  0 qa i = 'i(vka)'
+Cqa  qa 0 1p
+Rqa  qa 0 1e9
+
+* ---- case b -------------------------------------------------------------
+vsb  sb 0 dc 0
+Rbp  sb apb {rsrc}
+Cbp  apb 0 {cin}
+vkb  apb apb_pin dc 0
+Iinjb 0 apb_pin pwl(0 0 33n 0 33.1n -1u 43n -1u 43.1n 0)
+Bqb  0 qb i = 'i(vkb)'
+Cqb  qb 0 1p
+Rqb  qb 0 1e9
+
+* ---- case c -------------------------------------------------------------
+vsc  sc 0 dc 0
+Rcp  sc apc {rsrc}
+Ccp  apc 0 {cin}
+vkc  apc apc_pin dc 0
+Iinjc 0 apc_pin pwl(0 0 31n 0 31.1n 4u 36n 4u 36.1n 0 38n 0 38.1n -4u 43n -4u 43.1n 0)
+Bqc  0 qc i = 'i(vkc)'
+Cqc  qc 0 1p
+Rqc  qc 0 1e9
+
+* ---- case d -------------------------------------------------------------
+vsd  sd 0 dc 0
+Rdp  sd apd {rsrc}
+Cdp  apd 0 {cin}
+vkd  apd apd_pin dc 0
+Iinjd 0 apd_pin pwl(0 0 33n 0 33.1n 1u 43n 1u 43.1n 0)
+Bqd  0 qd i = 'i(vkd)'
+Cqd  qd 0 1p
+Rqd  qd 0 1e9

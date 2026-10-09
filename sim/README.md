@@ -48,7 +48,8 @@ envelopes over the full 45-point grid. It runs on the batch fleet, and
 evidence trail in `klt`'s own envelope format: it does not relabel or replace
 the six experiments above, whose records stay as they are. It also adds two
 measurements those benches never made: a direct Q_kick (DR-0002 Row 4's open
-item) and a full-cycle average power. See its README for the verdicts and how
+item, validated against a known-charge fixture) and a full-cycle average
+power. See its README for the verdicts and how
 they differ from DR-0002's.
 
 **Whole-latch offset across a common-mode band (issue #79).**

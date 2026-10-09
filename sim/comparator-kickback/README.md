@@ -13,7 +13,13 @@ source (≤ 8 fC/side, ≤ 30 µV stretch), with the peak excursion into the
 1 kΩ / 100 fF drive recorded but deliberately unbounded until a driving stage
 is named.
 
-> **This bench does not yet emit the ratified charge quantity.** No
+> **This bench does not emit the ratified charge quantity; the direct
+> measurement lives in the `klt sim` port.** (Issue #78 decided not to port it
+> here.) The 0 V ammeter + integrator Q_kick instrument, its known-charge
+> validation (unipolar, negative, zero-net bipolar and restoring-resistor
+> injections) and its 45-point result (23.6 ... 31.5 fC, 39/45 over 25 fC) are
+> in [`sim/klt-corner-verification/`](../klt-corner-verification/README.md).
+> What follows describes THIS bench as it stands. No
 > `measure:` key in [`testbench/tb.json`](testbench/tb.json) reports Q_kick —
 > the one charge-shaped key, `q_resid_small_ac`, is the attocoulomb
 > *differential residue* on the floating branches B/C, a different quantity.
