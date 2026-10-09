@@ -10,6 +10,9 @@ bsim4v5.out
 # sim/ harness: per-corner ngspice logs under corners/ are committed evidence
 # (append-only record trail), so they escape the *.log rule.
 !sim/*/corners/**/*.log
+# klt sim campaign artifacts (per-corner ngspice logs + generated decks) are
+# committed evidence too (sim/klt-corner-verification/README.md).
+!sim/klt-corner-verification/campaigns/**/*.log
 # sim/ harness scratch: generated decks for in-flight runs (deleted on exit,
 # but a crashed or interrupted run leaves them behind).
 sim/.work/

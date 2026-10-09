@@ -40,6 +40,17 @@ number as a *reportable lower bound*.
 Metastability and kickback are first-class rows here, not appendices, per
 [`CLAUDE.md`](../CLAUDE.md).
 
+**`klt sim` corner verification (T1 item 5, issue #62).**
+[`klt-corner-verification/`](klt-corner-verification/) re-measures every
+DR-0002 row against the same schematic DUT as `klt sim` corner-matrix
+envelopes over the full 45-point grid. It runs on the batch fleet, and
+`sim/kltsim/grade.py` grades it literally against DR-0002. It is a separate
+evidence trail in `klt`'s own envelope format: it does not relabel or replace
+the six experiments above, whose records stay as they are. It also adds two
+measurements those benches never made: a direct Q_kick (DR-0002 Row 4's open
+item) and a full-cycle average power. See its README for the verdicts and how
+they differ from DR-0002's.
+
 Plus one supporting confirmation, not a spec-row bench:
 
 ```
@@ -159,6 +170,20 @@ version mismatch have cleared.
 **Unblocked when** either the worker spec provides ngspice >= 46 (a change to
 the worker spec in 2AMLogic/2am `infra/aws/loom-worker/`, not a host change),
 or the fleet runner image reaches a klt that supports `osdi_preload`.
+
+**A batch path that does work (issue #62, 2026-10-09).** The
+[`klt-corner-verification/`](klt-corner-verification/) campaign ran
+the full grid on the batch fleet and produced graded envelopes. It avoids both
+blockers in the table: it submits with the **CI-pinned** client (klt
+`0.5.0+ge8ca621a6961`, from a venv in the worktree; the host's 0.7.0 is not
+used), so client and runner versions match. It also needs no
+`osdi_preload`: every netlist body carries its own `.control` block that
+`pre_osdi`-loads the runner image's baked OSDI models
+(`/opt/pdk/ihp-sg13g2/libs.tech/ngspice/osdi/`), which is the workaround
+documented in `sim/kltsim/build.py` (klayout-tools#2666). The envelopes record
+ngspice 46 on the runner. This route does not unblock the local row, and it is
+not the `osdi_preload` request form the pex leg uses. Adapting the pex leg to
+it is #61's call.
 
 **If a preflight fails:** record the failure verbatim as an append-only
 attempt, as the committed pex attempt does. Do not relax the spec, do not pass

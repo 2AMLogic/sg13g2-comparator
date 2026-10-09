@@ -1,0 +1,166 @@
+{
+  "_comment": [
+    "DR-0002 row/sub-bound inventory for the issue #62 klt sim corner campaign.",
+    "Every bound, unit, statistical basis and condition below is COPIED from",
+    "spec/decision-records/0002-target-spec-ratification.md (ratified via PR #18)",
+    "and README.md's ratified table -- this file restates nothing and relaxes",
+    "nothing. `target`/`stretch` are null where DR-0002 ratifies no bound for",
+    "that column (graded NOT SPECIFIED, never PASS). `evidence` maps each",
+    "sub-bound either to a measurement in a klt sim envelope of this campaign",
+    "(sim/kltsim/benches.py) or to a named evidence gap. sim/kltsim/grade.py",
+    "is the only consumer."
+  ],
+  "spec_source": "spec/decision-records/0002-target-spec-ratification.md",
+  "grid": {
+    "process": ["tt", "ff", "ss", "fs", "sf"],
+    "supply_v": [1.08, 1.2, 1.32],
+    "temperature_c": [-40, 27, 125]
+  },
+  "rows": [
+    {
+      "id": "1",
+      "row": "Offset sigma",
+      "sub_bound": "input-referred offset, 3 sigma, calibration-free, at every PVT point",
+      "unit": "mV",
+      "target": {"max": 15.0},
+      "stretch": {"max": 8.0},
+      "condition": "whole latch (comparator_dut), differential axis at dut_vcm = 0.6 V; no common-mode claim (DR-0002 'What this record does not ratify')",
+      "statistical_basis": "Monte Carlo over SG13G2's shipped per-instance local-mismatch models (mos_<p>_mismatch sections), N = 60 draws per PVT point, base seed 20260916 (DR-0002 Row 1: whole-latch bench N = 60, seed 20260916, sigma precision +/-9.1 %); the row is met only if the WORST point meets it",
+      "evidence": {
+        "kind": "klt_sim",
+        "bench": "offset_mc",
+        "measurement": "vos_mv",
+        "reduction": "mc_per_corner_3sigma",
+        "expected_n": 60,
+        "quantization_step": 3.0
+      }
+    },
+    {
+      "id": "2",
+      "row": "Input-referred noise",
+      "sub_bound": "differential, input-referred, total integrated rms; compliance path = whole-latch transient-noise decision statistics with seeds and run counts committed",
+      "unit": "mV rms",
+      "target": {"max": 1.0},
+      "stretch": {"max": 0.6},
+      "condition": "TRNOISE-injected transient decision statistics on comparator_dut, N = 80 trials per rung per PVT point, 3 rungs; DR-designated statistic = grid-wide mean of the per-point two-rung probit-slope sigma (+/-13 % per-corner scatter at N = 80)",
+      "statistical_basis": "transient-noise decision statistics (DR-0002 Row 2); the .noise figure on the reduced sub-model is a reportable lower bound only, never compliance",
+      "evidence": {
+        "kind": "klt_sim",
+        "bench": "transient_noise",
+        "measurement": "hit_plus / hit_minus (hit_zero = injection guard)",
+        "reduction": "mc_probit_slope_grid_mean",
+        "plus": "hit_plus",
+        "minus": "hit_minus",
+        "zero": "hit_zero",
+        "od_x_mv": 1.0,
+        "expected_n": 80,
+        "zero_guard": {"min": 0.1, "max": 0.9},
+        "_zero_guard_source": "sim/comparator-transient-noise/testbench/tb.json checks.frac_high_zero (the original bench's noise-is-actually-injected guard)",
+        "reduction_note": "klt sim measures every trial (one Monte-Carlo sample = one trial, N = 80 per PVT point) and reports each rung's per-corner mean = hit fraction; the DR-designated statistic (per-point two-rung probit-slope sigma, then the grid-wide mean) is a cross-sample, cross-measurement reduction klt sim cannot grade, so sim/kltsim/grade.py computes it from those klt-reported means. The envelopes' own status therefore reflects only the per-sample validity gates, never this row's verdict. ngspice-46's TRNOISE ignores klt's per-sample `.options seed=`, so the draws are independent but NOT reproducible; the grader refuses any point whose samples repeat a raw noise draw.",
+        "tool_gap": "2AMLogic/klayout-tools#2960 (no gradeable population statistic over two measurements / per-corner populations); #2963 (the Monte-Carlo seed contract does not cover TRNOISE: draws are pid-seeded, so separate batch jobs can share noise streams); see also #2482 (one analysis per corner)",
+        "retained_record": {
+          "path": "sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md",
+          "format": "this repo's append-only record format (not a klt envelope)",
+          "recorded_value": "grid-wide mean implied 1-sigma decision noise 1.335 mV (per-point 0.889 ... 2.710 mV), 45/45 points, N = 80 per rung",
+          "recorded_verdict_target": "NOT MET",
+          "recorded_verdict_stretch": "NOT MET",
+          "binding": "grid-wide mean (the DR-designated statistic); worst single point tt_125c_1.08v (2.710 mV)"
+        }
+      }
+    },
+    {
+      "id": "3a",
+      "row": "Decision time vs overdrive",
+      "sub_bound": "decision time at 50 mV overdrive, 1.2 V core, at every PVT point",
+      "unit": "ns",
+      "target": {"max": 1.5},
+      "stretch": {"max": 0.8},
+      "condition": "33.3 MHz strobe, delay measured on the second strobe (output must flip a latch holding the opposite answer), thresholds supply-normalized",
+      "statistical_basis": "deterministic corner matrix, mismatch off (plain mos_<p> sections)",
+      "evidence": {"kind": "klt_sim", "bench": "regeneration", "measurement": "td_od50_ns", "reduction": "per_corner",
+                   "gates": ["dout_od50_first", "dout_od50_end"]}
+    },
+    {
+      "id": "3b",
+      "row": "Decision time vs overdrive (metastability)",
+      "sub_bound": "regeneration time constant tau, worst PVT point, tau = (t(0.1 mV) - t(1 mV)) / ln 10",
+      "unit": "ps",
+      "target": {"max": 250.0},
+      "stretch": null,
+      "condition": "extracted from the (1 mV, 0.1 mV) delay pair of the regeneration bench",
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "evidence": {"kind": "klt_sim", "bench": "regeneration", "measurement": "tau_ps", "reduction": "per_corner",
+                   "gates": ["dout_od1_first", "dout_od1_end", "dout_od01_first", "dout_od01_end"]}
+    },
+    {
+      "id": "3c",
+      "row": "Decision time vs overdrive (metastability)",
+      "sub_bound": "decision time at 0.1 mV overdrive, worst PVT point",
+      "unit": "ns",
+      "target": {"max": 2.0},
+      "stretch": null,
+      "condition": "same bench and strobe as 3a",
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "evidence": {"kind": "klt_sim", "bench": "regeneration", "measurement": "td_od01_ns", "reduction": "per_corner",
+                   "gates": ["dout_od01_first", "dout_od01_end"]}
+    },
+    {
+      "id": "4a",
+      "row": "Kickback",
+      "sub_bound": "peak transient injected charge per decision edge, per side: Q_kick = max_t |integral of i_kick dt'| over 30 ... 45 ns, referenced to the node's pre-decision level at 29 ns",
+      "unit": "fC",
+      "target": {"max": 25.0},
+      "stretch": {"max": 8.0},
+      "condition": "branch A of the kickback bench: input node driven from an ideal source through R_src = 1 kohm with C_in = 100 fF to ground; NOT the net settled charge on the floating branch (a different, ~8x smaller quantity)",
+      "statistical_basis": "deterministic corner matrix, mismatch off; worst side (max of + and - input) per point",
+      "evidence": {"kind": "klt_sim", "bench": "kickback", "measurement": "qkick_fc", "reduction": "per_corner",
+                   "gates": ["dout_1k_end"]}
+    },
+    {
+      "id": "4b",
+      "row": "Kickback",
+      "sub_bound": "signal-dependent differential residue at the input nodes at the end of a 30 ns decision cycle, against a non-charge-restoring source",
+      "unit": "uV",
+      "target": {"max": 100.0},
+      "stretch": {"max": 30.0},
+      "condition": "branches B and C (1 Gohm / 1 pF, RC = 1 ms): difference between the settled differential input displacement at a 1 mV and a 100 mV input, 29 ns -> 55 ns (DR-0002 key kick_sigdep)",
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "evidence": {"kind": "klt_sim", "bench": "kickback", "measurement": "kick_sigdep_uv", "reduction": "per_corner",
+                   "gates": ["dout_float_small_end", "dout_float_big_end"]}
+    },
+    {
+      "id": "4c",
+      "row": "Kickback",
+      "sub_bound": "peak single-ended excursion into the stated 1 kohm / 100 fF drive -- a REPORTING requirement, deliberately unbounded until a driving stage is named",
+      "unit": "mV",
+      "target": null,
+      "stretch": null,
+      "reporting_requirement": true,
+      "condition": "branch A, v(apa) - v(asp), max |.| over 30 ... 45 ns",
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "evidence": {"kind": "klt_sim", "bench": "kickback", "measurement": "kick_1k_peak_mv", "reduction": "per_corner"}
+    },
+    {
+      "id": "5a",
+      "row": "Supply / power",
+      "sub_bound": "1.2 V +/-10 % LV core, -40 ... 125 C: every implemented bench exercised over the full grid, with the supply and temperature verified as applied",
+      "unit": null,
+      "target": {"coverage": true},
+      "stretch": null,
+      "condition": "supply 1.08 / 1.20 / 1.32 V, temperature -40 / 27 / 125 C, process tt/ff/ss/fs/sf",
+      "statistical_basis": "coverage of the ratified grid",
+      "evidence": {"kind": "coverage", "benches": ["regeneration", "kickback", "offset_mc", "transient_noise"]}
+    },
+    {
+      "id": "5b",
+      "row": "Supply / power",
+      "sub_bound": "average power at 33.3 MHz, INCLUDING the tail-bias reference branch",
+      "unit": "uW",
+      "target": null,
+      "stretch": {"max": 20.0},
+      "condition": "instance A of the regeneration bench on its own supply (core + its own dut_ib reference branch), average supply power over one full 30 ns cycle (30 ... 60 ns) containing one decision that flips the held output",
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "evidence": {"kind": "klt_sim", "bench": "regeneration", "measurement": "p_avg_uw", "reduction": "per_corner"}
+    }
+  ]
+}

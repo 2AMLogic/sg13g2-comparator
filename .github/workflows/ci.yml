@@ -107,3 +107,8 @@ jobs:
 
       - name: Run sim harness unit tests
         run: PYTHONPATH=sim python3 -m unittest discover -t sim -s harness.tests -p 'test_*.py'
+
+      # Issue #62: the klt sim corner-verification adapter's grading rules
+      # (sim/kltsim/), same stdlib-only contract; `sim/selftest.sh` step 0.
+      - name: Run kltsim grading unit tests
+        run: PYTHONPATH=sim python3 -m unittest discover -t sim -s sim/kltsim/tests -p 'test_*.py'

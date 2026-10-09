@@ -1,0 +1,88 @@
+* ---- bench: transient_noise (klt sim port of sim/comparator-transient-noise)
+*
+* Circuit is sim/comparator-transient-noise/testbench/tb_transient_noise.spice's,
+* carried over element for element: three whole-latch comparator_dut
+* instances at -od_x / 0 / +od_x differential overdrive, each driven through
+* its OWN trnoise() source at the calibrated density (vn_na = 5.735e-3 at
+* vn_ts = 20 ps <=> 36.27 nV/sqrt(Hz), white only, the original tb.json's
+* params copied verbatim), one strobe, the decision read INSIDE the evaluate
+* phase at 5 ns (CLK falls at 5.1 ns), mismatch off (plain mos_<p> sections).
+* Solver options are the original tb.json's (reltol=1e-2 abstol=1e-12).
+*
+* What changes, and why:
+*
+* 1. ONE TRIAL PER klt sim MONTE-CARLO SAMPLE, not a `dowhile ... reset`
+*    loop. klt sim owns the .control block (one analysis per corner unit,
+*    klayout-tools#2482), so the original's in-process loop of N = 80 trials
+*    cannot be expressed. Instead the request asks for monte_carlo n = 80:
+*    80 separate ngspice runs per PVT point, each one trial. The per-corner
+*    MEAN of a 0/1 decision probe over those 80 samples is exactly the
+*    original's frac_high_* (fraction of trials deciding HIGH).
+*
+* 2. SUPPLY-TRACKING CLOCK (same change as the other klt benches): klt sim
+*    sweeps supply with `alter vsup=<V>`, which does not reach a .param'd
+*    pulse amplitude, so the strobe is a unit pulse scaled by v(vdd).
+*
+* 3. BINARIZED DECISION PROBES h0/h1/h2 = u(dout/vdd - 0.5), so each sample
+*    contributes exactly 0 or 1 and klt's per-corner mean is a fraction, not
+*    an average of partially-resolved voltages. Resolution gates (|dout/vdd
+*    - 0.5| >= 0.4 at 5 ns) reject a sample whose output had not resolved.
+*
+* 4. A RAW-NOISE INDEPENDENCE PROBE. ngspice-46's TRNOISE generator is not
+*    controlled by setseed / set rndseed / .options seed
+*    (sim/comparator-transient-noise/README.md, "Seed reproducibility"), so
+*    klt's per-sample `.options seed=` does NOT make these draws
+*    reproducible, and whether 80 separately launched runs draw INDEPENDENT
+*    noise is an empirical property of the engine, not of klt's seed
+*    contract. The request therefore measures the injected source value
+*    itself at three instants; kltsim.grade refuses a PVT point if any two
+*    of its samples report an identical draw (duplicated noise streams).
+*    v(vd0) at those instants is a pure source value -- the DUT does not
+*    load an ideal voltage source -- so equal values across two samples can
+*    only mean equal random streams.
+
+.options reltol=1e-2 abstol=1e-12
+
+.param vn_na=5.735e-3
+.param vn_ts=2e-11
+.param od_x=1e-3
+.param od_xn={-1*od_x}
+
+vsup vdd 0 dc 1.2
+vcm  cm 0 dc {dut_vcm}
+
+* ---- rung 0: zero overdrive (noise-is-actually-injected guard) ----------
+vd0  vd0 0 dc 0      trnoise({vn_na} {vn_ts} 0 0)
+Eap0 ap0 cm vd0 0 0.5
+Ean0 an0 cm vd0 0 -0.5
+ib0  vdd ibn0 dc {dut_ib}
+X0   ap0 an0 clk ibn0 dout0 doutb0 vdd 0 comparator_dut
+
+* ---- rung +: +od_x --------------------------------------------------------
+vd1  vd1 0 dc {od_x}  trnoise({vn_na} {vn_ts} 0 0)
+Eap1 ap1 cm vd1 0 0.5
+Ean1 an1 cm vd1 0 -0.5
+ib1  vdd ibn1 dc {dut_ib}
+X1   ap1 an1 clk ibn1 dout1 doutb1 vdd 0 comparator_dut
+
+* ---- rung -: -od_x --------------------------------------------------------
+vd2  vd2 0 dc {od_xn} trnoise({vn_na} {vn_ts} 0 0)
+Eap2 ap2 cm vd2 0 0.5
+Ean2 an2 cm vd2 0 -0.5
+ib2  vdd ibn2 dc {dut_ib}
+X2   ap2 an2 clk ibn2 dout2 doutb2 vdd 0 comparator_dut
+
+* ---- strobe: original `pulse(0 {vdd_val} 1n 100p 100p 4n 20n)`, scaled ---
+vclku clku 0 pulse(0 1 1n 100p 100p 4n 20n)
+Bclk  clk  0 v = 'v(clku)*v(vdd)'
+
+* ---- supply-normalized decision probes and their 0/1 binarization --------
+Bd0 dn0 0 v = 'v(dout0)/v(vdd)'
+Bd1 dn1 0 v = 'v(dout1)/v(vdd)'
+Bd2 dn2 0 v = 'v(dout2)/v(vdd)'
+Bh0 h0 0 v = 'u(v(dout0)/v(vdd)-0.5)'
+Bh1 h1 0 v = 'u(v(dout1)/v(vdd)-0.5)'
+Bh2 h2 0 v = 'u(v(dout2)/v(vdd)-0.5)'
+
+* ---- corner-application probe (see regeneration bench) ------------------
+Btchk tcheck 0 v = 'temper'

@@ -47,6 +47,13 @@ if PYTHONPATH=sim python3 -m unittest discover -t sim -s harness.tests -p 'test_
 else
   bad "harness unit tests"
 fi
+# The klt sim corner-verification adapter's grading rules (issue #62):
+# same stdlib-only, writes-nothing contract.
+if PYTHONPATH=sim python3 -m unittest discover -t sim -s sim/kltsim/tests -p 'test_*.py' -v; then
+  ok "kltsim grading unit tests"
+else
+  bad "kltsim grading unit tests"
+fi
 
 note "1. environment, OSDI models, toolchain pins and DUT interface contract"
 if "${RUNNER[@]}" --check-env; then ok "environment"; else bad "environment"; fi

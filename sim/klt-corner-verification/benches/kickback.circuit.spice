@@ -1,0 +1,107 @@
+* ---- bench: kickback (klt sim port of sim/comparator-kickback) ----------
+*
+* Circuit is sim/comparator-kickback/testbench/tb_kickback.spice's, carried
+* over element for element (branch A: 1 kohm / 100 fF; branches B/C: 1 Gohm
+* / 1 pF floating inputs at 1 mV and 100 mV), with two changes:
+*
+* 1. SUPPLY-TRACKING CLOCK. klt sim sweeps supply by `alter vsup=<V>`, which
+*    does not reach the original `pulse(0 {vdd_val} ...)` amplitude, so the
+*    strobe here is a unit pulse scaled by the live supply node (Bclk) --
+*    same timing, rail-to-rail at every supply corner.
+*
+* 2. A DIRECT Q_kick MEASUREMENT on branch A, which DR-0002 Row 4 names as an
+*    open item ("A direct Q_kick measurement in the kickback bench"). The
+*    original deck emits no charge at all; DR-0002 Row 4 (b) shows the only
+*    available estimator (peak volts x C_in) under-reports by ~1.3-2.9x.
+*    Here each branch-A DUT input pin is reached through a 0 V ammeter
+*    (vkp / vkn), so i(vkp) is exactly the DUT + input pin's own current.
+*    A behavioural current source integrates it onto a 1 pF capacitor
+*    (Bqp -> qp), so v(qp) [V] x 1000 is the running pin charge in fC. Sign:
+*    oriented so that v(qp) RISES when the DUT pushes charge INTO node apa
+*    (checked in the single-corner smoke: v(qp) - v(qp)@29ns peaks positive
+*    in the same window where v(ad) = v(apa) - v(asp) peaks positive). The
+*    sign does not enter the graded number, which is an absolute value. The
+*    request measures v(qp) at 29 ns (DR-0002's pre-decision reference) and
+*    its max/min over the 30 ... 45 ns window, so
+*        Q_kick = max_t |q(t) - q(29 ns)|,  t in [30 ns, 45 ns]
+*    which is DR-0002 Row 4's definition `max_t |int i_kick dt'|` verbatim.
+*    The ammeters are ideal 0 V sources and the integrators load nothing,
+*    so the circuit the DUT sees is the original one. Rqp only gives the
+*    integrator node a DC path: tau = 1 ms (~10^5 x the 15 ns window), and
+*    small enough that the pin's DC leakage parks v(qp) at only mV, so the
+*    6-significant-figure .meas print keeps sub-0.001 fC resolution.
+
+.options reltol=1e-4 vntol=1e-9 abstol=1e-15 chgtol=1e-16
+
+.param rsrc=1k
+.param cin=100f
+.param rfloat=1G
+.param cfloat=1p
+.param dv_small=1m
+.param dv_big=100m
+
+vsup vdd 0 dc 1.2
+vcm  cm 0 dc {dut_vcm}
+
+* One strobe at 30 ns, as in the original (`pulse(0 {vdd_val} 30n 100p
+* 100p 10n 30n)`), scaled by the altered supply.
+vclku clku 0 pulse(0 1 30n 100p 100p 10n 30n)
+Bclk  clk  0 v = 'v(clku)*v(vdd)'
+
+* ---- A: 1 kohm source impedance (DR-0002 Row 4's stated condition) ------
+vsa  sa 0 dc {dv_small}
+Easp asp cm sa 0 0.5
+Easn asn cm sa 0 -0.5
+Rap  asp apa {rsrc}
+Ran  asn ana {rsrc}
+Cap  apa 0 {cin}
+Can  ana 0 {cin}
+* 0 V ammeters into the DUT pins (new; see header item 2)
+vkp  apa apa_pin dc 0
+vkn  ana ana_pin dc 0
+iba  vdd ibna dc {dut_ib}
+Xa   apa_pin ana_pin clk ibna douta doutba vdd 0 comparator_dut
+
+* ---- branch-A injected-charge integrators (new; see header item 2) ------
+Bqp  0 qp i = 'i(vkp)'
+Cqp  qp 0 1p
+Rqp  qp 0 1e9
+Bqn  0 qn i = 'i(vkn)'
+Cqn  qn 0 1p
+Rqn  qn 0 1e9
+
+* ---- B: floating high-Z input, small residue ----------------------------
+vsb  sb 0 dc {dv_small}
+Ebsp bsp cm sb 0 0.5
+Ebsn bsn cm sb 0 -0.5
+Rbp  bsp bpp {rfloat}
+Rbn  bsn bpn {rfloat}
+Cbp  bpp 0 {cfloat}
+Cbn  bpn 0 {cfloat}
+ibb  vdd ibnb dc {dut_ib}
+Xb   bpp bpn clk ibnb doutb doutbb vdd 0 comparator_dut
+
+* ---- C: floating high-Z input, large residue ----------------------------
+vsc  sc 0 dc {dv_big}
+Ecsp csp cm sc 0 0.5
+Ecsn csn cm sc 0 -0.5
+Rcp  csp cpp {rfloat}
+Rcn  csn cpn {rfloat}
+Ccp  cpp 0 {cfloat}
+Ccn  cpn 0 {cfloat}
+ibc  vdd ibnc dc {dut_ib}
+Xc   cpp cpn clk ibnc doutc doutbc vdd 0 comparator_dut
+
+* ---- near-zero-referenced probes (as in the original) -------------------
+Bad ad 0 v = 'v(apa)-v(asp)'
+Bbd bd 0 v = 'v(bpp)-v(bpn)'
+Bcd cd 0 v = 'v(cpp)-v(cpn)'
+Bbc bc 0 v = '(v(bpp)+v(bpn))/2-v(cm)'
+
+* ---- supply-normalized decision probes ----------------------------------
+Bdan dan 0 v = 'v(douta)/v(vdd)'
+Bdbn dbn 0 v = 'v(doutb)/v(vdd)'
+Bdcn dcn 0 v = 'v(doutc)/v(vdd)'
+
+* ---- corner-application probe (see regeneration bench) ------------------
+Btchk tcheck 0 v = 'temper'
