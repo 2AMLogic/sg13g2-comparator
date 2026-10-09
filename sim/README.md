@@ -50,7 +50,18 @@ the six experiments above, whose records stay as they are. It also adds two
 measurements those benches never made: a direct Q_kick (DR-0002 Row 4's open
 item, validated against a known-charge fixture) and a full-cycle average
 power. See its README for the verdicts and how
-they differ from DR-0002's.
+they differ from DR-0002's. The same directory holds the issue #80 `dut_ib` bias-point sweep
+(campaign `20261009-issue80`): a Pareto table of decision time, tau, offset,
+noise and power against bias, the basis for a later Row 5 power bound. It
+proposes no bound.
+
+**Whole-latch offset across a common-mode band (issue #79).**
+[`comparator-offset-cm-band/`](comparator-offset-cm-band/) runs the whole-latch
+offset staircase at `dut_vcm` − 50 mV, `dut_vcm` and `dut_vcm` + 50 mV as three
+paired `klt sim` campaigns on the batch fleet (same seeds, same draws per
+point). It is **characterization**: DR-0002 ratifies the offset row at
+`dut_vcm` only and no whole-latch common-mode range, so nothing there is a
+compliance verdict.
 
 Plus one supporting confirmation, not a spec-row bench:
 

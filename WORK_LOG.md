@@ -2,6 +2,24 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-09
+
+- **PR #88**: sim: whole-latch offset across a bounded common-mode band (#79)
+- **PR #87**: sim: known-charge validation of the Q_kick instrument (#78)
+- **PR #83**: feat(sim): klt sim corner verification of every DR-0002 row; cite T1 item 5 (unmet: noise and Q_kick Targets fail)
+- **PR #77**: ci: run stdlib-only sim harness unit tests as a third job
+- **PR #76**: docs(sim): backend readiness and preflight before T1 grids (#74)
+- **PR #73**: layout: klt pex extraction for T1 item 7; simulation leg blocked (#61)
+- **PR #72**: layout: LVS of the comparator, cite match as T1 item 4 (#60)
+- **Issue #86** (closed): Guard telemetry: resolve bounded worktree variables before denying writes
+- **Issue #85** (closed): Guard telemetry: retain protection against literal @path raw-field bodies
+- **Issue #79** (closed): Characterize whole-latch offset across a bounded common-mode band
+- **Issue #78** (closed): Measure peak per-side kickback charge with source restoration included
+- **Issue #75** (closed): CI: run the stdlib-only sim harness unit tests (no PDK needed) as a third tool-light job
+- **Issue #74** (closed): Document sim backend readiness and preflight before submitting T1 grids (#61-#64 blocked on OSDI v0.4 / runner version)
+- **Issue #62** (closed): Corner verification: mint klt sim corner-matrix envelopes for the DR-0002 spec rows and cite them (T1 item 5)
+- **Issue #60** (closed): LVS: klt lvs of the comparator layout against design/comparator.spice, cite the match (T1 item 4)
+
 ### 2026-10-08
 
 - **PR #70**: DRC: klt drc on the comparator layout, cite clean report (T1 item 3)

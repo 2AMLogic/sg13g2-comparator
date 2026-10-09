@@ -126,8 +126,18 @@ def compose_fixture_request(bench: Bench, netlist_name: str) -> dict:
     return request
 
 
-def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON) -> str:
+def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
+                 param_overrides: dict | None = None) -> str:
+    """``param_overrides`` replaces named ``sim/dut.json`` operating-point
+    parameters in the emitted ``.param`` lines only (issue #80's bias-point
+    sweep). The file itself is never edited, and each override is stated in
+    the body header so it is visible in the hashed netlist."""
     binding = load_dut_binding(dut_json)
+    params = dict(binding.get("params") or {})
+    for key in (param_overrides or {}):
+        if key not in params:
+            raise BuildError(f"override of {key!r}: not a sim/dut.json param")
+    params.update(param_overrides or {})
     dut_path: Path = binding["_netlist_path"]
     dut_bytes = dut_path.read_bytes()
     dut_text = dut_bytes.decode("utf-8")
@@ -147,6 +157,13 @@ def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON) -> str:
         f"*   DUT:     {dut_rel}  sha256={sha256_bytes(dut_bytes)}",
         f"*            sim/dut.json id={binding.get('id')} provenance={binding.get('provenance')}",
         f"*   OSDI:    {osdi_dir}",
+    ]
+    if param_overrides:
+        lines.append(
+            "*   OVERRIDE (issue #80 sweep; sim/dut.json untouched): "
+            + ", ".join(f"{k}={v!r}" for k, v in sorted(param_overrides.items()))
+        )
+    lines += [
         "*",
         "* klt sim netlist-body convention: no .lib / .temp / analysis / .end here --",
         "* klt sim generates those per corner around an .include of this file. The",
@@ -158,7 +175,7 @@ def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON) -> str:
     ]
     lines += [f"pre_osdi {osdi_dir.rstrip('/')}/{name}" for name in OSDI_MODELS]
     lines += [".endc", "", "* ---- DUT operating point (sim/dut.json params) ----"]
-    for key, value in sorted((binding.get("params") or {}).items()):
+    for key, value in sorted(params.items()):
         lines.append(f".param {key}={value!r}")
     if bench.params:
         lines += ["", "* ---- bench parameters (sim/kltsim/benches.py) ----"]
@@ -256,6 +273,7 @@ def write_bench_inputs(
     target: str,
     osdi_dir: str | None = None,
     split: bool = True,
+    param_overrides: dict | None = None,
 ) -> tuple[Path, list[Path]]:
     """Write ``<bench>.body.spice`` and its request(s) into out_dir.
 
@@ -274,7 +292,8 @@ def write_bench_inputs(
     out_dir.mkdir(parents=True, exist_ok=True)
     body_name = f"{bench.name}.body.spice"
     body_path = out_dir / body_name
-    body_path.write_text(compose_body(bench, osdi_dir), encoding="utf-8")
+    body_path.write_text(
+        compose_body(bench, osdi_dir, param_overrides=param_overrides), encoding="utf-8")
     backend = "batch" if target == "batch" else "local"
     requests: list[Path] = []
     if split and bench.split_by_process:
