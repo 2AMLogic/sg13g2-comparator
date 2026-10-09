@@ -1,0 +1,76 @@
+{
+  "stackup": [
+    {
+      "name": "GatPoly",
+      "layer": "5/0",
+      "role": "gate",
+      "active_layer": "1/0"
+    },
+    {
+      "name": "Metal1",
+      "layer": "8/0"
+    },
+    {
+      "name": "Metal2",
+      "layer": "10/0"
+    },
+    {
+      "name": "Metal3",
+      "layer": "30/0",
+      "label_layer": "30/25"
+    }
+  ],
+  "vias": [
+    {
+      "name": "Cont",
+      "layer": "6/0",
+      "between": [
+        "GatPoly",
+        "Metal1"
+      ]
+    },
+    {
+      "name": "Via1",
+      "layer": "19/0",
+      "between": [
+        "Metal1",
+        "Metal2"
+      ]
+    },
+    {
+      "name": "Via2",
+      "layer": "29/0",
+      "between": [
+        "Metal2",
+        "Metal3"
+      ]
+    }
+  ],
+  "nets": [
+    {
+      "name": "vdd",
+      "kind": "supply"
+    },
+    {
+      "name": "vss",
+      "kind": "supply"
+    },
+    {
+      "name": "vbias",
+      "kind": "signal"
+    }
+  ],
+  "ties": [
+    {
+      "name": "nwell_vdd",
+      "well_layer": "31/0",
+      "tap_layer": "1/0",
+      "tap_requires": [
+        "7/0",
+        "6/0"
+      ],
+      "connect_to": "Metal1",
+      "net": "vdd"
+    }
+  ]
+}
