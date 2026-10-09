@@ -5,7 +5,7 @@
   "tier": null,
   "t1_item_count": 11,
   "build_t1_item_count": 11,
-  "t1_met_count": 2,
+  "t1_met_count": 3,
   "source_doc": "docs/design-evidence-tiers.md",
   "source_doc_content_hash": "sha256:5ce13a12f12bfeb3ca07f45c7527e3423d69872f7f52a4bd0762099292e1c2e9",
   "build": {
@@ -228,10 +228,49 @@
       "notes": [
         "Both columns rest on the same `klt erc` **supply spec** run (`docs/cli/erc.md`): a spec declaring every supply as a `nets[]` entry with `\"kind\": \"supply\"`, a stackup covering the layers the supply is routed on, and the `ties[]` declarations for the well/substrate taps. Every declared supply must resolve to exactly **one** electrical island \u2014 no `erc.unconnected_net` and no `erc.supply_short` naming it \u2014 and the run must report zero `erc.missing_tie`, from a tie the run actually *checked*: a `ties[]` entry `klt erc` reports as degenerate (`erc_coverage.skipped[]`, reason `degenerate_tap_declaration`, issue #2199) returns zero for a reason that has nothing to do with taps, and renders `supply_spec_incomplete` rather than a met item \u2014 the same rule that already rejects a spec declaring no `ties[]` at all. Those are the rules this item grades, not the report's overall `status`: an antenna verdict or a floating-gate finding is a real defect, but it is not this item's subject and does not block it (#1994). IR-drop and EM (`klt power`) stay deliberately **outside** this item \u2014 see \"Power/IR-drop + EM evidence\" below. This item is the *structural* question (\"is the supply connected to what it powers\"), not the *analysis* question (\"how far does it droop, and does any segment exceed its EM limit\"). **Caveat (issue #2180)**: `erc.unconnected_net` can be a false positive for a declared supply whose real continuity in silicon runs through diffusion/well material outside the declared `stackup` \u2014 see `docs/cli/erc.md`'s \"Known false-positive: diffusion/well continuity is not modeled\" section. A grader who sees a multi-island `erc.unconnected_net` finding on a guard-ring/well-tap-strapped supply should not treat it as a confirmed power-delivery defect on its own \u2014 cross-check against an independent, device-aware LVS run first (and confirm that LVS deck's own connectivity setup does not join nets by label alone, e.g. via a bare `connect_implicit('*')` rule, before trusting a \"match\" verdict as that independent check). **Caveat (issue #2183)**: the mirror-image false positive applies to `erc.supply_short`. `klt erc` traces conductor geometry with no device recognition, so a drawn device body on a declared role \u2014 a poly resistor, a poly fuse, a MiM/MOM capacitor plate \u2014 reads as a wire. A block that deliberately spans its two supplies through such a device (a power-on-reset divider, a brown-out detector, a supply-referenced bias string) therefore reports an `erc.supply_short` that is an artifact of the declaration, not a power-delivery defect. **Declare those bodies in the spec's `devices[]` array** \u2014 see `docs/cli/erc.md`'s \"Device bodies are not wires\" section \u2014 and the item becomes gradeable for such a block. A grader seeing an `erc.supply_short` on a supply-sensing analog block should check the cited report's `provenance.devices` (empty, or missing the bodies on the conducting path) before reading the finding as a real short. **`--deck` (issue #2204) removes the need for hand-declaration for a device a curated extraction deck already knows about**: running the same supply-spec check with `--deck <name>` (e.g. `gf180mcu`/`sky130`) auto-carves out every deck-recognised `ResistorDevice`/`CapacitorDevice` body whose conducting-body layer matches a declared `stackup`/`vias` role, echoed in `provenance.devices` exactly as a hand-declared entry is (plus `source: \"deck\"`) \u2014 see `docs/cli/erc.md`'s \"Deck-driven device-marker auto-detection\". A run without `--deck`, or whose device is not yet covered by any curated deck's `resistors`/ `capacitors` tables, still needs the explicit `devices[]` declaration above; a grader should check `provenance.deck` alongside `provenance.devices` before treating a clean `erc.supply_short` read as covered by auto-detection rather than a hand-declaration that happens to be present."
       ],
-      "status": "unmet",
-      "reason": "no_evidence",
+      "status": "met",
+      "reason": null,
       "graded_by_build": true,
-      "citation": null
+      "citation": {
+        "file": "layout/comparator/erc_report.json",
+        "command": null,
+        "kind": "erc",
+        "check_status": "not_checked",
+        "content_hash": "sha256:67e44380bac6f5b2eb52ac80cfc0422856e06a8b12cd7526b36717531655ea41",
+        "input_verified": true,
+        "exit_status": 0,
+        "parts": [
+          {
+            "file": "layout/comparator/erc_report.json",
+            "command": null,
+            "kind": "erc",
+            "check_status": "not_checked",
+            "content_hash": "sha256:67e44380bac6f5b2eb52ac80cfc0422856e06a8b12cd7526b36717531655ea41",
+            "input_verified": true,
+            "exit_status": 0
+          },
+          {
+            "file": "layout/comparator/lvs_report.json",
+            "command": null,
+            "kind": "lvs",
+            "check_status": "match",
+            "content_hash": "sha256:6970e7e51951f876f68536d37d37adf16e5ff121862c9ee60a8be94ff6a3bf0b",
+            "input_verified": true,
+            "exit_status": 0
+          }
+        ],
+        "power_delivery": {
+          "partition_kind": "analog",
+          "supply_nets": [
+            "vdd",
+            "vss"
+          ],
+          "pdn": false,
+          "strap_layers": [],
+          "tapcell_master": null,
+          "power_connectivity_status": "unchecked"
+        }
+      }
     },
     {
       "tier": "T2",

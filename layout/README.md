@@ -7,6 +7,8 @@ one-command flow that regenerates and checks it (issue #58, T1 item 2).
 |---|---|
 | `comparator/comparator.gds` | **The committed stream.** One flat top cell, `comparator`, 31.46 x 76.00 um, dbu 1 nm. |
 | `comparator/drc_report.json` | **Committed evidence (issue #59, T1 item 3).** The `klt drc --deck sg13g2 --top comparator` JSON envelope for the stream: `status: clean`, 0 violations. Cited by `manifests/sg13g2-comparator.json`. |
+| `comparator/erc_supply_spec.json`, `comparator/erc_report.json` | **Committed evidence (issue #38, T1 item 11).** The `klt erc` supply-spec request and its JSON envelope for the stream: 0 findings, nothing skipped. Cited, together with `lvs_report.json`, by `manifests/sg13g2-comparator.json`. |
+| `comparator/erc_tool.py` | Derives the ERC request from `common_sg13g2.py`, judges envelopes, and builds the broken temp fixtures of the negative controls. |
 | `comparator/generate.py` | The generator. It draws the stream from a device table that it first reconciles with `design/comparator.spice`. |
 | `comparator/check_stream.py` | Structural smoke test of a stream: top cell, ports, no host paths. |
 | `common_sg13g2.py` | SG13G2 layer table, rule values and drawing primitives (boxes, contacts, vias). |
@@ -14,7 +16,7 @@ one-command flow that regenerates and checks it (issue #58, T1 item 2).
 
 Downstream work reads the stream at `layout/comparator/comparator.gds`, top
 cell `comparator`. That covers DRC #59, LVS #60, post-layout #61 and
-power-delivery #38.
+power-delivery #38 (stage 7).
 
 ## Regenerating it
 
@@ -80,7 +82,8 @@ The generator alone needs only the `klayout` Python module:
    Result: `status: match`, engine `klayout` 0.30.10, 24/24 devices, 18/18
    nets, 8/8 pins (`vinp vinn clk vbias dout doutb vdd vss`, including the
    independent `vbias` pin and `vdd`/`vss`, each with an identical
-   layout/reference entry in `net_correspondence`, which is what #38 cites),
+   layout/reference entry in `net_correspondence`, which item 11 cites next to
+   the stage 7 ERC envelope),
    0 mismatches, 0 warnings.
 
    Limits of the verdict, stated plainly:
@@ -92,7 +95,8 @@ The generator alone needs only the `klayout` Python module:
    - `body_verification.status` is `unchecked` (pre-extracted netlist form, so
      no deck establishes the tap convention). Body connections are not
      verified by this evidence.
-   - ERC and post-layout (parasitic) simulation are separate work (#38, #61).
+   - Supply geometry is checked by stage 7 (ERC, #38); post-layout (parasitic)
+     simulation is separate work (#61).
    - `provenance.input.content_hash` (the value the manifest pins) is the
      hash of the extracted netlist only. The tool does not tie it to the GDS
      or to `design/comparator.spice`, so `--check` proves those links itself
@@ -122,6 +126,65 @@ The generator alone needs only the `klayout` Python module:
    the committed envelope to be fresh (`klt drc --check`). The stage fails
    unless `status` is `clean`, and prints the coverage gaps (quoted in
    `manifests/README.md`).
+
+7. **erc.** `klt erc --deck sg13g2 --top comparator --findings-only` with the
+   request `comparator/erc_supply_spec.json`, run from the repo root. This is
+   the T1 item 11 evidence (with the stage 4 LVS report). The request is
+   *derived*: `comparator/erc_tool.py spec` prints it from the layer table in
+   `common_sg13g2.py`, the constants `generate.py` draws with, so no layer
+   number is typed twice and `--check` fails if the committed request drifts.
+
+   | declaration | content |
+   |---|---|
+   | conductors | GatPoly 5/0 (gate role), Metal1 8/0, Metal2 10/0, Metal3 30/0 (labels from Metal3.text 30/25) |
+   | vias | Cont 6/0 (GatPoly-Metal1), Via1 19/0, Via2 29/0 |
+   | `vdd`, `vss` | `kind: supply`. The two supplies of the eight-port `.subckt comparator` in `design/comparator.spice`; no other supply port exists. |
+   | `vbias` | `kind: signal`, **not a supply**. It is an independent bias input port with its own Metal3 pin and its own LVS pin pair; this top does not tie it to vdd (that tie exists only in the `comparator_dut_latch` test wrapper). It is checked as one island that is not shorted to a supply. |
+   | tie `nwell_vdd` | well = NWell 31/0; tap = Activ 1/0 & nSD 7/0 & Cont 6/0, i.e. the contacts on the n-tap bars; reaches Metal1; net `vdd` |
+
+   The tie is *checked*, not degenerate: only the n-tap bars carry nSD (the
+   PMOS rows carry pSD, the NMOS rows neither), so the narrowing removes the
+   source/drain contacts and the run's `erc_coverage.skipped` is empty.
+
+   Result: `erc_status: clean`, 0 findings. `vdd`, `vss` and `vbias` each
+   resolve to one island, and the `nwell_vdd` tie is in `erc_coverage.checked`.
+
+   Limits, stated plainly:
+   - `klt erc` has no substrate layer to hang a tie on, so the committed
+     request declares **no p-tap (substrate) tie**. The flow checks it in a
+     temp fixture instead (below); that is a flow check, not cited evidence.
+   - Diffusion and well are not conductors in the model. `vdd`/`vss`
+     continuity is through contacts, Metal1-3 and vias only (klayout-tools
+     #2180 caveat). Each supply already resolves to one island without
+     diffusion, so the caveat's false positive does not occur here, and LVS (stage 4) independently matches
+     the same devices and nets.
+   - Taps are modelled at their contacts joined to Metal1, so a tap whose
+     contacts do not land on Metal1 would be reported.
+   - The `status` of the envelope is `not_checked`: `--findings-only`
+     skips the antenna accumulation and `sg13g2` has no antenna table in the
+     pinned `klt`. Item 11 does not grade `status`. Antenna is not claimed.
+   - No `devices[]` carve-out is declared (`provenance.devices` is empty): the
+     comparator has no poly resistor, MiM or other body spanning a rail pair.
+   - `klt erc` has no `--check`, so freshness is checked by this flow:
+     `--check` requires the request and a fresh run to reproduce the
+     committed files byte-for-byte. `provenance.input.content_hash` (pinned
+     by the manifest) is the GDS hash, the same value item 3 pins.
+
+   Negative controls (temp copies of the stream only; committed geometry is
+   never edited), each of which MUST give the named result:
+
+   | mutation | expected |
+   |---|---|
+   | every Via2 under the leftmost vdd track removed | `erc.unconnected_net` |
+   | Metal3 strap between the vdd and vss tracks | `erc.supply_short` |
+   | nSD removed | `erc.missing_tie` |
+   | `tap_requires` omitted from the tie | `erc_coverage.skipped` reason `degenerate_tap_declaration` |
+   | substrate fixture with pSD removed | `erc.missing_tie` |
+
+   The substrate fixture adds a scratch layer (200/0, standing for
+   "everything outside NWell") to a temp stream and declares tie
+   `psub_vss` = Activ & pSD & Cont on `vss`. Unmutated it must be clean with
+   the tie checked: every p-tap bar reaches vss.
 
 CI runs `layout/run_flow.sh --check` on every PR. That is the
 `layout-reproducibility` job in `.github/workflows/ci.yml`.

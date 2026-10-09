@@ -45,13 +45,14 @@ why, is the rest of this document.
 |---|---|---|
 | `block` | `sg13g2-comparator` | **Required** — identifies this block's row in the fleet roll-up (2AMLogic/2am#956), which consumes exactly this file |
 | `kind` | `analog` | confirmed against the block itself, not taken from the filing: the DUT is a single-tail StrongARM dynamic latch (`design/comparator.spice`, DR-0001) on `sg13_lv_nmos`/`sg13_lv_pmos` — a continuous-time-analog comparator with no digital partition, no RTL, no standard cells, and no mixed-signal boundary to declare. The spec rows are offset-σ, input-referred noise, metastability/decision time, and kickback — all analog measurements (`README.md`'s target-spec table). Analog satisfies the Analog column only, which is the column every row below is graded against. |
-| `evidence` | items `3`, `4` and `5` | item 3 cites the `klt drc` envelope, item 4 the `klt lvs` envelope, item 5 a `klt sim` corner-matrix envelope whose own verdict is a Target **fail** (below); every other item is deliberately uncited — see "What is deliberately uncited, and why" |
+| `evidence` | items `3`, `4`, `5` and `11` | item 3 cites the `klt drc` envelope, item 4 the `klt lvs` envelope, item 5 a `klt sim` corner-matrix envelope whose own verdict is a Target **fail** (below), item 11 the compound of a `klt erc` supply-spec envelope and that same LVS envelope; every other item is deliberately uncited — see "What is deliberately uncited, and why" |
 
 ## What is deliberately uncited, and why
 
-The `klt` JSON envelopes cited here are the item 3 DRC report, the item 4 LVS report and one
+The `klt` JSON envelopes cited here are the item 3 DRC report, the item 4 LVS report (also
+part of item 11), the item 11 `klt erc` supply report and one
 item 5 `klt sim` corner envelope (`sim/klt-corner-verification/`, issue #62); no
-`klt yield`/passing `pex`/`erc` run has been minted. There is therefore nothing else the grader *accepts* to
+`klt yield`/passing `pex` run has been minted. There is therefore nothing else the grader *accepts* to
 cite, and per [#37]'s own rule — "do not
 cite an envelope that does not actually support the item" — nothing is
 borrowed to make a row go green. Every other row renders `unmet`/`no_evidence`,
@@ -105,11 +106,70 @@ row:
   envelope without a real report behind it would be a hand-rolled "yep,
   it's fine" standing in for evidence item 8 never proved, so the row is
   left `unmet`.
-- **Item 11 (Power delivery (structural))** — no `klt erc` supply run and no
-  supply-carrying LVS compare exist yet. The row exists (that is
-  this manifest's guarantee: the day the checklist has an item, this block
-  has a graded row for it) and its closing work is tracked in companion
-  issue [#38].
+- **Item 11 (Power delivery (structural))** — cited since #38; see "Item 11" below.
+
+## Item 11 (Power delivery, structural) — cited, `met`, with the evidence's limits
+
+Item 11 is a compound citation (issue [#38]): a list of two evidence files,
+both file-backed and pinned by `content_hash`.
+
+| Part | File | Pinned `content_hash` | Tool-defined value |
+|---|---|---|---|
+| `klt erc` | `layout/comparator/erc_report.json` | `sha256:67e44380bac6f5b2eb52ac80cfc0422856e06a8b12cd7526b36717531655ea41` | `provenance.input.content_hash`: the GDS (the same value item 3 pins) |
+| `klt lvs` | `layout/comparator/lvs_report.json` | `sha256:6970e7e51951f876f68536d37d37adf16e5ff121862c9ee60a8be94ff6a3bf0b` | `provenance.input.content_hash`: the extracted netlist (item 4's value; the envelope was **not** re-minted, none of its inputs changed) |
+
+**Declared supply set, reconciled against the schematic.** The ERC request
+(`layout/comparator/erc_supply_spec.json`, derived from the generator's layer
+table by `layout/comparator/erc_tool.py`) declares exactly `vdd` and `vss` as
+`kind: supply`. The ratified netlist's top is
+`.subckt comparator vinp vinn clk vbias dout doutb vdd vss`
+(`design/comparator.spice`); `vdd` and `vss` are its only supply ports (1.2 V
+LV core rail), and the grader reads `supply_nets: ["vdd", "vss"]` from the
+request. The grader cannot detect an undeclared supply, so this sentence is
+the claimant's enforcement of set completeness.
+
+**`vbias` is not a supply.** It is an independent bias input port: its own
+Metal3 pin, its own `VBIAS`-`VBIAS` entry in the LVS `net_correspondence`,
+and no geometry connecting it to vdd in this top. The older description of
+`vbias` as "tied to vdd" applies to the `comparator_dut_latch` test wrapper
+only, not to the drawn cell. The request declares it as a `kind: signal` net,
+so the run additionally proves it is one island and is not shorted to a
+supply; it is not counted among the supplies.
+
+**ERC half.** `klt erc --deck sg13g2 --top comparator --findings-only`
+reads `erc_status: clean`, 0 findings. `erc_coverage.checked` holds
+`erc.net_connectivity` for `vdd`, `vss` and `vbias`, `erc.missing_tie` for the
+`nwell_vdd` tie and `erc.floating_gate` for the 10 gate nets;
+`erc_coverage.skipped` is empty, so the tie is not a
+`degenerate_tap_declaration`. The tie is narrowed to Activ & nSD & Cont (the
+contacts of the n-tap bars; only those carry nSD) inside NWell. The envelope's
+own `status` is `not_checked` (antenna accumulation skipped by
+`--findings-only`; no antenna table exists for this deck). Item 11 does not
+grade it, and no antenna claim is made.
+
+**LVS half.** `lvs_report.json` is a `status: match` with `VDD`->`VDD` and
+`VSS`->`VSS` in `net_correspondence` (the reference is the SPICE subcircuit,
+which carries the supply pins). As for item 4, `power_connectivity` and
+`body_verification` are `unchecked`: they are not a geometric power-grid or
+body verification.
+
+**What this does not establish.**
+- No p-tap (substrate) tie is in the cited request: `klt erc` has no
+  substrate layer. `layout/run_flow.sh` checks the p-tap bars in a temp
+  fixture with a scratch layer, which is a flow check, not cited evidence.
+- Diffusion/well continuity is not modelled (klayout-tools#2180); supply
+  continuity is through contacts, Metal1-3 and vias. No finding of that kind
+  occurred, so no waiver was needed. No `devices[]` carve-out is declared (no
+  rail-spanning device body exists; `provenance.devices` is empty).
+- Not IR-drop or EM (`klt power`), not DRC coverage (item 3), not item 4's
+  signal verdict.
+- Stage 7 of `layout/run_flow.sh` (CI runs it with `--check`) re-derives the
+  request, requires the committed envelope to equal a fresh run, and runs five
+  temp-fixture negative controls (a severed vdd track gives
+  `erc.unconnected_net`; a vdd-vss strap `erc.supply_short`; no nSD
+  `erc.missing_tie`; an un-narrowed tap declaration the skipped
+  `degenerate_tap_declaration`; a p-tap fixture without pSD
+  `erc.missing_tie`), so the clean verdict is known to be falsifiable.
 
 ## Item 3 (DRC clean) — cited, with the deck's coverage gaps
 
@@ -183,7 +243,7 @@ The envelope reads `status: match` (engine `klayout` 0.30.10, klt
 `reference.form: subckt-call` the supply pins take part in the ordinary
 compare, so the signal-only power check does not apply. That is **not** a
 geometric power-grid verification. `body_verification` is also `unchecked`.
-ERC (#38) and post-layout simulation (#61) are separate work. The reference is
+Supply ERC is item 11 (#38, below); post-layout simulation (#61) is separate work. The reference is
 cut out of the schematic netlist as a workaround for
 [klayout-tools#2852](https://github.com/2AMLogic/klayout-tools/issues/2852).
 
@@ -260,7 +320,7 @@ diff /tmp/fresh.json manifests/t1-signoff-report.json   # regeneration = update 
 ```
 
 Exit `0` means every T1 item met (this repo is **not** there: exit `3`,
-`tier: null`, `2/11` item rows met at the time of freezing: items 3 and 4). Exit codes
+`tier: null`, `3/11` item rows met at the time of freezing: items 3, 4 and 11). Exit codes
 `0` and `3` are both clean runs; exit `1` is an error and must be fixed,
 not committed around.
 
@@ -286,10 +346,11 @@ not committed around.
 
 | File | What it is |
 |---|---|
-| `sg13g2-comparator.json` | the block manifest — `block`, `kind`, per-item pinned evidence citations (items 3, 4 and 5 cited; the rest deliberately uncited — see above). **The stable path a fleet roll-up points at.** |
+| `sg13g2-comparator.json` | the block manifest — `block`, `kind`, per-item pinned evidence citations (items 3, 4, 5 and 11 cited; the rest deliberately uncited — see above). **The stable path a fleet roll-up points at.** |
 | `../sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json` | the cited item 5 evidence (`klt sim` envelope, status `fail`); the rest of that campaign, its grading and its reproduction are in `../sim/klt-corner-verification/README.md` |
 | `../layout/comparator/drc_report.json` | the cited item 3 evidence (`klt drc` envelope), regenerated by `layout/run_flow.sh` |
 | `../layout/comparator/lvs_report.json` | the cited item 4 evidence (`klt lvs` envelope), with its derived inputs `lvs_extracted.spice`, `lvs_reference.spice`, `lvs_request.json`, regenerated by `layout/run_flow.sh` |
+| `../layout/comparator/erc_report.json`, `../layout/comparator/erc_supply_spec.json` | the cited item 11 `klt erc` evidence and its derived request, regenerated by `layout/run_flow.sh` (item 11 also cites `lvs_report.json`) |
 | `t1-signoff-report.json` | `klt signoff --manifest sg13g2-comparator.json --format json` output, frozen at the pinned `klt`; CI diff-checks a fresh render against it |
 | `README.md` | this claim document — kind basis, citation rationale and the disclosure of the uncited rows, the regeneration contract |
 

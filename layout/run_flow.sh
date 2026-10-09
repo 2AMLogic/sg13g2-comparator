@@ -38,6 +38,17 @@
 #                    be fresh (`klt drc --check`) and `status: clean`. The
 #                    deck's coverage gaps are printed, and are quoted in
 #                    manifests/README.md.
+#   7. erc           `klt erc --deck sg13g2 --findings-only` supply-spec run
+#                    (issue #38, T1 item 11): layout/comparator/erc_tool.py
+#                    derives erc_supply_spec.json from layout/common_sg13g2.py
+#                    (vdd/vss supplies, vbias an independent signal net, an
+#                    n-well tie narrowed to Activ&nSD&Cont); writes the
+#                    COMMITTED erc_supply_spec.json and erc_report.json, or
+#                    with --check requires both to reproduce byte-for-byte.
+#                    Then temp-dir negative controls (severed supply, supply
+#                    short, missing implant, degenerate tap declaration, and
+#                    a substrate-tie fixture with and without its implant)
+#                    must produce the expected finding.
 #
 # Tooling: everything runs on the klayout-tools build this repo pins (see
 # manifests/README.md and .github/workflows/ci.yml), and on the KLayout
@@ -61,7 +72,7 @@ MODE="run"
 case "${1:-}" in
   "") ;;
   --check) MODE="check" ;;
-  -h|--help) sed -n '2,52p' "${BASH_SOURCE[0]}"; exit 0 ;;
+  -h|--help) sed -n '2,62p' "${BASH_SOURCE[0]}"; exit 0 ;;
   *) echo "usage: $0 [--check]" >&2; exit 2 ;;
 esac
 
@@ -284,6 +295,60 @@ print(f"  layers in stream without rules: {', '.join(c['layers_in_stream_without
 if d["file"].startswith("/"):
     print(f"  FAIL: envelope embeds a host-absolute path: {d['file']}", file=sys.stderr); sys.exit(1)
 sys.exit(0 if d["status"] == "clean" else 1)
+PY
+
+say "7. erc (klt erc supply spec; T1 item 11 evidence)"
+ERC_SPEC="${REL_CELL}/erc_supply_spec.json"
+ERC_REPORT="${REL_CELL}/erc_report.json"
+ERC_TOOL="${REL_CELL}/erc_tool.py"
+cd "${REPO}"
+"${PY[@]}" "${ERC_TOOL}" spec > "${WORK}/erc_supply_spec.json"
+run_erc() {  # <gds> <spec> <out>   (exit 3/4 = findings / not_checked, still an envelope)
+  local rc=0
+  "${KLT[@]}" erc --deck sg13g2 --top "${TOP}" --findings-only --format json "$1" "$2" \
+    > "$3" 2> "${WORK}/erc.err" || rc=$?
+  [[ ${rc} -eq 0 || ${rc} -eq 3 || ${rc} -eq 4 ]] || { cat "${WORK}/erc.err" >&2; exit 1; }
+}
+if [[ "${MODE}" == "check" ]]; then
+  cmp "${WORK}/erc_supply_spec.json" "${ERC_SPEC}" || {
+    echo "  FAIL: committed ${ERC_SPEC} is stale (layer table or tie declaration changed)" >&2
+    echo "        run layout/run_flow.sh (no --check) and commit the result" >&2; exit 1; }
+  run_erc "${REL_GDS}" "${ERC_SPEC}" "${WORK}/erc_report.json"
+  cmp "${WORK}/erc_report.json" "${ERC_REPORT}" || {
+    echo "  FAIL: committed ${ERC_REPORT} differs from a fresh klt erc run" >&2
+    echo "        run layout/run_flow.sh (no --check) and commit the result" >&2; exit 1; }
+  echo "  committed spec and envelope reproduce byte-for-byte"
+else
+  cp "${WORK}/erc_supply_spec.json" "${ERC_SPEC}"
+  run_erc "${REL_GDS}" "${ERC_SPEC}" "${WORK}/erc_report.json"
+  "${PY[@]}" "${ERC_TOOL}" judge "${WORK}/erc_report.json" || exit 1
+  cp "${WORK}/erc_report.json" "${ERC_REPORT}"
+fi
+"${PY[@]}" "${ERC_TOOL}" judge "${ERC_REPORT}"
+
+econtrol() {  # <mutation> <expected token> <what it breaks>
+  local k="$1" want="$2" what="$3"
+  "${PY[@]}" "${ERC_TOOL}" mutate "$k" "${REL_GDS}" "${WORK}/erc-$k.gds" "${WORK}/erc-$k.spec.json"
+  run_erc "${WORK}/erc-$k.gds" "${WORK}/erc-$k.spec.json" "${WORK}/erc-$k.json"
+  "${PY[@]}" "${ERC_TOOL}" judge "${WORK}/erc-$k.json" --expect "${want}" \
+    || { echo "  FAIL: control ${k} (${what}) did not produce ${want}" >&2; exit 1; }
+}
+econtrol broken-supply erc.unconnected_net "vdd track severed from the stack"
+econtrol supply-short erc.supply_short "Metal3 strap vdd-vss"
+econtrol no-tap-implant erc.missing_tie "nSD removed: n-tap bars are no taps"
+econtrol degenerate-tap degenerate_tap_declaration "tap declared without narrowing"
+econtrol substrate-no-implant erc.missing_tie "substrate fixture, pSD removed"
+# Positive substrate check: every p-tap reaches vss (fixture-only; the scratch
+# layer standing for the substrate exists in the temp stream alone).
+"${PY[@]}" "${ERC_TOOL}" mutate substrate-fixture "${REL_GDS}" "${WORK}/erc-sub.gds" "${WORK}/erc-sub.spec.json"
+run_erc "${WORK}/erc-sub.gds" "${WORK}/erc-sub.spec.json" "${WORK}/erc-sub.json"
+"${PY[@]}" - "${WORK}/erc-sub.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+cov = d["erc_coverage"]
+if d["erc_findings"] or cov["skipped"] or 'erc.missing_tie:["psub_vss"]' not in cov["checked"]:
+    print("  FAIL: substrate-fixture: p-tap tie not clean/checked", file=sys.stderr); sys.exit(1)
+print("  substrate fixture: p-tap tie to vss checked, 0 findings (temp stream, not cited)")
 PY
 
 say "done (${MODE})"
