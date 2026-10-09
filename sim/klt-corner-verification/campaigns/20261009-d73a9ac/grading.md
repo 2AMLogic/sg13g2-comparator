@@ -27,7 +27,7 @@ Not every ratified Target is met on klt sim evidence:
 
 ## Gaps and incomplete points
 
-- **2** -- statistic computed by `sim/kltsim/grade.py` from klt sim's per-corner means (klt cannot grade it: 2AMLogic/klayout-tools#2960 (no gradeable population statistic over two measurements / per-corner populations); see also #2482 (one analysis per corner)). Cross-check against the retained non-klt record `sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md`: grid-wide mean implied 1-sigma decision noise 1.335 mV (per-point 0.889 ... 2.710 mV), 45/45 points, N = 80 per rung; Target NOT MET, Stretch NOT MET.
+- **2** -- statistic computed by `sim/kltsim/grade.py` from klt sim's per-corner means (klt cannot grade it: 2AMLogic/klayout-tools#2960 (no gradeable population statistic over two measurements / per-corner populations); #2963 (the Monte-Carlo seed contract does not cover TRNOISE: draws are pid-seeded, so separate batch jobs can share noise streams); see also #2482 (one analysis per corner)). Cross-check against the retained non-klt record `sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md`: grid-wide mean implied 1-sigma decision noise 1.335 mV (per-point 0.889 ... 2.710 mV), 45/45 points, N = 80 per rung; Target NOT MET, Stretch NOT MET.
 - **2** -- note: 1383/3600 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated).
 
 ## Evidence
