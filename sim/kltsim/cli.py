@@ -61,6 +61,40 @@ def _parse_overrides(items) -> dict:
     return overrides
 
 
+def _rel(path: Path) -> Path:
+    """Repo-relative form of ``path`` (as ``klt sim`` records it); a path
+    outside the repo (tests use temporary campaign dirs) is kept absolute."""
+    try:
+        return path.relative_to(build_mod.REPO_ROOT)
+    except ValueError:
+        return path
+
+
+def _json_bytes(obj) -> bytes:
+    return (json.dumps(obj, indent=2) + "\n").encode("utf-8")
+
+
+def _commit_planned(planned, args, label: str) -> bool:
+    """Write a helper command's precomputed inputs append-only (issue #105).
+
+    Every destination that exists must already hold exactly the proposed
+    bytes, else nothing is written (an identical regeneration leaves bytes and
+    timestamps alone). ``--force`` keeps its explicit scratch contract and
+    overwrites. Returns False (after printing why) on a refusal.
+    """
+    if getattr(args, "force", False):
+        for path, data in planned:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        return True
+    try:
+        build_mod.commit_inputs(planned)
+    except build_mod.BuildError as exc:
+        print(f"{label}: {exc}", file=sys.stderr)
+        return False
+    return True
+
+
 def cmd_build(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     names = args.bench or list(BENCHES)
@@ -130,13 +164,14 @@ def cmd_fixture(args) -> int:
     ``campaigns/ID/fixture/``, and write the measured-vs-analytic table."""
     bench = FIXTURE_BENCHES[args.bench]
     out_dir = _campaign_dir(args.campaign) / "fixture"
-    out_dir.mkdir(parents=True, exist_ok=True)
     body_name = f"{bench.name}.body.spice"
-    (out_dir / body_name).write_text(build_mod.compose_fixture_body(bench), encoding="utf-8")
     request_path = out_dir / f"{bench.name}.request.json"
-    request_path.write_text(
-        json.dumps(build_mod.compose_fixture_request(bench, body_name), indent=2) + "\n",
-        encoding="utf-8")
+    planned = [
+        (out_dir / body_name, build_mod.compose_fixture_body(bench).encode("utf-8")),
+        (request_path, _json_bytes(build_mod.compose_fixture_request(bench, body_name))),
+    ]
+    if not _commit_planned(planned, args, "fixture"):
+        return 1
     # Same append-only submit path as the campaign; the request pins
     # backend=local and a single unit, which host policy allows.
     code = _submit(request_path, out_dir, bench.name, args, backend="local")
@@ -175,13 +210,13 @@ def cmd_ab(args) -> int:
     ``ab.json`` comparing every dout_* / probe measurement."""
     bench = BENCHES["kickback"]
     out_dir = _campaign_dir(args.campaign) / "ab"
-    out_dir.mkdir(parents=True, exist_ok=True)
     base = build_mod.compose_body(bench, build_mod.BATCH_OSDI_DIR)
     arms = {"with_instrument": base, "without_instrument": strip_instrument(base)}
-    envs = {}
+    # Compose BOTH arms before writing or submitting anything, so a conflict
+    # in the second arm leaves the first untouched (issue #105).
+    planned = []
     for arm, body in arms.items():
         body_name = f"kickback-{arm}.body.spice"
-        (out_dir / body_name).write_text(body, encoding="utf-8")
         request = build_mod.compose_request(bench, body_name, "batch")
         request["_comment"].append(
             f"DECISIONS A/B arm `{arm}` (issue #78): one unit, {args.process} / {args.supply} V / "
@@ -193,8 +228,13 @@ def cmd_ab(args) -> int:
             # the q* measurements have no node to read; keep the decision ones
             request["measurements"] = [m for m in request["measurements"]
                                        if not m["name"].startswith(("qp", "qn", "qkick"))]
+        planned += [(out_dir / body_name, body.encode("utf-8")),
+                    (out_dir / f"kickback-{arm}.request.json", _json_bytes(request))]
+    if not _commit_planned(planned, args, "ab"):
+        return 1
+    envs = {}
+    for arm in arms:
         request_path = out_dir / f"kickback-{arm}.request.json"
-        request_path.write_text(json.dumps(request, indent=2) + "\n", encoding="utf-8")
         code = _submit(request_path, out_dir, f"kickback-{arm}", args)
         if code:
             return code
@@ -228,16 +268,23 @@ def cmd_fleet_smoke(args) -> int:
     """A deliberately tiny batch job: proves the fleet path (image OSDI dir,
     model resolution, section switching, MC seeding) before a campaign.
     Its inputs and envelope are committed under campaigns/ID/smoke/ as the
-    verification record; it is never graded as spec evidence."""
+    verification record; it is never graded as spec evidence. Inputs are
+    append-only (issue #105): each tag owns ``<tag>.body.spice`` and
+    ``<tag>.request.json``, and a changed repeat of a tag is refused."""
     bench = ALL_BENCHES[args.bench]
     out_dir = _campaign_dir(args.campaign) / "smoke"
     tag = args.tag or bench.name
     overrides = _parse_overrides(args.dut_param)
     if args.bias_probes and bench.name == "regeneration":
         bench = dataclasses.replace(bench, measurements=bench.measurements + BIAS_PROBES)
-    body, (request_path, *rest) = build_mod.write_bench_inputs(
+    _, _, files = build_mod.plan_bench_inputs(
         bench, out_dir, target="batch", split=False, param_overrides=overrides or None)
-    request = json.loads(request_path.read_text(encoding="utf-8"))
+    # Each tag owns its body (<tag>.body.spice): tags with different overrides
+    # must not share, and so invalidate, one mutable bench-named body.
+    body_name = f"{tag}.body.spice"
+    body_bytes = files[0][1]
+    request = json.loads(files[1][1].decode("utf-8"))
+    request["netlist"] = body_name
     request["_comment"].append(
         f"FLEET SMOKE `{tag}`: a reduced grid for verifying the batch path, "
         "not spec evidence (sim/kltsim/cli.py fleet-smoke)."
@@ -255,8 +302,9 @@ def cmd_fleet_smoke(args) -> int:
     if "monte_carlo" in request:
         request["monte_carlo"]["n"] = args.n
     final_request = out_dir / f"{tag}.request.json"
-    request_path.unlink()
-    final_request.write_text(json.dumps(request, indent=2) + "\n", encoding="utf-8")
+    if not _commit_planned([(out_dir / body_name, body_bytes),
+                            (final_request, _json_bytes(request))], args, "fleet-smoke"):
+        return 1
     return _submit(final_request, out_dir, tag, args)
 
 
@@ -278,8 +326,8 @@ def _submit(request_path: Path, out_dir: Path, tag: str, args,
               "use a new --campaign id", file=sys.stderr)
         return 1
     artifacts = out_dir / "artifacts" / tag
-    rel_request = request_path.relative_to(build_mod.REPO_ROOT)
-    rel_artifacts = artifacts.relative_to(build_mod.REPO_ROOT)
+    rel_request = _rel(request_path)
+    rel_artifacts = _rel(artifacts)
     # A local-backend run needs an ABSOLUTE -o: with a repo-relative one the
     # pinned klt (0.7.0) ends every unit in an `error` envelope with no
     # ngspice.log and "produced no value" for every measurement (the same
@@ -322,7 +370,7 @@ def _submit(request_path: Path, out_dir: Path, tag: str, args,
     envelope_path.write_text(proc.stdout, encoding="utf-8")
     (out_dir / f"{tag}.invocation.json").write_text(
         json.dumps(invocation, indent=2) + "\n", encoding="utf-8")
-    print(f"klt sim exit {proc.returncode} -> {envelope_path.relative_to(build_mod.REPO_ROOT)}",
+    print(f"klt sim exit {proc.returncode} -> {_rel(envelope_path)}",
           file=sys.stderr)
     return 0
 
