@@ -37,6 +37,7 @@ from the gf180-comparator source.
 | `corners.py` | The corner grid: `.LIB`-section bundles, PVT axes, and `sabotage()`. |
 | `testbench.py` | Load and validate `tb.json` manifests and their netlist fragments. |
 | `runner.py` | Compose one self-contained deck per PVT point (incl. the OSDI preflight) and run ngspice. |
+| `internal_noise.py` | Optional, off-by-default hook (issue #81): emits per-device TRNOISE sources on named internal DUT devices when `tb.json` has an `internal_noise` block; a pure function, see `sim/dut/README.md` "Optional internal-noise hook". |
 | `report.py` | Evaluate checks, render the evidence record, write logs + snapshot. |
 | `cli.py` | Argument surface and console summary. |
 

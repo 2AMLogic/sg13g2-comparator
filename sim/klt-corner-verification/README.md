@@ -404,6 +404,11 @@ run interrupted part-way through can be resumed with `--skip-existing`
   ([#81](https://github.com/2AMLogic/sg13g2-comparator/issues/81)), so the
   figure is a lower bound on the true decision noise. It already fails the
   Target.
+  **Update (issue #81, appended, nothing above edited):** the injection was
+  then extended to the regenerative pair and reset devices; with it the
+  grid mean is 1.305 mV (Target still NOT MET) and the internal term is about
+  0.18 mV rms by a model-based estimate. See
+  [`../comparator-transient-noise-full/README.md`](../comparator-transient-noise-full/README.md).
 - **Offset reads 13 % high against the DR-0002 record** (grid-mean 3σ
   9.51 vs 8.40 mV, uniform across process corners, about 5 standard errors):
   a systematic difference with an undetermined cause, tracked in

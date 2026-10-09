@@ -35,6 +35,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import internal_noise as internal_noise_mod
 from .corners import (
     DEFAULT_CORNER_SET,
     DEFAULT_NOMINAL_SUPPLY_V,
@@ -88,6 +89,9 @@ class Testbench:
     checks: dict[str, dict] = field(default_factory=dict)
     options: tuple[str, ...] = ()
     evidence: dict = field(default_factory=dict)
+    #: Optional internal-noise hook request (harness/internal_noise.py). Empty
+    #: (the default) => compose_deck emits nothing extra.
+    internal_noise: dict = field(default_factory=dict)
 
     @property
     def experiment(self) -> str:
@@ -257,7 +261,10 @@ def load(directory: str | Path) -> Testbench:
         checks=checks,
         options=tuple(manifest.get("options", ())),
         evidence=evidence,
+        internal_noise=dict(manifest.get("internal_noise") or {}),
     )
+    if tb.internal_noise:
+        internal_noise_mod.validate_block(tb.internal_noise)
     validate_netlist(tb)
     return tb
 

@@ -38,6 +38,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from harness import internal_noise as internal_noise_mod
+
 from .benches import MODELS, SUPPLIES_V, TEMPERATURES_C, Bench
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -175,6 +177,10 @@ def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
     lines += [".endc", "", "* ---- DUT operating point (sim/dut.json params) ----"]
     for key, value in sorted(params.items()):
         lines.append(f".param {key}={value!r}")
+    if bench.params:
+        lines += ["", "* ---- bench parameters (sim/kltsim/benches.py) ----"]
+        for key, value in sorted(bench.params.items()):
+            lines.append(f".param {key}={value!r}")
     lines += [
         "",
         f"{DUT_BEGIN} {dut_rel} sha256={sha256_bytes(dut_bytes)} ====",
@@ -184,6 +190,9 @@ def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
         circuit_text.rstrip("\n"),
         "",
     ]
+    if bench.internal_noise:
+        # Optional hook (issue #81): sources on named internal devices.
+        lines += internal_noise_mod.emit_internal_noise(bench.internal_noise, dut_text)
     return "\n".join(lines)
 
 
