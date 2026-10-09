@@ -140,8 +140,21 @@ The DUT, its parameters or a bench definition changed since this campaign's inpu
 ```
 
 Recovery: rerun `build` with a new `--campaign <new-id>`. Disposable local
-`smoke` directories (and `fleet-smoke` scratch requests) keep their existing
-overwrite-in-place contract.
+`smoke` directories keep their existing overwrite-in-place contract.
+
+The helper commands `fixture`, `ab` and `fleet-smoke` follow the same rule
+(issue #105). Each composes its final body and request bytes (both arms for
+`ab`) and checks them against any existing files before writing or submitting
+anything, even when a result envelope already exists. Identical regeneration
+leaves existing bytes and timestamps alone (the envelope check then still
+refuses a second submission); a changed condition, source or parameter exits 1
+with the `NEW campaign ID` message and changes no input, envelope or attempt
+log, and a conflict in the second `ab` arm leaves the first arm untouched.
+`fleet-smoke` gives every `--tag` its own `<tag>.body.spice` and
+`<tag>.request.json`, so tags with different overrides coexist. Recovery: rerun
+the command under a new `--campaign <new-id>` (or, for `fleet-smoke`, a new
+`--tag`). `--force` remains the explicit scratch-only override that replaces
+inputs and envelope; never use it on committed evidence.
 
 ### Toolchain and provenance actually used
 
