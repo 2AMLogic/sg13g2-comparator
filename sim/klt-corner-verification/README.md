@@ -124,6 +124,25 @@ a re-run uses a **new** campaign id. The Monte-Carlo benches are split into
 one request per process corner, so each fits one batch job and can be retried
 on its own.
 
+`build` is append-only too (issue #95). It composes the inputs of every
+selected bench first, then compares each destination that already exists with
+the proposed bytes. An identical rebuild succeeds and writes nothing; a bench
+that is not yet in the campaign directory is added (files are created
+exclusively, never overwritten). If any existing body or request differs
+(changed `sim/dut.json` parameter, `--dut-param`, schematic, or bench
+definition), `build` exits 1 before writing anything, even for benches earlier
+in the selection that were new:
+
+```
+build: refusing to rebuild: campaign inputs are append-only evidence and nothing was written. Conflicting input(s):
+  <campaign>/regeneration.body.spice: existing content differs from the proposed content
+The DUT, its parameters or a bench definition changed since this campaign's inputs were built. Rebuild under a NEW campaign ID (`build --campaign <new-id>`) instead of replacing these files.
+```
+
+Recovery: rerun `build` with a new `--campaign <new-id>`. Disposable local
+`smoke` directories (and `fleet-smoke` scratch requests) keep their existing
+overwrite-in-place contract.
+
 ### Toolchain and provenance actually used
 
 | | |

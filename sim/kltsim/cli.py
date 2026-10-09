@@ -65,15 +65,27 @@ def cmd_build(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     names = args.bench or list(BENCHES)
     overrides = _parse_overrides(args.dut_param)
+    # Compose EVERY selected bench's inputs before writing anything, then
+    # commit them append-only: a conflict in any bench changes no file.
+    planned: list[tuple[Path, bytes]] = []
     for name in names:
         bench = ALL_BENCHES[name]
         if args.bias_probes and name == "regeneration":
             bench = dataclasses.replace(bench, measurements=bench.measurements + BIAS_PROBES)
-        body, requests = build_mod.write_bench_inputs(
-            bench, out_dir, target="batch", param_overrides=overrides or None)
-        print(f"wrote {body.relative_to(build_mod.REPO_ROOT)}")
-        for request in requests:
-            print(f"wrote {request.relative_to(build_mod.REPO_ROOT)}")
+        planned += build_mod.plan_bench_inputs(
+            bench, out_dir, target="batch", param_overrides=overrides or None)[2]
+    try:
+        created = set(build_mod.commit_inputs(planned))
+    except build_mod.BuildError as exc:
+        print(f"build: {exc}", file=sys.stderr)
+        return 1
+    for path, _ in planned:
+        verb = "wrote" if path in created else "unchanged"
+        try:
+            shown = path.relative_to(build_mod.REPO_ROOT)
+        except ValueError:  # a campaigns dir outside the repo (tests)
+            shown = path
+        print(f"{verb} {shown}")
     return 0
 
 
