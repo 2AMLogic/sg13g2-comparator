@@ -61,6 +61,11 @@ Results (see `comparison.md` for every PVT point):
   DR-0002 harness record by the klt-per-draw vs harness gap tracked in #82.
 - Same-seed repeat (`vcm-p050`, `tt_-40c_1.08v`): 60/60 draws bit-identical.
 - Mismatch-off controls at all three conditions (`tt_27c_1.20v`): sigma = 0.
+  The control is run at the nominal PVT point (typical process, 27 C, nominal
+  supply) with N = 4. It answers a structural question that does not depend on
+  PVT: whether anything other than the mismatch draw varies between samples.
+  Any non-zero spread among the 4 otherwise-identical draws would show that.
+  The nominal point is the representative choice; it is not a sweep.
 - No clipped draws anywhere (range-adequacy gate).
 - Per-sample runtime max 3.8 s, inside the point limits.
 
@@ -74,3 +79,12 @@ completes (vos = -1.5 mV), but that is a different simulation setting and is
 not substituted into the population. Those two points report no sigma (the
 59-draw value is informational only). Whether the abort is a bench artifact
 or a convergence weakness at the low-CM edge at cold temperature is open.
+
+Issue #79's "three complete 45-point campaigns" criterion is therefore
+**deliberately partly met**: `vcm-m050` is 43/45. Completing the two points is
+tracked in #89. That work is a separately labelled supplementary campaign with
+one tighter max step applied uniformly to all three conditions at those
+points. It keeps the same seed and is never merged into this campaign's
+population. Separately, `klt sim` reports the abort only as "measurement
+produced no value", and the reason appears only in the kept `ngspice.log`.
+That tool gap is tracked at 2AMLogic/klayout-tools#2918.
