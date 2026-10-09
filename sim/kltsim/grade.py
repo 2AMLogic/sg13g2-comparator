@@ -89,6 +89,52 @@ def _norm_unit(unit: str | None) -> str | None:
     return unit.replace("µ", "u")
 
 
+class NonFiniteError(ValueError):
+    """A value that is not a finite real number (NaN, +/-inf, non-numeric)."""
+
+
+def finite(value, what: str = "value") -> float:
+    """``value`` as a finite float, or ``NonFiniteError``.
+
+    Evidence that is NaN, infinite, a bool, or not convertible to a number is
+    invalid: comparisons against a bound are meaningless for it (every
+    comparison with NaN is False; -inf passes any upper bound).
+    """
+    if isinstance(value, bool):
+        raise NonFiniteError(f"{what} is not a number ({value!r})")
+    try:
+        x = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise NonFiniteError(f"{what} is not a number ({value!r})") from None
+    if not math.isfinite(x):
+        raise NonFiniteError(f"{what} is not finite ({value!r})")
+    return x
+
+
+def _finite_or_none(value) -> float | None:
+    try:
+        return finite(value)
+    except NonFiniteError:
+        return None
+
+
+def json_safe(obj):
+    """Copy of ``obj`` with every non-finite float replaced by None, so the
+    serialised report never contains NaN / Infinity tokens."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [json_safe(v) for v in obj]
+    return obj
+
+
+def dumps_strict(obj, **kw) -> str:
+    """Strict (RFC 8259) JSON: non-finite floats become null, never tokens."""
+    return json.dumps(json_safe(obj), allow_nan=False, **kw)
+
+
 def convert(value: float, from_unit: str | None, to_unit: str | None) -> float:
     """Convert ``value`` between two units of one dimension.
 
@@ -186,8 +232,10 @@ def _corner_key(corner: dict) -> tuple[str, float, float] | None:
     if not supplies:
         return None
     first = supplies[sorted(supplies)[0]]
-    return (_process_name(corner.get("process")), round(float(first), 6),
-            float(corner.get("temperature_c")))
+    v, t = _finite_or_none(first), _finite_or_none(corner.get("temperature_c"))
+    if v is None or t is None:
+        return None  # an unplaceable corner can never cover a grid point
+    return (_process_name(corner.get("process")), round(v, 6), t)
 
 
 def check_dut(bench: BenchEvidence, dut: DutReference) -> list[str]:
@@ -258,20 +306,34 @@ def _corner_problems(corner: dict, bench_name: str, gates: list[str]) -> str | N
         m = values.get(probe)
         if m is None or m.get("value") is None:
             return f"supply probe {probe} missing"
-        if not any(abs(m["value"] - float(v)) <= SUPPLY_TOL_V for v in supplies.values()):
+        try:
+            pv = finite(m["value"], f"supply probe {probe}")
+            sv = [finite(v, "corner supply") for v in supplies.values()]
+        except NonFiniteError as exc:
+            return f"invalid numeric evidence: {exc}"
+        if not any(abs(pv - v) <= SUPPLY_TOL_V for v in sv):
             return f"supply probe {probe}={m['value']} V does not match corner {supplies}"
     temp_probe = probes.get("temperature")
     if temp_probe:
         m = values.get(temp_probe)
         if m is None or m.get("value") is None:
             return f"temperature probe {temp_probe} missing"
-        if abs(m["value"] - float(corner.get("temperature_c"))) > TEMP_TOL_C:
+        try:
+            tv = finite(m["value"], f"temperature probe {temp_probe}")
+            tc = finite(corner.get("temperature_c"), "corner temperature_c")
+        except NonFiniteError as exc:
+            return f"invalid numeric evidence: {exc}"
+        if abs(tv - tc) > TEMP_TOL_C:
             return (f"temperature probe {temp_probe}={m['value']} C does not match "
                     f"corner {corner.get('temperature_c')} C")
     for gate in gates:
         m = values.get(gate)
         if m is None or m.get("value") is None:
             return f"validity gate {gate} missing"
+        try:
+            finite(m["value"], f"validity gate {gate}")
+        except NonFiniteError as exc:
+            return f"invalid numeric evidence: {exc}"
         if m.get("status") != "pass":
             return f"validity gate {gate}={m['value']} failed"
     return None
@@ -308,8 +370,9 @@ def per_corner_values(bench: BenchEvidence, measurement: str, unit: str | None,
             out.append(CornerValue(key, None, corner.get("corner_id"), problem))
             continue
         try:
-            value = convert(float(m["value"]), m.get("unit"), unit)
-        except UnitError as exc:
+            value = finite(convert(finite(m["value"], f"measurement {measurement}"),
+                                   m.get("unit"), unit), f"measurement {measurement} (converted)")
+        except (UnitError, NonFiniteError) as exc:
             out.append(CornerValue(key, None, corner.get("corner_id"), str(exc)))
             continue
         out.append(CornerValue(key, None if problem else value, corner.get("corner_id"), problem))
@@ -317,6 +380,11 @@ def per_corner_values(bench: BenchEvidence, measurement: str, unit: str | None,
 
 
 def grade_values(values: list[CornerValue], bound: dict | None) -> dict:
+    # Last line of defence: a non-finite value is never usable evidence,
+    # whatever produced it.
+    values = [v if v.value is None or _finite_or_none(v.value) is not None
+              else CornerValue(v.key, None, v.corner_id, f"non-finite value {v.value!r}")
+              for v in values]
     present = [v for v in values if v.value is not None]
     missing = [v for v in values if v.value is None]
     result: dict = {
@@ -415,28 +483,48 @@ def mc_per_corner(bench: BenchEvidence, measurement: str, unit: str | None, grid
             continue
         try:
             s = entry.get("stddev")
-            s = None if s is None else convert(float(s), entry["_unit"], unit)
-            q = step  # step is declared in the row's own unit
-        except UnitError as exc:
+            s = None if s is None else finite(
+                convert(finite(s, "Monte-Carlo stddev"), entry["_unit"], unit),
+                "Monte-Carlo stddev (converted)")
+            q = finite(step, "quantization step")  # declared in the row's own unit
+        except (UnitError, NonFiniteError) as exc:
             out.append(CornerValue(key, None, base, str(exc)))
             continue
         n = entry.get("n")
-        three = three_sigma_dr_basis(n, s, q)
+        stat_problem = None
+        n_ok = _finite_or_none(n)
+        if n_ok is None or n_ok != int(n_ok):
+            stat_problem = f"Monte-Carlo sample count n is not a finite integer ({n!r})"
+        else:
+            n = int(n_ok)
+        if entry.get("mean") is not None and _finite_or_none(entry.get("mean")) is None:
+            stat_problem = stat_problem or f"Monte-Carlo mean is not finite ({entry.get('mean')!r})"
+        if stat_problem:
+            three = None
+        else:
+            three = three_sigma_dr_basis(n, s, q)
+            if three is not None and not math.isfinite(three):
+                three, stat_problem = None, "derived 3-sigma statistic is not finite"
         window = entry.get("sigma_window") or {}
         detail = {
             "point": key_label(key), "corner_id": base, "n": n,
-            "errored": entry.get("errored"), "mean": entry.get("mean"), "stddev_bessel": s,
+            "errored": entry.get("errored"), "mean": _finite_or_none(entry.get("mean")),
+            "stddev_bessel": s,
             "three_sigma_dr_basis": three,
             "three_s_raw": None if s is None else 3.0 * s,
             "klt_sigma_window": {k2: window.get(k2) for k2 in ("k", "low", "high", "status", "margin")},
         }
         details.append(detail)
         problem = None
-        if n != expected_n or entry.get("errored"):
+        if stat_problem:
+            problem = stat_problem
+        elif n != expected_n or entry.get("errored"):
             problem = (f"{n} usable draws (+{entry.get('errored')} errored), ratified basis "
                        f"is N = {expected_n} per point")
         elif sample_problems.get(k):
             problem = f"{len(sample_problems[k])} draw(s) untrusted: {sample_problems[k][0]}"
+        elif s is None or three is None:
+            problem = "no usable Monte-Carlo spread (stddev missing)"
         elif not s:
             problem = "zero spread: mismatch not applied (the sabotage signature)"
         out.append(CornerValue(key, None if problem else three, base, problem))
@@ -520,7 +608,7 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
     if indep:
         for k, corners in samples.items():
             for c in corners:
-                vals = {m["name"]: m.get("value") for m in c.get("measurements") or []}
+                vals = {m["name"]: _finite_or_none(m.get("value")) for m in c.get("measurements") or []}
                 d = tuple(vals.get(name) for name in indep)
                 if None not in d:
                     draw_points.setdefault(d, set()).add(k)
@@ -542,15 +630,20 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
             details.append(point)
             continue
         ns = {name: e.get("n") for name, e in entries.items()}
-        point.update({"n": ns[plus], "p_plus": entries[plus].get("mean"),
-                      "p_minus": entries[minus].get("mean"), "p_zero": entries[zero].get("mean")})
+        raw_p = {"p_plus": entries[plus].get("mean"), "p_minus": entries[minus].get("mean"),
+                 "p_zero": entries[zero].get("mean")}
+        nonfinite_p = [k2 for k2, v in raw_p.items() if _finite_or_none(v) is None]
+        # An invalid population statistic is retained as a diagnostic only
+        # (None), never as a usable number.
+        point.update({"n": _finite_or_none(ns[plus]) if ns[plus] is not None else None,
+                      **{k2: _finite_or_none(v) for k2, v in raw_p.items()}})
         bad_n = [f"{name}: n = {n} (+{entries[name].get('errored')} errored)"
                  for name, n in ns.items() if n != expected_n or entries[name].get("errored")]
         untrusted = [f"{c['corner_id']}: {p}" for c in corners
                      if (p := _corner_problems(c, bench.name, gates))]
         draws = []
         for c in corners:
-            vals = {m["name"]: m.get("value") for m in c.get("measurements") or []}
+            vals = {m["name"]: _finite_or_none(m.get("value")) for m in c.get("measurements") or []}
             draws.append(tuple(vals.get(name) for name in indep))
         duplicated = len(draws) - len(set(draws)) if indep else 0
         missing_draws = sum(1 for d in draws if any(v is None for v in d)) if indep else 0
@@ -558,6 +651,9 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
             1 for d in draws if len(draw_points.get(d, ())) > 1)
         if bad_n:
             point["problem"] = f"sampling basis is not N = {expected_n}: {'; '.join(bad_n)}"
+        elif nonfinite_p:
+            point["problem"] = ("non-finite population statistic(s) "
+                                f"{', '.join(nonfinite_p)}: {[raw_p[k2] for k2 in nonfinite_p]!r}")
         elif untrusted:
             point["problem"] = f"{len(untrusted)} sample(s) untrusted: {untrusted[0]}"
         elif missing_draws:
@@ -571,8 +667,11 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
                                 "demonstrably injected")
         else:
             try:
-                point["sigma"] = probit_slope_sigma(point["p_plus"], point["p_minus"], od_x)
-            except ValueError as exc:
+                point["sigma"] = finite(
+                    probit_slope_sigma(point["p_plus"], point["p_minus"], od_x),
+                    "derived probit-slope sigma")
+            except ValueError as exc:  # includes NonFiniteError
+                point["sigma"] = None
                 point["problem"] = str(exc)
         details.append(point)
     notes: list[str] = []
@@ -593,6 +692,9 @@ def grade_grid_mean(details: list[dict], bound: dict | None) -> dict:
     per-point sigma -- against one column's bound. The mean exists only when
     every grid point has a valid value; otherwise the column is INCOMPLETE
     (the partial mean is reported, never graded)."""
+    details = [d if d["sigma"] is None or _finite_or_none(d["sigma"]) is not None
+               else dict(d, sigma=None, problem=f"non-finite sigma {d['sigma']!r}")
+               for d in details]
     valid = [d for d in details if d["sigma"] is not None]
     invalid = [d for d in details if d["sigma"] is None]
     result: dict = {
@@ -611,14 +713,19 @@ def grade_grid_mean(details: list[dict], bound: dict | None) -> dict:
             "max": {"value": hi["sigma"], "point": hi["point"], "corner_id": hi["corner_id"]},
         }
         mean = sum(d["sigma"] for d in valid) / len(valid)
-        result["grid_mean" if not invalid else "partial_mean_ungraded"] = mean
+        if math.isfinite(mean):
+            result["grid_mean" if not invalid else "partial_mean_ungraded"] = mean
+        else:
+            result["mean_problem"] = "grid mean is not finite (overflow)"
+            mean = None
+    else:
+        mean = None
     if bound is None:
         result["verdict"] = NOT_SPECIFIED
         return result
-    if invalid or not valid:
+    if invalid or not valid or mean is None:
         result["verdict"] = INCOMPLETE
         return result
-    mean = result["grid_mean"]
     result["binding"] = {"point": "grid-wide mean (DR-designated statistic)", "corner_id": None,
                          "value": mean, "margin": margin(mean, bound)}
     result["worst_point"] = result["range"]["max"]
@@ -806,7 +913,7 @@ def grade(rows_spec: dict, benches: dict[str, BenchEvidence], dut: DutReference)
         {"id": r["id"], "sub_bound": r["sub_bound"], "target_verdict": r["target_verdict"]}
         for r in target_rows if r["target_verdict"] != PASS
     ]
-    return {
+    return json_safe({
         "schema": "sg13g2-comparator/klt-corner-grading/1",
         "spec_source": rows_spec.get("spec_source"),
         "dut": {"netlist": dut.netlist_rel,
@@ -821,7 +928,7 @@ def grade(rows_spec: dict, benches: dict[str, BenchEvidence], dut: DutReference)
             "all_target_rows_pass": not blockers,
             "blocking_sub_bounds": blockers,
         },
-    }
+    })
 
 
 def _spec_meas(bench_name: str) -> str:

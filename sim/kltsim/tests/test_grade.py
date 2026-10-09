@@ -615,5 +615,160 @@ class RowsInventoryTests(unittest.TestCase):
                 self.assertEqual(meas.k_sigma, 3.0)
 
 
+class NonFiniteEvidenceTests(unittest.TestCase):
+    """Issue #101: NaN / +-inf / non-numeric evidence is never a usable value."""
+
+    BAD = (float("nan"), float("inf"), float("-inf"), "garbage", "nan")
+
+    def setUp(self):
+        self.dut = grade.load_dut_reference()
+        self.reg_body = _body("regeneration")
+        self.mc_body = _body("offset_mc")
+        self.noise_body = _body("transient_noise")
+
+    def _reg(self, env, rows=None):
+        return grade.grade(_spec(rows or [_row("3a")]),
+                           {"regeneration": _evidence("regeneration", env, self.reg_body)},
+                           self.dut)
+
+    @staticmethod
+    def _set(corner, name, value):
+        for m in corner["measurements"]:
+            if m["name"] == name:
+                m["value"] = value
+
+    def test_all_nan_grid_is_not_pass(self):
+        for bad in self.BAD:
+            env = regeneration_envelope(self.reg_body)
+            for c in env["corners"]:
+                self._set(c, "td_od50_ns", bad)
+            row = self._reg(env)["rows"][0]
+            self.assertEqual(row["target_verdict"], grade.INCOMPLETE, bad)
+            self.assertEqual(row["target"]["points_valid"], 0, bad)
+            self.assertEqual(row["stretch_verdict"], grade.INCOMPLETE, bad)
+
+    def test_negative_infinity_does_not_pass_upper_bound(self):
+        env = regeneration_envelope(self.reg_body)
+        self._set(env["corners"][0], "td_od50_ns", float("-inf"))
+        row = self._reg(env)["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+        self.assertEqual(row["target"]["points_valid"], 44)
+        self.assertEqual(row["target"]["points_expected"], 45)
+        self.assertIn("not finite", row["target"]["points_missing_or_invalid"][0]["why"])
+
+    def test_invalid_point_does_not_hide_a_real_miss(self):
+        env = regeneration_envelope(self.reg_body, td50=lambda p, v, t: 2.0 if p == "ff" else 0.7)
+        self._set(env["corners"][0], "td_od50_ns", float("nan"))
+        row = self._reg(env)["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.FAIL)
+        self.assertEqual(row["target"]["points_valid"], 44)
+        self.assertEqual(len(row["target"]["points_missing_or_invalid"]), 1)
+
+    def test_finite_campaign_unchanged(self):
+        row = self._reg(regeneration_envelope(self.reg_body))["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.PASS)
+        self.assertEqual(row["target"]["points_valid"], 45)
+
+    def test_nonfinite_probes_and_gates_invalidate_point(self):
+        for name in ("vdd_meas", "dout_od50_end", "dout_od50_first"):
+            for bad in self.BAD:
+                env = regeneration_envelope(self.reg_body)
+                self._set(env["corners"][3], name, bad)
+                row = self._reg(env)["rows"][0]
+                self.assertEqual(row["target_verdict"], grade.INCOMPLETE, (name, bad))
+                self.assertEqual(row["target"]["points_valid"], 44, (name, bad))
+        env = regeneration_envelope(self.reg_body)
+        self._set(env["corners"][3], BENCHES["regeneration"].probes["temperature"], float("nan"))
+        self.assertEqual(self._reg(env)["rows"][0]["target"]["points_valid"], 44)
+
+    def test_nonfinite_corner_metadata_is_a_missing_point_not_an_exception(self):
+        env = regeneration_envelope(self.reg_body)
+        env["corners"][0]["temperature_c"] = float("nan")
+        row = self._reg(env)["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+
+    def test_grade_values_rejects_nonfinite_directly(self):
+        key = ("tt", 1.2, 27.0)
+        for bad in (float("nan"), float("-inf"), float("inf")):
+            out = grade.grade_values([grade.CornerValue(key, bad, "x")], {"max": 1.0})
+            self.assertEqual(out["verdict"], grade.INCOMPLETE)
+
+    def test_mc_nonfinite_stddev_is_not_a_value(self):
+        for bad in self.BAD:
+            env = offset_envelope(self.mc_body)
+            env["measurements"][0]["monte_carlo"]["by_corner"][0]["stddev"] = bad
+            row = grade.grade(_spec([_row("1")]),
+                              {"offset_mc": _evidence("offset_mc", env, self.mc_body)},
+                              self.dut)["rows"][0]
+            self.assertEqual(row["target_verdict"], grade.INCOMPLETE, bad)
+            self.assertEqual(row["target"]["points_valid"], 44, bad)
+
+    def test_mc_nonfinite_mean_or_n_is_not_a_value(self):
+        for field in ("mean", "n"):
+            env = offset_envelope(self.mc_body)
+            env["measurements"][0]["monte_carlo"]["by_corner"][0][field] = float("nan")
+            row = grade.grade(_spec([_row("1")]),
+                              {"offset_mc": _evidence("offset_mc", env, self.mc_body)},
+                              self.dut)["rows"][0]
+            self.assertNotEqual(row["target_verdict"], grade.PASS, field)
+            self.assertEqual(row["target"]["points_valid"], 44, field)
+
+    def _noise(self, env):
+        return grade.grade(_spec([_row("2")]),
+                           {"transient_noise": _evidence("transient_noise", env, self.noise_body)},
+                           self.dut)["rows"][0]
+
+    def test_grid_mean_nonfinite_population_statistic_is_incomplete(self):
+        for field in ("mean", "n"):
+            for bad in (float("nan"), float("inf"), float("-inf")):
+                env = noise_envelope(self.noise_body)
+                for m in env["measurements"]:
+                    if m["name"] == "hit_plus":
+                        m["monte_carlo"]["by_corner"][0][field] = bad
+                row = self._noise(env)
+                self.assertEqual(row["target_verdict"], grade.INCOMPLETE, (field, bad))
+                self.assertEqual(row["target"]["points_valid"], 44, (field, bad))
+                self.assertNotIn("grid_mean", row["target"])
+
+    def test_grid_mean_reducer_rejects_nonfinite_sigma(self):
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            details = [{"point": f"p{i}", "corner_id": f"c{i}", "sigma": 1.0, "problem": None}
+                       for i in range(3)]
+            details[1]["sigma"] = bad
+            out = grade.grade_grid_mean(details, {"max": 5.0})
+            self.assertEqual(out["verdict"], grade.INCOMPLETE, bad)
+            self.assertEqual(out["points_valid"], 2)
+            self.assertNotIn("grid_mean", out)
+            single = [{"point": "p", "corner_id": "c", "sigma": bad, "problem": None}]
+            self.assertEqual(grade.grade_grid_mean(single, {"max": 5.0})["verdict"], grade.INCOMPLETE)
+
+    def test_noise_independence_probe_nan_is_not_a_draw(self):
+        env = noise_envelope(self.noise_body)
+        for m in env["corners"][0]["measurements"]:
+            if m["name"] == "vn0_a":
+                m["value"] = float("nan")
+        self.assertEqual(self._noise(env)["target_verdict"], grade.INCOMPLETE)
+
+    def test_report_json_is_strict(self):
+        env = regeneration_envelope(self.reg_body)
+        self._set(env["corners"][0], "td_od50_ns", float("nan"))
+        self._set(env["corners"][1], "td_od50_ns", float("-inf"))
+        text = grade.dumps_strict(self._reg(env))
+        for token in ("NaN", "Infinity"):
+            self.assertNotIn(token, text)
+        json.loads(text, parse_constant=lambda c: self.fail(f"non-standard constant {c}"))
+        # even if a non-finite float leaks into a report, serialisation is strict
+        text = grade.dumps_strict({"x": float("nan"), "y": [float("inf")]})
+        self.assertEqual(json.loads(text), {"x": None, "y": [None]})
+
+    def test_noise_report_json_is_strict(self):
+        env = noise_envelope(self.noise_body)
+        for m in env["measurements"]:
+            if m["name"] == "hit_zero":
+                m["monte_carlo"]["by_corner"][0]["mean"] = float("nan")
+        text = grade.dumps_strict(self._noise(env))
+        json.loads(text, parse_constant=lambda c: self.fail(f"non-standard constant {c}"))
+
+
 if __name__ == "__main__":
     unittest.main()
