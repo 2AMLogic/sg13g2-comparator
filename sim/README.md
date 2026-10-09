@@ -147,7 +147,7 @@ backend only repeats the one-corner failure 45 times):
 
 ```bash
 python3 sim/run_corners.py --check-env      # toolchain must not report DRIFT
-klt sim --backend batch sim/comparator-pex/requests/regeneration.nominal.json -o <report.json>   # one corner
+klt sim --backend batch --format json sim/comparator-pex/requests/regeneration.nominal.json > <report.json>   # one corner
 ```
 
 **Unblocked when** either the worker spec provides ngspice >= 46 (a change to
