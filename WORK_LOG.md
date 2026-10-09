@@ -4,6 +4,15 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-09
 
+- **PR #109**: ab: validate both arm envelopes before certifying decisions unchanged
+- **PR #108**: Preserve fixture, A/B and fleet-smoke inputs before submission
+- **PR #104**: grade: reject ambiguous duplicate PVT results and population summaries
+- **PR #103**: grade: reject non-finite numeric evidence before corner grading
+- **PR #99**: spec: DR-0003 status-only evidence update for Rows 1, 4, 5 (#93)
+- **PR #98**: sim: preserve campaign inputs on rebuild (#95)
+- **PR #97**: layout: klt erc supply-spec stage and T1 item 11 citation (#38)
+- **PR #94**: sim: internal-noise hook and whole-latch transient-noise record with regenerative-pair injection (#81)
+- **PR #91**: sim: dut_ib bias-point sweep, a Pareto basis for a Row 5 power bound (#80)
 - **PR #88**: sim: whole-latch offset across a bounded common-mode band (#79)
 - **PR #87**: sim: known-charge validation of the Q_kick instrument (#78)
 - **PR #83**: feat(sim): klt sim corner verification of every DR-0002 row; cite T1 item 5 (unmet: noise and Q_kick Targets fail)
@@ -11,6 +20,17 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 - **PR #76**: docs(sim): backend readiness and preflight before T1 grids (#74)
 - **PR #73**: layout: klt pex extraction for T1 item 7; simulation leg blocked (#61)
 - **PR #72**: layout: LVS of the comparator, cite match as T1 item 4 (#60)
+- **Issue #100** (closed): Auditor guard telemetry: retain main-checkout stash protection
+- **Issue #106** (closed): Require complete successful decision sets for the kickback A/B control
+- **Issue #105** (closed): Preserve fixture, A/B and fleet-smoke inputs before submission
+- **Issue #102** (closed): Reject ambiguous duplicate PVT results and population summaries
+- **Issue #101** (closed): Reject non-finite numeric evidence before corner grading
+- **Issue #96** (closed): Auditor guard telemetry: worktree-write-confinement
+- **Issue #93** (closed): DR-0003: status-only update of Rows 1, 4, 5 now that #78/#79/#80 evidence has landed
+- **Issue #95** (closed): Preserve campaign inputs when rebuilding existing klt sim evidence
+- **Issue #38** (closed): Analog power-delivery (structural) evidence for T1 item 11 — klt erc supply run + supply-carrying LVS once layout exists
+- **Issue #81** (closed): Complete whole-latch transient-noise injection into the regenerative pair (internal-node hook)
+- **Issue #80** (closed): Bias-point sizing study to found a Target-column power bound for DR-0002 Row 5
 - **Issue #86** (closed): Guard telemetry: resolve bounded worktree variables before denying writes
 - **Issue #85** (closed): Guard telemetry: retain protection against literal @path raw-field bodies
 - **Issue #79** (closed): Characterize whole-latch offset across a bounded common-mode band
