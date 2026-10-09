@@ -140,7 +140,8 @@ neither backend a `klt sim` leg can run on does so:
 | local | ngspice-42 supports OSDI v0.3; the PDK's `psp103.osdi` targets v0.4 (`ngspice_min_major: 46` in [`toolchain.json`](toolchain.json)) | `pre_osdi` prints `NGSPICE only supports OSDI v0.3 but ".../psp103.osdi" targets v0.4!`; `--check-env` reports `toolchain: DRIFT` (floor 46, installed 42) |
 | batch fleet | runner image is klt 0.5.0, client is 0.7.0, and 0.5.0 has no `osdi_preload` | `options.osdi_preload` refused for `--backend batch`; with `stage_model_inputs: true` the job fails in seconds with `batch_runner_version_mismatch` |
 
-Both are tool gaps already filed upstream (klayout-tools#2901, #2851).
+The batch row is a tool gap already filed upstream (klayout-tools#2901,
+#2851); the local row is a worker-spec gap (ngspice version), not a klt one.
 
 **Preflight before submitting any grid** (a 45-point submit against a broken
 backend only repeats the one-corner failure 45 times):
@@ -149,6 +150,11 @@ backend only repeats the one-corner failure 45 times):
 python3 sim/run_corners.py --check-env      # toolchain must not report DRIFT
 klt sim --backend batch --format json sim/comparator-pex/requests/regeneration.nominal.json > <report.json>   # one corner
 ```
+
+The regeneration request sets `osdi_preload`, so today the batch probe is
+refused client-side and never reaches the fleet; that refusal is the expected
+failure. A pass means *unblocked* only once both the refusal and the runner
+version mismatch have cleared.
 
 **Unblocked when** either the worker spec provides ngspice >= 46 (a change to
 the worker spec in 2AMLogic/2am `infra/aws/loom-worker/`, not a host change),
