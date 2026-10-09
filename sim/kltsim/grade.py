@@ -302,6 +302,12 @@ class CornerValue:
     problem: str | None = None
 
 
+def _bench_names() -> list[str]:
+    from .benches import BENCHES
+
+    return list(BENCHES)
+
+
 def _bench_spec(name: str):
     from .benches import BENCHES
 
@@ -1052,9 +1058,19 @@ def _by_name(measurements):
     return sorted(measurements, key=lambda m: str(m["name"]))
 
 
-def check_request_semantics(bench, tag: str, request: dict) -> list[str]:
-    """Reasons a saved request cannot support grading this part (empty = ok)."""
+def check_request_semantics(bench, tag: str, request: dict,
+                            corners: dict | None = None) -> list[str]:
+    """Reasons a saved request cannot support grading this part (empty = ok).
+
+    ``corners`` (default None = the bench's full contract grid) names the one
+    intentionally different grid a caller may expect instead, e.g. the issue
+    #92 reduced screening grid. Every other contract field is still compared
+    exactly, and an explicit ``corners`` is compared exactly too, so the
+    full-grid check is not weakened by the existence of this parameter.
+    """
     expected = _expected_request(bench, tag)
+    if corners is not None:
+        expected["corners"] = corners
     problems = []
     if request.get("netlist") != expected["netlist"]:
         problems.append(f"{tag}: request names body {request.get('netlist')!r}, "
@@ -1070,7 +1086,7 @@ def check_request_semantics(bench, tag: str, request: dict) -> list[str]:
 
 
 def check_chain(bench, tag: str, campaign_dir: Path, envelope_sha: str,
-                problems: list[str]) -> dict:
+                problems: list[str], corners: dict | None = None) -> dict:
     """Validate <tag>.request.json / <tag>.invocation.json against the envelope bytes."""
     checked: dict = {"envelope_sha256": envelope_sha}
     _, inv = _load_json_file(campaign_dir / f"{tag}.invocation.json", "invocation", tag, problems)
@@ -1092,15 +1108,24 @@ def check_chain(bench, tag: str, campaign_dir: Path, envelope_sha: str,
         if inv.get("tag") not in (None, tag):
             problems.append(f"{tag}: invocation names tag {inv.get('tag')!r}")
     if req is not None:
-        problems.extend(check_request_semantics(bench, tag, req))
+        problems.extend(check_request_semantics(bench, tag, req, corners))
     return checked
 
 
-def load_campaign(campaign_dir: Path) -> dict[str, BenchEvidence]:
+def load_campaign(campaign_dir: Path, corners: dict | None = None,
+                  bench_names: tuple[str, ...] | None = None) -> dict[str, BenchEvidence]:
+    """Load a campaign's evidence with the saved request/invocation chain checked.
+
+    ``corners`` / ``bench_names`` are for reduced-grid callers (issue #122):
+    they pass the explicit expected grid and the benches the directory holds.
+    Defaults reproduce the full-campaign load exactly.
+    """
     from .benches import BENCHES
 
     benches: dict[str, BenchEvidence] = {}
     for name, bench in BENCHES.items():
+        if bench_names is not None and name not in bench_names:
+            continue
         body_path = campaign_dir / f"{name}.body.spice"
         envelopes: list[tuple[str, dict]] = []
         shas: dict[str, str] = {}
@@ -1120,7 +1145,7 @@ def load_campaign(campaign_dir: Path) -> dict[str, BenchEvidence]:
                     problems.append(f"{tag}: envelope {path.name} is not a JSON object")
                     continue
                 envelopes.append((tag, envelope))
-                checked[tag] = check_chain(bench, tag, campaign_dir, shas[tag], problems)
+                checked[tag] = check_chain(bench, tag, campaign_dir, shas[tag], problems, corners)
         benches[name] = BenchEvidence(
             name=name,
             envelopes=envelopes,
