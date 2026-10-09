@@ -1,11 +1,50 @@
 # `sim/comparator-pex/` -- post-layout `klt pex` attempt (issue #61, T1 item 7)
 
-**Outcome: the schematic-vs-extracted spec re-run did NOT run. No spec row has
-an extracted-side value, so there is no delta to report, and T1 item 7 stays
+**Historical first-attempt outcome (see "Update 2026-10-09 (later)" below for the current state: a single-corner extracted run now works). On that first attempt the schematic-vs-extracted spec re-run did NOT run: no spec row had an extracted-side value, so there was no delta to report,
+and T1 item 7 stayed
 `unmet`.** What exists is the extraction itself, a complete and reproducible
 `klt pex` setup, and the exact reasons the simulation leg cannot run on the
 available backends. Nothing here is a pass, and nothing was relaxed
 (DR-0002 is untouched).
+
+## Update 2026-10-09 (later): single-corner extracted run now works locally
+
+The host's ngspice is now 46 (matches `sim/toolchain.json`), so the OSDI
+v0.4 blocker in "Why nothing simulated" (item 1) no longer applies; the
+text below it is kept as the record of the earlier attempt. The same
+`klt pex` command, unchanged, now produces real `delta[]` rows
+(`--backend local`, nominal requests only, 54 s):
+
+- Envelope: `layout/comparator/pex_report.json` (this is the cited item-7
+  artifact; the extracted netlist `comparator.pex.spice` is byte-identical,
+  sha256 `9bd443be...980a`). Table: `reports/delta-nominal-20261009.{md,json}`
+  (`make_delta_table.py`).
+- Basis: **one corner, tt / 1.20 V / 27 C; deterministic transients; no MC,
+  no seeds, no sigma.** Status `error`: 29 pass, 0 fail, 1 errored.
+- Findings (single-corner observations, not statistics):
+  - Decision delay is much slower extracted: `td_a` (50 mV overdrive) 0.710 ns
+    -> 2.040 ns (+187 %), `td_b` (1 mV) 0.963 -> 2.682 ns (+178 %). Part of
+    this is the layout's 64 fingers with drawn junction geometry versus the
+    schematic's 24 devices with none, not only routing RC; the two are not
+    separated here.
+  - `td_c` (0.1 mV overdrive): schematic 1.106 ns; extracted has no value.
+    The extracted `dc` output is already high at 18 ns (before the input
+    flips to +0.1 mV), so it resolved to the opposite side at -0.1 mV and
+    never makes the rising transition the measure waits for. This is
+    consistent with an extracted systematic offset larger than 0.1 mV at
+    this corner (the input pair sees 5.6 % more ground C on `vinn`), but one
+    run cannot size it: offset sigma needs the MC bench, which was not run.
+  - Kickback is smaller but not eliminated: `ad_pos` -8.0 %, `ad_neg`
+    -14.1 %, `apmax` -1.3 %; `bc1` -79.6 % (a tiny-magnitude current row).
+  - Rows with no change beyond 0.1 %: supply, end-state, bias current
+    (`i_stat` -0.08 %), common-mode levels.
+- Not run: the 45-point PVT grids and the offset / noise Monte Carlo rows.
+  `klt sim --backend batch` was re-probed and refused:
+  `batch_no_capacity` ("no capacity in any of the 30 pools after 3
+  attempts"). No local grid was launched as fallback (host rule). The
+  derived DR-0002 quantities (kickback mV, tau) were not recomputed against
+  the spec limits; only schematic-vs-extracted raw deltas are recorded.
+- DR-0002 is untouched; nothing was relaxed.
 
 ## What ran, and what it proved
 
