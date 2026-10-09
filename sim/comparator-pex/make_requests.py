@@ -7,11 +7,21 @@ requests/<row>.pvt.json      the 45-point PVT grid of the schematic benches
 Measurement cards are the original `meas tran` analyses, verbatim; the derived
 `measure` expressions (tau, kick_*_mv, ...) are recomputed from the reported raw
 values in the delta table, because klt pex diffs reported measurement names.
+
+    python3 sim/comparator-pex/make_requests.py [--check]
+
+`--check` writes nothing; it exits non-zero naming every missing or stale
+request, nominal and PVT alike (issue #123).
 """
 import json
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.dont_write_bytecode = True  # --check must leave the tree untouched
+sys.path.insert(0, str(HERE))  # also under `python3 -I`
+from make_reference import emit  # noqa: E402
+
 SIM = HERE.parent
 OSDI = [f"$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/{n}"
         for n in ("psp103.osdi", "psp103_nqs.osdi", "r3_cmc.osdi", "mosvar.osdi")]
@@ -47,7 +57,7 @@ def request(name: str, grid: bool) -> dict:
 
 
 if __name__ == "__main__":
-    for name in ("regeneration", "kickback"):
-        for grid in (False, True):
-            out = HERE / "requests" / f"{name}.{'pvt' if grid else 'nominal'}.json"
-            out.write_text(json.dumps(request(name, grid), indent=2) + "\n")
+    emit({HERE / "requests" / f"{name}.{'pvt' if grid else 'nominal'}.json":
+          json.dumps(request(name, grid), indent=2) + "\n"
+          for name in ("regeneration", "kickback") for grid in (False, True)},
+         "--check" in sys.argv)

@@ -343,6 +343,12 @@ results committed as records. The harness's own unit tests
 PYTHONPATH=sim python3 -m unittest discover -t sim -s harness.tests -p 'test_*.py'
 ```
 
+The same job also runs a read-only freshness check of the post-layout
+`klt pex` adapter inputs (`comparator-pex/dut/`, `comparator-pex/requests/`)
+against the schematic, `dut.json` and the source benches, also stdlib only.
+Commands and regeneration:
+[`comparator-pex/README.md`](comparator-pex/README.md#freshness-check-ci-and-intentional-regeneration).
+
 ## Rules
 
 - **No claim without a testbench.** A number that is not in a record under
