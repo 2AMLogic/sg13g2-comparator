@@ -46,9 +46,8 @@ Issues carrying `loom:curated`.
 
 ## Proposed (Architect / Hermit)
 
-- **#107**: Verify saved request and invocation provenance when grading campaigns *(architect)*
-- **#110**: Reserve unique PVT harness run identities before writing evidence *(architect)*
-- **#111**: Reject overflowed measurements and invalid summaries in the PVT harness *(architect)*
+- **#116**: CI guard: enforce append-only sim evidence (records, campaigns, corners) *(architect)*
+- **#117**: Unit tests for the CI-gating scripts: signoff parity, ERC judge, netlist generator *(architect)*
 
 ## Epics
 
@@ -65,6 +64,6 @@ Issues carrying `loom:curated`.
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 0 |
 | Curated | 1 |
-| Architect / Hermit proposals | 3 |
+| Architect / Hermit proposals | 2 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->

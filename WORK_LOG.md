@@ -4,6 +4,11 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-09
 
+- **PR #119**: pex: record batch re-probe of PVT grid (Part of #61)
+- **PR #118**: Verify saved request and invocation provenance when grading campaigns
+- **PR #115**: harness: reserve unique PVT run identities before writing evidence (#110)
+- **PR #114**: harness: reject non-finite measurements and invalid summaries
+- **PR #113**: Post-layout klt pex: single-corner extracted run, item 7 cited (#61)
 - **PR #109**: ab: validate both arm envelopes before certifying decisions unchanged
 - **PR #108**: Preserve fixture, A/B and fleet-smoke inputs before submission
 - **PR #104**: grade: reject ambiguous duplicate PVT results and population summaries
@@ -20,6 +25,9 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 - **PR #76**: docs(sim): backend readiness and preflight before T1 grids (#74)
 - **PR #73**: layout: klt pex extraction for T1 item 7; simulation leg blocked (#61)
 - **PR #72**: layout: LVS of the comparator, cite match as T1 item 4 (#60)
+- **Issue #107** (closed): Verify saved request and invocation provenance when grading campaigns
+- **Issue #110** (closed): Reserve unique PVT harness run identities before writing evidence
+- **Issue #111** (closed): Reject overflowed measurements and invalid summaries in the PVT harness
 - **Issue #100** (closed): Auditor guard telemetry: retain main-checkout stash protection
 - **Issue #106** (closed): Require complete successful decision sets for the kickback A/B control
 - **Issue #105** (closed): Preserve fixture, A/B and fleet-smoke inputs before submission
