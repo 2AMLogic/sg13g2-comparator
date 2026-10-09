@@ -1,0 +1,853 @@
+* extracted by klt extract --deck sg13g2
+* parasitic model (--parasitics):
+* - capacitance: net-to-ground for every net's own (non-coupled) area/perimeter, plus net-to-net for the vertical-overlap coupling `coupling` describes below -- a coupled net pair gets a direct capacitor between their two hub nodes, not just capacitors to the deck's ground/substrate net
+* - coupling: vertical overlap (crossover) unconditionally -- where one net's conductor on an adjacent metal level sits directly over another *distinct* net's conductor, that overlap area is charged between the two nets instead of to ground (issue #760) -- plus lateral (same-layer, sidewall) coupling, but only for a net pair naming one of the caller's declared `--critical-net` nets (issue #976): facing-edge length within that layer's own minimum-spacing lookback is charged between the two nets, *additively* (not deducted from either net's substrate fringe term, unlike the vertical case -- a known simplification). Any same-layer pair with neither side named `--critical-net`, and fringe shielding in general, are still not modelled
+* - resistance: single lumped series resistance per net, distributed as a star across that net's device terminals (issue #592) -- not a per-segment, distributed RC ladder, *unless* `--distributed-rc` names this net via `--critical-net` (issue #977, Epic #709 Phase 2b): then the net's terminals are ordered along their approximate physical spread and its total R/C is broken into a chain of per-segment resistors (segment length proportional to inter-terminal distance) with a ground capacitor at each terminal node (proportional to its adjacent segment length/2), instead of one star hub -- still an approximation (terminal position is a device-placement proxy, not true per-segment routing geometry), but a strictly finer-grained one than the single-hub star
+* - frequency: quasi-static -- one frequency-independent R and C per net; no skin effect, no distributed transmission-line behavior
+.GLOBAL vsubs
+
+* cell comparator
+* pin clk
+* pin dout
+* pin doutb
+* pin vbias
+* pin vdd
+* pin vinn
+* pin vinp
+* pin vss
+.SUBCKT comparator clk dout doutb vbias vdd vinn vinp vss
+* device instance $1 r0 *1 -3.5,5.2 nfet
+X$1 tmid__t12 vbias__t0 vss__t0 vss__t14 sg13_lv_nmos L=0.5U W=5U AS=2.5P
++ AD=1.25P PS=11U PD=5.5U
+* device instance $2 r0 *1 -2.5,5.2 nfet
+X$2 vss__t13 vbias__t1 tmid__t13 vss__t15 sg13_lv_nmos L=0.5U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $3 r0 *1 -1.5,5.2 nfet
+X$3 tmid__t11 vbias__t7 vss__t12 vss__t16 sg13_lv_nmos L=0.5U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $4 r0 *1 -0.5,5.2 nfet
+X$4 vss__t9 vbias__t6 tmid__t15 vss__t17 sg13_lv_nmos L=0.5U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $5 r0 *1 0.5,5.2 nfet
+X$5 tmid__t10 vbias__t5 vss__t11 vss__t18 sg13_lv_nmos L=0.5U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $6 r0 *1 1.5,5.2 nfet
+X$6 vss__t8 vbias__t4 tmid__t14 vss__t19 sg13_lv_nmos L=0.5U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $7 r0 *1 2.5,5.2 nfet
+X$7 tmid__t8 vbias__t3 vss__t10 vss__t20 sg13_lv_nmos L=0.5U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $8 r0 *1 3.5,5.2 nfet
+X$8 vss__t1 vbias__t2 tmid__t9 vss__t21 sg13_lv_nmos L=0.5U W=5U AS=1.25P
++ AD=2.5P PS=5.5U PD=11U
+* device instance $9 r0 *1 -2.205,13.85 nfet
+X$9 tail__t12 clk__t0 tmid__t0 vss__t22 sg13_lv_nmos L=0.13U W=5U AS=2.5P
++ AD=1.25P PS=11U PD=5.5U
+* device instance $10 r0 *1 -1.575,13.85 nfet
+X$10 tmid__t5 clk__t1 tail__t13 vss__t23 sg13_lv_nmos L=0.13U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $11 r0 *1 -0.945,13.85 nfet
+X$11 tail__t8 clk__t15 tmid__t4 vss__t24 sg13_lv_nmos L=0.13U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $12 r0 *1 -0.315,13.85 nfet
+X$12 tmid__t3 clk__t19 tail__t15 vss__t25 sg13_lv_nmos L=0.13U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $13 r0 *1 0.315,13.85 nfet
+X$13 tail__t9 clk__t16 tmid__t6 vss__t26 sg13_lv_nmos L=0.13U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $14 r0 *1 0.945,13.85 nfet
+X$14 tmid__t2 clk__t17 tail__t14 vss__t27 sg13_lv_nmos L=0.13U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $15 r0 *1 1.575,13.85 nfet
+X$15 tail__t10 clk__t18 tmid__t7 vss__t28 sg13_lv_nmos L=0.13U W=5U AS=1.25P
++ AD=1.25P PS=5.5U PD=5.5U
+* device instance $16 r0 *1 2.205,13.85 nfet
+X$16 tmid__t1 clk__t2 tail__t11 vss__t29 sg13_lv_nmos L=0.13U W=5U AS=1.25P
++ AD=2.5P PS=5.5U PD=11U
+* device instance $17 r0 *1 -4.29,23.5 nfet
+X$17 np__t6 vinp__t3 tail__t0 vss__t30 sg13_lv_nmos L=0.34U W=3U AS=1.5P
++ AD=0.75P PS=7U PD=3.5U
+* device instance $18 r0 *1 -3.45,23.5 nfet
+X$18 tail__t1 vinp__t1 np__t7 vss__t34 sg13_lv_nmos L=0.34U W=3U AS=0.75P
++ AD=1.5P PS=3.5U PD=7U
+* device instance $19 r0 *1 -1.71,23.5 nfet
+X$19 nn__t9 vinn__t0 tail__t7 vss__t31 sg13_lv_nmos L=0.34U W=3U AS=1.5P
++ AD=0.75P PS=7U PD=3.5U
+* device instance $20 r0 *1 -0.87,23.5 nfet
+X$20 tail__t2 vinn__t1 nn__t6 vss__t35 sg13_lv_nmos L=0.34U W=3U AS=0.75P
++ AD=1.5P PS=3.5U PD=7U
+* device instance $21 r0 *1 0.87,23.5 nfet
+X$21 nn__t8 vinn__t3 tail__t6 vss__t32 sg13_lv_nmos L=0.34U W=3U AS=1.5P
++ AD=0.75P PS=7U PD=3.5U
+* device instance $22 r0 *1 1.71,23.5 nfet
+X$22 tail__t3 vinn__t2 nn__t7 vss__t36 sg13_lv_nmos L=0.34U W=3U AS=0.75P
++ AD=1.5P PS=3.5U PD=7U
+* device instance $23 r0 *1 3.45,23.5 nfet
+X$23 np__t9 vinp__t2 tail__t5 vss__t33 sg13_lv_nmos L=0.34U W=3U AS=1.5P
++ AD=0.75P PS=7U PD=3.5U
+* device instance $24 r0 *1 4.29,23.5 nfet
+X$24 tail__t4 vinp__t0 np__t8 vss__t37 sg13_lv_nmos L=0.34U W=3U AS=0.75P
++ AD=1.5P PS=3.5U PD=7U
+* device instance $25 r0 *1 -3.555,30.425 nfet
+X$25 ln__t18 lp__t0 np__t0 vss__t38 sg13_lv_nmos L=0.13U W=0.75U AS=0.375P
++ AD=0.1875P PS=2.5U PD=1.25U
+* device instance $26 r0 *1 -2.925,30.425 nfet
+X$26 np__t1 lp__t1 ln__t19 vss__t42 sg13_lv_nmos L=0.13U W=0.75U AS=0.1875P
++ AD=0.375P PS=1.25U PD=2.5U
+* device instance $27 r0 *1 -1.395,30.425 nfet
+X$27 lp__t21 ln__t9 nn__t3 vss__t39 sg13_lv_nmos L=0.13U W=0.75U AS=0.375P
++ AD=0.1875P PS=2.5U PD=1.25U
+* device instance $28 r0 *1 -0.765,30.425 nfet
+X$28 nn__t1 ln__t7 lp__t19 vss__t43 sg13_lv_nmos L=0.13U W=0.75U AS=0.1875P
++ AD=0.375P PS=1.25U PD=2.5U
+* device instance $29 r0 *1 0.765,30.425 nfet
+X$29 lp__t20 ln__t8 nn__t2 vss__t40 sg13_lv_nmos L=0.13U W=0.75U AS=0.375P
++ AD=0.1875P PS=2.5U PD=1.25U
+* device instance $30 r0 *1 1.395,30.425 nfet
+X$30 nn__t0 ln__t6 lp__t18 vss__t44 sg13_lv_nmos L=0.13U W=0.75U AS=0.1875P
++ AD=0.375P PS=1.25U PD=2.5U
+* device instance $31 r0 *1 2.925,30.425 nfet
+X$31 ln__t21 lp__t9 np__t3 vss__t41 sg13_lv_nmos L=0.13U W=0.75U AS=0.375P
++ AD=0.1875P PS=2.5U PD=1.25U
+* device instance $32 r0 *1 3.555,30.425 nfet
+X$32 np__t2 lp__t8 ln__t20 vss__t45 sg13_lv_nmos L=0.13U W=0.75U AS=0.1875P
++ AD=0.375P PS=1.25U PD=2.5U
+* device instance $33 r0 *1 -2.325,69.8 nfet
+X$33 doutb__t3 dout__t1 vss__t2 vss__t46 sg13_lv_nmos L=0.13U W=1.5U AS=0.75P
++ AD=0.375P PS=4U PD=2U
+* device instance $34 r0 *1 -1.695,69.8 nfet
+X$34 vss__t4 lnb__t1 doutb__t4 vss__t48 sg13_lv_nmos L=0.13U W=1.5U AS=0.375P
++ AD=0.375P PS=2U PD=2U
+* device instance $35 r0 *1 -1.065,69.8 nfet
+X$35 lnb__t2 ln__t2 vss__t5 vss__t50 sg13_lv_nmos L=0.13U W=1.5U AS=0.375P
++ AD=0.75P PS=2U PD=4U
+* device instance $36 r0 *1 1.065,69.8 nfet
+X$36 vss__t7 lp__t3 lpb__t1 vss__t47 sg13_lv_nmos L=0.13U W=1.5U AS=0.75P
++ AD=0.375P PS=4U PD=2U
+* device instance $37 r0 *1 1.695,69.8 nfet
+X$37 dout__t4 lpb__t0 vss__t6 vss__t49 sg13_lv_nmos L=0.13U W=1.5U AS=0.375P
++ AD=0.375P PS=2U PD=2U
+* device instance $38 r0 *1 2.325,69.8 nfet
+X$38 vss__t3 doutb__t2 dout__t3 vss__t51 sg13_lv_nmos L=0.13U W=1.5U AS=0.375P
++ AD=0.75P PS=2U PD=4U
+* device instance $39 r0 *1 -3.555,40.725 pfet
+X$39 ln__t14 lp__t6 vdd__t0 vdd__t1 sg13_lv_pmos L=0.13U W=0.75U AS=0.375P
++ AD=0.1875P PS=2.5U PD=1.25U
+* device instance $40 r0 *1 -2.925,40.725 pfet
+X$40 vdd__t2 lp__t2 ln__t15 vdd__t3 sg13_lv_pmos L=0.13U W=0.75U AS=0.1875P
++ AD=0.375P PS=1.25U PD=2.5U
+* device instance $41 r0 *1 -1.395,40.725 pfet
+X$41 lp__t16 ln__t5 vdd__t47 vdd__t44 sg13_lv_pmos L=0.13U W=0.75U AS=0.375P
++ AD=0.1875P PS=2.5U PD=1.25U
+* device instance $42 r0 *1 -0.765,40.725 pfet
+X$42 vdd__t43 ln__t4 lp__t15 vdd__t40 sg13_lv_pmos L=0.13U W=0.75U AS=0.1875P
++ AD=0.375P PS=1.25U PD=2.5U
+* device instance $43 r0 *1 0.765,40.725 pfet
+X$43 lp__t17 ln__t0 vdd__t48 vdd__t45 sg13_lv_pmos L=0.13U W=0.75U AS=0.375P
++ AD=0.1875P PS=2.5U PD=1.25U
+* device instance $44 r0 *1 1.395,40.725 pfet
+X$44 vdd__t42 ln__t3 lp__t14 vdd__t39 sg13_lv_pmos L=0.13U W=0.75U AS=0.1875P
++ AD=0.375P PS=1.25U PD=2.5U
+* device instance $45 r0 *1 2.925,40.725 pfet
+X$45 ln__t17 lp__t7 vdd__t49 vdd__t46 sg13_lv_pmos L=0.13U W=0.75U AS=0.375P
++ AD=0.1875P PS=2.5U PD=1.25U
+* device instance $46 r0 *1 3.555,40.725 pfet
+X$46 vdd__t41 lp__t5 ln__t16 vdd__t38 sg13_lv_pmos L=0.13U W=0.75U AS=0.1875P
++ AD=0.375P PS=1.25U PD=2.5U
+* device instance $47 r0 *1 -5.715,46.2 pfet
+X$47 np__t4 clk__t3 vdd__t4 vdd__t5 sg13_lv_pmos L=0.13U W=1.5U AS=0.75P
++ AD=0.375P PS=4U PD=2U
+* device instance $48 r0 *1 -5.085,46.2 pfet
+X$48 vdd__t6 clk__t4 np__t5 vdd__t7 sg13_lv_pmos L=0.13U W=1.5U AS=0.375P
++ AD=0.75P PS=2U PD=4U
+* device instance $49 r0 *1 -3.555,46.2 pfet
+X$49 ln__t13 clk__t14 vdd__t37 vdd__t32 sg13_lv_pmos L=0.13U W=1.5U AS=0.75P
++ AD=0.375P PS=4U PD=2U
+* device instance $50 r0 *1 -2.925,46.2 pfet
+X$50 vdd__t27 clk__t9 ln__t11 vdd__t22 sg13_lv_pmos L=0.13U W=1.5U AS=0.375P
++ AD=0.75P PS=2U PD=4U
+* device instance $51 r0 *1 -1.395,46.2 pfet
+X$51 lp__t13 clk__t13 vdd__t36 vdd__t31 sg13_lv_pmos L=0.13U W=1.5U AS=0.75P
++ AD=0.375P PS=4U PD=2U
+* device instance $52 r0 *1 -0.765,46.2 pfet
+X$52 vdd__t23 clk__t5 lp__t10 vdd__t18 sg13_lv_pmos L=0.13U W=1.5U AS=0.375P
++ AD=0.75P PS=2U PD=4U
+* device instance $53 r0 *1 0.765,46.2 pfet
+X$53 lp__t12 clk__t11 vdd__t34 vdd__t29 sg13_lv_pmos L=0.13U W=1.5U AS=0.75P
++ AD=0.375P PS=4U PD=2U
+* device instance $54 r0 *1 1.395,46.2 pfet
+X$54 vdd__t24 clk__t6 lp__t11 vdd__t19 sg13_lv_pmos L=0.13U W=1.5U AS=0.375P
++ AD=0.75P PS=2U PD=4U
+* device instance $55 r0 *1 2.925,46.2 pfet
+X$55 ln__t12 clk__t10 vdd__t33 vdd__t28 sg13_lv_pmos L=0.13U W=1.5U AS=0.75P
++ AD=0.375P PS=4U PD=2U
+* device instance $56 r0 *1 3.555,46.2 pfet
+X$56 vdd__t25 clk__t7 ln__t10 vdd__t20 sg13_lv_pmos L=0.13U W=1.5U AS=0.375P
++ AD=0.75P PS=2U PD=4U
+* device instance $57 r0 *1 5.085,46.2 pfet
+X$57 nn__t5 clk__t12 vdd__t35 vdd__t30 sg13_lv_pmos L=0.13U W=1.5U AS=0.75P
++ AD=0.375P PS=4U PD=2U
+* device instance $58 r0 *1 5.715,46.2 pfet
+X$58 vdd__t26 clk__t8 nn__t4 vdd__t21 sg13_lv_pmos L=0.13U W=1.5U AS=0.375P
++ AD=0.75P PS=2U PD=4U
+* device instance $59 r0 *1 -1.065,56.3 pfet
+X$59 lnb__t0 ln__t1 vdd__t11 vdd__t12 sg13_lv_pmos L=0.13U W=3U AS=1.5P AD=1.5P
++ PS=7U PD=7U
+* device instance $60 r0 *1 1.065,56.3 pfet
+X$60 vdd__t15 lp__t4 lpb__t3 vdd__t13 sg13_lv_pmos L=0.13U W=3U AS=1.5P AD=1.5P
++ PS=7U PD=7U
+* device instance $61 r0 *1 -3.225,56.8 pfet
+X$61 \$25 dout__t0 doutb__t0 vdd__t8 sg13_lv_pmos L=0.13U W=4U AS=2P AD=1P
++ PS=9U PD=4.5U
+* device instance $62 r0 *1 -2.595,56.8 pfet
+X$62 vdd__t9 lnb__t3 \$25 vdd__t10 sg13_lv_pmos L=0.13U W=4U AS=1P AD=2P
++ PS=4.5U PD=9U
+* device instance $63 r0 *1 2.595,56.8 pfet
+X$63 \$26 lpb__t2 vdd__t16 vdd__t17 sg13_lv_pmos L=0.13U W=4U AS=2P AD=1P PS=9U
++ PD=4.5U
+* device instance $64 r0 *1 3.225,56.8 pfet
+X$64 dout__t2 doutb__t1 \$26 vdd__t14 sg13_lv_pmos L=0.13U W=4U AS=1P AD=2P
++ PS=4.5U PD=9U
+* device instance clk_t0 r0 *1 0,0 
+Rclk_t0 clk__t0 clk 3.19356886276
+* device instance clk_t1 r0 *1 0,0 
+Rclk_t1 clk__t1 clk 3.18358869403
+* device instance clk_t2 r0 *1 0,0 
+Rclk_t2 clk__t2 clk 3.19356886276
+* device instance clk_t3 r0 *1 0,0 
+Rclk_t3 clk__t3 clk 2.31257124412
+* device instance clk_t4 r0 *1 0,0 
+Rclk_t4 clk__t4 clk 2.27291499889
+* device instance clk_t5 r0 *1 0,0 
+Rclk_t5 clk__t5 clk 2.11913310456
+* device instance clk_t6 r0 *1 0,0 
+Rclk_t6 clk__t6 clk 2.12769681774
+* device instance clk_t7 r0 *1 0,0 
+Rclk_t7 clk__t7 clk 2.1938202516
+* device instance clk_t8 r0 *1 0,0 
+Rclk_t8 clk__t8 clk 2.31257124412
+* device instance clk_t9 r0 *1 0,0 
+Rclk_t9 clk__t9 clk 2.16881105589
+* device instance clk_t10 r0 *1 0,0 
+Rclk_t10 clk__t10 clk 2.16881105589
+* device instance clk_t11 r0 *1 0,0 
+Rclk_t11 clk__t11 clk 2.11913310456
+* device instance clk_t12 r0 *1 0,0 
+Rclk_t12 clk__t12 clk 2.27291499889
+* device instance clk_t13 r0 *1 0,0 
+Rclk_t13 clk__t13 clk 2.12769681774
+* device instance clk_t14 r0 *1 0,0 
+Rclk_t14 clk__t14 clk 2.1938202516
+* device instance clk_t15 r0 *1 0,0 
+Rclk_t15 clk__t15 clk 3.17691783029
+* device instance clk_t16 r0 *1 0,0 
+Rclk_t16 clk__t16 clk 3.17357714012
+* device instance clk_t17 r0 *1 0,0 
+Rclk_t17 clk__t17 clk 3.17691783029
+* device instance clk_t18 r0 *1 0,0 
+Rclk_t18 clk__t18 clk 3.18358869403
+* device instance clk_t19 r0 *1 0,0 
+Rclk_t19 clk__t19 clk 3.17357714012
+* device instance clk r0 *1 0,0 
+Cclk clk vsubs 1.5139265e-14
+* device instance dout_t0 r0 *1 0,0 
+Rdout_t0 dout__t0 dout 5.97216396697
+* device instance dout_t1 r0 *1 0,0 
+Rdout_t1 dout__t1 dout 4.06888800029
+* device instance dout_t2 r0 *1 0,0 
+Rdout_t2 dout__t2 dout 5.79187869052
+* device instance dout_t3 r0 *1 0,0 
+Rdout_t3 dout__t3 dout 3.87644687726
+* device instance dout_t4 r0 *1 0,0 
+Rdout_t4 dout__t4 dout 3.74242246496
+* device instance dout r0 *1 0,0 
+Cdout dout vsubs 6.538875e-15
+* device instance doutb_t0 r0 *1 0,0 
+Rdoutb_t0 doutb__t0 doutb 5.95668141995
+* device instance doutb_t1 r0 *1 0,0 
+Rdoutb_t1 doutb__t1 doutb 6.14209655275
+* device instance doutb_t2 r0 *1 0,0 
+Rdoutb_t2 doutb__t2 doutb 4.18466457021
+* device instance doutb_t3 r0 *1 0,0 
+Rdoutb_t3 doutb__t3 doutb 3.9867477071
+* device instance doutb_t4 r0 *1 0,0 
+Rdoutb_t4 doutb__t4 doutb 3.84890974998
+* device instance doutb r0 *1 0,0 
+Cdoutb doutb vsubs 6.70864e-15
+* device instance ln_t0 r0 *1 0,0 
+Rln_t0 ln__t0 ln 0.416139397235
+* device instance ln_t1 r0 *1 0,0 
+Rln_t1 ln__t1 ln 6.0475263152
+* device instance ln_t2 r0 *1 0,0 
+Rln_t2 ln__t2 ln 11.0439713679
+* device instance ln_t3 r0 *1 0,0 
+Rln_t3 ln__t3 ln 0.61373903535
+* device instance ln_t4 r0 *1 0,0 
+Rln_t4 ln__t4 ln 0.364021567084
+* device instance ln_t5 r0 *1 0,0 
+Rln_t5 ln__t5 ln 0.550027596324
+* device instance ln_t6 r0 *1 0,0 
+Rln_t6 ln__t6 ln 3.59165276854
+* device instance ln_t7 r0 *1 0,0 
+Rln_t7 ln__t7 ln 3.55749992376
+* device instance ln_t8 r0 *1 0,0 
+Rln_t8 ln__t8 ln 3.56321007017
+* device instance ln_t9 r0 *1 0,0 
+Rln_t9 ln__t9 ln 3.58131600993
+* device instance ln_t10 r0 *1 0,0 
+Rln_t10 ln__t10 ln 2.66423773124
+* device instance ln_t11 r0 *1 0,0 
+Rln_t11 ln__t11 ln 2.52302813737
+* device instance ln_t12 r0 *1 0,0 
+Rln_t12 ln__t12 ln 2.55365166419
+* device instance ln_t13 r0 *1 0,0 
+Rln_t13 ln__t13 ln 2.62853797735
+* device instance ln_t14 r0 *1 0,0 
+Rln_t14 ln__t14 ln 1.30863916627
+* device instance ln_t15 r0 *1 0,0 
+Rln_t15 ln__t15 ln 1.08120097627
+* device instance ln_t16 r0 *1 0,0 
+Rln_t16 ln__t16 ln 1.37894425475
+* device instance ln_t17 r0 *1 0,0 
+Rln_t17 ln__t17 ln 1.1508524628
+* device instance ln_t18 r0 *1 0,0 
+Rln_t18 ln__t18 ln 3.77303995125
+* device instance ln_t19 r0 *1 0,0 
+Rln_t19 ln__t19 ln 3.7003093867
+* device instance ln_t20 r0 *1 0,0 
+Rln_t20 ln__t20 ln 3.79799700684
+* device instance ln_t21 r0 *1 0,0 
+Rln_t21 ln__t21 ln 3.72125723343
+* device instance ln r0 *1 0,0 
+Cln ln vsubs 1.7270597e-14
+* device instance lnb_t0 r0 *1 0,0 
+Rlnb_t0 lnb__t0 lnb 4.90713324372
+* device instance lnb_t1 r0 *1 0,0 
+Rlnb_t1 lnb__t1 lnb 4.71460759284
+* device instance lnb_t2 r0 *1 0,0 
+Rlnb_t2 lnb__t2 lnb 4.72980667038
+* device instance lnb_t3 r0 *1 0,0 
+Rlnb_t3 lnb__t3 lnb 4.59065249306
+* device instance lnb r0 *1 0,0 
+Clnb lnb vsubs 5.341793e-15
+* device instance lp_t0 r0 *1 0,0 
+Rlp_t0 lp__t0 lp 3.8049059153
+* device instance lp_t1 r0 *1 0,0 
+Rlp_t1 lp__t1 lp 3.72802654514
+* device instance lp_t2 r0 *1 0,0 
+Rlp_t2 lp__t2 lp 1.15294597006
+* device instance lp_t3 r0 *1 0,0 
+Rlp_t3 lp__t3 lp 11.0640613751
+* device instance lp_t4 r0 *1 0,0 
+Rlp_t4 lp__t4 lp 6.05852732591
+* device instance lp_t5 r0 *1 0,0 
+Rlp_t5 lp__t5 lp 1.31101970217
+* device instance lp_t6 r0 *1 0,0 
+Rlp_t6 lp__t6 lp 1.38145268212
+* device instance lp_t7 r0 *1 0,0 
+Rlp_t7 lp__t7 lp 1.08316778102
+* device instance lp_t8 r0 *1 0,0 
+Rlp_t8 lp__t8 lp 3.77990346052
+* device instance lp_t9 r0 *1 0,0 
+Rlp_t9 lp__t9 lp 3.70704059233
+* device instance lp_t10 r0 *1 0,0 
+Rlp_t10 lp__t10 lp 2.32150849626
+* device instance lp_t11 r0 *1 0,0 
+Rlp_t11 lp__t11 lp 2.34930438954
+* device instance lp_t12 r0 *1 0,0 
+Rlp_t12 lp__t12 lp 2.3127026046
+* device instance lp_t13 r0 *1 0,0 
+Rlp_t13 lp__t13 lp 2.36508908099
+* device instance lp_t14 r0 *1 0,0 
+Rlp_t14 lp__t14 lp 0.551028147485
+* device instance lp_t15 r0 *1 0,0 
+Rlp_t15 lp__t15 lp 0.416896393357
+* device instance lp_t16 r0 *1 0,0 
+Rlp_t16 lp__t16 lp 0.614855483522
+* device instance lp_t17 r0 *1 0,0 
+Rlp_t17 lp__t17 lp 0.364683756043
+* device instance lp_t18 r0 *1 0,0 
+Rlp_t18 lp__t18 lp 3.58783075558
+* device instance lp_t19 r0 *1 0,0 
+Rlp_t19 lp__t19 lp 3.56969187944
+* device instance lp_t20 r0 *1 0,0 
+Rlp_t20 lp__t20 lp 3.56397134575
+* device instance lp_t21 r0 *1 0,0 
+Rlp_t21 lp__t21 lp 3.59818631771
+* device instance lp r0 *1 0,0 
+Clp lp vsubs 1.7107095e-14
+* device instance lpb_t0 r0 *1 0,0 
+Rlpb_t0 lpb__t0 lpb 4.71460759284
+* device instance lpb_t1 r0 *1 0,0 
+Rlpb_t1 lpb__t1 lpb 4.72980667038
+* device instance lpb_t2 r0 *1 0,0 
+Rlpb_t2 lpb__t2 lpb 4.59065249306
+* device instance lpb_t3 r0 *1 0,0 
+Rlpb_t3 lpb__t3 lpb 4.90713324372
+* device instance lpb r0 *1 0,0 
+Clpb lpb vsubs 5.341793e-15
+* device instance nn_t0 r0 *1 0,0 
+Rnn_t0 nn__t0 nn 0.232678570164
+* device instance nn_t1 r0 *1 0,0 
+Rnn_t1 nn__t1 nn 0.881585459988
+* device instance nn_t2 r0 *1 0,0 
+Rnn_t2 nn__t2 nn 0.232678570164
+* device instance nn_t3 r0 *1 0,0 
+Rnn_t3 nn__t3 nn 1.17160097059
+* device instance nn_t4 r0 *1 0,0 
+Rnn_t4 nn__t4 nn 7.51803867106
+* device instance nn_t5 r0 *1 0,0 
+Rnn_t5 nn__t5 nn 7.43841338173
+* device instance nn_t6 r0 *1 0,0 
+Rnn_t6 nn__t6 nn 3.53880928977
+* device instance nn_t7 r0 *1 0,0 
+Rnn_t7 nn__t7 nn 3.43191836449
+* device instance nn_t8 r0 *1 0,0 
+Rnn_t8 nn__t8 nn 3.42065416716
+* device instance nn_t9 r0 *1 0,0 
+Rnn_t9 nn__t9 nn 3.65982255489
+* device instance nn r0 *1 0,0 
+Cnn nn vsubs 8.795931e-15
+* device instance np_t0 r0 *1 0,0 
+Rnp_t0 np__t0 np 0.959652700687
+* device instance np_t1 r0 *1 0,0 
+Rnp_t1 np__t1 np 0.72210239561
+* device instance np_t2 r0 *1 0,0 
+Rnp_t2 np__t2 np 1.78192672092
+* device instance np_t3 r0 *1 0,0 
+Rnp_t3 np__t3 np 1.5415122336
+* device instance np_t4 r0 *1 0,0 
+Rnp_t4 np__t4 np 6.15798919226
+* device instance np_t5 r0 *1 0,0 
+Rnp_t5 np__t5 np 6.09276850206
+* device instance np_t6 r0 *1 0,0 
+Rnp_t6 np__t6 np 3.05881869067
+* device instance np_t7 r0 *1 0,0 
+Rnp_t7 np__t7 np 2.94420473663
+* device instance np_t8 r0 *1 0,0 
+Rnp_t8 np__t8 np 3.47516709297
+* device instance np_t9 r0 *1 0,0 
+Rnp_t9 np__t9 np 3.2948577346
+* device instance np r0 *1 0,0 
+Cnp np vsubs 8.358959e-15
+* device instance tail_t0 r0 *1 0,0 
+Rtail_t0 tail__t0 tail 1.90317123311
+* device instance tail_t1 r0 *1 0,0 
+Rtail_t1 tail__t1 tail 1.74846361778
+* device instance tail_t2 r0 *1 0,0 
+Rtail_t2 tail__t2 tail 1.44522101726
+* device instance tail_t3 r0 *1 0,0 
+Rtail_t3 tail__t3 tail 1.50896510739
+* device instance tail_t4 r0 *1 0,0 
+Rtail_t4 tail__t4 tail 1.90317123311
+* device instance tail_t5 r0 *1 0,0 
+Rtail_t5 tail__t5 tail 1.74846361778
+* device instance tail_t6 r0 *1 0,0 
+Rtail_t6 tail__t6 tail 1.44522101726
+* device instance tail_t7 r0 *1 0,0 
+Rtail_t7 tail__t7 tail 1.50896510739
+* device instance tail_t8 r0 *1 0,0 
+Rtail_t8 tail__t8 tail 1.44930739833
+* device instance tail_t9 r0 *1 0,0 
+Rtail_t9 tail__t9 tail 1.42531302698
+* device instance tail_t10 r0 *1 0,0 
+Rtail_t10 tail__t10 tail 1.49614215728
+* device instance tail_t11 r0 *1 0,0 
+Rtail_t11 tail__t11 tail 1.56376644188
+* device instance tail_t12 r0 *1 0,0 
+Rtail_t12 tail__t12 tail 1.56376644188
+* device instance tail_t13 r0 *1 0,0 
+Rtail_t13 tail__t13 tail 1.49614215728
+* device instance tail_t14 r0 *1 0,0 
+Rtail_t14 tail__t14 tail 1.44930739833
+* device instance tail_t15 r0 *1 0,0 
+Rtail_t15 tail__t15 tail 1.42531302698
+* device instance tail r0 *1 0,0 
+Ctail tail vsubs 7.644222e-15
+* device instance tmid_t0 r0 *1 0,0 
+Rtmid_t0 tmid__t0 tmid 1.36816904249
+* device instance tmid_t1 r0 *1 0,0 
+Rtmid_t1 tmid__t1 tmid 1.36816904249
+* device instance tmid_t2 r0 *1 0,0 
+Rtmid_t2 tmid__t2 tmid 1.24765553636
+* device instance tmid_t3 r0 *1 0,0 
+Rtmid_t3 tmid__t3 tmid 1.22212761163
+* device instance tmid_t4 r0 *1 0,0 
+Rtmid_t4 tmid__t4 tmid 1.24765553636
+* device instance tmid_t5 r0 *1 0,0 
+Rtmid_t5 tmid__t5 tmid 1.29720515493
+* device instance tmid_t6 r0 *1 0,0 
+Rtmid_t6 tmid__t6 tmid 1.22212761163
+* device instance tmid_t7 r0 *1 0,0 
+Rtmid_t7 tmid__t7 tmid 1.29720515493
+* device instance tmid_t8 r0 *1 0,0 
+Rtmid_t8 tmid__t8 tmid 1.40788066617
+* device instance tmid_t9 r0 *1 0,0 
+Rtmid_t9 tmid__t9 tmid 1.56801931461
+* device instance tmid_t10 r0 *1 0,0 
+Rtmid_t10 tmid__t10 tmid 1.22701726531
+* device instance tmid_t11 r0 *1 0,0 
+Rtmid_t11 tmid__t11 tmid 1.29012540849
+* device instance tmid_t12 r0 *1 0,0 
+Rtmid_t12 tmid__t12 tmid 1.56801931461
+* device instance tmid_t13 r0 *1 0,0 
+Rtmid_t13 tmid__t13 tmid 1.40788066617
+* device instance tmid_t14 r0 *1 0,0 
+Rtmid_t14 tmid__t14 tmid 1.29012540849
+* device instance tmid_t15 r0 *1 0,0 
+Rtmid_t15 tmid__t15 tmid 1.22701726531
+* device instance tmid r0 *1 0,0 
+Ctmid tmid vsubs 6.544307e-15
+* device instance vbias_t0 r0 *1 0,0 
+Rvbias_t0 vbias__t0 vbias 1.2271875
+* device instance vbias_t1 r0 *1 0,0 
+Rvbias_t1 vbias__t1 vbias 0.8765625
+* device instance vbias_t2 r0 *1 0,0 
+Rvbias_t2 vbias__t2 vbias 1.2271875
+* device instance vbias_t3 r0 *1 0,0 
+Rvbias_t3 vbias__t3 vbias 0.8765625
+* device instance vbias_t4 r0 *1 0,0 
+Rvbias_t4 vbias__t4 vbias 0.5259375
+* device instance vbias_t5 r0 *1 0,0 
+Rvbias_t5 vbias__t5 vbias 0.1753125
+* device instance vbias_t6 r0 *1 0,0 
+Rvbias_t6 vbias__t6 vbias 0.1753125
+* device instance vbias_t7 r0 *1 0,0 
+Rvbias_t7 vbias__t7 vbias 0.5259375
+* device instance vbias r0 *1 0,0 
+Cvbias vbias vsubs 1.670129e-15
+* device instance vdd_t0 r0 *1 0,0 
+Rvdd_t0 vdd__t0 vdd 1.75783255707
+* device instance vdd_t1 r0 *1 0,0 
+Rvdd_t1 vdd__t1 vdd 1.75783255707
+* device instance vdd_t2 r0 *1 0,0 
+Rvdd_t2 vdd__t2 vdd 1.67857054304
+* device instance vdd_t3 r0 *1 0,0 
+Rvdd_t3 vdd__t3 vdd 1.67857054304
+* device instance vdd_t4 r0 *1 0,0 
+Rvdd_t4 vdd__t4 vdd 1.47862196593
+* device instance vdd_t5 r0 *1 0,0 
+Rvdd_t5 vdd__t5 vdd 1.47862196593
+* device instance vdd_t6 r0 *1 0,0 
+Rvdd_t6 vdd__t6 vdd 1.31619243789
+* device instance vdd_t7 r0 *1 0,0 
+Rvdd_t7 vdd__t7 vdd 1.31619243789
+* device instance vdd_t8 r0 *1 0,0 
+Rvdd_t8 vdd__t8 vdd 2.78096749341
+* device instance vdd_t9 r0 *1 0,0 
+Rvdd_t9 vdd__t9 vdd 2.73663040839
+* device instance vdd_t10 r0 *1 0,0 
+Rvdd_t10 vdd__t10 vdd 2.73663040839
+* device instance vdd_t11 r0 *1 0,0 
+Rvdd_t11 vdd__t11 vdd 2.53906778673
+* device instance vdd_t12 r0 *1 0,0 
+Rvdd_t12 vdd__t12 vdd 2.53906778673
+* device instance vdd_t13 r0 *1 0,0 
+Rvdd_t13 vdd__t13 vdd 2.53906778673
+* device instance vdd_t14 r0 *1 0,0 
+Rvdd_t14 vdd__t14 vdd 2.78096749341
+* device instance vdd_t15 r0 *1 0,0 
+Rvdd_t15 vdd__t15 vdd 2.53906778673
+* device instance vdd_t16 r0 *1 0,0 
+Rvdd_t16 vdd__t16 vdd 2.73663040839
+* device instance vdd_t17 r0 *1 0,0 
+Rvdd_t17 vdd__t17 vdd 2.73663040839
+* device instance vdd_t18 r0 *1 0,0 
+Rvdd_t18 vdd__t18 vdd 0.214997586926
+* device instance vdd_t19 r0 *1 0,0 
+Rvdd_t19 vdd__t19 vdd 0.370156776642
+* device instance vdd_t20 r0 *1 0,0 
+Rvdd_t20 vdd__t20 vdd 0.922161785085
+* device instance vdd_t21 r0 *1 0,0 
+Rvdd_t21 vdd__t21 vdd 1.47862196593
+* device instance vdd_t22 r0 *1 0,0 
+Rvdd_t22 vdd__t22 vdd 0.760267141959
+* device instance vdd_t23 r0 *1 0,0 
+Rvdd_t23 vdd__t23 vdd 0.214997586926
+* device instance vdd_t24 r0 *1 0,0 
+Rvdd_t24 vdd__t24 vdd 0.370156776642
+* device instance vdd_t25 r0 *1 0,0 
+Rvdd_t25 vdd__t25 vdd 0.922161785085
+* device instance vdd_t26 r0 *1 0,0 
+Rvdd_t26 vdd__t26 vdd 1.47862196593
+* device instance vdd_t27 r0 *1 0,0 
+Rvdd_t27 vdd__t27 vdd 0.760267141959
+* device instance vdd_t28 r0 *1 0,0 
+Rvdd_t28 vdd__t28 vdd 0.760267141959
+* device instance vdd_t29 r0 *1 0,0 
+Rvdd_t29 vdd__t29 vdd 0.214997586926
+* device instance vdd_t30 r0 *1 0,0 
+Rvdd_t30 vdd__t30 vdd 1.31619243789
+* device instance vdd_t31 r0 *1 0,0 
+Rvdd_t31 vdd__t31 vdd 0.370156776642
+* device instance vdd_t32 r0 *1 0,0 
+Rvdd_t32 vdd__t32 vdd 0.922161785085
+* device instance vdd_t33 r0 *1 0,0 
+Rvdd_t33 vdd__t33 vdd 0.760267141959
+* device instance vdd_t34 r0 *1 0,0 
+Rvdd_t34 vdd__t34 vdd 0.214997586926
+* device instance vdd_t35 r0 *1 0,0 
+Rvdd_t35 vdd__t35 vdd 1.31619243789
+* device instance vdd_t36 r0 *1 0,0 
+Rvdd_t36 vdd__t36 vdd 0.370156776642
+* device instance vdd_t37 r0 *1 0,0 
+Rvdd_t37 vdd__t37 vdd 0.922161785085
+* device instance vdd_t38 r0 *1 0,0 
+Rvdd_t38 vdd__t38 vdd 1.75783255707
+* device instance vdd_t39 r0 *1 0,0 
+Rvdd_t39 vdd__t39 vdd 1.54162543444
+* device instance vdd_t40 r0 *1 0,0 
+Rvdd_t40 vdd__t40 vdd 1.5118918292
+* device instance vdd_t41 r0 *1 0,0 
+Rvdd_t41 vdd__t41 vdd 1.75783255707
+* device instance vdd_t42 r0 *1 0,0 
+Rvdd_t42 vdd__t42 vdd 1.54162543444
+* device instance vdd_t43 r0 *1 0,0 
+Rvdd_t43 vdd__t43 vdd 1.5118918292
+* device instance vdd_t44 r0 *1 0,0 
+Rvdd_t44 vdd__t44 vdd 1.54162543444
+* device instance vdd_t45 r0 *1 0,0 
+Rvdd_t45 vdd__t45 vdd 1.5118918292
+* device instance vdd_t46 r0 *1 0,0 
+Rvdd_t46 vdd__t46 vdd 1.67857054304
+* device instance vdd_t47 r0 *1 0,0 
+Rvdd_t47 vdd__t47 vdd 1.54162543444
+* device instance vdd_t48 r0 *1 0,0 
+Rvdd_t48 vdd__t48 vdd 1.5118918292
+* device instance vdd_t49 r0 *1 0,0 
+Rvdd_t49 vdd__t49 vdd 1.67857054304
+* device instance vdd r0 *1 0,0 
+Cvdd vdd vsubs 3.0619391e-14
+* device instance vinn_t0 r0 *1 0,0 
+Rvinn_t0 vinn__t0 vinn 4.04245988372
+* device instance vinn_t1 r0 *1 0,0 
+Rvinn_t1 vinn__t1 vinn 2.05669011628
+* device instance vinn_t2 r0 *1 0,0 
+Rvinn_t2 vinn__t2 vinn 4.04245988372
+* device instance vinn_t3 r0 *1 0,0 
+Rvinn_t3 vinn__t3 vinn 2.05669011628
+* device instance vinn r0 *1 0,0 
+Cvinn vinn vsubs 3.453621e-15
+* device instance vinp_t0 r0 *1 0,0 
+Rvinp_t0 vinp__t0 vinp 3.13868372093
+* device instance vinp_t1 r0 *1 0,0 
+Rvinp_t1 vinp__t1 vinp 2.52411627907
+* device instance vinp_t2 r0 *1 0,0 
+Rvinp_t2 vinp__t2 vinp 2.52411627907
+* device instance vinp_t3 r0 *1 0,0 
+Rvinp_t3 vinp__t3 vinp 3.13868372093
+* device instance vinp r0 *1 0,0 
+Cvinp vinp vsubs 3.256586e-15
+* device instance vss_t0 r0 *1 0,0 
+Rvss_t0 vss__t0 vss 1.71071868282
+* device instance vss_t1 r0 *1 0,0 
+Rvss_t1 vss__t1 vss 1.71071868282
+* device instance vss_t2 r0 *1 0,0 
+Rvss_t2 vss__t2 vss 3.0770776959
+* device instance vss_t3 r0 *1 0,0 
+Rvss_t3 vss__t3 vss 3.0770776959
+* device instance vss_t4 r0 *1 0,0 
+Rvss_t4 vss__t4 vss 3.07483932501
+* device instance vss_t5 r0 *1 0,0 
+Rvss_t5 vss__t5 vss 3.07330158918
+* device instance vss_t6 r0 *1 0,0 
+Rvss_t6 vss__t6 vss 3.07483932501
+* device instance vss_t7 r0 *1 0,0 
+Rvss_t7 vss__t7 vss 3.07330158918
+* device instance vss_t8 r0 *1 0,0 
+Rvss_t8 vss__t8 vss 1.69475258836
+* device instance vss_t9 r0 *1 0,0 
+Rvss_t9 vss__t9 vss 1.6915412855
+* device instance vss_t10 r0 *1 0,0 
+Rvss_t10 vss__t10 vss 1.70115700808
+* device instance vss_t11 r0 *1 0,0 
+Rvss_t11 vss__t11 vss 1.6915412855
+* device instance vss_t12 r0 *1 0,0 
+Rvss_t12 vss__t12 vss 1.69475258836
+* device instance vss_t13 r0 *1 0,0 
+Rvss_t13 vss__t13 vss 1.70115700808
+* device instance vss_t14 r0 *1 0,0 
+Rvss_t14 vss__t14 vss 1.71071868282
+* device instance vss_t15 r0 *1 0,0 
+Rvss_t15 vss__t15 vss 1.70115700808
+* device instance vss_t16 r0 *1 0,0 
+Rvss_t16 vss__t16 vss 1.69475258836
+* device instance vss_t17 r0 *1 0,0 
+Rvss_t17 vss__t17 vss 1.6915412855
+* device instance vss_t18 r0 *1 0,0 
+Rvss_t18 vss__t18 vss 1.6915412855
+* device instance vss_t19 r0 *1 0,0 
+Rvss_t19 vss__t19 vss 1.69475258836
+* device instance vss_t20 r0 *1 0,0 
+Rvss_t20 vss__t20 vss 1.70115700808
+* device instance vss_t21 r0 *1 0,0 
+Rvss_t21 vss__t21 vss 1.71071868282
+* device instance vss_t22 r0 *1 0,0 
+Rvss_t22 vss__t22 vss 1.06578578397
+* device instance vss_t23 r0 *1 0,0 
+Rvss_t23 vss__t23 vss 1.05969390445
+* device instance vss_t24 r0 *1 0,0 
+Rvss_t24 vss__t24 vss 1.05561312058
+* device instance vss_t25 r0 *1 0,0 
+Rvss_t25 vss__t25 vss 1.05356680137
+* device instance vss_t26 r0 *1 0,0 
+Rvss_t26 vss__t26 vss 1.05356680137
+* device instance vss_t27 r0 *1 0,0 
+Rvss_t27 vss__t27 vss 1.05561312058
+* device instance vss_t28 r0 *1 0,0 
+Rvss_t28 vss__t28 vss 1.05969390445
+* device instance vss_t29 r0 *1 0,0 
+Rvss_t29 vss__t29 vss 1.06578578397
+* device instance vss_t30 r0 *1 0,0 
+Rvss_t30 vss__t30 vss 0.465678302873
+* device instance vss_t31 r0 *1 0,0 
+Rvss_t31 vss__t31 vss 0.364264063686
+* device instance vss_t32 r0 *1 0,0 
+Rvss_t32 vss__t32 vss 0.347713663492
+* device instance vss_t33 r0 *1 0,0 
+Rvss_t33 vss__t33 vss 0.426034896251
+* device instance vss_t34 r0 *1 0,0 
+Rvss_t34 vss__t34 vss 0.426034896251
+* device instance vss_t35 r0 *1 0,0 
+Rvss_t35 vss__t35 vss 0.347713663492
+* device instance vss_t36 r0 *1 0,0 
+Rvss_t36 vss__t36 vss 0.364264063686
+* device instance vss_t37 r0 *1 0,0 
+Rvss_t37 vss__t37 vss 0.465678302873
+* device instance vss_t38 r0 *1 0,0 
+Rvss_t38 vss__t38 vss 0.311830730746
+* device instance vss_t39 r0 *1 0,0 
+Rvss_t39 vss__t39 vss 0.197746759673
+* device instance vss_t40 r0 *1 0,0 
+Rvss_t40 vss__t40 vss 0.178058498413
+* device instance vss_t41 r0 *1 0,0 
+Rvss_t41 vss__t41 vss 0.273937124766
+* device instance vss_t42 r0 *1 0,0 
+Rvss_t42 vss__t42 vss 0.273937124766
+* device instance vss_t43 r0 *1 0,0 
+Rvss_t43 vss__t43 vss 0.178058498413
+* device instance vss_t44 r0 *1 0,0 
+Rvss_t44 vss__t44 vss 0.197746759673
+* device instance vss_t45 r0 *1 0,0 
+Rvss_t45 vss__t45 vss 0.311830730746
+* device instance vss_t46 r0 *1 0,0 
+Rvss_t46 vss__t46 vss 3.0770776959
+* device instance vss_t47 r0 *1 0,0 
+Rvss_t47 vss__t47 vss 3.07330158918
+* device instance vss_t48 r0 *1 0,0 
+Rvss_t48 vss__t48 vss 3.07483932501
+* device instance vss_t49 r0 *1 0,0 
+Rvss_t49 vss__t49 vss 3.07483932501
+* device instance vss_t50 r0 *1 0,0 
+Rvss_t50 vss__t50 vss 3.07330158918
+* device instance vss_t51 r0 *1 0,0 
+Rvss_t51 vss__t51 vss 3.0770776959
+* device instance vss r0 *1 0,0 
+Cvss vss vsubs 3.3212082e-14
+* device instance cc_clk_ln r0 *1 0,0 
+Ccc_clk_ln clk ln 5.6469e-17
+* device instance cc_clk_lp r0 *1 0,0 
+Ccc_clk_lp clk lp 5.6469e-17
+* device instance cc_clk_nn r0 *1 0,0 
+Ccc_clk_nn clk nn 2.4201e-17
+* device instance cc_clk_np r0 *1 0,0 
+Ccc_clk_np clk np 2.4201e-17
+* device instance cc_clk_tmid r0 *1 0,0 
+Ccc_clk_tmid clk tmid 8.067e-18
+* device instance cc_clk_vdd r0 *1 0,0 
+Ccc_clk_vdd clk vdd 8.4703e-17
+* device instance cc_clk_vinn r0 *1 0,0 
+Ccc_clk_vinn clk vinn 8.067e-18
+* device instance cc_clk_vinp r0 *1 0,0 
+Ccc_clk_vinp clk vinp 8.067e-18
+* device instance cc_clk_vss r0 *1 0,0 
+Ccc_clk_vss clk vss 6.4536e-17
+* device instance cc_dout_doutb r0 *1 0,0 
+Ccc_dout_doutb dout doutb 1.21e-17
+* device instance cc_dout_ln r0 *1 0,0 
+Ccc_dout_ln dout ln 1.21e-17
+* device instance cc_dout_lnb r0 *1 0,0 
+Ccc_dout_lnb dout lnb 1.21e-17
+* device instance cc_dout_lp r0 *1 0,0 
+Ccc_dout_lp dout lp 2.4201e-17
+* device instance cc_dout_lpb r0 *1 0,0 
+Ccc_dout_lpb dout lpb 3.0655e-17
+* device instance cc_dout_vdd r0 *1 0,0 
+Ccc_dout_vdd dout vdd 1.5327e-17
+* device instance cc_dout_vss r0 *1 0,0 
+Ccc_dout_vss dout vss 1.5327e-17
+* device instance cc_doutb_ln r0 *1 0,0 
+Ccc_doutb_ln doutb ln 2.4201e-17
+* device instance cc_doutb_lnb r0 *1 0,0 
+Ccc_doutb_lnb doutb lnb 3.0655e-17
+* device instance cc_doutb_lp r0 *1 0,0 
+Ccc_doutb_lp doutb lp 1.21e-17
+* device instance cc_doutb_lpb r0 *1 0,0 
+Ccc_doutb_lpb doutb lpb 1.21e-17
+* device instance cc_doutb_vdd r0 *1 0,0 
+Ccc_doutb_vdd doutb vdd 1.5327e-17
+* device instance cc_doutb_vss r0 *1 0,0 
+Ccc_doutb_vss doutb vss 1.5327e-17
+* device instance cc_ln_lnb r0 *1 0,0 
+Ccc_ln_lnb ln lnb 3.6301e-17
+* device instance cc_ln_lp r0 *1 0,0 
+Ccc_ln_lp ln lp 1.64567e-16
+* device instance cc_ln_nn r0 *1 0,0 
+Ccc_ln_nn ln nn 7.7443e-17
+* device instance cc_ln_np r0 *1 0,0 
+Ccc_ln_np ln np 7.7443e-17
+* device instance cc_ln_vdd r0 *1 0,0 
+Ccc_ln_vdd ln vdd 1.62147e-16
+* device instance cc_ln_vss r0 *1 0,0 
+Ccc_ln_vss ln vss 1.45206e-16
+* device instance cc_lnb_vdd r0 *1 0,0 
+Ccc_lnb_vdd lnb vdd 1.5327e-17
+* device instance cc_lnb_vss r0 *1 0,0 
+Ccc_lnb_vss lnb vss 1.5327e-17
+* device instance cc_lp_lpb r0 *1 0,0 
+Ccc_lp_lpb lp lpb 3.6301e-17
+* device instance cc_lp_nn r0 *1 0,0 
+Ccc_lp_nn lp nn 7.7443e-17
+* device instance cc_lp_np r0 *1 0,0 
+Ccc_lp_np lp np 7.7443e-17
+* device instance cc_lp_vdd r0 *1 0,0 
+Ccc_lp_vdd lp vdd 1.62147e-16
+* device instance cc_lp_vss r0 *1 0,0 
+Ccc_lp_vss lp vss 1.45206e-16
+* device instance cc_lpb_vdd r0 *1 0,0 
+Ccc_lpb_vdd lpb vdd 1.5327e-17
+* device instance cc_lpb_vss r0 *1 0,0 
+Ccc_lpb_vss lpb vss 1.5327e-17
+* device instance cc_nn_np r0 *1 0,0 
+Ccc_nn_np nn np 8.309e-17
+* device instance cc_nn_tail r0 *1 0,0 
+Ccc_nn_tail nn tail 1.4521e-17
+* device instance cc_nn_vdd r0 *1 0,0 
+Ccc_nn_vdd nn vdd 5.9696e-17
+* device instance cc_nn_vss r0 *1 0,0 
+Ccc_nn_vss nn vss 4.8402e-17
+* device instance cc_np_tail r0 *1 0,0 
+Ccc_np_tail np tail 1.4521e-17
+* device instance cc_np_vdd r0 *1 0,0 
+Ccc_np_vdd np vdd 5.9696e-17
+* device instance cc_np_vss r0 *1 0,0 
+Ccc_np_vss np vss 4.8402e-17
+* device instance cc_tail_tmid r0 *1 0,0 
+Ccc_tail_tmid tail tmid 2.9041e-17
+* device instance cc_tail_vinn r0 *1 0,0 
+Ccc_tail_vinn tail vinn 8.067e-18
+* device instance cc_tail_vinp r0 *1 0,0 
+Ccc_tail_vinp tail vinp 8.067e-18
+* device instance cc_tmid_vss r0 *1 0,0 
+Ccc_tmid_vss tmid vss 2.9848e-17
+* device instance cc_vdd_vss r0 *1 0,0 
+Ccc_vdd_vss vdd vss 1.45206e-16
+* device instance cc_vinn_vinp r0 *1 0,0 
+Ccc_vinn_vinp vinn vinp 3.2268e-17
+* device instance cc_vinn_vss r0 *1 0,0 
+Ccc_vinn_vss vinn vss 8.067e-18
+* device instance cc_vinp_vss r0 *1 0,0 
+Ccc_vinp_vss vinp vss 8.067e-18
+* device instance vsubs_dctie r0 *1 0,0 
+Rvsubs_dctie vsubs 0 1e+12
+.ENDS comparator
