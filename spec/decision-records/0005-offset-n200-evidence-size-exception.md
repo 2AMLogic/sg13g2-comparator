@@ -40,8 +40,8 @@ committed campaign measures 61,709,133 B (the estimate was within 0.5 %).
    per-corner `ngspice.log` / generated deck artifacts, `grading.json`/`.md`
    and the seed/mismatch preflight. It exceeds the new-unit ceiling by exactly
    12426061 B.
-2. The `sim/` total exceeds its ceiling by exactly 15562275 B (this campaign
-   plus its 0.8 MB `klt yield` unit and the exception entries themselves).
+2. The `sim/` total exceeds its ceiling by exactly 15571105 B (this campaign
+   plus its 0.8 MB `klt yield` unit, the declared-N tooling and docs under `sim/`, and the exception entries themselves).
 
 Reducing the unit instead was considered and rejected: dropping the
 per-corner artifacts would make this campaign structurally unlike every
@@ -57,7 +57,7 @@ no further growth is silently allowed.
 ```
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 15562275}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 15571105}
 ```
 
 ## Consequences
