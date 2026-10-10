@@ -24,7 +24,7 @@ _None._
 Issues currently being built (`loom:building`).
 
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
-- **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise)
+- **#117**: Unit tests for the CI-gating scripts: signoff parity, ERC judge, netlist generator
 
 ## PRs Awaiting Review
 
@@ -46,8 +46,7 @@ Issues carrying `loom:curated`.
 
 ## Proposed (Architect / Hermit)
 
-- **#116**: CI guard: enforce append-only sim evidence (records, campaigns, corners) *(architect)*
-- **#117**: Unit tests for the CI-gating scripts: signoff parity, ERC judge, netlist generator *(architect)*
+- **#132**: Evidence size budget, sparse CI checkout, and bulk-evidence storage decision for sim/ campaigns *(architect)*
 
 ## Epics
 
@@ -64,6 +63,6 @@ Issues carrying `loom:curated`.
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 0 |
 | Curated | 1 |
-| Architect / Hermit proposals | 2 |
+| Architect / Hermit proposals | 1 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
