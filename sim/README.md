@@ -77,6 +77,18 @@ point). It is **characterization**: DR-0002 ratifies the offset row at
 `dut_vcm` only and no whole-latch common-mode range, so nothing there is a
 compliance verdict.
 
+**Memory / hysteresis (issue #159).** [`comparator-memory/`](comparator-memory/)
+compares the fourth decision's switching boundary after three +50 mV and after
+three -50 mV conditioning strobes (both histories in one netlist and one
+simulator invocation; deterministic 10 uV search over +/-50 mV; 45 PVT points;
+long-reset and short-reset controls), all on the batch fleet. Latest record:
+[`campaigns/20261010-08e31bed1/record.md`](comparator-memory/campaigns/20261010-08e31bed1/record.md).
+It is **characterization, not compliance**: no spec row is added or changed. It
+establishes that the two history-conditioned boundaries agree to within the
+10 uV brackets at every point; it does **not** establish absence of memory,
+because the short-reset sensitivity control FAILED (the bench did not
+demonstrate it can resolve a deliberately induced shift).
+
 Plus one supporting confirmation, not a spec-row bench:
 
 ```
@@ -529,7 +541,7 @@ inputs):
 |---|---|
 | signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
-| harness-unit-tests | `sim/{harness,kltsim,comparator-pex}/`, the `comparator-{regeneration,kickback}/testbench/` source benches, `sim/dut.json`, `sim/dut/`, `sim/klt-corner-verification/{benches/,rows.json}`, the top-level `*.json`/`*.jsonl`/`*.spice` of campaigns `20261009-d73a9ac` and `20261010-n200` (the N = 200 offset campaign the cited item 6 report is derived from), `campaigns/20261009-issue78/fixture/`, the `smoke/offset_mc-mismatch-vs-negctrl.envelope.json` control, `sim/klt-yield/`, `manifests/{klt-pin.json,t1-signoff-report.json}` (the frozen report the item 6 test compares with the citation), `design/`, `layout/{tests/,common_sg13g2.py,comparator/erc_tool.py,comparator/erc_report.json}` |
+| harness-unit-tests | `sim/{harness,kltsim,comparator-pex}/`, the `comparator-{regeneration,kickback,memory}/testbench/` source benches, `sim/run_memory.py`, `sim/dut.json`, `sim/dut/`, `sim/klt-corner-verification/{benches/,rows.json}`, the top-level `*.json`/`*.jsonl`/`*.spice` of campaigns `20261009-d73a9ac` and `20261010-n200` (the N = 200 offset campaign the cited item 6 report is derived from), `campaigns/20261009-issue78/fixture/`, the `smoke/offset_mc-mismatch-vs-negctrl.envelope.json` control, `sim/klt-yield/`, `manifests/{klt-pin.json,t1-signoff-report.json}` (the frozen report the item 6 test compares with the citation), `design/`, `layout/{tests/,common_sg13g2.py,comparator/erc_tool.py,comparator/erc_report.json}` |
 | append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` |
 
 A new input a job starts reading must be added to its patterns in the same

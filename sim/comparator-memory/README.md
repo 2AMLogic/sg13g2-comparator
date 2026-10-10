@@ -1,0 +1,147 @@
+# `sim/comparator-memory/`: does the previous decision bias the next one?
+
+Issue [#159](https://github.com/2AMLogic/sg13g2-comparator/issues/159). A
+history-dependent switching-boundary characterization of the real DR-0001 DUT
+(`sim/dut.json`, `comparator-dr0001`, provenance `schematic`).
+
+**Characterization, not compliance.** No specification row is added, changed or
+claimed (nothing under `spec/` or the ratified table is touched). A future spec
+claim needs its own decision record under DR-0002.
+
+## What it measures
+
+At each PVT point two histories run in **one generated netlist and one
+simulator invocation** (same model cards, temperature, supply, DUT netlist and
+clock), on separate DUT instances:
+
+- history `P`: three conditioning strobes at +50 mV, then the swept probe on the fourth strobe;
+- history `N`: three conditioning strobes at -50 mV, then the identical swept probe grid.
+
+The switching boundary of the fourth decision (the input at which it changes
+polarity) is searched over [-50 mV, +50 mV] to a final bracket of at most
+10 uV for each history, and `memory_shift = threshold_after_P - threshold_after_N`.
+
+- Clock: the regeneration bench's stimulus (10 ns high, 30 ns period, 20 ns
+  reset; `sim/comparator-regeneration/testbench/tb_regeneration.spice` is
+  referenced, not edited). The input steps from the conditioning value to the
+  probe 0.3 ns after the third strobe falls.
+- Decision: `(V(dout) - V(doutb)) / VDD` sampled 9 ns after the fourth rising
+  edge. Resolved positive `>= +0.8`, resolved negative `<= -0.8`, otherwise
+  unresolved; a resolved result opposing the nonzero probe is resolved wrong
+  polarity. Unresolved and wrong-polarity counts are kept separate everywhere.
+- Mismatch and Monte Carlo are off (plain `mos_<p>` sections): the search is
+  deterministic, so no seeds or run counts apply.
+- Grid: 5 process x 3 temperature (-40/27/125 C) x 3 supply (1.08/1.20/1.32 V) = 45 points.
+- Solver: `reltol=1e-6 vntol=1e-9 abstol=1e-13` (tighter than the timing
+  benches' 1e-4, because the quantity is a ~10 uV boundary).
+
+### The search (a justified deterministic equivalent of bisection)
+
+`klt sim` cannot run an adaptive search inside one request, and every
+sequential round is a full batch-fleet round trip, so the 14-step bisection is
+replaced by a **10-ary search in integer microvolts**: round 1 evaluates 11
+probes (-50 mV ... +50 mV in 10 mV steps, endpoints included), each later round
+the 9 interior points of the current bracket. The bracket shrinks exactly 10x
+per round, 100 mV -> 10 mV -> 1 mV -> 100 uV -> **10 uV in four rounds**, which meets the
+"<= 10 uV final bracket" contract exactly. The bracket is the adjacent pair of
+evaluated points with opposite resolved polarities; the threshold is its
+midpoint; the width is recorded with every result.
+
+A point is **rejected** (no threshold fabricated) if the initial bracket does not
+resolve to opposite polarities, an unresolved point separates the two
+polarities, the resolved polarities are non-monotone, or a measurement is
+missing or disagrees with the plan. An unresolved probe elsewhere (off the
+crossing) is counted, not fatal. Each round is one set of `klt sim` requests
+(one per process, 9 corners each; the controls are one 1-corner request each),
+all on the Spot batch fleet (`environment.remote.job_id` in every envelope).
+The next round's per-PVT-point bracket low end is looked up inside the netlist
+from the previous round's committed envelopes (a ternary-selected table on
+`temper` and the live supply), and the probe actually applied is measured and
+checked against the plan, so a wrong lookup rejects the point instead of
+mis-reporting it.
+
+### Controls (tt, 1.20 V, 27 C, same paired search)
+
+1. **Long reset** (10 ns high, 110 ns period, 100 ns reset): `|shift| <= 20 uV`.
+2. **Short reset** (10 ns high, 11 ns period, 1 ns reset): `|shift| >= 40 uV` and at least 20 uV above the long-reset `|shift|`.
+
+If the short-reset control does not meet its criterion the bench sensitivity
+control is **FAIL** and a near-zero nominal shift must not be read as "no
+memory". The optional stronger state-retention injection was not attempted.
+
+## Layout
+
+```
+sim/comparator-memory/
+  README.md
+  testbench/memory.circuit.spice     reference circuit (nominal, round 1); drift-guarded by the unit tests
+  testbench/memory.manifest.json     contract summary (not tb.json: this bench is not driven by sim/harness)
+  campaigns/<series>/                append-only evidence (series = date + git short sha of the code that ran)
+    nominal/round{1..4}/             per round: memory.<process>.{body.spice,request.json,envelope.json,invocation.json}
+    control-long/round{1..4}/  control-short/round{1..4}/  repeat/round{1..4}/
+    */attempts.jsonl, artifacts/     every submission attempt (incl. fleet-cap refusals), per-corner deck + log
+    record.json, record.md           generated by `run_memory.py record`
+```
+
+Code: `sim/kltsim/memory.py` (search, classification, verdicts, netlist and
+request composition, envelope reading), `sim/run_memory.py` (driver).
+Tests: `sim/kltsim/tests/test_memory.py`, `test_run_memory.py` (run by the
+CI `kltsim` discover step).
+
+## Reproduce
+
+Use the repo's pinned-era klt in a throwaway venv (the batch fleet runner is
+klt 0.5.0 and refuses newer clients, klayout-tools#2948/#2851):
+
+```bash
+uv venv /tmp/klt-venv && uv pip install --python /tmp/klt-venv/bin/python \
+  "klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@e8ca621a6961879cec1af60cc932c3b3d58ddcaa"
+S=<new-series-id>
+python3 sim/run_memory.py auto   --series $S --klt /tmp/klt-venv/bin/klt --retry-refused 60   # 4 rounds x (5 + 2 requests)
+python3 sim/run_memory.py repeat --series $S --klt /tmp/klt-venv/bin/klt                       # determinism re-run, tt/1.20 V/27 C
+python3 sim/run_memory.py record --series $S
+```
+
+## Result: series `20261010-08e31bed1`
+
+Full per-point table: [`campaigns/20261010-08e31bed1/record.md`](campaigns/20261010-08e31bed1/record.md)
+(machine form `record.json`; ngspice 46 and klt 0.5.0+ge8ca621a6961 on the fleet, DUT sha256 in the record).
+
+- **45/45 points closed, 0 rejected.** Every probe resolved (3420 probes: 1710
+  positive, 1710 negative, **0 unresolved, 0 wrong-polarity**, 0 missing).
+- **Every point is identical:** history P switches between -10 and 0 uV
+  (threshold -5 uV), history N between 0 and +10 uV (threshold +5 uV), final
+  brackets 10 uV, so `memory_shift = -10 uV` at all 45 points. No PVT
+  dependence is resolved at this search resolution.
+- What the -10 uV is: the only probe on which history shows is the exact-zero
+  input, which resolves with the sign of the conditioning (P -> positive, N ->
+  negative). Every probe with `|x| >= 10 uV` resolves with the sign of the input
+  in both histories. Both thresholds therefore lie inside (-10, +10) uV, so
+  `|shift| < 20 uV` is bounded by the brackets; the -10 uV itself is one search
+  step, a resolution-limited tie-break, not a resolved physical shift.
+- **Long-reset control: PASS** (shift -10 uV, bound 20 uV).
+- **Short-reset sensitivity control: FAIL** (shift -10 uV, needs >= 40 uV and
+  +20 uV over the long reset). The bench therefore did **not** demonstrate that it
+  can see a history-dependent shift when reset is deliberately incomplete, so
+  this record **does not support a "no measurable memory" conclusion**; the
+  nominal near-zero shift must not be read as evidence of no memory. The failed
+  control is kept as evidence. (1 ns of reset already erases history to within
+  the 10 uV resolution, or the bench is not sensitive to retention at that
+  level; this record cannot tell which.)
+- **Determinism re-run** (tt / 1.20 V / 27 C, all four rounds resubmitted as
+  separate batch jobs on the same bodies): every measured value bit-identical.
+
+## What this does and does not establish
+
+Establishes: with mismatch off, over the 45-point PVT grid, the fourth
+decision's switching boundary after three +50 mV strobes and after three -50 mV
+strobes is the same to within the brackets above (each inside +/-10 uV of
+zero), at a 10 uV search resolution, with the long-reset control inside its
+20 uV bound and a deterministic, reproducible measurement.
+
+Does **not** establish: any specification row or compliance verdict; absence of
+memory (the sensitivity control FAILED); anything about memory below 10 uV, with
+mismatch or noise (a mismatch-free, noise-free run), at other conditioning
+amplitudes or strobe counts, other common modes, or the post-layout netlist. It
+uses the same real DR-0001 DUT as the other benches; the ratified spec table is
+unchanged.
