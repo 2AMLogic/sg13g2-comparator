@@ -54,27 +54,83 @@ DEFAULT_REPORT = REPO_ROOT / "manifests" / "t1-signoff-report.json"
 _ACCEPTED_EXITS = (0, 3)
 
 
-def _flatten(obj, prefix=""):
-    """Yield (path, value) for every scalar leaf, for a readable diff."""
-    if isinstance(obj, dict):
-        for key in sorted(obj):
-            yield from _flatten(obj[key], f"{prefix}.{key}")
-    elif isinstance(obj, list):
-        for i, item in enumerate(obj):
-            yield from _flatten(item, f"{prefix}[{i}]")
-    else:
-        yield prefix, obj
+_ABSENT_FRESH = "<absent in fresh>"
+_ABSENT_COMMITTED = "<absent in committed>"
+
+
+def _node_type(value):
+    """JSON node type; bool is deliberately distinct from number."""
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return type(value).__name__
+
+
+def _reject_constant(name):
+    raise ValueError(f"non-standard JSON constant {name} is not allowed")
+
+
+def _parse_report(text):
+    """Parse JSON, rejecting NaN/Infinity; the root must be an object."""
+    value = json.loads(text, parse_constant=_reject_constant)
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"report root must be a JSON object, got {_node_type(value)}"
+        )
+    return value
+
+
+def _walk(fresh, committed, path=""):
+    """Yield (path, committed_value, fresh_value) for each difference.
+
+    Node types are compared first, then object key sets and array lengths,
+    then children / scalars. Objects are order-independent, arrays ordered.
+    Empty containers are real nodes, so structural changes are visible.
+    """
+    ft, ct = _node_type(fresh), _node_type(committed)
+    if ft != ct:
+        yield (path or ".", committed, fresh)
+        return
+    if ft == "object":
+        for key in sorted(set(fresh) | set(committed)):
+            sub = f"{path}.{key}"
+            if key not in committed:
+                yield (sub, _ABSENT_COMMITTED, fresh[key])
+            elif key not in fresh:
+                yield (sub, committed[key], _ABSENT_FRESH)
+        for key in sorted(set(fresh) & set(committed)):
+            yield from _walk(fresh[key], committed[key], f"{path}.{key}")
+    elif ft == "array":
+        if len(fresh) != len(committed):
+            yield (
+                f"{path or '.'}.length",
+                len(committed),
+                len(fresh),
+            )
+        for i in range(min(len(fresh), len(committed))):
+            yield from _walk(fresh[i], committed[i], f"{path}[{i}]")
+        for i in range(len(committed), len(fresh)):
+            yield (f"{path}[{i}]", _ABSENT_COMMITTED, fresh[i])
+        for i in range(len(fresh), len(committed)):
+            yield (f"{path}[{i}]", committed[i], _ABSENT_FRESH)
+    elif fresh != committed:
+        yield (path or ".", committed, fresh)
 
 
 def _first_differences(fresh, committed, limit=5):
-    fresh_map = dict(_flatten(fresh))
-    committed_map = dict(_flatten(committed))
+    """Up to `limit` (path, committed, fresh) differences, bounded."""
     out = []
-    for key in sorted(set(fresh_map) | set(committed_map)):
-        f = fresh_map.get(key, "<absent in fresh>")
-        c = committed_map.get(key, "<absent in committed>")
-        if f != c:
-            out.append((key, c, f))
+    for diff in _walk(fresh, committed):
+        out.append(diff)
         if len(out) >= limit:
             break
     return out
@@ -137,16 +193,24 @@ def main() -> int:
         return 1
 
     try:
-        fresh = json.loads(proc.stdout)
-    except json.JSONDecodeError as exc:
+        fresh = _parse_report(proc.stdout)
+    except ValueError as exc:
         print(
             f"FAIL: klt signoff exited {proc.returncode} but its stdout is "
-            f"not valid JSON ({exc}): {proc.stdout[:500]!r}",
+            f"not a valid JSON report object ({exc}): {proc.stdout[:500]!r}",
             file=sys.stderr,
         )
         return 1
 
-    committed = json.loads(report_path.read_text(encoding="utf-8"))
+    try:
+        committed = _parse_report(report_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        print(
+            f"FAIL: committed report {report_path} is not a valid JSON "
+            f"report object ({exc})",
+            file=sys.stderr,
+        )
+        return 1
     frozen_build = committed.get("build", {})
 
     diffs = _first_differences(fresh, committed)
