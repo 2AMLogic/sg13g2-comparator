@@ -375,11 +375,20 @@ def _corner_problems(corner: dict, bench_name: str, gates: list[str],
             return f"supply probe {probe} missing"
         try:
             pv = finite(m["value"], f"supply probe {probe}")
+            unit = m.get("unit")
+            if not isinstance(unit, str):
+                return (f"supply probe {probe} has missing or malformed unit {unit!r} "
+                        f"(expected V or a compatible voltage unit)")
+            try:
+                pv = convert(pv, unit, "V")
+            except UnitError:
+                return (f"supply probe {probe} unit {unit!r} is not a voltage unit "
+                        f"(expected V or a compatible voltage unit)")
             sv = [finite(v, "corner supply") for v in supplies.values()]
         except NonFiniteError as exc:
             return f"invalid numeric evidence: {exc}"
         if not any(abs(pv - v) <= SUPPLY_TOL_V for v in sv):
-            return f"supply probe {probe}={m['value']} V does not match corner {supplies}"
+            return f"supply probe {probe}={m['value']} {m.get('unit')} does not match corner {supplies}"
     temp_probe = probes.get("temperature")
     if temp_probe:
         m = values.get(temp_probe)
@@ -387,6 +396,10 @@ def _corner_problems(corner: dict, bench_name: str, gates: list[str],
             return f"temperature probe {temp_probe} missing"
         try:
             tv = finite(m["value"], f"temperature probe {temp_probe}")
+            unit = m.get("unit")
+            if not isinstance(unit, str) or unit.strip() != "C":
+                return (f"temperature probe {temp_probe} unit {unit!r} is not the declared "
+                        f"Celsius unit 'C' (no implicit conversion)")
             tc = finite(corner.get("temperature_c"), "corner temperature_c")
         except NonFiniteError as exc:
             return f"invalid numeric evidence: {exc}"
