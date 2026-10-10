@@ -23,7 +23,7 @@ _None._
 
 Issues currently being built (`loom:building`).
 
-_None._
+- **#159**: Memory / hysteresis characterization bench: does the previous decision bias the next?
 
 ## PRs Awaiting Review
 
@@ -42,13 +42,11 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 Issues carrying `loom:curated`.
 
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
-- **#157**: CI: pinned pyflakes-class static check over harness, kltsim and guard scripts *(curated)*
+- **#159**: Memory / hysteresis characterization bench: does the previous decision bias the next? *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-- **#157**: CI: pinned pyflakes-class static check over harness, kltsim and guard scripts *(architect)*
-- **#159**: Memory / hysteresis characterization bench: does the previous decision bias the next? *(architect)*
-- **#167**: T1 statistical signoff: larger offset populations at every PVT point *(architect)*
+_None._
 
 ## Epics
 
@@ -61,10 +59,10 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 0 |
 | Operator priority | 0 |
 | Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 0 |
+| In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 1 |
 | Curated | 2 |
-| Architect / Hermit proposals | 3 |
+| Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
