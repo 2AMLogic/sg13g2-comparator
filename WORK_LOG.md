@@ -4,6 +4,14 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-10
 
+- **PR #140**: feat(sim): T1 item 8 aggregated characterization report (schematic)
+- **PR #139**: ci: bound tracked sim evidence growth and use verified sparse checkouts
+- **PR #138**: ci: single source of truth and drift guard for pinned klt/KLayout build
+- **PR #137**: ci: pin GitHub Actions by commit SHA (Closes #136)
+- **Issue #64** (closed): Characterization: one aggregated per-spec-row report with a generic envelope (T1 item 8)
+- **Issue #132** (closed): Bound tracked sim evidence growth and use verified sparse CI checkouts
+- **Issue #135** (closed): CI: single source of truth and drift guard for the pinned klt/KLayout build
+- **Issue #136** (closed): CI: pin third-party GitHub Actions by commit SHA, matching the klt pin policy
 - **PR #133**: CI guard: enforce append-only sim evidence
 - **PR #131**: pex: record 2026-10-10 batch re-probe; PVT/MC rows still not run (Part of #61)
 - **PR #130**: CI: preserve started verification runs when newer commits arrive
