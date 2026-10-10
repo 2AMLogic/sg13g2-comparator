@@ -211,13 +211,28 @@ def main(argv: list[str] | None = None) -> int:
     write = not (args.no_write or sabotaged)
     # Captured BEFORE the run writes anything, so the flag describes the tree
     # this record was produced from rather than the tree the run left behind.
-    dirty_at_start = report_mod.dirty_paths()
+    # The SAME object supplies the run id and the record context, so a HEAD
+    # change during the run cannot change either.
+    git_prov = report_mod.capture_git_provenance()
+    if not git_prov.verified:
+        if write:
+            print(
+                "GIT PROVENANCE NOT VERIFIED -- refusing to write evidence: "
+                f"{git_prov.error}. Run inside a working Git checkout, or pass "
+                "--no-write for exploration with explicitly unknown provenance.",
+                file=sys.stderr,
+            )
+            return 6
+        print(f"  (git provenance unverified, commit recorded as "
+              f"'{git_prov.commit}': {git_prov.error})", file=sys.stderr)
+    dirty_at_start = list(git_prov.dirty_paths)
     # Issue #110: exclusively reserve this run's identity (evidence log dir +
     # private scratch dir) before any deck or log is written. A collision is
     # retried with a fresh token; existing evidence is never touched.
     try:
         reservation = report_mod.reserve_run(
-            tb.experiment_dir, WORK_DIR / tb.experiment, write
+            tb.experiment_dir, WORK_DIR / tb.experiment, write,
+            commit=git_prov.commit,
         )
     except report_mod.ReservationFailed as exc:
         print(f"RUN IDENTITY NOT RESERVED -- refusing to simulate: {exc}", file=sys.stderr)
@@ -317,7 +332,8 @@ def main(argv: list[str] | None = None) -> int:
     if write:
         context = {
             "record_id": rid,
-            "commit": report_mod.git_short_sha(),
+            "commit": git_prov.commit,
+            "git_verified": git_prov.verified,
             "dirty": bool(dirty_at_start),
             "dirty_paths": dirty_at_start[:20],
             "pdk": pdk.provenance(),

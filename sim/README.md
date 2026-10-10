@@ -346,6 +346,13 @@ it:
 - the **testbench** fragment and manifest sha256s;
 - the **commit**, flagged loudly if the working tree was dirty — a
   dirty-tree record is not citable;
+  Git provenance (commit, dirty paths) is captured and verified ONCE before
+  the run reserves its identity or simulates, checking every git exit code;
+  the same commit is used for the record id and the record. An
+  evidence-writing run **refuses to start** (exit 6) if git is missing, times
+  out, fails, or returns an invalid commit. `--no-write` exploration still
+  works with provenance explicitly `unknown`; evidence writes outside a
+  working Git checkout therefore require no-write mode;
 - the **PDK** variant and release version, and the **toolchain** observed,
   plus any accepted drift;
 - the **corner matrix** actually run and how many points completed;
