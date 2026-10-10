@@ -217,6 +217,13 @@ simulation-free step (issue #64):
 ./sim/characterize.sh report check    # re-hash every indexed source; fail if anything is stale
 ```
 
+Report directories are append-only evidence. `report` into an existing
+directory succeeds only when every existing artifact is byte-identical to the
+regeneration (an identical rerun); otherwise it fails before writing anything.
+A changed generator, DUT or grader is not permission to rewrite a historical
+report: select a new report directory and repoint the manifest item 8 citation.
+A partially populated directory is completed by creating only the missing files.
+
 Stdlib `python3` only: no PDK, ngspice, `klt` or batch submit. It reads one
 explicitly named committed campaign (`REPORT_CAMPAIGN`, default
 `20261009-d73a9ac`; never "newest"), grades it with the committed
@@ -390,7 +397,8 @@ Commands and regeneration:
 `append-only-evidence` job in `.github/workflows/ci.yml` runs
 `scripts/check_append_only_evidence.py` (stdlib only, no PDK).
 
-**Protected:** every file under `sim/<bench>/{records,corners,netlist-snapshots,campaigns,reports}/`
+**Protected:** every file under `sim/characterization/<report-id>/` (aggregated
+characterization reports, issue #155), and every file under `sim/<bench>/{records,corners,netlist-snapshots,campaigns,reports}/`
 for any bench name (matched by path component), including campaign request
 JSON, copied DUTs, generated decks, probes, failed attempts, and
 `comparator-pex/reports/`. A protected path present at the base must exist at

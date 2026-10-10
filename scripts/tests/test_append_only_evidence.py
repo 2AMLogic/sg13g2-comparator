@@ -180,6 +180,51 @@ class Protection(Base):
         self.assertEqual(self.main(b), 1)
 
 
+class AggregateCharacterization(Base):
+    D = "sim/characterization/20261009-x-schematic"
+
+    def _base(self):
+        for n in ("report.json", "input-index.json"):
+            self.r.write(f"{self.D}/{n}")
+        return self.r.commit()
+
+    def test_modify_delete_move_mode_fail(self):
+        b = self._base()
+        self.r.write(f"{self.D}/report.json", "changed\n")
+        (self.r.root / self.D / "input-index.json").rename(
+            self.r.root / "sim/characterization/moved.json")
+        self.r.commit()
+        v = self.run_check(b)
+        self.assertEqual(len(v), 2, v)
+        b2 = self.r.git("rev-parse", "HEAD")
+        (self.r.root / self.D / "report.json").chmod(0o755)
+        self.r.commit()
+        self.assertEqual(len(self.run_check(b2)), 1)
+
+    def test_additions_pass(self):
+        b = self._base()
+        self.r.write("sim/characterization/new-report/report.json")
+        self.r.write(f"{self.D}/extra.md")
+        self.r.commit()
+        self.assertEqual(self.run_check(b), [])
+
+    def test_existing_exception_mechanism_authorizes(self):
+        b = self._base()
+        old = self.r.oid(f"{self.D}/report.json")
+        self.r.write(f"{self.D}/report.json", "fixed\n")
+        self.r.commit()
+        new = self.r.oid(f"{self.D}/report.json")
+        tup = {"path": f"{self.D}/report.json", "old_oid": old, "old_mode": "100644",
+               "new_oid": new, "new_mode": "100644"}
+        self.r.write("spec/decision-records/0009-x.md",
+                     "```json\n" + json.dumps(tup) + "\n```\n")
+        self.r.write("sim/evidence-exceptions.json", json.dumps(
+            {"version": 1, "exceptions": [dict(
+                tup, decision_record="spec/decision-records/0009-x.md", reason="r")]}))
+        self.r.commit()
+        self.assertEqual(self.run_check(b), [])
+
+
 class Revisions(Base):
     def test_merge_base_vs_diverged_main(self):
         self.r.write("sim/a/records/old.json")
