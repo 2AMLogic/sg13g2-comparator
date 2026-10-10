@@ -35,6 +35,7 @@ reported per-corner moments, for Row 1).
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -924,7 +925,27 @@ def _provenance(bench: BenchEvidence) -> list[dict]:
     return out
 
 
-def grade(rows_spec: dict, benches: dict[str, BenchEvidence], dut: DutReference) -> dict:
+def with_offset_n(rows_spec: dict, offset_n: int | None) -> dict:
+    """``rows_spec`` with the offset row's ratified ``expected_n`` replaced by an
+    explicitly declared campaign N (issue #167). ``None`` returns it untouched.
+    The declared N must be a valid draw count; the saved requests are separately
+    required to carry exactly that N (``check_request_semantics``)."""
+    if offset_n is None:
+        return rows_spec
+    from .benches import validate_offset_n
+
+    validate_offset_n(offset_n)
+    spec = copy.deepcopy(rows_spec)
+    for row in spec["rows"]:
+        ev = row["evidence"]
+        if ev.get("bench") == "offset_mc" and ev.get("expected_n"):
+            ev["expected_n"] = int(offset_n)
+    return spec
+
+
+def grade(rows_spec: dict, benches: dict[str, BenchEvidence], dut: DutReference,
+          offset_n: int | None = None) -> dict:
+    rows_spec = with_offset_n(rows_spec, offset_n)
     grid = rows_spec["grid"]
     dut_problems = {name: check_dut(b, dut) for name, b in benches.items()}
     rows_out = []
@@ -1190,19 +1211,25 @@ def check_chain(bench, tag: str, campaign_dir: Path, envelope_sha: str,
 
 
 def load_campaign(campaign_dir: Path, corners: dict | None = None,
-                  bench_names: tuple[str, ...] | None = None) -> dict[str, BenchEvidence]:
+                  bench_names: tuple[str, ...] | None = None,
+                  offset_n: int | None = None) -> dict[str, BenchEvidence]:
     """Load a campaign's evidence with the saved request/invocation chain checked.
 
     ``corners`` / ``bench_names`` are for reduced-grid callers (issue #122):
     they pass the explicit expected grid and the benches the directory holds.
-    Defaults reproduce the full-campaign load exactly.
+    Defaults reproduce the full-campaign load exactly. ``offset_n`` (issue
+    #167) declares a non-historical offset_mc draw count: the saved offset
+    requests must then carry exactly that N, and any other value is a chain
+    problem that rejects the bench's evidence.
     """
-    from .benches import BENCHES
+    from .benches import BENCHES, offset_mc_with_n
 
     benches: dict[str, BenchEvidence] = {}
     for name, bench in BENCHES.items():
         if bench_names is not None and name not in bench_names:
             continue
+        if name == "offset_mc":
+            bench = offset_mc_with_n(offset_n)
         body_path = campaign_dir / f"{name}.body.spice"
         envelopes: list[tuple[str, dict]] = []
         shas: dict[str, str] = {}
@@ -1241,10 +1268,13 @@ def load_dut_reference() -> DutReference:
                         netlist.relative_to(build_mod.REPO_ROOT).as_posix(), dut_json)
 
 
-def grade_campaign(campaign_dir: Path) -> dict:
+def grade_campaign(campaign_dir: Path, offset_n: int | None = None) -> dict:
     rows_spec = json.loads((build_mod.EXPERIMENT_DIR / "rows.json").read_text(encoding="utf-8"))
-    result = grade(rows_spec, load_campaign(campaign_dir), load_dut_reference())
+    result = grade(rows_spec, load_campaign(campaign_dir, offset_n=offset_n), load_dut_reference(),
+                   offset_n=offset_n)
     result["campaign"] = campaign_dir.name
+    if offset_n is not None:
+        result["declared_offset_n"] = int(offset_n)
     return result
 
 
