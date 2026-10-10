@@ -290,23 +290,12 @@ class CommittedCampaign(unittest.TestCase):
     def test_check_passes_on_committed_tree(self):
         self.assertEqual(yr.check(self.cid), [])
 
-    def test_stale_manifest_pin_is_rejected(self):
-        manifest = json.loads((yr.REPO_ROOT / "manifests/sg13g2-comparator.json").read_text())
-        manifest["evidence"]["6"]["content_hash"] = "sha256:" + "0" * 64
-        with tempfile.TemporaryDirectory() as td:
-            path = Path(td) / "m.json"
-            path.write_text(json.dumps(manifest))
-            problems = yr.check(self.cid, manifest_path=str(path))
-        self.assertTrue(any("content_hash" in p for p in problems), problems)
-
-    def test_uncited_item_six_is_rejected(self):
-        manifest = json.loads((yr.REPO_ROOT / "manifests/sg13g2-comparator.json").read_text())
-        del manifest["evidence"]["6"]
-        with tempfile.TemporaryDirectory() as td:
-            path = Path(td) / "m.json"
-            path.write_text(json.dumps(manifest))
-            problems = yr.check(self.cid, manifest_path=str(path))
-        self.assertTrue(any("cites no item 6" in p for p in problems))
+    def test_historical_campaign_is_superseded_not_broken(self):
+        """Item 6 now cites the later N = 200 campaign; the historical one still
+        checks clean on its own and is simply not the cited campaign."""
+        self.assertEqual(yr.check(self.cid), [])
+        problems = yr.check(self.cid, require_cited=True)
+        self.assertTrue(any("manifest item 6 cites" in p for p in problems), problems)
 
     def test_every_point_accounted_and_controls_detected(self):
         off = self.index["rows"][0]
@@ -344,6 +333,115 @@ class CommittedCampaign(unittest.TestCase):
         for b in benches.values():
             self.assertEqual(b.chain_problems, [])
             self.assertEqual(len(b.envelopes), 5)
+
+
+class CitedLargerCampaign(unittest.TestCase):
+    """Issue #167: the campaign item 6 cites (N = 200 per PVT point, offset only)."""
+
+    cid = "20261010-n200"
+    source = "sim/klt-corner-verification/campaigns/20261010-n200"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dir = yr.REPO_ROOT / yr.OUT_ROOT / cls.cid
+        cls.index = json.loads((cls.dir / "index.json").read_text(encoding="utf-8"))
+
+    def check(self, **kw):
+        return yr.check(self.cid, self.source, require_cited=True, **kw)
+
+    def test_check_passes_and_item_six_cites_it(self):
+        self.assertEqual(self.check(offset_n=200), [])
+
+    def test_undeclared_or_wrong_n_is_rejected(self):
+        for wrong in (60, 199, 183):
+            problems = self.check(offset_n=wrong)
+            self.assertTrue(any("does not match the campaign's declared" in p for p in problems),
+                            (wrong, problems))
+
+    def test_stale_source_is_rejected(self):
+        problems = yr.check(self.cid, yr.SOURCE_CAMPAIGN, require_cited=True)
+        self.assertTrue(problems)
+        self.assertTrue(any("stale source" in p for p in problems), problems)
+
+    def test_stale_manifest_pin_is_rejected(self):
+        manifest = json.loads((yr.REPO_ROOT / "manifests/sg13g2-comparator.json").read_text())
+        manifest["evidence"]["6"]["content_hash"] = "sha256:" + "0" * 64
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "m.json"
+            path.write_text(json.dumps(manifest))
+            problems = self.check(manifest_path=str(path))
+        self.assertTrue(any("content_hash" in p for p in problems), problems)
+
+    def test_manifest_repointed_at_the_wrong_report_is_rejected(self):
+        manifest = json.loads((yr.REPO_ROOT / "manifests/sg13g2-comparator.json").read_text())
+        manifest["evidence"]["6"]["file"] = "sim/klt-yield/campaigns/20261010-d73a9ac/offset.yield.json"
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "m.json"
+            path.write_text(json.dumps(manifest))
+            problems = self.check(manifest_path=str(path))
+        self.assertTrue(any("manifest item 6 cites" in p for p in problems), problems)
+
+    def test_uncited_item_six_is_rejected(self):
+        manifest = json.loads((yr.REPO_ROOT / "manifests/sg13g2-comparator.json").read_text())
+        del manifest["evidence"]["6"]
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "m.json"
+            path.write_text(json.dumps(manifest))
+            problems = self.check(manifest_path=str(path))
+        self.assertTrue(any("cites no item 6" in p for p in problems))
+
+    def test_every_population_is_exactly_200_and_adequate(self):
+        d = self.index["declared"]
+        self.assertEqual((d["offset_n"], d["rows"], d["attempted_per_population"]), (200, ["1"], [200]))
+        self.assertEqual(d["points_reporting_insufficient_or_no_verdict"], [])
+        self.assertEqual(self.index["source"]["campaign"], self.source)
+        self.assertEqual([r["row_id"] for r in self.index["rows"]], ["1"])
+        pops = self.index["rows"][0]["populations"]
+        self.assertEqual(len(pops), 45)
+        for p in pops:
+            self.assertEqual((p["attempted"], p["usable"], p["errored"], p["inconclusive"], p["excluded"]),
+                             (200, 200, 0, 0, []))
+            self.assertEqual(len(p["sample_seeds"]), 200)
+            self.assertEqual(len(set(p["sample_seeds"])), 200)
+            self.assertEqual(p["yield"]["n"], 200)
+            self.assertEqual(p["yield"]["sample_size_verdict"], "sufficient")
+            self.assertEqual(p["yield"]["negative_control_verdict"], "detected")
+            self.assertTrue(p["ratified_statistic"]["agrees_with_grader"])
+
+    def test_yield_and_ratified_statistics_stay_separate_and_failures_disclosed(self):
+        summary = self.index["ratified_summary"]
+        self.assertLessEqual(summary["row1_worst_3sigma_mv"], summary["row1_target_mv"])
+        self.assertEqual(summary["row1_target_mv"], 15.0)
+        self.assertIn("points_with_observed_target_failures", self.index["declared"])
+        for p in self.index["rows"][0]["populations"]:
+            self.assertNotEqual(p["yield"]["empirical_estimate"], p["ratified_statistic"]["value_mv"])
+            if p["yield"]["empirical_estimate"] == 1.0:
+                self.assertLess(p["yield"]["ci_low"], 1.0)  # zero failures are a bound, not proof
+
+    def test_issue_82_warning_and_preflight_are_retained(self):
+        self.assertIn("#82", self.index["source"]["realization_note"])
+        pre = self.index["mismatch_off_smoke_control"]["preflight"]
+        self.assertTrue(pre["mismatch_seeds_distinct"] and pre["mismatch_on_spread_nonzero"]
+                        and pre["mismatch_off_spread_zero"])
+        self.assertIn("preflight", self.index["mismatch_off_smoke_control"]["path"])
+
+    def test_report_names_the_samples_the_manifest_pins(self):
+        manifest = json.loads((yr.REPO_ROOT / "manifests/sg13g2-comparator.json").read_text())
+        cite = manifest["evidence"]["6"]
+        report = json.loads((yr.REPO_ROOT / cite["file"]).read_text())
+        self.assertEqual(report["samples"], self.index["rows"][0]["samples"])
+        self.assertEqual(cite["content_hash"], "sha256:" + yr.sha256_file(yr.REPO_ROOT / report["samples"]))
+
+    def test_frozen_signoff_report_agrees_with_the_citation(self):
+        frozen = json.loads((yr.REPO_ROOT / "manifests/t1-signoff-report.json").read_text())
+        item = next(i for i in frozen["items"] if i["id"] == 6)
+        manifest = json.loads((yr.REPO_ROOT / "manifests/sg13g2-comparator.json").read_text())
+        cite = manifest["evidence"]["6"]
+        self.assertEqual((item["citation"]["file"], item["citation"]["content_hash"]),
+                         (cite["file"], cite["content_hash"]))
+        self.assertEqual(item["citation"]["yield_campaign"]["sample_size"], "sufficient")
+        others = {i["id"]: i["status"] for i in frozen["items"] if i["id"] != 6}
+        self.assertIn("unmet", others.values())  # other T1 failures remain visible
 
 
 if __name__ == "__main__":

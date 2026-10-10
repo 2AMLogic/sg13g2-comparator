@@ -92,5 +92,18 @@
     "sim/klt-corner-verification/campaigns/20261009-issue81": 15395018,
     "sim/klt-corner-verification/campaigns/20261009-issue92": 189470186
   },
-  "exceptions": []
+  "exceptions": [
+    {
+      "path": "sim",
+      "additional_bytes": 15571193,
+      "reason": "issue #167: N=200 offset campaign (T1 item 6 sample-size adequacy) is irreducibly larger than the 47 MiB total allowance headroom; see the decision record",
+      "decision_record": "spec/decision-records/0005-offset-n200-evidence-size-exception.md"
+    },
+    {
+      "path": "sim/klt-corner-verification/campaigns/20261010-n200",
+      "additional_bytes": 12426061,
+      "reason": "issue #167: one N=200 whole-latch offset campaign (45 PVT points x 200 draws, envelopes plus per-corner artifacts) exceeds the 47 MiB new-unit ceiling",
+      "decision_record": "spec/decision-records/0005-offset-n200-evidence-size-exception.md"
+    }
+  ]
 }

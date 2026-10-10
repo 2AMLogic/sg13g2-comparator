@@ -40,7 +40,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import build as build_mod
+from . import declared_n
 from . import grade
+from . import benches as BENCH_MODS
 from .benches import BENCHES
 
 REPO_ROOT = build_mod.REPO_ROOT
@@ -49,6 +51,10 @@ OUT_ROOT = "sim/klt-yield/campaigns"
 DEFAULT_CAMPAIGN_ID = "20261010-d73a9ac"
 PIN_FILE = "manifests/klt-pin.json"
 SMOKE_CONTROL = "smoke/offset_mc-mismatch-vs-negctrl.envelope.json"
+#: Issue #167: a larger-N campaign's own seed/mismatch preflight (fleet-smoke,
+#: N = 4, mismatch on vs off), recorded beside its requests before the grid
+#: is submitted. Preferred over the historical campaign's smoke when present.
+PREFLIGHT = "smoke/offset_mc-preflight-seed-mismatch.envelope.json"
 INDEX_SCHEMA = "sg13g2-comparator/klt-yield-index/1"
 
 #: Row 1: the per-draw +/-15 mV window is the Target the bench itself encodes.
@@ -61,6 +67,8 @@ NOISE_MEASUREMENTS = (
     ("hit_plus", {"min": 0.5}),
     ("hit_minus", {"max": 0.5}),
 )
+ROWS_BOTH = ("1", "2")
+ROWS_OFFSET = ("1",)
 MIN_USABLE = 2  # klt yield's own hard floor; below this no interval exists
 
 
@@ -423,32 +431,74 @@ def _rows_spec() -> dict:
     return json.loads((build_mod.EXPERIMENT_DIR / "rows.json").read_text(encoding="utf-8"))
 
 
-def derive_inputs(source_dir: Path) -> dict:
-    """Everything deterministic from the committed source campaign: the two
+def validate_selection(offset_n, rows) -> tuple[int | None, tuple[str, ...]]:
+    """The declared offset N and row selection, or ``YieldInputError``.
+
+    ``offset_n`` None is the historical ratified N (60). A declared N must be
+    a valid draw count; selecting only row 1 is the offset-only form (no noise
+    source is read, so no noise population is run or re-analysed).
+    """
+    rows = tuple(rows)
+    if rows not in (ROWS_BOTH, ROWS_OFFSET):
+        raise YieldInputError(f"unsupported row selection {rows!r}; use {ROWS_BOTH} or {ROWS_OFFSET}")
+    if offset_n is not None:
+        try:
+            offset_n = BENCH_MODS.validate_offset_n(offset_n)
+        except ValueError as exc:
+            raise YieldInputError(str(exc)) from None
+        if offset_n == BENCH_MODS.OFFSET_MC_N and rows == ROWS_BOTH:
+            offset_n = None  # the historical basis is not a "declared" variant
+    return offset_n, rows
+
+
+def derive_inputs(source_dir: Path, offset_n: int | None = None,
+                  rows_sel: tuple[str, ...] = ROWS_BOTH) -> dict:
+    """Everything deterministic from the committed source campaign: the
     sample-set documents and the per-point provenance. No engine, no I/O
-    outside ``source_dir``."""
+    outside ``source_dir``.
+
+    ``offset_n`` declares a non-historical offset draw count (the saved
+    requests must carry exactly it, every population must have exactly it);
+    ``rows_sel`` selects both rows (historical default) or the offset row
+    only, which reads no noise evidence at all.
+    """
+    offset_n, rows_sel = validate_selection(offset_n, rows_sel)
     rows = _rows_spec()
     grid = rows["grid"]
     row1 = next(r for r in rows["rows"] if r["id"] == "1")["evidence"]
     row2 = next(r for r in rows["rows"] if r["id"] == "2")["evidence"]
-    benches = grade.load_campaign(Path(source_dir), bench_names=(OFFSET["bench"], NOISE["bench"]))
-    off_bench, noise_bench = benches[OFFSET["bench"]], benches[NOISE["bench"]]
+    expected_off = int(offset_n) if offset_n is not None else int(row1["expected_n"])
+    with_noise = rows_sel == ROWS_BOTH
+    names = (OFFSET["bench"], NOISE["bench"]) if with_noise else (OFFSET["bench"],)
+    benches = declared_n.load_campaign(Path(source_dir), offset_n, bench_names=names)
+    off_bench = benches[OFFSET["bench"]]
     dut = grade.load_dut_reference()
-    for b in (off_bench, noise_bench):
+    for b in [benches[n] for n in names]:
         problems = grade.check_dut(b, dut)
         if problems:
             raise YieldInputError(f"{b.name}: {problems[0]}")
 
     limits = offset_limits()
-    off_pops = collect_populations(off_bench, OFFSET["measurement"], "mV", grid,
-                                   int(row1["expected_n"]))
+    off_pops = collect_populations(off_bench, OFFSET["measurement"], "mV", grid, expected_off)
+    step_mv = float(row1["quantization_step"])
+    if not with_noise:
+        return {
+            "grid": grid, "limits": limits, "step_mv": step_mv,
+            "offset_pops": off_pops, "noise_pops": None, "zero_pops": None,
+            "offset_doc": sample_set(off_pops, prefix=OFFSET["prefix"], unit="mV",
+                                     limits_for=limits, with_control=True),
+            "noise_doc": None,
+            "benches": {OFFSET["bench"]: off_bench},
+            "expected_n": {"1": expected_off},
+            "offset_n": offset_n, "rows_sel": rows_sel,
+        }
+    noise_bench = benches[NOISE["bench"]]
     noise_pops = {name: collect_populations(noise_bench, name, "1", grid, int(row2["expected_n"]),
                                             binary=True, independence=True)
                   for name, _ in NOISE_MEASUREMENTS}
     zero_pops = collect_populations(noise_bench, row2["zero"], "1", grid, int(row2["expected_n"]),
                                     binary=True, independence=True)
     guard = row2["zero_guard"]
-    step_mv = float(row1["quantization_step"])
     od_x = float(row2["od_x_mv"])
     for label, zp in zero_pops.items():
         p_zero = sum(zp.values) / len(zp.values)
@@ -462,7 +512,8 @@ def derive_inputs(source_dir: Path) -> dict:
                                  limits_for=limits, with_control=True),
         "noise_doc": noise_sample_set(noise_pops),
         "benches": {OFFSET["bench"]: off_bench, NOISE["bench"]: noise_bench},
-        "expected_n": {"1": int(row1["expected_n"]), "2": int(row2["expected_n"])},
+        "expected_n": {"1": expected_off, "2": int(row2["expected_n"])},
+        "offset_n": offset_n, "rows_sel": rows_sel,
     }
 
 
@@ -495,7 +546,8 @@ def _yield_summary(report: dict) -> dict:
 
 
 def generate(campaign_id: str = DEFAULT_CAMPAIGN_ID, klt_cmd: list[str] | None = None,
-             source_rel: str = SOURCE_CAMPAIGN) -> Path:
+             source_rel: str = SOURCE_CAMPAIGN, offset_n: int | None = None,
+             rows_sel: tuple[str, ...] = ROWS_BOTH) -> Path:
     """Write ``sim/klt-yield/campaigns/<campaign_id>/``. Refuses to touch an
     existing directory (append-only evidence)."""
     pin = load_pin()
@@ -505,10 +557,11 @@ def generate(campaign_id: str = DEFAULT_CAMPAIGN_ID, klt_cmd: list[str] | None =
         raise YieldInputError(f"{out_dir.relative_to(REPO_ROOT)} already exists; evidence is "
                               "append-only, choose a new --campaign-id")
     tool_version = engine_preflight(klt_cmd, pin)
-    derived = derive_inputs(REPO_ROOT / source_rel)
+    derived = derive_inputs(REPO_ROOT / source_rel, offset_n, rows_sel)
 
     inputs_rel = f"{OUT_ROOT}/{campaign_id}/inputs"
     docs = {"offset": derived["offset_doc"], "noise": derived["noise_doc"]}
+    docs = {k: v for k, v in docs.items() if v is not None}
     try:
         (out_dir / "inputs").mkdir(parents=True)
         reports, report_bytes = {}, {}
@@ -527,12 +580,13 @@ def generate(campaign_id: str = DEFAULT_CAMPAIGN_ID, klt_cmd: list[str] | None =
     return out_dir
 
 
-def smoke_control(source_dir: Path) -> dict:
+def smoke_control(source_dir: Path, source_rel: str = SOURCE_CAMPAIGN) -> dict:
     """The committed mismatch-off smoke evidence, read as-is: same point,
     mismatch models on vs off. It shows the injection mechanism moves the
     spread; it is NOT a known-bad yield control (the off population sits
     inside the limits)."""
-    path = Path(source_dir) / SMOKE_CONTROL
+    name = PREFLIGHT if (Path(source_dir) / PREFLIGHT).is_file() else SMOKE_CONTROL
+    path = Path(source_dir) / name
     raw = path.read_bytes()
     env = json.loads(raw)
     vos = next(m for m in env["measurements"] if m["name"] == "vos_mv")
@@ -541,8 +595,8 @@ def smoke_control(source_dir: Path) -> dict:
     off = next((e for c, e in by.items() if not c.split("/")[0].endswith("_mismatch")), None)
     if on is None or off is None:
         raise YieldInputError("smoke control: mismatch-on / mismatch-off populations not both present")
-    return {
-        "path": f"{SOURCE_CAMPAIGN}/{SMOKE_CONTROL}", "sha256": sha256_bytes(raw),
+    out = {
+        "path": f"{source_rel}/{name}", "sha256": sha256_bytes(raw),
         "mismatch_on": {"corner_id": on["corner_id"], "n": on["n"], "stddev_mv": on["stddev"]},
         "mismatch_off": {"corner_id": off["corner_id"], "n": off["n"], "stddev_mv": off["stddev"]},
         "limits_mv": [-15.0, 15.0],
@@ -552,13 +606,31 @@ def smoke_control(source_dir: Path) -> dict:
                     "it is not a known-bad yield control; that role is played by the derived "
                     "over-limit control carried in inputs/offset.samples.json."),
     }
+    if name == PREFLIGHT:
+        seeds = [c["monte_carlo"]["mismatch_seed"] for c in env["corners"]
+                 if c["corner_id"].startswith("mos_tt_mismatch/") and c.get("monte_carlo")]
+        out["preflight"] = {
+            "role": "seed/mismatch preflight run before the grid was submitted (issue #167)",
+            "mismatch_on_draws": len(seeds),
+            "mismatch_seeds_distinct": len(set(seeds)) == len(seeds) and len(seeds) >= 2,
+            "mismatch_on_spread_nonzero": bool(on["stddev"]) and on["stddev"] > 0,
+            "mismatch_off_spread_zero": off["stddev"] == 0,
+            "batch_job": ((env.get("environment") or {}).get("remote") or {}).get("job_id"),
+        }
+        if not (out["preflight"]["mismatch_seeds_distinct"]
+                and out["preflight"]["mismatch_on_spread_nonzero"]
+                and out["preflight"]["mismatch_off_spread_zero"]):
+            raise YieldInputError("seed/mismatch preflight failed: stop and resolve issue #82 "
+                                  "before relying on the grid")
+    return out
 
 
 def build_index(campaign_id: str, source_rel: str, derived: dict, reports: dict,
                 report_bytes: dict, tool_version: str, pin: dict, klt_cmd: list[str]) -> dict:
     source_dir = REPO_ROOT / source_rel
     out_rel = f"{OUT_ROOT}/{campaign_id}"
-    grader = grade.grade_campaign(source_dir)
+    offset_n, with_noise = derived["offset_n"], derived["rows_sel"] == ROWS_BOTH
+    grader = declared_n.grade_campaign(source_dir, offset_n)
     g_rows = {r["id"]: r for r in grader["rows"]}
 
     # ---- row 1 ----
@@ -581,10 +653,11 @@ def build_index(campaign_id: str, source_rel: str, derived: dict, reports: dict,
         off_points.append(rec)
 
     # ---- row 2 ----
-    noise_sum = _yield_summary(reports["noise"])
-    grader_noise = {d["point"]: d for d in g_rows["2"]["monte_carlo_per_point"]}
+    noise_sum = _yield_summary(reports["noise"]) if with_noise else {}
+    grader_noise = ({d["point"]: d for d in g_rows["2"]["monte_carlo_per_point"]}
+                    if with_noise else {})
     noise_points = []
-    for label in derived["zero_pops"]:
+    for label in (derived["zero_pops"] if with_noise else ()):
         plus, minus = (derived["noise_pops"][n][label] for n, _ in NOISE_MEASUREMENTS)
         sig = ratified_noise_sigma(plus, minus, derived["od_x_mv"])
         g = grader_noise[label]
@@ -617,11 +690,32 @@ def build_index(campaign_id: str, source_rel: str, derived: dict, reports: dict,
                 "run_warnings": report.get("warnings") or []}
 
     off_rel, noise_rel = f"{out_rel}/inputs/offset.samples.json", f"{out_rel}/inputs/noise.samples.json"
+    n_text = offset_n if offset_n is not None else 60
     source_env = {}
     for name, bench in derived["benches"].items():
         source_env[name] = _chain_summary(bench)
     sample_sizes = {n: s["sample_size_verdict"] for n, s in off_sum.items()}
-    return {
+    def noise_row() -> dict:
+        return (
+        {
+            "row_id": "2", "spec_row": "Input-referred noise (whole-latch transient noise)",
+            "report": f"{out_rel}/noise.yield.json",
+            "report_sha256": sha256_bytes(report_bytes["noise"]),
+            "samples": noise_rel, "samples_sha256": sha256_file(REPO_ROOT / noise_rel),
+            "citable_for_item6": False,
+            "what_the_report_establishes": (
+                "Per PVT point and rung (hit_plus >= 0.5, hit_minus <= 0.5): the fraction of "
+                "N = 80 independent trials that resolve in the correct direction at "
+                "+/-1 mV overdrive. This is a Bernoulli hit fraction, NOT the ratified "
+                "input-referred noise sigma (grid-wide mean of the per-point probit-slope "
+                "sigma, in each point's ratified_statistic). No target yield is declared and "
+                "no negative control is declared, so this report is not cited for item 6."),
+            "settings": stats_of(reports["noise"]),
+            "populations": noise_points,
+        }
+        )
+
+    index = {
         "schema": INDEX_SCHEMA,
         "campaign_id": campaign_id,
         "generated_by": ("python3 sim/run_klt_yield.py generate --campaign-id " + campaign_id),
@@ -647,7 +741,7 @@ def build_index(campaign_id: str, source_rel: str, derived: dict, reports: dict,
                 "samples": off_rel, "samples_sha256": sha256_file(REPO_ROOT / off_rel),
                 "citable_for_item6": True,
                 "what_the_report_establishes": (
-                    "Per PVT point (45 separate populations, N = 60 each, never pooled): the "
+                    f"Per PVT point (45 separate populations, N = {n_text} each, never pooled): the "
                     "empirical fraction of vos_mv draws inside the +/-15 mV Target window with a "
                     "Clopper-Pearson interval. This is a per-draw yield, NOT the ratified "
                     "criterion (3 x population sigma net of 3 mV staircase quantization, <= 15 mV "
@@ -660,24 +754,8 @@ def build_index(campaign_id: str, source_rel: str, derived: dict, reports: dict,
                 "sample_size_verdicts": sample_sizes,
                 "populations": off_points,
             },
-            {
-                "row_id": "2", "spec_row": "Input-referred noise (whole-latch transient noise)",
-                "report": f"{out_rel}/noise.yield.json",
-                "report_sha256": sha256_bytes(report_bytes["noise"]),
-                "samples": noise_rel, "samples_sha256": sha256_file(REPO_ROOT / noise_rel),
-                "citable_for_item6": False,
-                "what_the_report_establishes": (
-                    "Per PVT point and rung (hit_plus >= 0.5, hit_minus <= 0.5): the fraction of "
-                    "N = 80 independent trials that resolve in the correct direction at "
-                    "+/-1 mV overdrive. This is a Bernoulli hit fraction, NOT the ratified "
-                    "input-referred noise sigma (grid-wide mean of the per-point probit-slope "
-                    "sigma, in each point's ratified_statistic). No target yield is declared and "
-                    "no negative control is declared, so this report is not cited for item 6."),
-                "settings": stats_of(reports["noise"]),
-                "populations": noise_points,
-            },
         ],
-        "mismatch_off_smoke_control": smoke_control(source_dir),
+        "mismatch_off_smoke_control": smoke_control(source_dir, source_rel),
         "limitations": [
             "Transient-noise draws are not reproducible (ngspice-46 TRNOISE ignores klt's "
             "per-sample seed); the recorded seeds identify samples, not noise streams "
@@ -692,12 +770,58 @@ def build_index(campaign_id: str, source_rel: str, derived: dict, reports: dict,
                                          if p["ratified_statistic"]["value_mv"] is not None),
                                         default=None),
             "row1_target_mv": 15.0,
-            "row2_grid_mean_sigma_mv": g_rows["2"]["target"].get("grid_mean"),
+            "row2_grid_mean_sigma_mv": g_rows["2"]["target"].get("grid_mean") if with_noise else None,
             "row2_target_mv": 1.0,
             "row2_target_verdict": g_rows["2"]["target_verdict"],
             "note": "copied from the existing grader on the same campaign; yield statistics above "
                     "do not replace them.",
         },
+    }
+    if with_noise:
+        index["rows"].append(noise_row())
+    else:
+        index["ratified_summary"].pop("row2_grid_mean_sigma_mv")
+        index["ratified_summary"].pop("row2_target_mv")
+        index["ratified_summary"].pop("row2_target_verdict")
+    if offset_n is not None or not with_noise:
+        index["declared"] = declared_block(offset_n, derived, index["rows"][0])
+        index["source"]["realization_note"] = larger_n_note(offset_n)
+    return index
+
+
+def larger_n_note(offset_n) -> str:
+    return (f"Analyses a separately identified, offset-only whole-latch klt sim campaign (declared "
+            f"N = {offset_n} draws per PVT point, klt base seed 20260916; every population's "
+            "sample seed is recorded). No noise population is run or re-analysed here. Issue #82 "
+            "(the whole-latch offset reads ~13 % above the DR-0002 historical record, cause "
+            "undetermined between the old harness loop and the new process) is NOT settled by a "
+            "larger sample and this discrepancy warning is retained: nothing here replaces the "
+            "ratified historical record or DR-0002's evidence basis.")
+
+
+def declared_block(offset_n, derived: dict, row1: dict) -> dict:
+    """Campaign-level declaration (non-historical campaigns only; the historical
+    index is unchanged byte-for-byte): declared N, row selection, and the
+    engine's own sample-size verdict across all populations."""
+    verdicts = [p["yield"]["sample_size_verdict"] for p in row1["populations"]]
+    required = [p["yield"]["required_n"] for p in row1["populations"]
+                if p["yield"]["required_n"] is not None]
+    failures = [p["point"] for p in row1["populations"] if (p["yield"]["empirical_estimate"] or 0) < 1.0]
+    return {
+        "offset_n": offset_n, "rows": list(derived["rows_sel"]),
+        "attempted_per_population": sorted({p["attempted"] for p in row1["populations"]}),
+        "sample_size_verdicts": {v: verdicts.count(v) for v in sorted(set(verdicts))},
+        "max_required_n_reported_by_engine": max(required) if required else None,
+        "points_reporting_insufficient_or_no_verdict": [
+            p["point"] for p in row1["populations"]
+            if p["yield"]["sample_size_verdict"] in (None, "insufficient")],
+        "points_with_observed_target_failures": failures,
+        "note": ("The engine's sample-size verdict is read from each population's own report; "
+                 "N = 183 is the zero-failure planning figure, not a guarantee. If any "
+                 "population reports `insufficient` the honest unmet verdict stands and "
+                 "max_required_n_reported_by_engine is the additional sample requirement. Any "
+                 "observed Target failure is listed, never hidden, and the 15 mV bound is "
+                 "unchanged."),
     }
 
 
@@ -741,7 +865,8 @@ def render_index_md(index: dict) -> str:
 
 def check(campaign_id: str = DEFAULT_CAMPAIGN_ID, source_rel: str = SOURCE_CAMPAIGN,
           klt_cmd: list[str] | None = None, rerun: bool = False,
-          manifest_path: str = "manifests/sg13g2-comparator.json") -> list[str]:
+          manifest_path: str = "manifests/sg13g2-comparator.json",
+          offset_n: int | None = None, require_cited: bool = False) -> list[str]:
     """Problems found (empty = consistent): derived inputs regenerate
     byte-for-byte from the source, index hashes match the files, each
     report names the committed samples document, and the manifest's item-6
@@ -749,12 +874,39 @@ def check(campaign_id: str = DEFAULT_CAMPAIGN_ID, source_rel: str = SOURCE_CAMPA
     engine and requires identical report bytes."""
     problems: list[str] = []
     out_dir = REPO_ROOT / OUT_ROOT / campaign_id
+    index_path = out_dir / "index.json"
+    if not index_path.is_file():
+        return [f"{OUT_ROOT}/{campaign_id}/index.json does not exist"]
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    # The campaign's own declaration (absent = the historical N = 60, rows 1+2).
+    # A caller-supplied --offset-n must agree with it: an undeclared or wrong N
+    # is a problem, never silently accepted.
+    declared = index.get("declared") or {}
+    decl_n = declared.get("offset_n")
+    if offset_n is not None and offset_n != (decl_n if decl_n is not None else 60):
+        problems.append(f"--offset-n {offset_n} does not match the campaign's declared "
+                        f"offset N {decl_n if decl_n is not None else 60}")
+    rows_sel = tuple(declared.get("rows") or ROWS_BOTH)
+    if index.get("source", {}).get("campaign") != source_rel:
+        problems.append(f"index records source {index.get('source', {}).get('campaign')!r}, "
+                        f"checked against {source_rel!r} (stale source)")
     try:
-        derived = derive_inputs(REPO_ROOT / source_rel)
+        derived = derive_inputs(REPO_ROOT / source_rel, decl_n, rows_sel)
     except YieldInputError as exc:
-        return [f"source evidence rejected: {exc}"]
-    index = json.loads((out_dir / "index.json").read_text(encoding="utf-8"))
+        return problems + [f"source evidence rejected: {exc}"]
+    for row in index["rows"]:
+        for p in row["populations"] if row["row_id"] == "1" else ():
+            want = derived["expected_n"]["1"]
+            if p["attempted"] != want:
+                problems.append(f"{p['point']}: index records {p['attempted']} attempted draws, "
+                                f"declared N is {want}")
+    if len(index["rows"]) != len(rows_sel):
+        problems.append(f"index holds {len(index['rows'])} rows, declaration selects {list(rows_sel)}")
     for key, doc in (("offset", derived["offset_doc"]), ("noise", derived["noise_doc"])):
+        if doc is None:
+            if (out_dir / "inputs" / f"{key}.samples.json").exists():
+                problems.append(f"{key}.samples.json present but the declaration excludes that row")
+            continue
         path = out_dir / "inputs" / f"{key}.samples.json"
         if not path.is_file() or path.read_text(encoding="utf-8") != dumps(doc):
             problems.append(f"{key}.samples.json does not regenerate from the source campaign")
@@ -780,9 +932,13 @@ def check(campaign_id: str = DEFAULT_CAMPAIGN_ID, source_rel: str = SOURCE_CAMPA
         problems.append("manifest cites no item 6")
     else:
         row1 = index["rows"][0]
+        # A superseded campaign (item 6 repointed at a later report) is checked
+        # for internal consistency only; the one the manifest cites must pin
+        # its own samples hash.
         if cite.get("file") != row1["report"]:
-            problems.append(f"manifest item 6 cites {cite.get('file')!r}, expected {row1['report']!r}")
-        if cite.get("content_hash") != "sha256:" + row1["samples_sha256"]:
+            if require_cited:
+                problems.append(f"manifest item 6 cites {cite.get('file')!r}, expected {row1['report']!r}")
+        elif cite.get("content_hash") != "sha256:" + row1["samples_sha256"]:
             problems.append("manifest item 6 content_hash is not the sha256 of the report's "
                             "samples document (the artifact signoff pins for a yield report)")
     if rerun:
@@ -809,17 +965,27 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--klt", default=os.environ.get("KLT_YIELD_CMD"),
                        help="klt command (default: the uvx command built from manifests/klt-pin.json; "
                             "or $KLT_YIELD_CMD)")
+        p.add_argument("--offset-n", type=int, default=None, metavar="N",
+                       help="declared offset draws per PVT point (default: the historical 60); "
+                            "for `check` it must agree with the campaign's own declaration")
+        p.add_argument("--rows", choices=("both", "offset"), default=None,
+                       help="generate only: `offset` analyses the offset row only (no noise "
+                            "evidence read); default both, the historical form")
         if name == "check":
+            p.add_argument("--require-cited", action="store_true",
+                           help="fail unless the manifest's item 6 cites this campaign")
             p.add_argument("--rerun", action="store_true",
                            help="also re-run the pinned native engine and require identical reports")
     args = ap.parse_args(argv)
     cmd = shlex.split(args.klt) if args.klt else None
     try:
         if args.cmd == "generate":
-            out = generate(args.campaign_id, cmd, args.source)
+            sel = ROWS_OFFSET if args.rows == "offset" else ROWS_BOTH
+            out = generate(args.campaign_id, cmd, args.source, args.offset_n, sel)
             print(f"wrote {out.relative_to(REPO_ROOT)}")
             return 0
-        problems = check(args.campaign_id, args.source, cmd, rerun=args.rerun)
+        problems = check(args.campaign_id, args.source, cmd, rerun=args.rerun,
+                         offset_n=args.offset_n, require_cited=args.require_cited)
     except (YieldInputError, EngineError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

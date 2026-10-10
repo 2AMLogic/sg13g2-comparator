@@ -36,11 +36,14 @@ import time
 from pathlib import Path
 
 from . import build as build_mod
+from . import declared_n as declared_n_mod
+from . import estimate as estimate_mod
 from . import fixture as fixture_mod
 from . import grade as grade_mod
 from . import ibsweep as ibsweep_mod
 from . import sizesweep as sizesweep_mod
 from . import noise_full as noise_full_mod
+from . import benches as benches_mod
 from .benches import ALL_BENCHES, BENCHES, BIAS_PROBES, FIXTURE_BENCHES
 
 CAMPAIGNS_DIR = build_mod.EXPERIMENT_DIR / "campaigns"
@@ -100,13 +103,26 @@ def _commit_planned(planned, args, label: str) -> bool:
 def cmd_build(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     names = args.bench or list(BENCHES)
+    offset_n = getattr(args, "offset_n", None)
+    if offset_n is not None:
+        # A larger offset campaign is an explicit, offset-only request: it never
+        # silently re-sizes (or is combined with) the other benches.
+        try:
+            benches_mod.validate_offset_n(offset_n)
+        except ValueError as exc:
+            print(f"build: {exc}", file=sys.stderr)
+            return 2
+        if names != ["offset_mc"]:
+            print("build: --offset-n requires --bench offset_mc and no other bench",
+                  file=sys.stderr)
+            return 2
     overrides = _parse_overrides(args.dut_param)
     geometry = build_mod.parse_geometry(getattr(args, "geometry", None)) or None
     # Compose EVERY selected bench's inputs before writing anything, then
     # commit them append-only: a conflict in any bench changes no file.
     planned: list[tuple[Path, bytes]] = []
     for name in names:
-        bench = ALL_BENCHES[name]
+        bench = benches_mod.offset_mc_with_n(offset_n) if name == "offset_mc" else ALL_BENCHES[name]
         if args.bias_probes and name == "regeneration":
             bench = dataclasses.replace(bench, measurements=bench.measurements + BIAS_PROBES)
         planned += build_mod.plan_bench_inputs(
@@ -513,11 +529,29 @@ def _last_attempt_refused_at_cap(out_dir: Path) -> bool:
 
 def cmd_grade(args) -> int:
     out_dir = _campaign_dir(args.campaign)
-    result = grade_mod.grade_campaign(out_dir)
+    offset_n = getattr(args, "offset_n", None)
+    if offset_n is not None:
+        try:
+            benches_mod.validate_offset_n(offset_n)
+        except ValueError as exc:
+            print(f"grade: {exc}", file=sys.stderr)
+            return 2
+    result = declared_n_mod.grade_campaign(out_dir, offset_n)
     (out_dir / "grading.json").write_text(grade_mod.dumps_strict(result, indent=2) + "\n", encoding="utf-8")
     (out_dir / "grading.md").write_text(grade_mod.render_markdown(result), encoding="utf-8")
     print(grade_mod.render_summary(result))
     return 0
+
+
+def cmd_estimate(args) -> int:
+    try:
+        benches_mod.validate_offset_n(args.offset_n)
+        est = estimate_mod.estimate_offset_campaign(args.offset_n, args.reference_campaign, args.tree)
+    except (ValueError, estimate_mod.EstimateError) as exc:
+        print(f"estimate: {exc}", file=sys.stderr)
+        return 2
+    print(estimate_mod.render(est))
+    return 0 if est["within_budget"] else 1
 
 
 def cmd_noise_full(args) -> int:
@@ -565,6 +599,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="reduced screening grid (tt/ff/ss x 1.08/1.32 V x -40/27/125 C), issue #92")
     b.add_argument("--bias-probes", action="store_true",
                    help="append the mirror/headroom probes to the regeneration bench")
+    b.add_argument("--offset-n", type=int, metavar="N",
+                   help="declared offset_mc draws per PVT point (issue #167; requires --bench "
+                        "offset_mc; default: the historical N = 60, unchanged)")
     b.set_defaults(func=cmd_build)
 
     s = sub.add_parser("smoke", help="run ONE corner of a bench locally (scratch dir)")
@@ -633,7 +670,17 @@ def main(argv: list[str] | None = None) -> int:
 
     g = sub.add_parser("grade", help="grade a campaign's committed envelopes")
     g.add_argument("--campaign", required=True)
+    g.add_argument("--offset-n", type=int, metavar="N",
+                   help="declared offset_mc draws per PVT point of a non-historical campaign "
+                        "(issue #167); the saved requests must carry exactly this N")
     g.set_defaults(func=cmd_grade)
+
+    e = sub.add_parser("estimate", help="issue #167: estimate a larger offset campaign's committed "
+                       "evidence bytes against the size budget, before submission")
+    e.add_argument("--offset-n", type=int, required=True, metavar="N")
+    e.add_argument("--reference-campaign", default="20261009-d73a9ac")
+    e.add_argument("--tree", default="HEAD")
+    e.set_defaults(func=cmd_estimate)
 
     nf = sub.add_parser("noise-full", help="issue #81: analyse the tn_full_* configurations of a campaign")
     nf.add_argument("--campaign", required=True)
