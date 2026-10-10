@@ -66,6 +66,8 @@ The PVT and Monte Carlo rows remain not run; no local grid was launched.
 
 A second probe the same day (`reports/batch-probe.regeneration.pvt.20261010-b.{md,json}`) was refused identically (`batch_no_capacity`, 30 pools).
 
+A third probe (`reports/batch-probe.pvt.20261010-c.md`) ran the full `klt pex` over both staged PVT requests on `--backend batch`, and this time capacity was granted. Result: all 1350 delta rows errored (`reports/pex.batch-probe.pvt.20261010-c.json`). A direct `klt sim` submit (`reports/batch-probe.regeneration.pvt.20261010-c.json`, job `klt-sim-f07e181de148`) shows the cause: `batch_runner_version_mismatch` (runner klt 0.5.0, client 0.7.0), the same as on 2026-10-09. The blocker is now the runner image, not capacity. The `model_mismatch` block in both pex envelopes is a count-only (finger) difference with identical model sets, not a flavour divergence (filed upstream as klayout-tools#3054).
+
 ## What ran, and what it proved
 
 | Artifact | What it is |

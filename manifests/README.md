@@ -116,9 +116,13 @@ row:
   is a recorded post-layout finding, not a tooling failure, and the request
   was not edited to hide it. The run is **one corner only** (tt, 1.20 V,
   27 C, deterministic transient, no Monte Carlo, no sigma): the 45-point PVT
-  grids and the offset-sigma / noise Monte Carlo rows were not run because
-  the batch fleet refused the submit (`batch_no_capacity`, no capacity in
-  any of 30 pools) and host rules forbid a local grid. Extraction half:
+  grids and the offset-sigma / noise Monte Carlo rows were not run, and host
+  rules forbid a local grid. The batch fleet first refused the submit
+  (`batch_no_capacity`, 30 pools). When capacity was granted (2026-10-10,
+  job `klt-sim-f07e181de148`, record
+  `sim/comparator-pex/reports/batch-probe.pvt.20261010-c.md`), every corner
+  failed with `batch_runner_version_mismatch` (fleet runner klt 0.5.0,
+  client 0.7.0). The open blocker is the runner image. Extraction half:
   `body_bias.status: "biased"` (0 unbiased devices); `extraction.model` is
   the quasi-static lumped-RC model (single series R per net, net-to-ground
   C plus vertical-overlap coupling; no lateral coupling without
