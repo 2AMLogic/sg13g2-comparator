@@ -48,6 +48,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Issue #132: explicit sparse working tree = this job's complete
+          # transitive inputs (audited in sim/README.md, "Sparse CI checkouts";
+          # proven by scripts/tests/test_sparse_checkout.py). actions/checkout
+          # implies `--filter=blob:none` with this input (a partial clone);
+          # harmless here because this job reads only blobs inside its cone
+          # and never measures sizes. The size job avoids this input.
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.github/workflows/ci.yml
+            /scripts/check_klt_pin.py
+            /scripts/check_signoff_report.py
+            /manifests/
+            /layout/
+            /design/
+            /sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -91,6 +107,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Issue #132: explicit sparse working tree = this job's complete
+          # transitive inputs (audited in sim/README.md, "Sparse CI checkouts";
+          # proven by scripts/tests/test_sparse_checkout.py). actions/checkout
+          # implies `--filter=blob:none` with this input (a partial clone);
+          # harmless here because this job reads only blobs inside its cone
+          # and never measures sizes. The size job avoids this input.
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /layout/
+            /design/comparator.spice
+            /manifests/klt-pin.json
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -117,6 +145,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Issue #132: explicit sparse working tree = this job's complete
+          # transitive inputs (audited in sim/README.md, "Sparse CI checkouts";
+          # proven by scripts/tests/test_sparse_checkout.py). actions/checkout
+          # implies `--filter=blob:none` with this input (a partial clone);
+          # harmless here because this job reads only blobs inside its cone
+          # and never measures sizes. The size job avoids this input.
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /sim/harness/
+            /sim/kltsim/
+            /sim/comparator-pex/
+            /sim/comparator-regeneration/testbench/
+            /sim/comparator-kickback/testbench/
+            /sim/dut.json
+            /sim/dut/
+            /sim/klt-corner-verification/benches/
+            /sim/klt-corner-verification/rows.json
+            /sim/klt-corner-verification/campaigns/20261009-issue78/fixture/
+            /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.json
+            /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.spice
+            /design/
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -160,9 +210,35 @@ jobs:
     name: append-only sim evidence (stdlib only, no PDK)
     runs-on: ubuntu-latest
     steps:
+      # Full history AND every blob (a complete, non-partial clone): the size
+      # guard reads blob sizes via `git ls-tree -rl`. Deliberately NO
+      # `sparse-checkout:` input here: actions/checkout silently adds
+      # `--filter=blob:none` whenever that input is set (an empty `filter:`
+      # cannot turn it off), and in that partial clone ls-tree -l lazily
+      # fetches every blob one at a time (~97k round trips; CI run
+      # 38029844566 hung). The working tree is narrowed by the next step.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+
+      # Issue #132: explicit sparse working tree = this job's complete inputs
+      # (audited in sim/README.md, "Sparse CI checkouts"; proven by
+      # scripts/tests/test_sparse_checkout.py), applied after the full fetch
+      # so no blob filter is ever involved. Fails if the clone is partial.
+      - name: Narrow working tree to this job's inputs (sparse, no blob filter)
+        run: |
+          set -eu
+          if git config --get extensions.partialclone >/dev/null || git config --get-regexp '^remote\..*\.promisor$' >/dev/null; then
+            echo "::error::checkout is a partial clone; size accounting needs every blob"; exit 2
+          fi
+          git sparse-checkout set --no-cone --stdin <<'EOF'
+          /.github/workflows/ci.yml
+          /scripts/
+          /sim/evidence-exceptions.json
+          /sim/evidence-size-budget.json
+          /spec/decision-records/
+          EOF
+          echo "tracked files in working tree: $(git ls-files -t | grep -c '^H ' || true)"
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -211,7 +287,17 @@ jobs:
           esac
           python3 scripts/check_append_only_evidence.py --base "$base" --head "$head"
 
-      # Runs every scripts/tests/test_*.py: the evidence guard tests above
-      # and the klt pin drift guard tests (issue #135).
-      - name: Run scripts/ guard unit tests (evidence, klt pin)
+      # Issue #132: tracked sim/ evidence size budget. Measures committed blob
+      # bytes of the target tree (git ls-tree -rl), so the sparse working tree
+      # above does not matter; fails closed (exit 2, no lazy fetch) on a
+      # partial clone or if sizes cannot be read.
+      - name: Check tracked sim/ evidence size budget
+        env:
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/check_evidence_size.py --tree "$TARGET_SHA"
+
+      # Runs every scripts/tests/test_*.py: the evidence guard tests above,
+      # the klt pin drift guard tests (issue #135), the size budget tests and the
+      # sparse-checkout cone proof (issue #132).
+      - name: Run scripts/ guard unit tests (evidence, size, klt pin, sparse cones)
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'

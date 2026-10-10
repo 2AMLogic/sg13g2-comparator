@@ -402,6 +402,101 @@ The decision record must contain a fenced json block with the same
 authorize a different base blob or destination. Reviewers judge the
 rationale in the record as well as the change.
 
+## Evidence size budget
+
+Committed evidence dominates repository size, so growth is bounded by a
+machine-checked contract (issue #132). The `append-only-evidence` job runs
+`scripts/check_evidence_size.py --tree <target sha>` (stdlib only) against
+`sim/evidence-size-budget.json`. Bulk-storage policy (compression versus
+external storage) is deliberately out of scope here; this only measures and
+caps growth, and never edits, moves or externalizes existing evidence.
+
+**Accounting.** Bytes are Git blob sizes from `git ls-tree -rl <tree>` of the
+named commit/tree -- not working-tree or pack sizes. The checker reports
+repository-wide and `sim/` totals plus per **evidence unit**: the entry
+`sim/<bench>/<records|corners|netlist-snapshots|campaigns|reports>/<name>`
+(a campaign or run directory, or one record/report file). A missing or
+non-numeric size fails closed (exit 2), so never use a blob filter. The checker
+also refuses a partial clone up front (`extensions.partialClone` or a
+`remote.<name>.promisor` remote: exit 2, naming the cause) and runs git with
+`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error rather than one network
+round trip per blob (~97k; that is how CI run 38029844566 hung). A shallow
+clone is accepted: it holds every blob of the commits it has.
+
+**Baseline and grandfathering.** The budget file records the baseline commit
+(`2c6002775...`: 97,217 blobs / 509,447,840 B repo, 96,352 blobs /
+489,675,829 B under `sim/`) and the bytes of every existing unit. An existing
+unit may not exceed its recorded bytes (grandfathered at exactly that size).
+
+**Thresholds.** Allowance = 10% of baseline `sim/` bytes rounded up to the next
+MiB: ceil(10% x 489,675,829 B / 1,048,576) = 47 MiB = 49,283,072 B.
+* total ceiling = baseline `sim/` bytes + allowance = 538,958,901 B (the
+  budget file and any other `sim/` file count toward it);
+* a unit not in the baseline (a new campaign) is capped at the same 49,283,072 B.
+The checker validates the derivation (percentage, operands, ceilings); changing
+the percentage or resetting the baseline is a reviewed change to
+`scripts/check_evidence_size.py` plus a decision record, not a quiet edit of
+the JSON. Regenerate numbers for a new baseline with
+`python3 scripts/check_evidence_size.py --tree <commit> --emit-budget <commit>`.
+
+**Exceptions.** There is no bypass flag or environment override. An entry in
+the budget's `exceptions` list names one exact path (`sim` for the total, or one
+evidence unit; no wildcards), the exact `additional_bytes`, a `reason`, and a
+tracked `spec/decision-records/*.md` containing a fenced `json` block with the
+same path and bytes:
+
+```json
+{"kind": "evidence-size", "path": "sim/<bench>/campaigns/<id>", "additional_bytes": 12345678}
+```
+
+The bytes raise only that path's ceiling (baseline or new-unit) by exactly that
+amount. Missing or mismatching records, extra/missing keys, wildcards,
+non-positive or non-integer bytes, and duplicates fail validation.
+Overage output names the path, measured bytes, ceiling and this route.
+
+**Sparse CI checkouts.** Every job in `.github/workflows/ci.yml` checks out
+only its explicit, audited inputs (non-cone patterns, never a `filter:`).
+Caveat: `actions/checkout` silently adds `--filter=blob:none` whenever its
+`sparse-checkout:` input is set, and an empty `filter:` cannot turn that off.
+The three jobs that only read files inside their cone use that input and are
+therefore blob-less partial clones, which is harmless for them. The
+`append-only-evidence` job measures blob sizes, so it must be a complete clone:
+its checkout has `fetch-depth: 0` and **no** `sparse-checkout:` input, and the
+next step applies its patterns with `git sparse-checkout set --no-cone --stdin`
+(failing with exit 2 if the clone is partial). The full fetch is small (the
+repository packs to roughly 60 MiB); only the transient full working tree
+costs a few seconds. Cones (each must contain the job's complete transitive
+inputs):
+
+| Job | Inputs beyond its own scripts |
+|---|---|
+| signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json` |
+| layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
+| harness-unit-tests | `sim/{harness,kltsim,comparator-pex}/`, the `comparator-{regeneration,kickback}/testbench/` source benches, `sim/dut.json`, `sim/dut/`, `sim/klt-corner-verification/{benches/,rows.json}`, the top-level `*.json`/`*.spice` of campaign `20261009-d73a9ac`, `campaigns/20261009-issue78/fixture/`, `design/` |
+| append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` |
+
+A new input a job starts reading must be added to its patterns in the same
+change. `scripts/tests/test_sparse_checkout.py` proves the cones: it builds a
+clean clone of `HEAD` per job with the same semantics `actions/checkout`
+applies to that job's `with:` block (implied `blob:none` filter over `file://`
+for a `sparse-checkout:` input, complete clone otherwise) and runs the job's
+exact `run:` commands, including the narrowing step (tests skipping because an
+input is outside the cone fail). It also asserts that every job running the
+size checker gets a complete clone, and that the size step exits 2 quickly in
+a `blob:none` clone. The two jobs that need the pinned `klt` run there only when the
+pinned build is first on `PATH`; otherwise they are skipped locally and proven
+by the real CI jobs.
+
+Reproduce locally:
+
+```bash
+python3 scripts/check_evidence_size.py --tree HEAD
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+# pinned klt jobs too: python3 -m venv /tmp/v && /tmp/v/bin/pip install \
+#   "klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@<manifests/klt-pin.json commit>" klayout==0.30.10
+# PATH=/tmp/v/bin:$PATH python3 -m unittest scripts.tests.test_sparse_checkout
+```
+
 ## Rules
 
 - **No claim without a testbench.** A number that is not in a record under
