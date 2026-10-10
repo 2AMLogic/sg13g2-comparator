@@ -219,10 +219,10 @@ jobs:
         run: python3 -m pip install ruff==0.17.0
 
       - name: Static check (ruff F rules) over harness, kltsim, run_*.py, guards, design and layout tooling
-        run: >-
-          ruff check --select F design layout scripts sim/harness sim/kltsim
-          sim/comparator-pex sim/run_*.py sim/comparator-transient-noise
-          sim/comparator-transient-noise-full sim/device-mismatch-confirm
+        run: |
+          ruff check --select F design layout scripts sim/harness sim/kltsim \
+            sim/comparator-pex sim/run_*.py sim/comparator-transient-noise \
+            sim/comparator-transient-noise-full sim/device-mismatch-confirm
 
       - name: Run sim harness unit tests
         run: PYTHONPATH=sim python3 -m unittest discover -t sim -s harness.tests -p 'test_*.py'
