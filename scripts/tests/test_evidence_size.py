@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -213,6 +214,82 @@ class Measuring(Base):
                 rc, _, err = self.run_main()
                 self.assertEqual(rc, 1, err)
                 self.assertIn("FAIL (budget)", err)
+
+
+class PartialClone(Base):
+    """A blob-filtered partial clone must fail closed fast, never lazy-fetch.
+
+    This is the shape actions/checkout produces whenever its `sparse-checkout:`
+    input is set (it adds --filter=blob:none); CI run 38029844566 hung there.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.commit("budget")
+        self.blob = self.git("rev-parse", f"HEAD:{UNIT_A}/data.bin")
+
+    def clone(self, *opts):
+        dst = Path(self._td.name + "-clone")
+        self.addCleanup(subprocess.run, ["rm", "-rf", str(dst)])
+        subprocess.run(
+            ["git", "clone", "-q", "--no-checkout", *opts,
+             "-u", "git -c uploadpack.allowFilter=true upload-pack",
+             f"file://{self.root}", str(dst)],
+            env=ENV, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return dst
+
+    def has_blob(self, repo):
+        return subprocess.run(
+            ["git", "-C", str(repo), "cat-file", "-e", self.blob],
+            env={**ENV, "GIT_NO_LAZY_FETCH": "1"},
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE).returncode == 0
+
+    def run_in(self, repo):
+        out, err = io.StringIO(), io.StringIO()
+        t0 = time.monotonic()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = chk.main(["--repo", str(repo), "--tree", "origin/main"])
+        return rc, err.getvalue(), time.monotonic() - t0
+
+    def test_blob_none_clone_exits_2_quickly_without_fetching(self):
+        dst = self.clone("--filter=blob:none")
+        self.assertFalse(self.has_blob(dst))
+        rc, err, dt = self.run_in(dst)
+        self.assertEqual(rc, 2, err)
+        self.assertIn("partial clone", err)
+        self.assertLess(dt, 10)
+        self.assertFalse(self.has_blob(dst), "checker lazily fetched a blob")
+
+    def test_no_lazy_fetch_even_if_config_guard_is_bypassed(self):
+        dst = self.clone("--filter=blob:none")
+        orig = chk.assert_complete_repo
+        chk.assert_complete_repo = lambda repo: None
+        self.addCleanup(setattr, chk, "assert_complete_repo", orig)
+        rc, err, dt = self.run_in(dst)
+        self.assertEqual(rc, 2, err)
+        self.assertIn("ERROR (measure)", err)
+        self.assertFalse(self.has_blob(dst), "GIT_NO_LAZY_FETCH not honoured")
+
+    def test_promisor_config_alone_is_refused(self):
+        for key, val in (("remote.origin.promisor", "true"),
+                         ("extensions.partialClone", "origin")):
+            with self.subTest(key=key):
+                self.git("config", key, val)
+                rc, _, err = self.run_main()
+                self.assertEqual(rc, 2, err)
+                self.assertIn("partial clone", err)
+                self.git("config", "--unset", key)
+        self.git("config", "remote.origin.promisor", "false")
+        self.assertEqual(self.run_main()[0], 0)
+
+    def test_complete_and_shallow_clones_measure_exactly(self):
+        for opts in ((), ("--depth=1",)):
+            with self.subTest(opts=opts):
+                dst = self.clone(*opts)
+                rc, err, _ = self.run_in(dst)
+                self.assertEqual(rc, 0, err)
+                self.assertTrue(self.has_blob(dst))
+                subprocess.run(["rm", "-rf", str(dst)], check=True)
 
 
 class Exceptions(Base):

@@ -416,7 +416,12 @@ named commit/tree -- not working-tree or pack sizes. The checker reports
 repository-wide and `sim/` totals plus per **evidence unit**: the entry
 `sim/<bench>/<records|corners|netlist-snapshots|campaigns|reports>/<name>`
 (a campaign or run directory, or one record/report file). A missing or
-non-numeric size fails closed (exit 2), so never use a blob filter.
+non-numeric size fails closed (exit 2), so never use a blob filter. The checker
+also refuses a partial clone up front (`extensions.partialClone` or a
+`remote.<name>.promisor` remote: exit 2, naming the cause) and runs git with
+`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error rather than one network
+round trip per blob (~97k; that is how CI run 38029844566 hung). A shallow
+clone is accepted: it holds every blob of the commits it has.
 
 **Baseline and grandfathering.** The budget file records the baseline commit
 (`2c6002775...`: 97,217 blobs / 509,447,840 B repo, 96,352 blobs /
@@ -450,10 +455,18 @@ non-positive or non-integer bytes, and duplicates fail validation.
 Overage output names the path, measured bytes, ceiling and this route.
 
 **Sparse CI checkouts.** Every job in `.github/workflows/ci.yml` checks out
-only its explicit, audited inputs (`sparse-checkout`, non-cone patterns, never
-a `filter:`). Sparse checkout narrows the working tree only; the size and
-append-only checks read commit/tree metadata, which `fetch-depth: 0` keeps
-complete. Cones (each must contain the job's complete transitive inputs):
+only its explicit, audited inputs (non-cone patterns, never a `filter:`).
+Caveat: `actions/checkout` silently adds `--filter=blob:none` whenever its
+`sparse-checkout:` input is set, and an empty `filter:` cannot turn that off.
+The three jobs that only read files inside their cone use that input and are
+therefore blob-less partial clones, which is harmless for them. The
+`append-only-evidence` job measures blob sizes, so it must be a complete clone:
+its checkout has `fetch-depth: 0` and **no** `sparse-checkout:` input, and the
+next step applies its patterns with `git sparse-checkout set --no-cone --stdin`
+(failing with exit 2 if the clone is partial). The full fetch is small (the
+repository packs to roughly 60 MiB); only the transient full working tree
+costs a few seconds. Cones (each must contain the job's complete transitive
+inputs):
 
 | Job | Inputs beyond its own scripts |
 |---|---|
@@ -464,9 +477,13 @@ complete. Cones (each must contain the job's complete transitive inputs):
 
 A new input a job starts reading must be added to its patterns in the same
 change. `scripts/tests/test_sparse_checkout.py` proves the cones: it builds a
-clean sparse clone of `HEAD` per job from the patterns in `ci.yml` and runs the
-job's exact `run:` commands (tests skipping because an input is outside the
-cone fail). The two jobs that need the pinned `klt` run there only when the
+clean clone of `HEAD` per job with the same semantics `actions/checkout`
+applies to that job's `with:` block (implied `blob:none` filter over `file://`
+for a `sparse-checkout:` input, complete clone otherwise) and runs the job's
+exact `run:` commands, including the narrowing step (tests skipping because an
+input is outside the cone fail). It also asserts that every job running the
+size checker gets a complete clone, and that the size step exits 2 quickly in
+a `blob:none` clone. The two jobs that need the pinned `klt` run there only when the
 pinned build is first on `PATH`; otherwise they are skipped locally and proven
 by the real CI jobs.
 

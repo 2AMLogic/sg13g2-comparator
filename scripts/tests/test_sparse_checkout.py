@@ -1,10 +1,17 @@
 """Sparse-checkout cone proof for .github/workflows/ci.yml (issue #132).
 
-For every CI job this builds a *clean* sparse checkout of the repository's
-current HEAD commit from the job's declared `sparse-checkout:` patterns (a
-local no-network clone, no blob filter), then runs the job's exact `run:`
-commands from ci.yml inside it. A pattern list missing a transitive input
-makes the real command fail here.
+For every CI job this builds a *clean* checkout of the repository's current
+HEAD commit with the same semantics actions/checkout uses for that job's
+`with:` block, then runs the job's exact `run:` commands from ci.yml inside it.
+A pattern list missing a transitive input makes the real command fail here.
+
+actions/checkout semantics emulated (pinned v4.4.0, src/git-source-provider.ts):
+an explicit `filter:` is used as given; otherwise a `sparse-checkout:` input
+silently implies `--filter=blob:none` (a partial clone; an empty `filter:`
+cannot disable it); without either, the clone is complete and the whole tree is
+checked out. Filtered clones are made over file:// so the filter is honoured
+(a `--local` clone would ignore it, which is how CI run 38029844566's hang in
+the size check slipped past an earlier version of this test).
 
 * Stdlib-only jobs (append-only/size guards, harness unit tests) always run.
 * Jobs whose commands need the pinned `klt` (signoff parity, layout
@@ -21,6 +28,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -29,6 +37,10 @@ CI = ROOT / ".github" / "workflows" / "ci.yml"
 NESTED = "LOOM_SPARSE_TEST_NESTED"
 ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
 KLT_JOBS = {"signoff-manifest-parity", "layout-reproducibility"}
+SIZE_JOB = "append-only-evidence"
+SIZE_STEP = "Check tracked sim/ evidence size budget"
+NARROW = "git sparse-checkout set --no-cone --stdin <<'EOF'\n"
+UPLOAD_PACK = "git -c uploadpack.allowFilter=true upload-pack"
 
 
 def parse_jobs(text):
@@ -38,7 +50,10 @@ def parse_jobs(text):
     body = m.group(1)
     for jm in re.finditer(r"^  ([A-Za-z0-9_-]+):\n((?:(?:    .*)?\n)+)", body, re.M):
         name, jbody = jm.group(1), jm.group(2)
-        jobs[name] = {"checkout": checkout_of(jbody), "runs": runs_of(jbody)}
+        runs = runs_of(jbody)
+        co = checkout_of(jbody)
+        jobs[name] = {"checkout": co, "runs": runs,
+                      "patterns": co["patterns"] or narrow_patterns(runs)}
     return jobs
 
 
@@ -49,8 +64,21 @@ def checkout_of(jbody):
     sp = re.search(r"^ {10}sparse-checkout: \|\n((?: {12}\S.*\n)+)", withb, re.M)
     pats = [l.strip() for l in sp.group(1).splitlines()] if sp else []
     cone = re.search(r"^ {10}sparse-checkout-cone-mode: (\S+)", withb, re.M)
+    filt = re.search(r"^ {10}filter: *(.*)$", withb, re.M)
+    filt = filt.group(1).strip().strip("'\"") if filt else ""
     return {"patterns": pats, "cone": cone.group(1) if cone else None,
-            "with": withb}
+            "with": withb,
+            # actions/checkout: explicit filter wins, else sparse => blob:none
+            "filter": filt or ("blob:none" if pats else None)}
+
+
+def narrow_patterns(runs):
+    """Patterns of a post-checkout `git sparse-checkout set --stdin` heredoc."""
+    for _step, script in runs:
+        if NARROW in script:
+            body = script.split(NARROW, 1)[1]
+            return [l.strip() for l in body.split("\nEOF\n", 1)[0].splitlines()]
+    return []
 
 
 def runs_of(jbody):
@@ -98,42 +126,68 @@ class SparseCones(unittest.TestCase):
         self.assertEqual(
             set(self.jobs),
             {"signoff-manifest-parity", "layout-reproducibility",
-             "harness-unit-tests", "append-only-evidence"})
+             "harness-unit-tests", SIZE_JOB})
         for name, job in self.jobs.items():
             co = job["checkout"]
-            self.assertTrue(co["patterns"], name)
-            self.assertEqual(co["cone"], "false", name)
+            self.assertTrue(job["patterns"], name)
             self.assertNotRegex(co["with"], r"(?m)^\s*filter:", f"{name}: blob filter forbidden")
-            for p in co["patterns"]:
+            if co["patterns"]:
+                self.assertEqual(co["cone"], "false", name)
+            for p in job["patterns"]:
                 self.assertTrue(p.startswith("/"), f"{name}: unanchored {p!r}")
                 # only a basename wildcard (`dir/*.ext`); never `**`, `?`, `[`, `!`
                 self.assertFalse(set("?[!") & set(p) or "**" in p
                                  or "*" in p.rsplit("/", 1)[0], f"{name}: wildcard {p!r}")
 
     def test_append_only_job_keeps_full_history(self):
-        self.assertIn("fetch-depth: 0", self.jobs["append-only-evidence"]["checkout"]["with"])
+        self.assertIn("fetch-depth: 0", self.jobs[SIZE_JOB]["checkout"]["with"])
 
-    def _clone(self, tmp, patterns):
+    def test_size_measuring_jobs_get_a_complete_clone(self):
+        """Any job running the size checker must not be a partial clone.
+
+        A `sparse-checkout:` input on actions/checkout implies blob:none, so
+        such a job narrows its working tree in a later step instead.
+        """
+        users = {n for n, j in self.jobs.items()
+                 if any("check_evidence_size.py" in s for _, s in j["runs"])}
+        self.assertEqual(users, {SIZE_JOB})
+        for name in users:
+            co = self.jobs[name]["checkout"]
+            self.assertIsNone(co["filter"], f"{name}: actions/checkout would make a "
+                              f"partial clone (filter {co['filter']})")
+            self.assertEqual(co["patterns"], [], name)
+            self.assertTrue(narrow_patterns(self.jobs[name]["runs"]), name)
+
+    def _clone(self, tmp, checkout):
+        """Clone HEAD the way actions/checkout would for this `with:` block."""
         dst = Path(tmp) / "clone"
-        sh(["git", "clone", "-q", "--no-checkout", "--local",
-            str(ROOT), str(dst)], tmp)
-        sh(["git", "config", "core.sparseCheckout", "true"], dst)
-        sh(["git", "config", "core.sparseCheckoutCone", "false"], dst)
-        (dst / ".git" / "info").mkdir(exist_ok=True)
-        (dst / ".git" / "info" / "sparse-checkout").write_text("\n".join(patterns) + "\n")
+        if checkout["filter"]:
+            sh(["git", "clone", "-q", "--no-checkout", f"--filter={checkout['filter']}",
+                "-u", UPLOAD_PACK, f"file://{ROOT}", str(dst)], tmp)
+            sh(["git", "config", "remote.origin.uploadpack", UPLOAD_PACK], dst)
+        else:
+            sh(["git", "clone", "-q", "--no-checkout", "--local",
+                str(ROOT), str(dst)], tmp)
+        if checkout["patterns"]:
+            sh(["git", "config", "core.sparseCheckout", "true"], dst)
+            sh(["git", "config", "core.sparseCheckoutCone", "false"], dst)
+            (dst / ".git" / "info").mkdir(exist_ok=True)
+            (dst / ".git" / "info" / "sparse-checkout").write_text(
+                "\n".join(checkout["patterns"]) + "\n")
         sh(["git", "checkout", "-q", "--detach", self.head], dst)
         return dst
+
+    def _env(self, dst):
+        return {**ENV, NESTED: "1", "EVENT_NAME": "push", "PUSH_AFTER": self.head,
+                "PUSH_BEFORE": sh(["git", "rev-parse", "HEAD~1"], dst).stdout.strip(),
+                "PR_BASE_SHA": "", "PR_HEAD_SHA": "", "GITHUB_SHA_CUR": self.head,
+                "TARGET_SHA": self.head}
 
     def _run_job(self, name):
         job = self.jobs[name]
         with tempfile.TemporaryDirectory() as tmp:
-            dst = self._clone(tmp, job["checkout"]["patterns"])
-            env = {**ENV, NESTED: "1"}
-            if name == "append-only-evidence":
-                env.update(EVENT_NAME="push", PUSH_AFTER=self.head,
-                           PUSH_BEFORE=sh(["git", "rev-parse", "HEAD~1"], dst).stdout.strip(),
-                           PR_BASE_SHA="", PR_HEAD_SHA="", GITHUB_SHA_CUR=self.head,
-                           TARGET_SHA=self.head)
+            dst = self._clone(tmp, job["checkout"])
+            env = self._env(dst)
             ran = 0
             for step, script in job["runs"]:
                 if "pip install" in script:
@@ -147,6 +201,29 @@ class SparseCones(unittest.TestCase):
                                     f"{name} / {step}: tests skipped in sparse clone:\n{r.stdout[-3000:]}")
                 ran += 1
             self.assertGreater(ran, 0)
+            # the working tree really is narrowed to the declared patterns
+            if name == SIZE_JOB:
+                self.assertTrue((dst / "sim/evidence-size-budget.json").is_file())
+                self.assertFalse((dst / "sim/dut.json").exists())
+
+    def test_size_check_fails_closed_fast_in_a_blob_filtered_clone(self):
+        """The pre-fix layout (sparse-checkout input => blob:none) must exit 2
+        quickly with a clear message instead of lazily fetching every blob."""
+        job = self.jobs[SIZE_JOB]
+        steps = dict(job["runs"])
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, {"filter": "blob:none", "cone": "false",
+                                    "patterns": job["patterns"]})
+            env = self._env(dst)
+            for step in (SIZE_STEP, next(s for s in steps if NARROW in steps[s])):
+                with self.subTest(step=step):
+                    t0 = time.monotonic()
+                    r = subprocess.run(["bash", "-eu", "-c", steps[step]], cwd=dst, env=env,
+                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       text=True, timeout=60)
+                    self.assertEqual(r.returncode, 2, r.stdout[-3000:])
+                    self.assertIn("partial clone", r.stdout)
+                    self.assertLess(time.monotonic() - t0, 30)
 
     def test_append_only_and_size_job_from_sparse_clone(self):
         self._run_job("append-only-evidence")

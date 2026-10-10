@@ -23,7 +23,8 @@ additional bytes in a fenced json block (see ``sim/README.md``). There is no
 bypass flag or environment override.
 
 Exit codes: 0 within budget, 1 budget violation or invalid budget/exception,
-2 usage / git / measurement error (never reported as success).
+2 usage / git / measurement error, including a partial (blob-filtered) clone,
+which is refused up front and never lazily fetched (never reported as success).
 
 Stdlib only; needs ``git`` on PATH.
 """
@@ -32,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import posixpath
 import re
 import subprocess
@@ -61,16 +63,59 @@ class BudgetError(Exception):
     """Budget file or exception invalid (exit 1, fail closed)."""
 
 
+def _git_env() -> dict:
+    # Never lazily fetch a missing object from a promisor remote: in a
+    # blob-filtered partial clone `ls-tree -l` would otherwise fetch every blob
+    # one round trip at a time (CI run 38029844566 hung on ~97k of them). A
+    # missing object must fail closed instead.
+    return {**os.environ, "GIT_NO_LAZY_FETCH": "1"}
+
+
 def git(repo: str, *args: str) -> bytes:
     try:
         p = subprocess.run(["git", "-C", repo, *args], stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE, check=False)
+                           stderr=subprocess.PIPE, check=False, env=_git_env())
     except OSError as exc:
         raise MeasureError(f"cannot run git: {exc}") from exc
     if p.returncode != 0:
         raise MeasureError(f"git {' '.join(args)} failed: "
                            f"{p.stderr.decode('utf-8', 'replace').strip()}")
     return p.stdout
+
+
+_TRUE = {"true", "yes", "on", "1"}
+
+
+def assert_complete_repo(repo: str) -> None:
+    """Refuse a partial clone before reading any object (exit 2).
+
+    A partial clone (``extensions.partialClone`` or a ``remote.<name>.promisor``
+    remote, e.g. actions/checkout with ``sparse-checkout:`` which implies
+    ``--filter=blob:none``) lacks blobs, so sizes are unavailable locally and
+    git would lazily fetch them one by one. A *shallow* clone is not refused:
+    it still holds every tree and blob of the commits it has, so a resolvable
+    target tree is measured exactly (an unavailable one already exits 2).
+    """
+    try:
+        p = subprocess.run(
+            ["git", "-C", repo, "config", "--get-regexp",
+             r"^(extensions\.partialclone|remote\..*\.promisor)$"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+            env=_git_env())
+    except OSError as exc:
+        raise MeasureError(f"cannot run git: {exc}") from exc
+    if p.returncode not in (0, 1):  # 1 = no matching key
+        raise MeasureError("git config --get-regexp failed: "
+                           f"{p.stderr.decode('utf-8', 'replace').strip()}")
+    for line in p.stdout.decode("utf-8", "replace").splitlines():
+        key, _, val = line.partition(" ")
+        if key == "extensions.partialclone" or val.strip().lower() in _TRUE:
+            raise MeasureError(
+                f"{repo} is a partial clone ({key} {val.strip()}); blob sizes "
+                "are not available locally and would be lazily fetched one by "
+                "one. Measure from a complete clone (no blob filter; in CI do "
+                "not give actions/checkout a `sparse-checkout:` input for this "
+                "job, which implies --filter=blob:none)")
 
 
 def resolve_tree(repo: str, rev: str) -> str:
@@ -330,6 +375,7 @@ def main(argv=None) -> int:
     ap.add_argument("--quiet", action="store_true", help="omit per-unit listing")
     args = ap.parse_args(argv)
     try:
+        assert_complete_repo(args.repo)
         tree = resolve_tree(args.repo, args.tree)
         m = measure(args.repo, tree)
         if args.emit_budget:
