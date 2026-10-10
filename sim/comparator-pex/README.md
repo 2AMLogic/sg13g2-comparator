@@ -58,6 +58,12 @@ text below it is kept as the record of the earlier attempt. The same
   the spec limits; only schematic-vs-extracted raw deltas are recorded.
 - DR-0002 is untouched; nothing was relaxed.
 
+## Update 2026-10-10: batch re-probe
+
+`klt sim --backend batch` on the staged PVT regeneration request was refused again
+(`batch_no_capacity`, 30 pools). Record: `reports/batch-probe.regeneration.pvt.20261010.{md,json}`.
+The PVT and Monte Carlo rows remain not run; no local grid was launched.
+
 ## What ran, and what it proved
 
 | Artifact | What it is |
