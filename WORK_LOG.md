@@ -4,6 +4,11 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-10
 
+- **PR #170**: T1 statistical signoff: N=200 offset populations at every PVT point (Closes #167)
+- **PR #169**: ci: pinned ruff F-rule static check (Closes #157)
+- **Issue #167** (closed): T1 statistical signoff: larger offset populations at every PVT point
+- **Issue #157** (closed): CI: pinned pyflakes-class static check over harness, kltsim and guard scripts
+
 - **PR #158**: test: unit tests for harness PDK resolution and toolchain-pin drift
 - **PR #163**: klt yield evidence for the statistical DR-0002 rows; cite T1 item 6 (unmet, undersized_sample)
 - **PR #162**: Protect aggregated characterization reports from in-place replacement
