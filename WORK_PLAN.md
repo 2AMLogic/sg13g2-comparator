@@ -17,13 +17,13 @@ _None._
 
 Human-approved issues ready for implementation (`loom:issue`).
 
-_None._
+- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
+- **#63**: Monte Carlo: mint a klt yield report for the statistical spec rows (offset sigma) and cite it (T1 item 6)
 - **#117**: Unit tests for the CI-gating scripts: signoff parity, ERC judge, netlist generator
 
 ## PRs Awaiting Review
@@ -43,10 +43,12 @@ _None._
 Issues carrying `loom:curated`.
 
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
+- **#63**: Monte Carlo: mint a klt yield report for the statistical spec rows (offset sigma) and cite it (T1 item 6) *(curated)*
+- **#65**: Cite artifact-anchored evidence for T1 items 1, 9 and 10 (design sources, testbenches, repo hygiene) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-- **#132**: Evidence size budget, sparse CI checkout, and bulk-evidence storage decision for sim/ campaigns *(architect)*
+- **#142**: Capture verified Git provenance before PVT simulation *(architect)*
 
 ## Epics
 
@@ -58,11 +60,11 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 0 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 0 |
+| Ready (`loom:issue`) | 1 |
 | In Progress (`loom:building`) | 2 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 0 |
-| Curated | 1 |
+| Curated | 3 |
 | Architect / Hermit proposals | 1 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
