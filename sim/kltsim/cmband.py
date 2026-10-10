@@ -248,7 +248,9 @@ def load_points(envelopes: list[dict], vcm_v: float | None = None) -> dict[tuple
             if mc is None:
                 continue
             key = grade_mod._corner_key(corner)
-            values = {m["name"]: m for m in corner.get("measurements") or []}
+            # Validated lookup (issue #150): a repeated or malformed measurement
+            # entry makes the sample untrusted; no copy is selected.
+            values = grade_mod.measurement_index(corner)[0] or {}
             lc = values.get("lowcount") or {}
             vos = values.get("vos_mv") or {}
             problem = grade_mod._corner_problems(corner, OFFSET_MC.name, gates=[])

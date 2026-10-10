@@ -183,7 +183,10 @@ def _point_problem(corner: dict, bench_name: str) -> str | None:
     dup = sorted(n for n in probes if names.count(n) > 1)
     if dup:
         return f"duplicate probe measurement(s) {', '.join(dup)}"
-    return grade_mod._corner_problems(corner, bench_name, [])
+    # Issue #122 scopes duplicate-name ambiguity per consumed measurement
+    # (_meas_value rejects a repeated scored/gate name); here only the probes
+    # must be unique for the whole point to be trusted.
+    return grade_mod._corner_problems(corner, bench_name, [], unique=probes)
 
 
 def _meas_value(corner: dict, name: str):

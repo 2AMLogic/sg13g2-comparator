@@ -10,8 +10,10 @@ The rules, in the order they bind:
 2. **Every grid point must be present, trustworthy and actually applied.**
    A corner that is missing, errored, lacks the measurement, failed a
    validity gate (a wrong decision, an offset clamped at the edge of the
-   swept window), or whose supply / temperature probe disagrees with the
-   corner it claims to be, contributes no value.
+   swept window), whose supply / temperature probe disagrees with the
+   corner it claims to be, or whose measurement list is malformed or reports
+   any name more than once (ambiguous: no copy is selected), contributes no
+   value.
 3. **Verdicts keep their causes apart.** ``FAIL`` means at least one
    trustworthy value violates the bound (a numerical spec miss, whatever
    else is missing). ``INCOMPLETE`` means no violation was seen but the grid
@@ -314,12 +316,56 @@ def _bench_spec(name: str):
     return BENCHES.get(name)
 
 
-def _corner_problems(corner: dict, bench_name: str, gates: list[str]) -> str | None:
-    """Why this (non-MC) corner's numbers cannot be trusted, or None."""
+def measurement_index(corner: dict, unique: tuple[str, ...] | frozenset | set | None = None
+                      ) -> tuple[dict[str, dict] | None, str | None]:
+    """Validated name -> measurement lookup for one corner (issue #150).
+
+    Returns ``(index, None)``, or ``(None, reason)`` when the corner's
+    measurement list cannot be trusted: not a list, an entry that is not an
+    object or lacks a non-empty string ``name``, or a name reported more than
+    once. A repeated name is ambiguous evidence even when the copies agree:
+    no copy is selected (never first, last or worst), so the result cannot
+    depend on list order.
+
+    ``unique`` (default None = every name) restricts the duplicate check to
+    the given names, for callers whose own policy scopes ambiguity to the
+    measurements they consume (issue #122 screening). Structural problems
+    are rejected regardless.
+    """
+    ms = corner.get("measurements")
+    if ms is None:
+        ms = []
+    if not isinstance(ms, list):
+        return None, f"malformed measurement list ({type(ms).__name__}, not a list)"
+    counts: dict[str, int] = {}
+    for i, m in enumerate(ms):
+        if not isinstance(m, dict):
+            return None, f"malformed measurement entry #{i} ({type(m).__name__}, not an object)"
+        name = m.get("name")
+        if not isinstance(name, str) or not name:
+            return None, f"malformed measurement entry #{i} (name {name!r} is not a non-empty string)"
+        counts[name] = counts.get(name, 0) + 1
+    dups = sorted(n for n, c in counts.items() if c > 1 and (unique is None or n in unique))
+    if dups:
+        return None, ("duplicate measurement name(s) "
+                      + ", ".join(f"{n} (x{counts[n]})" for n in dups)
+                      + ": ambiguous corner evidence, no value selected")
+    return {m["name"]: m for m in ms}, None
+
+
+def _corner_problems(corner: dict, bench_name: str, gates: list[str],
+                     unique: tuple[str, ...] | frozenset | set | None = None) -> str | None:
+    """Why this corner's numbers cannot be trusted, or None.
+
+    ``unique`` is passed to :func:`measurement_index` (default: every name in
+    the corner must be unique)."""
     if corner.get("status") == "error":
-        codes = ",".join(sorted({d.get("code", "?") for d in corner.get("diagnostics") or []}))
+        codes = ",".join(sorted({str(d.get("code", "?")) for d in corner.get("diagnostics") or []
+                                 if isinstance(d, dict)}))
         return f"errored ({codes or 'no diagnostic'})"
-    values = {m["name"]: m for m in corner.get("measurements") or []}
+    values, bad = measurement_index(corner, unique)
+    if bad:
+        return bad
     bench = _bench_spec(bench_name)
     probes = bench.probes if bench is not None else {}
     supplies = corner.get("supply_v") or {}
@@ -398,7 +444,13 @@ def per_corner_values(bench: BenchEvidence, measurement: str, unit: str | None,
             out.append(CornerValue(key, None, None, "grid point not in any envelope"))
             continue
         problem = _corner_problems(corner, bench.name, gates)
-        m = next((m for m in corner.get("measurements") or [] if m["name"] == measurement), None)
+        # The scored value comes from the same validated lookup as the probes
+        # and gates (issue #150): a repeated or malformed entry selects nothing.
+        index, bad = measurement_index(corner)
+        if bad:
+            out.append(CornerValue(key, None, corner.get("corner_id"), problem or bad))
+            continue
+        m = index.get(measurement)
         if m is None or m.get("value") is None:
             problem = problem or f"measurement {measurement} not reported"
             out.append(CornerValue(key, None, corner.get("corner_id"), problem))
@@ -492,8 +544,14 @@ def _index_populations(bench: BenchEvidence, names: tuple[str, ...]
     found: dict[str, dict[str, list[tuple[str, dict]]]] = {name: {} for name in names}
     for tag, env in bench.envelopes:
         for m in env.get("measurements") or []:
-            if m.get("name") in found and m.get("monte_carlo"):
+            # A malformed summary is never indexed: its point then has no
+            # population (fail-closed), rather than raising.
+            if not isinstance(m, dict) or not isinstance(m.get("monte_carlo"), dict):
+                continue
+            if m.get("name") in found:
                 for entry in m["monte_carlo"].get("by_corner") or []:
+                    if not isinstance(entry, dict) or not isinstance(entry.get("corner_id"), str):
+                        continue
                     found[m["name"]].setdefault(entry["corner_id"], []).append(
                         (tag, dict(entry, _unit=m.get("unit"))))
     index = {name: {cid: v[0][1] for cid, v in per.items() if len(v) == 1}
@@ -626,6 +684,16 @@ def _mc_samples(bench: BenchEvidence) -> dict[tuple, list[dict]]:
     return samples
 
 
+def _independence_draw(corner: dict, indep: tuple[str, ...]) -> tuple:
+    """The sample's raw-noise draw from its validated measurement lookup; a
+    malformed or ambiguous list yields an all-None (missing) draw, and such
+    a sample is already untrusted via ``_corner_problems``."""
+    index, bad = measurement_index(corner)
+    if bad:
+        return tuple(None for _ in indep)
+    return tuple(_finite_or_none((index.get(name) or {}).get("value")) for name in indep)
+
+
 def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[dict], list[str]]:
     """Per grid point: the two-rung probit-slope sigma from klt's per-corner
     MEANS of the 0/1 trial outcomes, or the reason there is none.
@@ -661,8 +729,7 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
     if indep:
         for k, corners in samples.items():
             for c in corners:
-                vals = {m["name"]: _finite_or_none(m.get("value")) for m in c.get("measurements") or []}
-                d = tuple(vals.get(name) for name in indep)
+                d = _independence_draw(c, indep)
                 if None not in d:
                     draw_points.setdefault(d, set()).add(k)
     details: list[dict] = []
@@ -700,10 +767,7 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
                  for name, n in ns.items() if n != expected_n or entries[name].get("errored")]
         untrusted = [f"{c['corner_id']}: {p}" for c in corners
                      if (p := _corner_problems(c, bench.name, gates))]
-        draws = []
-        for c in corners:
-            vals = {m["name"]: _finite_or_none(m.get("value")) for m in c.get("measurements") or []}
-            draws.append(tuple(vals.get(name) for name in indep))
+        draws = [_independence_draw(c, indep) for c in corners]
         duplicated = len(draws) - len(set(draws)) if indep else 0
         missing_draws = sum(1 for d in draws if any(v is None for v in d)) if indep else 0
         point["samples_sharing_a_draw_with_another_point"] = sum(

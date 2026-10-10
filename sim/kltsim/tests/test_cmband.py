@@ -222,6 +222,30 @@ class ConditionProbe(unittest.TestCase):
         self.assertIsNone(cmband.point_stats(ok[("tt", 1.2, 27.0)])["rejected"])
 
 
+class MeasurementUniqueness(unittest.TestCase):
+    """Issue #150: a repeated or malformed measurement entry in one sample
+    makes that sample untrusted; no copy is selected by list order."""
+
+    def test_duplicate_measurement_rejects_point_in_either_order(self):
+        for name in ("vos_mv", "lowcount", "vdd_meas"):
+            for front in (False, True):
+                with self.subTest(name=name, front=front):
+                    env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+                    ms = env["corners"][4]["measurements"]
+                    orig = next(m for m in ms if m["name"] == name)
+                    ms.insert(0 if front else len(ms), dict(orig))
+                    pts = cmband.load_points([env], vcm_v=0.6)
+                    rejected = cmband.point_stats(pts[("tt", 1.2, 27.0)])["rejected"]
+                    self.assertIn(f"duplicate measurement name(s) {name} (x2)", rejected)
+
+    def test_malformed_entry_is_diagnosed_not_raised(self):
+        env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+        env["corners"][4]["measurements"].append("vos_mv")
+        pts = cmband.load_points([env], vcm_v=0.6)
+        self.assertIn("malformed measurement",
+                      cmband.point_stats(pts[("tt", 1.2, 27.0)])["rejected"])
+
+
 class Report(unittest.TestCase):
     def test_compare_series_end_to_end(self):
         """Three synthetic conditions, one grid point each, through the full
