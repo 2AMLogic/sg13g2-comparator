@@ -277,7 +277,7 @@ def _envelope_provenance(series: str) -> dict:
         inv = mem.load_json(inv_path) if inv_path.is_file() else {}
         klt_versions.add(inv.get("klt_version"))
         jobs.append({
-            "request": env_path.relative_to(build_mod.REPO_ROOT).as_posix().replace(
+            "request": kcli._rel(env_path).as_posix().replace(
                 ".envelope.json", ".request.json"),
             "backend": "batch" if remote.get("job_id") else "local",
             "job_id": remote.get("job_id"),
