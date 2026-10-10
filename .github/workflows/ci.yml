@@ -20,6 +20,10 @@
 # in the same change. The same job also checks, read-only, that the
 # post-layout `klt pex` adapter inputs in `sim/comparator-pex/` are fresh
 # against their sources (issue #123) -- also stdlib only, no PDK.
+#
+# Pinning policy: third-party actions and `klt` are pinned by full commit SHA
+# (action tags are kept as trailing comments) so verdicts are reproducible.
+# Bumps are deliberate changes, made by hand in a reviewed PR.
 
 name: CI
 
@@ -43,9 +47,9 @@ jobs:
     name: signoff manifest parity (T1 verdict of record, pinned klt)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
 
@@ -77,9 +81,9 @@ jobs:
     name: layout reproducibility (committed GDS regenerates byte-for-byte)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
 
@@ -103,9 +107,9 @@ jobs:
     name: harness unit tests (stdlib only, no PDK)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
 
@@ -147,11 +151,11 @@ jobs:
     name: append-only sim evidence (stdlib only, no PDK)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
 
