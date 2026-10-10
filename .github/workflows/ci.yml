@@ -194,6 +194,10 @@ jobs:
             /spec/decision-records/0002-target-spec-ratification.md
             /manifests/sg13g2-comparator.json
             /design/
+            /layout/tests/
+            /layout/common_sg13g2.py
+            /layout/comparator/erc_tool.py
+            /layout/comparator/erc_report.json
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -227,6 +231,14 @@ jobs:
 
       - name: Run post-layout freshness unit tests
         run: python3 -m unittest discover -s sim/comparator-pex/tests -p 'test_*.py'
+
+      # Issue #117: ERC request/judge (stand-in klayout, mutate() untested) and
+      # netlist generator (xschem mocked). Stdlib only, no PDK/klayout/xschem.
+      - name: Run ERC tool unit tests
+        run: python3 -I -m unittest discover -s layout/tests -p 'test_*.py'
+
+      - name: Run netlist generator unit tests
+        run: python3 -I -m unittest discover -s design/tests -p 'test_*.py'
 
   # Append-only sim evidence guard (issue #116): protected paths under
   # sim/<bench>/{records,corners,netlist-snapshots,campaigns,reports}/ may
