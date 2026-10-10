@@ -27,6 +27,13 @@
 #       thing from the two modes above: it proves the HARNESS works, not that
 #       the circuit does.
 #
+#   sim/characterize.sh report [generate|check]
+#       T1 item 8 (issue #64): aggregate the COMMITTED schematic campaign
+#       sim/klt-corner-verification/campaigns/${REPORT_CAMPAIGN} (explicit, never
+#       "newest") into sim/characterization/<campaign>-schematic/ (input index,
+#       report.json, report.md, generic envelope). Runs NO simulation. `check`
+#       re-hashes every indexed source and fails if anything is stale.
+#
 # Exit status: 0 if every campaign that ran exited 0; otherwise the number of
 # failing campaigns.
 
@@ -40,10 +47,21 @@ MODE="${1:-}"
 case "${MODE}" in
   smoke|characterize) ;;
   selftest) exec "${SIM_DIR}/selftest.sh" ;;
+  report)
+    # Aggregation only (no simulator). The campaign is named explicitly.
+    REPORT_CAMPAIGN="${REPORT_CAMPAIGN:-20261009-d73a9ac}"
+    SUB="${2:-generate}"
+    case "${SUB}" in
+      generate) exec python3 "${SIM_DIR}/run_characterization.py" generate --campaign "${REPORT_CAMPAIGN}" ;;
+      check) exec python3 "${SIM_DIR}/run_characterization.py" check --campaign "${REPORT_CAMPAIGN}" \
+                  --manifest "${REPO_ROOT}/manifests/sg13g2-comparator.json" ;;
+      *) echo "usage: $(basename "$0") report [generate|check]" >&2; exit 1 ;;
+    esac ;;
   *)
-    echo "usage: $(basename "$0") {smoke|characterize|selftest}" >&2
+    echo "usage: $(basename "$0") {smoke|characterize|selftest|report}" >&2
     echo "  smoke         one nominal point per campaign, writes no evidence (seconds)" >&2
     echo "  characterize  full 45-point PVT campaign, mints sim/ evidence records" >&2
+    echo "  report        aggregate committed evidence into the item 8 report (no simulation)" >&2
     echo "  selftest      harness acceptance test incl. the sabotage negative control" >&2
     exit 1
     ;;
