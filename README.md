@@ -148,6 +148,24 @@ a status-only record (proposed; awaiting two-key ratification) that moves no
 bound. Nothing here is
 post-layout.
 
+## Reproducing the results
+
+Every committed result can be regenerated or re-checked from a clean
+checkout. Nothing below relaxes the ratified spec; the commands only
+reproduce or re-validate evidence.
+
+| Result | Command | Details |
+|---|---|---|
+| Netlist derived from the xschem sources | `python3 design/netlist.py --check` (regenerate: no flag) | [`design/README.md`](design/README.md#regenerating-the-netlist) |
+| Spec-row measurements (offset, noise, decision time, metastability, kickback) | `python3 sim/run_corners.py --check-env`, then `./sim/characterize.sh characterize` (smoke: `./sim/characterize.sh smoke`) | [`sim/README.md`](sim/README.md#cold-start): pinned PDK in `sim/pdk.json`, ngspice 46+ with OSDI |
+| `klt sim` corner verification campaigns | `python3 sim/run_klt_corner_verification.py build\|run\|grade --campaign <id>` | [`sim/klt-corner-verification/README.md`](sim/klt-corner-verification/README.md) |
+| Aggregated characterization report (T1 item 8) | `./sim/characterize.sh report check` | [`sim/README.md`](sim/README.md) |
+| Layout, LVS, DRC, ERC | `layout/run_flow.sh --check` | [`layout/README.md`](layout/README.md) |
+| Tier verdict (`klt signoff`) and its guards | `python3 scripts/check_signoff_report.py`, `python3 scripts/check_klt_pin.py` | [`manifests/README.md`](manifests/README.md#regeneration-and-freshness) |
+
+Evidence under `sim/` is append-only; new runs add records and are never
+edited into old ones.
+
 ## License
 
 Apache-2.0.

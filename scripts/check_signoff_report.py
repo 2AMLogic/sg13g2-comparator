@@ -4,7 +4,7 @@
 `manifests/sg13g2-comparator.json` is this block's `klt signoff --manifest`
 block manifest, and `manifests/t1-signoff-report.json` is the rendered report
 frozen at this repo's pinned `klt` build, `2AMLogic/klayout-tools` @
-e8ca621a6961879cec1af60cc932c3b3d58ddcaa (see `manifests/README.md`). This
+3a75c3ae705b7ad3803625255de93bcd982e70c6 (see `manifests/README.md`). This
 script re-renders the report from the manifest right now and refuses to let
 the frozen one rot:
 

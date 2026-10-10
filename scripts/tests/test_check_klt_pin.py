@@ -17,9 +17,9 @@ spec = importlib.util.spec_from_file_location("check_klt_pin", SCRIPT)
 chk = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(chk)
 
-SHA = "e8ca621a6961879cec1af60cc932c3b3d58ddcaa"
-VER = "0.5.0+ge8ca621a6961"
-KLAYOUT = "0.30.10"
+SHA = "3a75c3ae705b7ad3803625255de93bcd982e70c6"
+VER = "0.6.0+g3a75c3ae705b"
+KLAYOUT = "0.30.12"
 OTHER_SHA = "86740f86d44f0000000000000000000000000000"
 
 CI = f"""\
@@ -62,7 +62,7 @@ class Fixture:
                 "klt_version": VER, "klayout_version": KLAYOUT}})
         # Deliberately different build: must be ignored by the guard.
         self.write_json("layout/comparator/pex_report.json", {"provenance": {
-            "klt_version": "0.7.0+g86740f86d44f", "klayout_version": "0.30.12"}})
+            "klt_version": "0.7.0+g86740f86d44f", "klayout_version": "0.30.13"}})
 
     def path(self, rel):
         return self.root / rel
@@ -133,8 +133,8 @@ class KltPinTests(unittest.TestCase):
         self.assertNotIn(chk.CI_YML + ":7 ", err)
 
     def test_disagree_ci_klayout(self):
-        self.fx.edit(chk.CI_YML, f"klayout=={KLAYOUT}", "klayout==0.30.12")
-        self.assertFails(chk.PIN_FILE + ":klayout_version", "0.30.12",
+        self.fx.edit(chk.CI_YML, f"klayout=={KLAYOUT}", "klayout==0.30.13")
+        self.assertFails(chk.PIN_FILE + ":klayout_version", "0.30.13",
                          chk.CI_YML + ":14")
 
     def test_disagree_run_flow_klt(self):
@@ -142,8 +142,8 @@ class KltPinTests(unittest.TestCase):
         self.assertFails(chk.RUN_FLOW + ":3 (KLT_PIN)", OTHER_SHA, SHA)
 
     def test_disagree_run_flow_klayout(self):
-        self.fx.edit(chk.RUN_FLOW, f'KLAYOUT_PIN="{KLAYOUT}"', 'KLAYOUT_PIN="0.30.12"')
-        self.assertFails(chk.RUN_FLOW + ":4 (KLAYOUT_PIN)", "0.30.12")
+        self.fx.edit(chk.RUN_FLOW, f'KLAYOUT_PIN="{KLAYOUT}"', 'KLAYOUT_PIN="0.30.13"')
+        self.assertFails(chk.RUN_FLOW + ":4 (KLAYOUT_PIN)", "0.30.13")
 
     def test_disagree_signoff_build(self):
         d = self.fx.read_json(chk.SIGNOFF)
@@ -159,7 +159,7 @@ class KltPinTests(unittest.TestCase):
                 good = self.fx.read(rel)
                 d = json.loads(good)
                 d["provenance"]["klt_version"] = "0.7.0+g86740f86d44f"
-                d["provenance"]["klayout_version"] = "0.30.12"
+                d["provenance"]["klayout_version"] = "0.30.13"
                 self.fx.write_json(rel, d)
                 self.assertFails(rel + ":provenance.klt_version",
                                  rel + ":provenance.klayout_version")
@@ -178,7 +178,7 @@ class KltPinTests(unittest.TestCase):
         d = self.fx.read_json(chk.PIN_FILE)
         d["klt_version"] = "0.5.0+g000000000000"
         self.fx.write_json(chk.PIN_FILE, d)
-        self.assertFails("does not end in '+ge8ca621a6961'")
+        self.assertFails("does not end in '+g3a75c3ae705b'")
 
     # -- missing copy -------------------------------------------------------
 

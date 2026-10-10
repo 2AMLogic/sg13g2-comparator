@@ -27,8 +27,8 @@ layout/run_flow.sh --check    # leave the committed file alone; prove it reprodu
 
 **Prerequisites.** You need [uv](https://docs.astral.sh/uv/) (`uvx`) and
 network access to fetch the pinned tools into uv's isolated cache. The pins
-are `2AMLogic/klayout-tools` @ `e8ca621a6961879cec1af60cc932c3b3d58ddcaa`
-(the same pin `manifests/README.md` and CI use) and `klayout==0.30.10` (the
+are `2AMLogic/klayout-tools` @ `3a75c3ae705b7ad3803625255de93bcd982e70c6`
+(the same pin `manifests/README.md` and CI use) and `klayout==0.30.12` (the
 KLayout that klt build was tested against). Nothing is installed host-wide.
 No PDK install is read: every layer number and rule value is a constant in
 `common_sg13g2.py`, so the result does not depend on where, or whether, a
@@ -79,7 +79,7 @@ The generator alone needs only the `klayout` Python module:
    | `lvs_request.json` | the `klt.lvs.request/1` document; netlist paths are relative to the request file, so nothing is host-absolute |
    | `lvs_report.json` | the `klt lvs` envelope that the manifest cites |
 
-   Result: `status: match`, engine `klayout` 0.30.10, 24/24 devices, 18/18
+   Result: `status: match`, engine `klayout` 0.30.12, 24/24 devices, 18/18
    nets, 8/8 pins (`vinp vinn clk vbias dout doutb vdd vss`, including the
    independent `vbias` pin and `vdd`/`vss`, each with an identical
    layout/reference entry in `net_correspondence`, which item 11 cites next to
@@ -315,9 +315,10 @@ ratified row.
 ## Manifest citation (T1 item 2)
 
 [klayout-tools#2718](https://github.com/2AMLogic/klayout-tools/issues/2718)
-landed upstream (PR #2843, `3a75c3ae`). It added the artifact-anchored
-generic evidence that lets `klt signoff` bind item 2 to this stream. This
-repo's pinned build (`e8ca621`) predates it. Bumping that pin moves the
-whole frozen report and is the first acceptance criterion of #65. So
-`manifests/sg13g2-comparator.json` does not cite item 2 yet. The citation
-belongs with, or right after, that pin bump.
+landed upstream (PR #2843, `3a75c3ae`), and this repo's pin now includes it.
+`manifests/sg13g2-comparator.json` cites item 2 through the generic envelope
+`manifests/evidence/item2-layout.envelope.json`, which names
+`layout/comparator/comparator.gds` in `provenance.input.path` and pins its
+content hash. Regenerating the GDS changes that hash: refresh the envelope,
+the manifest pin and `manifests/t1-signoff-report.json` in the same change
+(see `manifests/README.md`).
