@@ -1040,5 +1040,231 @@ class CampaignChainTests(unittest.TestCase):
         self.assertNotEqual(row["target_verdict"], grade.REJECTED_EVIDENCE)
 
 
+class MeasurementUniquenessTests(unittest.TestCase):
+    """Issue #150: a measurement name repeated within ONE corner is ambiguous
+    evidence. The point is rejected whatever the copies' order or values
+    (never first, last or worst), and a malformed measurement entry is a
+    diagnosed invalid point, never an unhandled exception."""
+
+    DUP = "duplicate measurement name(s)"
+
+    def setUp(self):
+        self.dut = grade.load_dut_reference()
+        self.body = _body("regeneration")
+
+    def _grade(self, env, rows=None, name="regeneration", body=None):
+        body = body or self.body
+        return grade.grade(_spec(rows or [_row("3a")]), {name: _evidence(name, env, body)}, self.dut)
+
+    @staticmethod
+    def _dup(corner, name, front=False, **override):
+        """Add a second ``name`` entry (with ``override``) before or after the original."""
+        ms = corner["measurements"]
+        orig = next(m for m in ms if m["name"] == name)
+        copy_ = dict(orig, **override)
+        if front:
+            ms.insert(0, copy_)
+        else:
+            ms.append(copy_)
+
+    def _both_orders(self, name, corner_index=0, envelope=None, **override):
+        """Two envelopes whose corner ``corner_index`` carries the original and
+        an overridden copy of ``name``, in either list order."""
+        out = []
+        for front in (False, True):
+            env = (envelope or (lambda: regeneration_envelope(self.body)))()
+            self._dup(env["corners"][corner_index], name, front=front, **override)
+            out.append(env)
+        return out
+
+    def _assert_rejected(self, row, name, points_valid=44):
+        self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+        self.assertNotEqual(row["stretch_verdict"], grade.PASS)
+        self.assertEqual(row["target"]["points_valid"], points_valid)
+        why = row["target"]["points_missing_or_invalid"][0]["why"]
+        self.assertIn(self.DUP, why)
+        self.assertIn(f"{name} (x2)", why)
+        self.assertIn("no value selected", why)
+
+    # -- the validated lookup itself ------------------------------------------
+
+    def test_measurement_index_unique_and_scoped(self):
+        corner = {"measurements": [{"name": "a", "value": 1}, {"name": "b", "value": 2},
+                                   {"name": "a", "value": 1}]}
+        index, bad = grade.measurement_index(corner)
+        self.assertIsNone(index)
+        self.assertIn("a (x2)", bad)
+        index, bad = grade.measurement_index(corner, unique={"b"})
+        self.assertIsNone(bad)  # scoped check (issue #122 screening policy)
+        index, bad = grade.measurement_index({"measurements": None})
+        self.assertEqual((index, bad), ({}, None))
+        index, bad = grade.measurement_index({"measurements": [{"name": "a"}, {"name": "b"}]})
+        self.assertEqual(sorted(index), ["a", "b"])
+
+    # -- deterministic per-corner grading -------------------------------------
+
+    def test_duplicate_scored_measurement_rejected_in_either_order(self):
+        # First-wins used to grade the failing 5.0 or passing 0.7 by list order.
+        rows = [self._grade(env)["rows"][0]
+                for env in self._both_orders("td_od50_ns", value=5.0)]
+        for row in rows:
+            self._assert_rejected(row, "td_od50_ns")
+        self.assertEqual(rows[0]["target"], rows[1]["target"])
+        self.assertEqual(rows[0]["stretch"], rows[1]["stretch"])
+
+    def test_identical_duplicate_scored_measurement_still_rejected(self):
+        env = regeneration_envelope(self.body)
+        self._dup(env["corners"][0], "td_od50_ns")  # exact copy, agreeing value
+        self._assert_rejected(self._grade(env)["rows"][0], "td_od50_ns")
+
+    def test_duplicate_supply_probe_rejected_in_either_order(self):
+        # One copy matches the corner, the other says the supply never applied.
+        for env in self._both_orders("vdd_meas", value=1.5):
+            self._assert_rejected(self._grade(env)["rows"][0], "vdd_meas")
+        env = regeneration_envelope(self.body)
+        self._dup(env["corners"][0], "vdda_meas")  # agreeing copies
+        self._assert_rejected(self._grade(env)["rows"][0], "vdda_meas")
+
+    def test_duplicate_temperature_probe_rejected_in_either_order(self):
+        for env in self._both_orders("temp_meas", value=999.0):
+            self._assert_rejected(self._grade(env)["rows"][0], "temp_meas")
+        env = regeneration_envelope(self.body)
+        self._dup(env["corners"][0], "temp_meas")
+        self._assert_rejected(self._grade(env)["rows"][0], "temp_meas")
+
+    def test_duplicate_validity_gate_rejected_in_either_order(self):
+        self.assertIn("dout_od50_end", _row("3a")["evidence"]["gates"])
+        for env in self._both_orders("dout_od50_end", value=0.0, status="fail"):
+            self._assert_rejected(self._grade(env)["rows"][0], "dout_od50_end")
+        env = regeneration_envelope(self.body)
+        self._dup(env["corners"][0], "dout_od50_end")
+        self._assert_rejected(self._grade(env)["rows"][0], "dout_od50_end")
+
+    def test_duplicate_unrelated_measurement_still_rejects_the_point(self):
+        # The corner record is ambiguous as a whole: uniqueness is checked
+        # before any lookup is built, not only for the names a row consumes.
+        env = regeneration_envelope(self.body)
+        self._dup(env["corners"][0], "p_avg_uw")
+        self._assert_rejected(self._grade(env)["rows"][0], "p_avg_uw")
+
+    def test_duplicate_cannot_hide_a_real_miss(self):
+        env = regeneration_envelope(self.body, td50=lambda p, v, t: 2.0 if p == "ff" else 0.7)
+        self._dup(env["corners"][0], "td_od50_ns")
+        row = self._grade(env)["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.FAIL)
+
+    def test_unique_valid_evidence_keeps_its_verdict(self):
+        env = regeneration_envelope(self.body)
+        row = self._grade(env)["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.PASS)
+        self.assertEqual(row["target"]["points_valid"], 45)
+        # reordering a unique list changes nothing
+        for c in env["corners"]:
+            c["measurements"].reverse()
+        self.assertEqual(self._grade(env)["rows"][0]["target"], row["target"])
+        failing = regeneration_envelope(self.body, td50=lambda p, v, t: 5.0)
+        self.assertEqual(self._grade(failing)["rows"][0]["target_verdict"], grade.FAIL)
+
+    def test_full_grid_pass_impossible_with_one_rejected_point(self):
+        for corner_index in (0, 22, 44):
+            env = regeneration_envelope(self.body)
+            self._dup(env["corners"][corner_index], "td_od50_ns")
+            out = self._grade(env)
+            self.assertEqual(out["rows"][0]["target_verdict"], grade.INCOMPLETE)
+            self.assertFalse(out["t1_item5"]["all_target_rows_pass"])
+            self.assertEqual(out["t1_item5"]["blocking_sub_bounds"][0]["target_verdict"],
+                             grade.INCOMPLETE)
+
+    def test_malformed_entries_are_diagnosed_not_raised(self):
+        cases = {
+            "not a list": lambda c: c.__setitem__("measurements", {"td_od50_ns": 0.7}),
+            "non-object entry": lambda c: c["measurements"].append("td_od50_ns=0.7"),
+            "missing name": lambda c: c["measurements"].append({"value": 0.7}),
+            "non-string name": lambda c: c["measurements"].append({"name": 7, "value": 0.7}),
+            "empty name": lambda c: c["measurements"].append({"name": "", "value": 0.7}),
+        }
+        for label, mutate in cases.items():
+            with self.subTest(label):
+                env = regeneration_envelope(self.body)
+                mutate(env["corners"][0])
+                row = self._grade(env)["rows"][0]
+                self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+                self.assertEqual(row["target"]["points_valid"], 44)
+                self.assertIn("malformed measurement",
+                              row["target"]["points_missing_or_invalid"][0]["why"])
+                grade.dumps_strict(self._grade(env))  # serialisable report
+
+    def test_coverage_row_rejects_duplicate_probe(self):
+        # The coverage caller grades per_corner_values on the supply probe.
+        body_k, body_o, body_n = _body("kickback"), _body("offset_mc"), _body("transient_noise")
+        benches = {
+            "kickback": _evidence("kickback", kickback_envelope(body_k), body_k),
+            "offset_mc": _evidence("offset_mc", offset_envelope(body_o), body_o),
+            "transient_noise": _evidence("transient_noise", noise_envelope(body_n), body_n),
+        }
+        for front in (False, True):
+            env = regeneration_envelope(self.body)
+            self._dup(env["corners"][7], "vdd_meas", front=front, value=1.5)
+            benches["regeneration"] = _evidence("regeneration", env, self.body)
+            row = grade.grade(_spec([_row("5a")]), benches, self.dut)["rows"][0]
+            self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+            self.assertTrue(any(self.DUP in p for p in row["coverage_problems"]))
+
+    # -- statistical paths ----------------------------------------------------
+
+    def test_offset_mc_duplicate_gate_or_probe_in_a_sample_rejects_the_point(self):
+        body = _body("offset_mc")
+        for name, override in (("lowcount", {"value": 0.0, "status": "fail"}),
+                               ("lowcount", {}), ("vdd_meas", {"value": 1.5})):
+            for front in (False, True):
+                with self.subTest(name=name, override=override, front=front):
+                    env = offset_envelope(body)
+                    self._dup(env["corners"][5], name, front=front, **override)
+                    row = self._grade(env, rows=[_row("1")], name="offset_mc", body=body)["rows"][0]
+                    self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+                    self.assertEqual(row["target"]["points_valid"], 44)
+                    self.assertIn(self.DUP, row["target"]["points_missing_or_invalid"][0]["why"])
+
+    def test_offset_mc_malformed_sample_entry_is_diagnosed(self):
+        body = _body("offset_mc")
+        env = offset_envelope(body)
+        env["corners"][5]["measurements"].append(["lowcount", 16.0])
+        env["measurements"].append("not a summary")
+        row = self._grade(env, rows=[_row("1")], name="offset_mc", body=body)["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+        self.assertIn("malformed measurement", row["target"]["points_missing_or_invalid"][0]["why"])
+
+    def test_noise_duplicate_outcome_or_independence_probe_rejects_the_point(self):
+        body = _body("transient_noise")
+        for name, override in (("hit_plus", {"value": 0.0}), ("vn0_a", {"value": 123.0}),
+                               ("vn0_a", {})):
+            for front in (False, True):
+                with self.subTest(name=name, override=override, front=front):
+                    env = noise_envelope(body)
+                    self._dup(env["corners"][3], name, front=front, **override)
+                    row = self._grade(env, rows=[_row("2")], name="transient_noise",
+                                      body=body)["rows"][0]
+                    self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+                    self.assertEqual(row["target"]["points_valid"], 44)
+                    self.assertIn(self.DUP, row["target"]["points_missing_or_invalid"][0]["why"])
+
+    def test_noise_malformed_sample_entry_is_diagnosed(self):
+        body = _body("transient_noise")
+        env = noise_envelope(body)
+        env["corners"][3]["measurements"].append({"value": 1.0})
+        row = self._grade(env, rows=[_row("2")], name="transient_noise", body=body)["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+        self.assertIn("malformed measurement", row["target"]["points_missing_or_invalid"][0]["why"])
+
+    def test_mc_coverage_rejects_duplicate_probe(self):
+        body = _body("offset_mc")
+        env = offset_envelope(body)
+        self._dup(env["corners"][0], "temp_meas")
+        vals = grade.mc_points_exercised(_evidence("offset_mc", env, body), GRID, 60)
+        bad = [v for v in vals if v.value is None]
+        self.assertEqual(len(bad), 1)
+        self.assertIn(self.DUP, bad[0].problem)
+
+
 if __name__ == "__main__":
     unittest.main()
