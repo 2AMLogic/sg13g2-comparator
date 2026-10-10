@@ -276,15 +276,70 @@ def summarize(tb: Testbench, results: list[PointResult]) -> dict[str, Measuremen
     return summaries
 
 
-def git_short_sha() -> str:
+UNKNOWN_COMMIT = "unknown"
+_SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+@dataclass(frozen=True)
+class GitProvenance:
+    """One verified-or-explicitly-unverified snapshot of the Git context.
+
+    Captured ONCE before a run reserves its identity or simulates, then reused
+    for the run id and the record context. ``verified`` is True only when both
+    ``rev-parse`` and ``status`` exited 0 and the commit looked like a SHA; an
+    unverified snapshot is never a clean one (``commit`` is ``"unknown"`` and
+    ``error`` says why).
+    """
+
+    commit: str
+    dirty_paths: tuple[str, ...]
+    verified: bool
+    error: str = ""
+
+    @property
+    def dirty(self) -> bool:
+        return bool(self.dirty_paths)
+
+
+def _run_git(args: list[str], timeout: int, run) -> tuple[str | None, str]:
+    """Return (stdout, "") on exit 0, else (None, reason)."""
+    cmd = "git " + " ".join(args)
     try:
-        out = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "rev-parse", "--short=7", "HEAD"],
-            capture_output=True, text=True, check=False, timeout=20,
+        out = run(
+            ["git", "-C", str(REPO_ROOT), *args],
+            capture_output=True, text=True, check=False, timeout=timeout,
         )
-        return out.stdout.strip() or "nogit"
-    except (FileNotFoundError, subprocess.TimeoutExpired):  # pragma: no cover
-        return "nogit"
+    except FileNotFoundError:
+        return None, f"`{cmd}`: git executable not found"
+    except subprocess.TimeoutExpired:
+        return None, f"`{cmd}`: timed out after {timeout}s"
+    except OSError as exc:
+        return None, f"`{cmd}`: {exc}"
+    if out.returncode != 0:
+        detail = (out.stderr or "").strip().splitlines()
+        return None, f"`{cmd}` exited {out.returncode}" + (f": {detail[-1]}" if detail else "")
+    return out.stdout or "", ""
+
+
+def capture_git_provenance(run=subprocess.run) -> GitProvenance:
+    """Capture commit + dirty paths once, checking every exit code."""
+    commit_out, err = _run_git(["rev-parse", "--short=7", "HEAD"], 20, run)
+    if commit_out is not None:
+        commit = commit_out.strip()
+        if not _SHA_RE.match(commit):
+            commit_out, err = None, f"`git rev-parse` returned an invalid commit {commit!r}"
+    if commit_out is None:
+        return GitProvenance(UNKNOWN_COMMIT, (), False, err)
+    status_out, err = _run_git(["status", "--porcelain"], 60, run)
+    if status_out is None:
+        return GitProvenance(UNKNOWN_COMMIT, (), False, err)
+    return GitProvenance(commit, tuple(_filter_status(status_out)), True)
+
+
+def git_short_sha() -> str:
+    """Compatibility helper: the commit, or ``"nogit"`` when unverifiable."""
+    prov = capture_git_provenance()
+    return prov.commit if prov.verified else "nogit"
 
 
 #: Path fragments whose UNTRACKED files do not make a tree "dirty" for the
@@ -297,24 +352,10 @@ def git_short_sha() -> str:
 _EVIDENCE_DIRS = ("/records/", "/corners/", "/netlist-snapshots/")
 
 
-def dirty_paths() -> list[str]:
-    """Working-tree paths that would make a record non-citable.
-
-    "Dirty" here means: something that feeds this record is not what is
-    committed. Tracked modifications always qualify. Untracked files qualify
-    too -- an untracked testbench fragment would be a genuinely uncitable
-    record -- EXCEPT under the harness's own evidence directories, which a
-    run unavoidably writes into before it can stamp its own header.
-    """
-    try:
-        out = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "status", "--porcelain"],
-            capture_output=True, text=True, check=False, timeout=60,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):  # pragma: no cover
-        return []
+def _filter_status(stdout: str) -> list[str]:
+    """Apply the dirty-tree rules (see ``_EVIDENCE_DIRS``) to porcelain output."""
     offenders: list[str] = []
-    for line in out.stdout.splitlines():
+    for line in stdout.splitlines():
         if not line.strip():
             continue
         status, _, path = line[:2], line[2], line[3:]
@@ -323,6 +364,24 @@ def dirty_paths() -> list[str]:
             continue
         offenders.append(f"{status.strip() or '??'} {path.strip()}")
     return offenders
+
+
+def dirty_paths() -> list[str]:
+    """Working-tree paths that would make a record non-citable.
+
+    "Dirty" here means: something that feeds this record is not what is
+    committed. Tracked modifications always qualify. Untracked files qualify
+    too -- an untracked testbench fragment would be a genuinely uncitable
+    record -- EXCEPT under the harness's own evidence directories, which a
+    run unavoidably writes into before it can stamp its own header.
+
+    Raises ``RuntimeError`` when the status lookup fails; an unavailable
+    lookup is never reported as a clean tree.
+    """
+    out, err = _run_git(["status", "--porcelain"], 60, subprocess.run)
+    if out is None:
+        raise RuntimeError(err)
+    return _filter_status(out)
 
 
 def new_token() -> str:
@@ -519,7 +578,9 @@ def render_record(
         f"`{tb.manifest_sha256[:16]}`",
         f"- **Commit**: `{context['commit']}`"
         + ("  — **taken against a DIRTY working tree**; not citable as a "
-           "clean-tree result" if context.get("dirty") else ""),
+           "clean-tree result" if context.get("dirty") else "")
+        + ("  — **Git provenance NOT VERIFIED**; not citable"
+           if context.get("git_verified") is False else ""),
         f"- **PDK**: {context['pdk']['variant']} @ release "
         f"`{context['pdk']['release_version']}` (found via "
         f"{context['pdk']['discovered_via']})",

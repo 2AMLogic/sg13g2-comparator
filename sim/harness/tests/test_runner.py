@@ -447,5 +447,77 @@ class ExclusiveLogTest(RunPointWarningsTest):
         self.assertIn("m_vos_mv", (log_dir / results[0].log).read_text())
 
 
+class GitProvenanceTest(ReservationTestBase):
+    """Issue #142: verified, single-capture Git provenance."""
+
+    @staticmethod
+    def _git(commit=("abc1234\n", 0), status=("", 0), calls=None):
+        def fake(cmd, **kw):
+            if calls is not None:
+                calls.append(cmd)
+            out, rc = commit if "rev-parse" in cmd else status
+            return subprocess.CompletedProcess(cmd, rc, stdout=out, stderr="fatal: boom")
+        return fake
+
+    def test_clean_verified(self):
+        p = report_mod.capture_git_provenance(run=self._git())
+        self.assertTrue(p.verified)
+        self.assertFalse(p.dirty)
+        self.assertEqual(p.commit, "abc1234")
+
+    def test_dirty_and_evidence_exclusions(self):
+        status = (" M sim/a.py\n?? sim/exp/records/x.md\n?? sim/exp/corners/y/z.log\n?? new.spice\n", 0)
+        p = report_mod.capture_git_provenance(run=self._git(status=status))
+        self.assertTrue(p.verified)
+        self.assertEqual(list(p.dirty_paths), ["M sim/a.py", "?? new.spice"])
+
+    def test_failed_lookups_are_never_clean(self):
+        cases = {
+            "rev-parse nonzero": self._git(commit=("abc1234\n", 128)),
+            "status nonzero": self._git(status=("", 128)),
+            "empty commit": self._git(commit=("\n", 0)),
+            "invalid commit": self._git(commit=("not a sha\n", 0)),
+        }
+        def missing(cmd, **kw):
+            raise FileNotFoundError("git")
+        def timeout(cmd, **kw):
+            raise subprocess.TimeoutExpired(cmd, 1)
+        cases["missing git"] = missing
+        cases["timeout"] = timeout
+        for name, fake in cases.items():
+            with self.subTest(name):
+                p = report_mod.capture_git_provenance(run=fake)
+                self.assertFalse(p.verified)
+                self.assertEqual(p.commit, report_mod.UNKNOWN_COMMIT)
+                self.assertFalse(p.dirty)
+                self.assertTrue(p.error)
+
+    def test_dirty_paths_raises_on_failure(self):
+        with mock.patch("subprocess.run", self._git(status=("", 1))):
+            with self.assertRaises(RuntimeError):
+                report_mod.dirty_paths()
+
+    def test_head_change_after_capture_does_not_change_identity(self):
+        prov = report_mod.capture_git_provenance(run=self._git())
+        calls: list = []
+        # HEAD moves after preflight: any further git query would see "def5678".
+        with mock.patch("subprocess.run", self._git(commit=("def5678\n", 0), calls=calls)):
+            res = report_mod.reserve_run(
+                self.exp, self.work, True, now=FROZEN, commit=prov.commit,
+                token_factory=lambda: "aaaaaa",
+            )
+        self.assertEqual(calls, [])
+        self.assertIn("abc1234", res.rid)
+        self.assertNotIn("def5678", res.rid)
+
+    def test_unverified_warning_in_record_header(self):
+        tb = _record_tb(self.exp)
+        tb.measure = {}
+        ctx = _record_context("rid")
+        ctx.update(commit="unknown", git_verified=False)
+        text = report_mod.render_record(tb, [], {}, ctx)
+        self.assertIn("NOT VERIFIED", text)
+
+
 if __name__ == "__main__":
     unittest.main()
