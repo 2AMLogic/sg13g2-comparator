@@ -2,8 +2,24 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-10
+
+- **PR #133**: CI guard: enforce append-only sim evidence
+- **PR #131**: pex: record 2026-10-10 batch re-probe; PVT/MC rows still not run (Part of #61)
+- **PR #130**: CI: preserve started verification runs when newer commits arrive
+- **PR #128**: docs: reconcile README Row 2 noise with issue #81 complete-injection campaign
+- **Issue #129** (closed): CI: preserve started verification runs when newer commits arrive
+- **Issue #127** (closed): Guard telemetry: retain unresolved campaign cleanup protection
+- **Issue #126** (closed): Reconcile public Row 2 noise summary with the completed internal-injection campaign
+- **Issue #116** (closed): CI guard: enforce append-only sim evidence (records, campaigns, corners)
+
 ### 2026-10-09
 
+- **PR #125**: ci: check post-layout klt pex inputs are fresh against their sources
+- **PR #124**: Validate sizing-screen evidence before selecting comparator finalists
+- **PR #121**: sim: joint input-pair sizing study for Rows 4a and 2 (Part of #92)
+- **Issue #123** (closed): CI: verify generated post-layout simulation inputs match their sources
+- **Issue #122** (closed): Validate sizing-screen evidence before selecting comparator finalists
 - **PR #119**: pex: record batch re-probe of PVT grid (Part of #61)
 - **PR #118**: Verify saved request and invocation provenance when grading campaigns
 - **PR #115**: harness: reserve unique PVT run identities before writing evidence (#110)
