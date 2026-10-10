@@ -60,6 +60,8 @@ jobs:
             /.github/workflows/ci.yml
             /scripts/check_klt_pin.py
             /scripts/check_signoff_report.py
+            /scripts/check_readme_claims.py
+            /README.md
             /manifests/
             /layout/
             /design/
@@ -118,6 +120,11 @@ jobs:
 
       - name: Fresh-render parity check vs committed report
         run: python3 scripts/check_signoff_report.py
+
+      # Issue #174: README target-spec-table figures vs the committed report
+      # (stdlib only). Unmapped claims are listed as UNCHECKED, never passed.
+      - name: README spec-table figures match the committed report
+        run: python3 scripts/check_readme_claims.py
 
       - name: Render the tier report (text, for the run log)
         if: always()
@@ -298,6 +305,8 @@ jobs:
           git sparse-checkout set --no-cone --stdin <<'EOF'
           /.github/workflows/ci.yml
           /scripts/
+          /README.md
+          /sim/characterization/20261009-d73a9ac-schematic/report.json
           /sim/evidence-exceptions.json
           /sim/evidence-size-budget.json
           /spec/decision-records/
