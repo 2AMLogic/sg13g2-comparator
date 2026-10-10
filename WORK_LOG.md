@@ -4,6 +4,31 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-10
 
+- **PR #158**: test: unit tests for harness PDK resolution and toolchain-pin drift
+- **PR #163**: klt yield evidence for the statistical DR-0002 rows; cite T1 item 6 (unmet, undersized_sample)
+- **PR #162**: Protect aggregated characterization reports from in-place replacement
+- **PR #161**: signoff parity: preserve JSON container structure
+- **PR #154**: grade: validate supply/temperature probe units (Closes #152)
+- **PR #153**: grade: reject repeated or malformed measurement names within a corner
+- **PR #148**: pex: full PVT klt pex on batch; runner klt 0.5.0 vs client 0.7.0 blocks every corner (Part of #61)
+- **PR #147**: tests: unit tests for signoff parity, ERC tool, netlist generator
+- **PR #146**: Cite artifact-anchored evidence for T1 items 1, 2, 9, 10; bump klt pin (#65)
+- **PR #145**: Capture verified Git provenance before PVT simulation
+- **PR #144**: pex: second batch re-probe, still no capacity (Part of #61)
+- **Issue #156** (closed): Unit tests for harness PDK resolution and toolchain-pin drift checks
+- **Issue #63** (closed): Monte Carlo: mint a klt yield report for the statistical spec rows (offset sigma) and cite it (T1 item 6)
+- **Issue #155** (closed): Protect aggregated characterization reports from in-place replacement
+- **Issue #149** (closed): Make signoff parity preserve JSON container structure
+- **Issue #151** (closed): Guard telemetry: retain stash create redirect confinement
+- **Issue #152** (closed): Validate supply and temperature probe units before accepting PVT evidence
+- **Issue #150** (closed): Reject repeated measurement names within corner evidence
+- **Issue #117** (closed): Unit tests for the CI-gating scripts: signoff parity, ERC judge, netlist generator
+- **Issue #141** (closed): Guard decision review: ask:(^|[;&|(`[:space:]])git checkout \.
+- **Issue #65** (closed): Cite artifact-anchored evidence for T1 items 1, 9 and 10 (design sources, testbenches, repo hygiene)
+- **Issue #142** (closed): Capture verified Git provenance before PVT simulation
+
+### 2026-10-10
+
 - **PR #140**: feat(sim): T1 item 8 aggregated characterization report (schematic)
 - **PR #139**: ci: bound tracked sim evidence growth and use verified sparse checkouts
 - **PR #138**: ci: single source of truth and drift guard for pinned klt/KLayout build
