@@ -66,9 +66,18 @@ output the workflow checks the reported version against `manifests/klt-pin.json`
 and runs a known-answer sample set; a missing extension, wrong version or wrong
 answer is an execution failure and writes nothing.
 
-Tests: `PYTHONPATH=sim python3 -m unittest kltsim.tests.test_yield_reports`.
-The tests that execute the native engine run only when `KLT_YIELD_CMD` is set
-(they are skipped, never passed, otherwise).
+Tests: `PYTHONPATH=sim python3 -m unittest kltsim.tests.test_yield_reports`
+(engine-free; runs in CI). The tests that execute the pinned native engine
+(nominal equivalence against direct analysis, over-limit failure, control
+detection, byte-identical re-run) are `kltsim/tests/engine_yield_reports.py`:
+CI has no native extension and forbids skipped tests, so they are not
+auto-discovered. Run them with `KLT_YIELD_CMD` set to the pinned engine; they
+fail, never skip, without it:
+
+```bash
+KLT_YIELD_CMD='uvx --from "klayout-tools[yield] @ git+https://github.com/2AMLogic/klayout-tools@<commit>" klt' \
+  PYTHONPATH=sim python3 -m unittest kltsim.tests.engine_yield_reports
+```
 
 ## What is in a campaign directory
 
