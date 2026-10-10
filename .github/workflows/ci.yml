@@ -31,7 +31,9 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Started runs must finish so verdicts for distinct commits are retained;
+  # pending runs are still replaced by the newest one (normal GitHub behavior).
+  cancel-in-progress: false
 
 permissions:
   contents: read
