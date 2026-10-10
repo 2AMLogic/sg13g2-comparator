@@ -3,7 +3,9 @@
 
 Fails when a path under ``sim/<bench>/{records,corners,netlist-snapshots,
 campaigns,reports}/`` that exists at ``--base`` is not present at ``--head``
-with the same Git blob ID and mode. Additions are always allowed. A move is a
+with the same Git blob ID and mode. Aggregated characterization reports under
+``sim/characterization/<report-id>/`` are protected the same way (issue #155).
+Additions are always allowed. A move is a
 deletion plus an addition (``--no-renames``), so moving evidence away fails on
 the old path while moving something *into* a protected directory passes.
 
@@ -30,6 +32,7 @@ import sys
 PROTECTED_DIRS = frozenset(
     {"records", "corners", "netlist-snapshots", "campaigns", "reports"}
 )
+AGGREGATE_ROOT = "characterization"
 EXCEPTIONS_PATH = "sim/evidence-exceptions.json"
 RECORD_DIR = "spec/decision-records/"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -53,6 +56,10 @@ class RegistryError(Exception):
 
 def is_protected(path: str) -> bool:
     parts = path.split("/")
+    if len(parts) >= 4 and parts[0] == "sim" and parts[1] == AGGREGATE_ROOT \
+            and all(parts[2:]):
+        # Aggregated characterization: sim/characterization/<report-id>/<file>
+        return True
     return (
         len(parts) >= 4
         and parts[0] == "sim"

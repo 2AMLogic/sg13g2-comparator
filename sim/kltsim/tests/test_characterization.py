@@ -351,3 +351,51 @@ class FreshnessTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GenerateAppendOnlyTests(unittest.TestCase):
+    """generate() never replaces existing artifacts."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.out = Path(self._tmp.name) / "out"
+        self.arts = {n: n.encode() + b"-new" for n in ch.ARTIFACT_NAMES}
+        real = ch.build_artifacts
+        ch.build_artifacts = lambda *a, **k: dict(self.arts)
+        self.addCleanup(setattr, ch, "build_artifacts", real)
+
+    def _snap(self):
+        return {p.name: p.read_bytes() for p in self.out.iterdir()}
+
+    def test_fresh_then_identical_rerun(self):
+        ch.generate(Path("c"), self.out)
+        before = self._snap()
+        ch.generate(Path("c"), self.out)
+        self.assertEqual(self._snap(), before)
+        self.assertEqual(before, self.arts)
+
+    def test_late_conflict_leaves_everything_unchanged(self):
+        self.out.mkdir()
+        names = list(ch.ARTIFACT_NAMES)
+        (self.out / names[0]).write_bytes(self.arts[names[0]])
+        (self.out / names[-1]).write_bytes(b"historical")
+        before = self._snap()
+        with self.assertRaises(ch.CharacterizationError) as cm:
+            ch.generate(Path("c"), self.out)
+        self.assertIn("NEW report directory", str(cm.exception))
+        self.assertEqual(self._snap(), before)
+
+    def test_partial_directory_is_completed_without_rewrites(self):
+        self.out.mkdir()
+        first = ch.ARTIFACT_NAMES[0]
+        (self.out / first).write_bytes(self.arts[first])
+        ch.generate(Path("c"), self.out)
+        self.assertEqual(self._snap(), self.arts)
+
+    def test_non_regular_existing_artifact_rejected(self):
+        self.out.mkdir()
+        (self.out / ch.ARTIFACT_NAMES[0]).mkdir()
+        with self.assertRaises(ch.CharacterizationError):
+            ch.generate(Path("c"), self.out)
+        self.assertEqual(sorted(p.name for p in self.out.iterdir()), [ch.ARTIFACT_NAMES[0]])
