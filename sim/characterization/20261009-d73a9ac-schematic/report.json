@@ -1,0 +1,1453 @@
+{
+  "campaign": "20261009-d73a9ac",
+  "dut": {
+    "dut_json_id": "comparator-dr0001",
+    "netlist": "design/comparator.spice",
+    "provenance": "schematic",
+    "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90"
+  },
+  "grid_points": 45,
+  "input_index": {
+    "path": "sim/characterization/20261009-d73a9ac-schematic/input-index.json",
+    "sha256": "843e1d97916596941d44d03ab23abd513f1dc154f0fe211c2f260ee27cc1280f"
+  },
+  "rows": [
+    {
+      "bench": "offset_mc",
+      "benches_fully_covered": null,
+      "chain_problems": [],
+      "condition": "whole latch (comparator_dut), differential axis at dut_vcm = 0.6 V; no common-mode claim (DR-0002 'What this record does not ratify')",
+      "coverage_problems": [],
+      "derived": {
+        "grid_mean_of_per_point_3sigma": 9.510645045694305
+      },
+      "dut_problems": [],
+      "evidence_kind": "klt_sim",
+      "gap_reason": null,
+      "id": "1",
+      "klt_window_note": "klt's own per-corner window (|mean| + 3 x Bessel sample sigma, raw quantized values) is a stricter statistic than DR-0002's; reported, not graded. 45/45 points pass it.",
+      "measurement": "vos_mv",
+      "notes": [
+        "Offset method uncertainty (issue #82, UNRESOLVED): this campaign's grid-mean 3-sigma offset reads about 13 % above the DR-0002 record (9.51 vs 8.40 mV, uniform across process corners, undetermined cause). The Target verdict is the same under either population (met at 45/45); the Stretch miss is wider here (40/45 vs 27/45). The less favourable of the two estimates is the one reported; neither population is edited. See sim/klt-corner-verification/README.md."
+      ],
+      "population": {
+        "draws_total": 2700,
+        "errored_total": 0,
+        "n_per_point_expected": 60,
+        "n_per_point_max": 60,
+        "n_per_point_min": 60,
+        "points": 45
+      },
+      "report_verdict": null,
+      "retained_record": null,
+      "row": "Offset sigma",
+      "sources": [
+        {
+          "path": "design/comparator.spice",
+          "role": "dut-netlist",
+          "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/grading.json",
+          "role": "committed-grading",
+          "sha256": "954fdf5a97678b19ca73e989480d21d3ed0654c4988dd0dbdbf628fa1012ce74"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.body.spice",
+          "role": "body",
+          "sha256": "8f19a72ae8c67e52f5cebf5ba5c4c6f1617fdd34f581d355376fc2887a29b531"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_ff_mismatch.envelope.json",
+          "role": "envelope",
+          "sha256": "7e0df2af40ce395040af2bf57f93f70d87df6c1a4a9c0fdb0e2e40af3224bfbb"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_ff_mismatch.invocation.json",
+          "role": "invocation",
+          "sha256": "24baf7367286c3a8895c29969a0106ea7d968f4bdb9a9bcaf8b32e4b3984357d"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_ff_mismatch.request.json",
+          "role": "request",
+          "sha256": "e74381ea0af21f4a9015829c98d2a39509ad17a634ce6a39d8802339dec823f3"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_fs_mismatch.envelope.json",
+          "role": "envelope",
+          "sha256": "149ce59eef288e411c15ab8348b65f876aa1a1a2f3488831efc601bdc957f28c"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_fs_mismatch.invocation.json",
+          "role": "invocation",
+          "sha256": "299111279d0eaa86a0f5ead5860b1dbecbe7dc6694c6748537d139f26ca843f2"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_fs_mismatch.request.json",
+          "role": "request",
+          "sha256": "8228253922ebcb8877ba35390cf2b79495b0b8a0d38dc32ce6eb8b84e82ccffb"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_sf_mismatch.envelope.json",
+          "role": "envelope",
+          "sha256": "72c503830d51f95c89f662d0c5b67a090bd3cde01646a9ba660dadee2cfc722c"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_sf_mismatch.invocation.json",
+          "role": "invocation",
+          "sha256": "b4f6af81aa78c8069ca16bcc2a0e7d4d24058bcef97f46e95036001b77f284cc"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_sf_mismatch.request.json",
+          "role": "request",
+          "sha256": "de5f1c2523de5a37fb9e2ece9f4b56c2ce93f7f16fbf640f2d01b5e94f2e2bd5"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_ss_mismatch.envelope.json",
+          "role": "envelope",
+          "sha256": "ac32b14b478d74a41e88e953adba6b9c50bffc68ce7ee1e91968442835a52111"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_ss_mismatch.invocation.json",
+          "role": "invocation",
+          "sha256": "437851b810a00b56a98c6143aea9a62a6231f17697386991e045f08d5159f1f0"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_ss_mismatch.request.json",
+          "role": "request",
+          "sha256": "c629762d86a7d92cdd73bcf86a26750d7f51b276a815be422bcb79af60deaba3"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_tt_mismatch.envelope.json",
+          "role": "envelope",
+          "sha256": "d55acc6b6307a88f008e61abe902e0ab56d7127f7bf3205324f004bb0208ab9f"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_tt_mismatch.invocation.json",
+          "role": "invocation",
+          "sha256": "763b9c57ade1bcdf4276dd25c2dad6e83dbd8d7b9213fb18588e8426313f783e"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/offset_mc.mos_tt_mismatch.request.json",
+          "role": "request",
+          "sha256": "1627e527bab297be7be0d8b11a4a478fc21fb41b11f3062b8f02fd5fed7b91da"
+        },
+        {
+          "path": "sim/klt-corner-verification/rows.json",
+          "role": "dr0002-row-inventory",
+          "sha256": "4209e0a3df59b9d9fe5bb9d8699b2902e5ba9e7c58231cc9c11d94b1809f8e67"
+        }
+      ],
+      "statistical_basis": "Monte Carlo over SG13G2's shipped per-instance local-mismatch models (mos_<p>_mismatch sections), N = 60 draws per PVT point, base seed 20260916 (DR-0002 Row 1: whole-latch bench N = 60, seed 20260916, sigma precision +/-9.1 %); the row is met only if the WORST point meets it",
+      "stretch": {
+        "binding": {
+          "corner_id": "mos_ff_mismatch/1.080V/125C",
+          "margin": -4.092923859153862,
+          "point": "ff_125c_1.08v",
+          "value": 12.092923859153862
+        },
+        "bound": "<= 8",
+        "failing_points": [
+          "tt_-40c_1.08v",
+          "tt_27c_1.08v",
+          "tt_125c_1.08v",
+          "tt_-40c_1.20v",
+          "tt_27c_1.20v",
+          "tt_125c_1.20v",
+          "tt_27c_1.32v",
+          "tt_125c_1.32v",
+          "ff_-40c_1.08v",
+          "ff_27c_1.08v",
+          "ff_125c_1.08v",
+          "ff_-40c_1.20v",
+          "ff_27c_1.20v",
+          "ff_125c_1.20v",
+          "ff_27c_1.32v",
+          "ff_125c_1.32v",
+          "ss_-40c_1.08v",
+          "ss_27c_1.08v",
+          "ss_125c_1.08v",
+          "ss_-40c_1.20v",
+          "ss_27c_1.20v",
+          "ss_125c_1.20v",
+          "ss_27c_1.32v",
+          "ss_125c_1.32v",
+          "fs_-40c_1.08v",
+          "fs_27c_1.08v",
+          "fs_125c_1.08v",
+          "fs_-40c_1.20v",
+          "fs_27c_1.20v",
+          "fs_125c_1.20v",
+          "fs_27c_1.32v",
+          "fs_125c_1.32v",
+          "sf_-40c_1.08v",
+          "sf_27c_1.08v",
+          "sf_125c_1.08v",
+          "sf_-40c_1.20v",
+          "sf_27c_1.20v",
+          "sf_125c_1.20v",
+          "sf_27c_1.32v",
+          "sf_125c_1.32v"
+        ],
+        "points_expected": 45,
+        "points_failing": 40,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ff_mismatch/1.080V/125C",
+            "point": "ff_125c_1.08v",
+            "value": 12.092923859153862
+          },
+          "min": {
+            "corner_id": "mos_ff_mismatch/1.320V/-40C",
+            "point": "ff_-40c_1.32v",
+            "value": 6.913014644541464
+          }
+        },
+        "verdict": "FAIL"
+      },
+      "sub_bound": "input-referred offset, 3 sigma, calibration-free, at every PVT point",
+      "target": {
+        "binding": {
+          "corner_id": "mos_ff_mismatch/1.080V/125C",
+          "margin": 2.9070761408461383,
+          "point": "ff_125c_1.08v",
+          "value": 12.092923859153862
+        },
+        "bound": "<= 15",
+        "failing_points": [],
+        "points_expected": 45,
+        "points_failing": 0,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ff_mismatch/1.080V/125C",
+            "point": "ff_125c_1.08v",
+            "value": 12.092923859153862
+          },
+          "min": {
+            "corner_id": "mos_ff_mismatch/1.320V/-40C",
+            "point": "ff_-40c_1.32v",
+            "value": 6.913014644541464
+          }
+        },
+        "verdict": "PASS"
+      },
+      "tool_gap": null,
+      "unit": "mV"
+    },
+    {
+      "bench": "transient_noise",
+      "benches_fully_covered": null,
+      "chain_problems": [],
+      "condition": "TRNOISE-injected transient decision statistics on comparator_dut, N = 80 trials per rung per PVT point, 3 rungs; DR-designated statistic = grid-wide mean of the per-point two-rung probit-slope sigma (+/-13 % per-corner scatter at N = 80)",
+      "coverage_problems": [],
+      "derived": {},
+      "dut_problems": [],
+      "evidence_kind": "klt_sim",
+      "gap_reason": null,
+      "id": "2",
+      "klt_window_note": null,
+      "measurement": "hit_plus / hit_minus (hit_zero = injection guard)",
+      "notes": [
+        "1383/3600 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated)."
+      ],
+      "population": {
+        "draws_total": 0,
+        "errored_total": 0,
+        "n_per_point_expected": 80,
+        "n_per_point_max": 80.0,
+        "n_per_point_min": 80.0,
+        "points": 45
+      },
+      "report_verdict": null,
+      "retained_record": {
+        "binding": "grid-wide mean (the DR-designated statistic); worst single point tt_125c_1.08v (2.710 mV)",
+        "format": "this repo's append-only record format (not a klt envelope)",
+        "path": "sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md",
+        "recorded_value": "grid-wide mean implied 1-sigma decision noise 1.335 mV (per-point 0.889 ... 2.710 mV), 45/45 points, N = 80 per rung",
+        "recorded_verdict_stretch": "NOT MET",
+        "recorded_verdict_target": "NOT MET"
+      },
+      "row": "Input-referred noise",
+      "sources": [
+        {
+          "path": "design/comparator.spice",
+          "role": "dut-netlist",
+          "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90"
+        },
+        {
+          "path": "sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md",
+          "role": "retained-record",
+          "sha256": "e21cb95ca1b23c698d59d09ba85df321a69077508ee241361bf97d3a88e0d281"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/grading.json",
+          "role": "committed-grading",
+          "sha256": "954fdf5a97678b19ca73e989480d21d3ed0654c4988dd0dbdbf628fa1012ce74"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.body.spice",
+          "role": "body",
+          "sha256": "edb6502b79c94c36252c3c434c37a83a5e10b004191e58e2d38c828d727b9eea"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_ff.envelope.json",
+          "role": "envelope",
+          "sha256": "eef38732e3ca9acd00b828c34ffb8c5719ba810a339c24df2e564ebd2ff390aa"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_ff.invocation.json",
+          "role": "invocation",
+          "sha256": "c9fdb1495aba5400b143ce55f9831fcec032de6f14691e49e75c50007d0f96c0"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_ff.request.json",
+          "role": "request",
+          "sha256": "392c39bf095d1218375c494fa2f3baf742b9441306dfb9a7806dc82fc91525f0"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_fs.envelope.json",
+          "role": "envelope",
+          "sha256": "cd1c211b7422e6dc86352aeffdef28ffc81df58678e9006d4eaa2f202d052190"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_fs.invocation.json",
+          "role": "invocation",
+          "sha256": "bc03dd3384fbaa004e21a77d3be50db1fa812cc26ef58597db9140a4a50079f8"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_fs.request.json",
+          "role": "request",
+          "sha256": "c7f4472d256ad7fce232c3f913f9820d10086e60a3068ee7b34f31e4ea073060"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_sf.envelope.json",
+          "role": "envelope",
+          "sha256": "c90d0f9b7460636d8a1cca1e7131281b8d7d7ea7844b1c7b3b779fa6db7bf275"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_sf.invocation.json",
+          "role": "invocation",
+          "sha256": "203abd28618a4153fc77835b02d86e974a2569d30642acbd0a62998db1306709"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_sf.request.json",
+          "role": "request",
+          "sha256": "39f6ece508fab7c9e00958609ddbb2b25fc447fb7b49ea2ae1d18d9a56eafb87"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_ss.envelope.json",
+          "role": "envelope",
+          "sha256": "f9cb177d887f61fd1789ccbe0ff06e833c0c24013973e40456c14c749344f2a0"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_ss.invocation.json",
+          "role": "invocation",
+          "sha256": "771fd69adb6aeaf713557c587aef29a103a0401beeeadfc6c310e17a64727c23"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_ss.request.json",
+          "role": "request",
+          "sha256": "5076a1425e6abf77d93328dacb947f3a30252a267df2b11add9ecf4c6ab97311"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_tt.envelope.json",
+          "role": "envelope",
+          "sha256": "e11b67180de3b960d9cd594e4b123cceb0026c174421b3094becbdfb623727be"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_tt.invocation.json",
+          "role": "invocation",
+          "sha256": "0390d2c2b4fe8cc9d7c78f2d03b78e029b7e566832d102bd75260f8edd7bd84d"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/transient_noise.mos_tt.request.json",
+          "role": "request",
+          "sha256": "1d0d57709322b2ed00e565c3d23ba7a0c30039897fc4b5433264c13cea12dae6"
+        },
+        {
+          "path": "sim/klt-corner-verification/rows.json",
+          "role": "dr0002-row-inventory",
+          "sha256": "4209e0a3df59b9d9fe5bb9d8699b2902e5ba9e7c58231cc9c11d94b1809f8e67"
+        }
+      ],
+      "statistical_basis": "transient-noise decision statistics (DR-0002 Row 2); the .noise figure on the reduced sub-model is a reportable lower bound only, never compliance",
+      "stretch": {
+        "binding": {
+          "corner_id": null,
+          "margin": -0.6890341289370533,
+          "point": "grid-wide mean (DR-designated statistic)",
+          "value": 1.2890341289370533
+        },
+        "bound": "<= 0.6",
+        "grid_mean": 1.2890341289370533,
+        "points_expected": 45,
+        "points_failing": null,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ff/1.080V/125C",
+            "point": "ff_125c_1.08v",
+            "value": 1.8431420761493886
+          },
+          "min": {
+            "corner_id": "mos_sf/1.320V/-40C",
+            "point": "sf_-40c_1.32v",
+            "value": 0.8461350023527735
+          }
+        },
+        "statistic": "grid-wide mean of the per-point two-rung probit-slope sigma",
+        "verdict": "FAIL",
+        "worst_point": {
+          "corner_id": "mos_ff/1.080V/125C",
+          "point": "ff_125c_1.08v",
+          "value": 1.8431420761493886
+        }
+      },
+      "sub_bound": "differential, input-referred, total integrated rms; compliance path = whole-latch transient-noise decision statistics with seeds and run counts committed",
+      "target": {
+        "binding": {
+          "corner_id": null,
+          "margin": -0.28903412893705327,
+          "point": "grid-wide mean (DR-designated statistic)",
+          "value": 1.2890341289370533
+        },
+        "bound": "<= 1",
+        "grid_mean": 1.2890341289370533,
+        "points_expected": 45,
+        "points_failing": null,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ff/1.080V/125C",
+            "point": "ff_125c_1.08v",
+            "value": 1.8431420761493886
+          },
+          "min": {
+            "corner_id": "mos_sf/1.320V/-40C",
+            "point": "sf_-40c_1.32v",
+            "value": 0.8461350023527735
+          }
+        },
+        "statistic": "grid-wide mean of the per-point two-rung probit-slope sigma",
+        "verdict": "FAIL",
+        "worst_point": {
+          "corner_id": "mos_ff/1.080V/125C",
+          "point": "ff_125c_1.08v",
+          "value": 1.8431420761493886
+        }
+      },
+      "tool_gap": "2AMLogic/klayout-tools#2960 (no gradeable population statistic over two measurements / per-corner populations); #2963 (the Monte-Carlo seed contract does not cover TRNOISE: draws are pid-seeded, so separate batch jobs can share noise streams); see also #2482 (one analysis per corner)",
+      "unit": "mV rms"
+    },
+    {
+      "bench": "regeneration",
+      "benches_fully_covered": null,
+      "chain_problems": [],
+      "condition": "33.3 MHz strobe, delay measured on the second strobe (output must flip a latch holding the opposite answer), thresholds supply-normalized",
+      "coverage_problems": [],
+      "derived": {},
+      "dut_problems": [],
+      "evidence_kind": "klt_sim",
+      "gap_reason": null,
+      "id": "3a",
+      "klt_window_note": null,
+      "measurement": "td_od50_ns",
+      "notes": [],
+      "population": null,
+      "report_verdict": null,
+      "retained_record": null,
+      "row": "Decision time vs overdrive",
+      "sources": [
+        {
+          "path": "design/comparator.spice",
+          "role": "dut-netlist",
+          "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/grading.json",
+          "role": "committed-grading",
+          "sha256": "954fdf5a97678b19ca73e989480d21d3ed0654c4988dd0dbdbf628fa1012ce74"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.body.spice",
+          "role": "body",
+          "sha256": "2dc087ac0a1f45992387219a9a30fb1871dbdf43af094ddaf6b280c211acf437"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.envelope.json",
+          "role": "envelope",
+          "sha256": "5f9e487e9f9e57e13570530395d024e4326a1a236375d82669fe29de01f110c1"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.invocation.json",
+          "role": "invocation",
+          "sha256": "0bdef6b7b2739cc9c58a487dd4ce0a4460b438bdbb22e637b314f51bea16e0f5"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.request.json",
+          "role": "request",
+          "sha256": "f229d01efcd90a6cc1b25a68fa5b7d8b24db60e88a4de8727f64c8c20fcc9357"
+        },
+        {
+          "path": "sim/klt-corner-verification/rows.json",
+          "role": "dr0002-row-inventory",
+          "sha256": "4209e0a3df59b9d9fe5bb9d8699b2902e5ba9e7c58231cc9c11d94b1809f8e67"
+        }
+      ],
+      "statistical_basis": "deterministic corner matrix, mismatch off (plain mos_<p> sections)",
+      "stretch": {
+        "binding": {
+          "corner_id": "mos_ss/vsup=1.320_vsupa=1.320V/125C",
+          "margin": -0.050184999999999924,
+          "point": "ss_125c_1.32v",
+          "value": 0.850185
+        },
+        "bound": "<= 0.8",
+        "failing_points": [
+          "ss_-40c_1.08v",
+          "ss_27c_1.08v",
+          "ss_125c_1.08v",
+          "ss_-40c_1.20v",
+          "ss_27c_1.20v",
+          "ss_125c_1.20v",
+          "ss_-40c_1.32v",
+          "ss_27c_1.32v",
+          "ss_125c_1.32v"
+        ],
+        "points_expected": 45,
+        "points_failing": 9,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ss/vsup=1.320_vsupa=1.320V/125C",
+            "point": "ss_125c_1.32v",
+            "value": 0.850185
+          },
+          "min": {
+            "corner_id": "mos_ff/vsup=1.080_vsupa=1.080V/-40C",
+            "point": "ff_-40c_1.08v",
+            "value": 0.596482
+          }
+        },
+        "verdict": "FAIL"
+      },
+      "sub_bound": "decision time at 50 mV overdrive, 1.2 V core, at every PVT point",
+      "target": {
+        "binding": {
+          "corner_id": "mos_ss/vsup=1.320_vsupa=1.320V/125C",
+          "margin": 0.649815,
+          "point": "ss_125c_1.32v",
+          "value": 0.850185
+        },
+        "bound": "<= 1.5",
+        "failing_points": [],
+        "points_expected": 45,
+        "points_failing": 0,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ss/vsup=1.320_vsupa=1.320V/125C",
+            "point": "ss_125c_1.32v",
+            "value": 0.850185
+          },
+          "min": {
+            "corner_id": "mos_ff/vsup=1.080_vsupa=1.080V/-40C",
+            "point": "ff_-40c_1.08v",
+            "value": 0.596482
+          }
+        },
+        "verdict": "PASS"
+      },
+      "tool_gap": null,
+      "unit": "ns"
+    },
+    {
+      "bench": "regeneration",
+      "benches_fully_covered": null,
+      "chain_problems": [],
+      "condition": "extracted from the (1 mV, 0.1 mV) delay pair of the regeneration bench",
+      "coverage_problems": [],
+      "derived": {},
+      "dut_problems": [],
+      "evidence_kind": "klt_sim",
+      "gap_reason": null,
+      "id": "3b",
+      "klt_window_note": null,
+      "measurement": "tau_ps",
+      "notes": [],
+      "population": null,
+      "report_verdict": null,
+      "retained_record": null,
+      "row": "Decision time vs overdrive (metastability)",
+      "sources": [
+        {
+          "path": "design/comparator.spice",
+          "role": "dut-netlist",
+          "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/grading.json",
+          "role": "committed-grading",
+          "sha256": "954fdf5a97678b19ca73e989480d21d3ed0654c4988dd0dbdbf628fa1012ce74"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.body.spice",
+          "role": "body",
+          "sha256": "2dc087ac0a1f45992387219a9a30fb1871dbdf43af094ddaf6b280c211acf437"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.envelope.json",
+          "role": "envelope",
+          "sha256": "5f9e487e9f9e57e13570530395d024e4326a1a236375d82669fe29de01f110c1"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.invocation.json",
+          "role": "invocation",
+          "sha256": "0bdef6b7b2739cc9c58a487dd4ce0a4460b438bdbb22e637b314f51bea16e0f5"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.request.json",
+          "role": "request",
+          "sha256": "f229d01efcd90a6cc1b25a68fa5b7d8b24db60e88a4de8727f64c8c20fcc9357"
+        },
+        {
+          "path": "sim/klt-corner-verification/rows.json",
+          "role": "dr0002-row-inventory",
+          "sha256": "4209e0a3df59b9d9fe5bb9d8699b2902e5ba9e7c58231cc9c11d94b1809f8e67"
+        }
+      ],
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "stretch": {
+        "bound": "not specified",
+        "points_expected": 45,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 167.256
+          },
+          "min": {
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/-40C",
+            "point": "ff_-40c_1.32v",
+            "value": 42.5912
+          }
+        },
+        "verdict": "NOT SPECIFIED"
+      },
+      "sub_bound": "regeneration time constant tau, worst PVT point, tau = (t(0.1 mV) - t(1 mV)) / ln 10",
+      "target": {
+        "binding": {
+          "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C",
+          "margin": 82.744,
+          "point": "ss_-40c_1.08v",
+          "value": 167.256
+        },
+        "bound": "<= 250",
+        "failing_points": [],
+        "points_expected": 45,
+        "points_failing": 0,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 167.256
+          },
+          "min": {
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/-40C",
+            "point": "ff_-40c_1.32v",
+            "value": 42.5912
+          }
+        },
+        "verdict": "PASS"
+      },
+      "tool_gap": null,
+      "unit": "ps"
+    },
+    {
+      "bench": "regeneration",
+      "benches_fully_covered": null,
+      "chain_problems": [],
+      "condition": "same bench and strobe as 3a",
+      "coverage_problems": [],
+      "derived": {},
+      "dut_problems": [],
+      "evidence_kind": "klt_sim",
+      "gap_reason": null,
+      "id": "3c",
+      "klt_window_note": null,
+      "measurement": "td_od01_ns",
+      "notes": [],
+      "population": null,
+      "report_verdict": null,
+      "retained_record": null,
+      "row": "Decision time vs overdrive (metastability)",
+      "sources": [
+        {
+          "path": "design/comparator.spice",
+          "role": "dut-netlist",
+          "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/grading.json",
+          "role": "committed-grading",
+          "sha256": "954fdf5a97678b19ca73e989480d21d3ed0654c4988dd0dbdbf628fa1012ce74"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.body.spice",
+          "role": "body",
+          "sha256": "2dc087ac0a1f45992387219a9a30fb1871dbdf43af094ddaf6b280c211acf437"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.envelope.json",
+          "role": "envelope",
+          "sha256": "5f9e487e9f9e57e13570530395d024e4326a1a236375d82669fe29de01f110c1"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.invocation.json",
+          "role": "invocation",
+          "sha256": "0bdef6b7b2739cc9c58a487dd4ce0a4460b438bdbb22e637b314f51bea16e0f5"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.request.json",
+          "role": "request",
+          "sha256": "f229d01efcd90a6cc1b25a68fa5b7d8b24db60e88a4de8727f64c8c20fcc9357"
+        },
+        {
+          "path": "sim/klt-corner-verification/rows.json",
+          "role": "dr0002-row-inventory",
+          "sha256": "4209e0a3df59b9d9fe5bb9d8699b2902e5ba9e7c58231cc9c11d94b1809f8e67"
+        }
+      ],
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "stretch": {
+        "bound": "not specified",
+        "points_expected": 45,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 1.66165
+          },
+          "min": {
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/-40C",
+            "point": "ff_-40c_1.32v",
+            "value": 0.909752
+          }
+        },
+        "verdict": "NOT SPECIFIED"
+      },
+      "sub_bound": "decision time at 0.1 mV overdrive, worst PVT point",
+      "target": {
+        "binding": {
+          "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C",
+          "margin": 0.33834999999999993,
+          "point": "ss_-40c_1.08v",
+          "value": 1.66165
+        },
+        "bound": "<= 2",
+        "failing_points": [],
+        "points_expected": 45,
+        "points_failing": 0,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 1.66165
+          },
+          "min": {
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/-40C",
+            "point": "ff_-40c_1.32v",
+            "value": 0.909752
+          }
+        },
+        "verdict": "PASS"
+      },
+      "tool_gap": null,
+      "unit": "ns"
+    },
+    {
+      "bench": "kickback",
+      "benches_fully_covered": null,
+      "chain_problems": [],
+      "condition": "branch A of the kickback bench: input node driven from an ideal source through R_src = 1 kohm with C_in = 100 fF to ground; NOT the net settled charge on the floating branch (a different, ~8x smaller quantity)",
+      "coverage_problems": [],
+      "derived": {},
+      "dut_problems": [],
+      "evidence_kind": "klt_sim",
+      "gap_reason": null,
+      "id": "4a",
+      "klt_window_note": null,
+      "measurement": "qkick_fc",
+      "notes": [],
+      "population": null,
+      "report_verdict": null,
+      "retained_record": null,
+      "row": "Kickback",
+      "sources": [
+        {
+          "path": "design/comparator.spice",
+          "role": "dut-netlist",
+          "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/grading.json",
+          "role": "committed-grading",
+          "sha256": "954fdf5a97678b19ca73e989480d21d3ed0654c4988dd0dbdbf628fa1012ce74"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.body.spice",
+          "role": "body",
+          "sha256": "5329b96594ca66668a235d8c3418b958b511fc4a17f3cf652a3bd84cc51c8af7"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json",
+          "role": "envelope",
+          "sha256": "94cd92bd9843d841dcc9924f5622b1dce9c89fa530581c0b73bd032cfbde1e39"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.invocation.json",
+          "role": "invocation",
+          "sha256": "e4ef2b0c78dc612af2e38dbedf93ce9d8ed261f4da8fff2044bc13990efbd981"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.request.json",
+          "role": "request",
+          "sha256": "c398e47f206f7b4d8fee3cd2a72aea78a5dcc5b619c7c9cb6cc72e3928feab7e"
+        },
+        {
+          "path": "sim/klt-corner-verification/rows.json",
+          "role": "dr0002-row-inventory",
+          "sha256": "4209e0a3df59b9d9fe5bb9d8699b2902e5ba9e7c58231cc9c11d94b1809f8e67"
+        }
+      ],
+      "statistical_basis": "deterministic corner matrix, mismatch off; worst side (max of + and - input) per point",
+      "stretch": {
+        "binding": {
+          "corner_id": "mos_ff/1.320V/125C",
+          "margin": -23.4623,
+          "point": "ff_125c_1.32v",
+          "value": 31.4623
+        },
+        "bound": "<= 8",
+        "failing_points": [
+          "tt_-40c_1.08v",
+          "tt_27c_1.08v",
+          "tt_125c_1.08v",
+          "tt_-40c_1.20v",
+          "tt_27c_1.20v",
+          "tt_125c_1.20v",
+          "tt_-40c_1.32v",
+          "tt_27c_1.32v",
+          "tt_125c_1.32v",
+          "ff_-40c_1.08v",
+          "ff_27c_1.08v",
+          "ff_125c_1.08v",
+          "ff_-40c_1.20v",
+          "ff_27c_1.20v",
+          "ff_125c_1.20v",
+          "ff_-40c_1.32v",
+          "ff_27c_1.32v",
+          "ff_125c_1.32v",
+          "ss_-40c_1.08v",
+          "ss_27c_1.08v",
+          "ss_125c_1.08v",
+          "ss_-40c_1.20v",
+          "ss_27c_1.20v",
+          "ss_125c_1.20v",
+          "ss_-40c_1.32v",
+          "ss_27c_1.32v",
+          "ss_125c_1.32v",
+          "fs_-40c_1.08v",
+          "fs_27c_1.08v",
+          "fs_125c_1.08v",
+          "fs_-40c_1.20v",
+          "fs_27c_1.20v",
+          "fs_125c_1.20v",
+          "fs_-40c_1.32v",
+          "fs_27c_1.32v",
+          "fs_125c_1.32v",
+          "sf_-40c_1.08v",
+          "sf_27c_1.08v",
+          "sf_125c_1.08v",
+          "sf_-40c_1.20v",
+          "sf_27c_1.20v",
+          "sf_125c_1.20v",
+          "sf_-40c_1.32v",
+          "sf_27c_1.32v",
+          "sf_125c_1.32v"
+        ],
+        "points_expected": 45,
+        "points_failing": 45,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ff/1.320V/125C",
+            "point": "ff_125c_1.32v",
+            "value": 31.4623
+          },
+          "min": {
+            "corner_id": "mos_ss/1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 23.5817
+          }
+        },
+        "verdict": "FAIL"
+      },
+      "sub_bound": "peak transient injected charge per decision edge, per side: Q_kick = max_t |integral of i_kick dt'| over 30 ... 45 ns, referenced to the node's pre-decision level at 29 ns",
+      "target": {
+        "binding": {
+          "corner_id": "mos_ff/1.320V/125C",
+          "margin": -6.462299999999999,
+          "point": "ff_125c_1.32v",
+          "value": 31.4623
+        },
+        "bound": "<= 25",
+        "failing_points": [
+          "tt_-40c_1.08v",
+          "tt_27c_1.08v",
+          "tt_125c_1.08v",
+          "tt_-40c_1.20v",
+          "tt_27c_1.20v",
+          "tt_125c_1.20v",
+          "tt_-40c_1.32v",
+          "tt_27c_1.32v",
+          "tt_125c_1.32v",
+          "ff_-40c_1.08v",
+          "ff_27c_1.08v",
+          "ff_125c_1.08v",
+          "ff_-40c_1.20v",
+          "ff_27c_1.20v",
+          "ff_125c_1.20v",
+          "ff_-40c_1.32v",
+          "ff_27c_1.32v",
+          "ff_125c_1.32v",
+          "ss_125c_1.08v",
+          "ss_27c_1.20v",
+          "ss_125c_1.20v",
+          "ss_-40c_1.32v",
+          "ss_27c_1.32v",
+          "ss_125c_1.32v",
+          "fs_-40c_1.08v",
+          "fs_27c_1.08v",
+          "fs_125c_1.08v",
+          "fs_-40c_1.20v",
+          "fs_27c_1.20v",
+          "fs_125c_1.20v",
+          "fs_-40c_1.32v",
+          "fs_27c_1.32v",
+          "fs_125c_1.32v",
+          "sf_125c_1.08v",
+          "sf_27c_1.20v",
+          "sf_125c_1.20v",
+          "sf_-40c_1.32v",
+          "sf_27c_1.32v",
+          "sf_125c_1.32v"
+        ],
+        "points_expected": 45,
+        "points_failing": 39,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ff/1.320V/125C",
+            "point": "ff_125c_1.32v",
+            "value": 31.4623
+          },
+          "min": {
+            "corner_id": "mos_ss/1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 23.5817
+          }
+        },
+        "verdict": "FAIL"
+      },
+      "tool_gap": null,
+      "unit": "fC"
+    },
+    {
+      "bench": "kickback",
+      "benches_fully_covered": null,
+      "chain_problems": [],
+      "condition": "branches B and C (1 Gohm / 1 pF, RC = 1 ms): difference between the settled differential input displacement at a 1 mV and a 100 mV input, 29 ns -> 55 ns (DR-0002 key kick_sigdep)",
+      "coverage_problems": [],
+      "derived": {},
+      "dut_problems": [],
+      "evidence_kind": "klt_sim",
+      "gap_reason": null,
+      "id": "4b",
+      "klt_window_note": null,
+      "measurement": "kick_sigdep_uv",
+      "notes": [],
+      "population": null,
+      "report_verdict": null,
+      "retained_record": null,
+      "row": "Kickback",
+      "sources": [
+        {
+          "path": "design/comparator.spice",
+          "role": "dut-netlist",
+          "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/grading.json",
+          "role": "committed-grading",
+          "sha256": "954fdf5a97678b19ca73e989480d21d3ed0654c4988dd0dbdbf628fa1012ce74"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.body.spice",
+          "role": "body",
+          "sha256": "5329b96594ca66668a235d8c3418b958b511fc4a17f3cf652a3bd84cc51c8af7"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json",
+          "role": "envelope",
+          "sha256": "94cd92bd9843d841dcc9924f5622b1dce9c89fa530581c0b73bd032cfbde1e39"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.invocation.json",
+          "role": "invocation",
+          "sha256": "e4ef2b0c78dc612af2e38dbedf93ce9d8ed261f4da8fff2044bc13990efbd981"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.request.json",
+          "role": "request",
+          "sha256": "c398e47f206f7b4d8fee3cd2a72aea78a5dcc5b619c7c9cb6cc72e3928feab7e"
+        },
+        {
+          "path": "sim/klt-corner-verification/rows.json",
+          "role": "dr0002-row-inventory",
+          "sha256": "4209e0a3df59b9d9fe5bb9d8699b2902e5ba9e7c58231cc9c11d94b1809f8e67"
+        }
+      ],
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "stretch": {
+        "binding": {
+          "corner_id": "mos_ss/1.080V/-40C",
+          "margin": 14.3673,
+          "point": "ss_-40c_1.08v",
+          "value": 15.6327
+        },
+        "bound": "<= 30",
+        "failing_points": [],
+        "points_expected": 45,
+        "points_failing": 0,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ss/1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 15.6327
+          },
+          "min": {
+            "corner_id": "mos_fs/1.320V/125C",
+            "point": "fs_125c_1.32v",
+            "value": 2.03423
+          }
+        },
+        "verdict": "PASS"
+      },
+      "sub_bound": "signal-dependent differential residue at the input nodes at the end of a 30 ns decision cycle, against a non-charge-restoring source",
+      "target": {
+        "binding": {
+          "corner_id": "mos_ss/1.080V/-40C",
+          "margin": 84.3673,
+          "point": "ss_-40c_1.08v",
+          "value": 15.6327
+        },
+        "bound": "<= 100",
+        "failing_points": [],
+        "points_expected": 45,
+        "points_failing": 0,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ss/1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 15.6327
+          },
+          "min": {
+            "corner_id": "mos_fs/1.320V/125C",
+            "point": "fs_125c_1.32v",
+            "value": 2.03423
+          }
+        },
+        "verdict": "PASS"
+      },
+      "tool_gap": null,
+      "unit": "uV"
+    },
+    {
+      "bench": "kickback",
+      "benches_fully_covered": null,
+      "chain_problems": [],
+      "condition": "branch A, v(apa) - v(asp), max |.| over 30 ... 45 ns",
+      "coverage_problems": [],
+      "derived": {},
+      "dut_problems": [],
+      "evidence_kind": "klt_sim",
+      "gap_reason": null,
+      "id": "4c",
+      "klt_window_note": null,
+      "measurement": "kick_1k_peak_mv",
+      "notes": [],
+      "population": null,
+      "report_verdict": "REPORTED",
+      "retained_record": null,
+      "row": "Kickback",
+      "sources": [
+        {
+          "path": "design/comparator.spice",
+          "role": "dut-netlist",
+          "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/grading.json",
+          "role": "committed-grading",
+          "sha256": "954fdf5a97678b19ca73e989480d21d3ed0654c4988dd0dbdbf628fa1012ce74"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.body.spice",
+          "role": "body",
+          "sha256": "5329b96594ca66668a235d8c3418b958b511fc4a17f3cf652a3bd84cc51c8af7"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json",
+          "role": "envelope",
+          "sha256": "94cd92bd9843d841dcc9924f5622b1dce9c89fa530581c0b73bd032cfbde1e39"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.invocation.json",
+          "role": "invocation",
+          "sha256": "e4ef2b0c78dc612af2e38dbedf93ce9d8ed261f4da8fff2044bc13990efbd981"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.request.json",
+          "role": "request",
+          "sha256": "c398e47f206f7b4d8fee3cd2a72aea78a5dcc5b619c7c9cb6cc72e3928feab7e"
+        },
+        {
+          "path": "sim/klt-corner-verification/rows.json",
+          "role": "dr0002-row-inventory",
+          "sha256": "4209e0a3df59b9d9fe5bb9d8699b2902e5ba9e7c58231cc9c11d94b1809f8e67"
+        }
+      ],
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "stretch": {
+        "bound": "not specified",
+        "points_expected": 45,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ff/1.320V/125C",
+            "point": "ff_125c_1.32v",
+            "value": 143.284
+          },
+          "min": {
+            "corner_id": "mos_ss/1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 87.6633
+          }
+        },
+        "verdict": "NOT SPECIFIED"
+      },
+      "sub_bound": "peak single-ended excursion into the stated 1 kohm / 100 fF drive -- a REPORTING requirement, deliberately unbounded until a driving stage is named",
+      "target": {
+        "bound": "not specified",
+        "points_expected": 45,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ff/1.320V/125C",
+            "point": "ff_125c_1.32v",
+            "value": 143.284
+          },
+          "min": {
+            "corner_id": "mos_ss/1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 87.6633
+          }
+        },
+        "verdict": "NOT SPECIFIED"
+      },
+      "tool_gap": null,
+      "unit": "mV"
+    },
+    {
+      "bench": null,
+      "benches_fully_covered": [
+        "regeneration",
+        "kickback",
+        "offset_mc",
+        "transient_noise"
+      ],
+      "chain_problems": [],
+      "condition": "supply 1.08 / 1.20 / 1.32 V, temperature -40 / 27 / 125 C, process tt/ff/ss/fs/sf",
+      "coverage_problems": [],
+      "derived": {},
+      "dut_problems": [],
+      "evidence_kind": "coverage",
+      "gap_reason": null,
+      "id": "5a",
+      "klt_window_note": null,
+      "measurement": null,
+      "notes": [],
+      "population": null,
+      "report_verdict": null,
+      "retained_record": null,
+      "row": "Supply / power",
+      "sources": [
+        {
+          "path": "design/comparator.spice",
+          "role": "dut-netlist",
+          "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/grading.json",
+          "role": "committed-grading",
+          "sha256": "954fdf5a97678b19ca73e989480d21d3ed0654c4988dd0dbdbf628fa1012ce74"
+        },
+        {
+          "path": "sim/klt-corner-verification/rows.json",
+          "role": "dr0002-row-inventory",
+          "sha256": "4209e0a3df59b9d9fe5bb9d8699b2902e5ba9e7c58231cc9c11d94b1809f8e67"
+        }
+      ],
+      "statistical_basis": "coverage of the ratified grid",
+      "stretch": {
+        "bound": "not specified",
+        "verdict": "NOT SPECIFIED"
+      },
+      "sub_bound": "1.2 V +/-10 % LV core, -40 ... 125 C: every implemented bench exercised over the full grid, with the supply and temperature verified as applied",
+      "target": {
+        "bound": "full grid exercised",
+        "verdict": "PASS"
+      },
+      "tool_gap": null,
+      "unit": null
+    },
+    {
+      "bench": "regeneration",
+      "benches_fully_covered": null,
+      "chain_problems": [],
+      "condition": "instance A of the regeneration bench on its own supply (core + its own dut_ib reference branch), average supply power over one full 30 ns cycle (30 ... 60 ns) containing one decision that flips the held output",
+      "coverage_problems": [],
+      "derived": {},
+      "dut_problems": [],
+      "evidence_kind": "klt_sim",
+      "gap_reason": null,
+      "id": "5b",
+      "klt_window_note": null,
+      "measurement": "p_avg_uw",
+      "notes": [],
+      "population": null,
+      "report_verdict": null,
+      "retained_record": null,
+      "row": "Supply / power",
+      "sources": [
+        {
+          "path": "design/comparator.spice",
+          "role": "dut-netlist",
+          "sha256": "b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/grading.json",
+          "role": "committed-grading",
+          "sha256": "954fdf5a97678b19ca73e989480d21d3ed0654c4988dd0dbdbf628fa1012ce74"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.body.spice",
+          "role": "body",
+          "sha256": "2dc087ac0a1f45992387219a9a30fb1871dbdf43af094ddaf6b280c211acf437"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.envelope.json",
+          "role": "envelope",
+          "sha256": "5f9e487e9f9e57e13570530395d024e4326a1a236375d82669fe29de01f110c1"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.invocation.json",
+          "role": "invocation",
+          "sha256": "0bdef6b7b2739cc9c58a487dd4ce0a4460b438bdbb22e637b314f51bea16e0f5"
+        },
+        {
+          "path": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.request.json",
+          "role": "request",
+          "sha256": "f229d01efcd90a6cc1b25a68fa5b7d8b24db60e88a4de8727f64c8c20fcc9357"
+        },
+        {
+          "path": "sim/klt-corner-verification/rows.json",
+          "role": "dr0002-row-inventory",
+          "sha256": "4209e0a3df59b9d9fe5bb9d8699b2902e5ba9e7c58231cc9c11d94b1809f8e67"
+        }
+      ],
+      "statistical_basis": "deterministic corner matrix, mismatch off",
+      "stretch": {
+        "binding": {
+          "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/125C",
+          "margin": -18.7798,
+          "point": "ff_125c_1.32v",
+          "value": 38.7798
+        },
+        "bound": "<= 20",
+        "failing_points": [
+          "tt_-40c_1.08v",
+          "tt_27c_1.08v",
+          "tt_125c_1.08v",
+          "tt_-40c_1.20v",
+          "tt_27c_1.20v",
+          "tt_125c_1.20v",
+          "tt_-40c_1.32v",
+          "tt_27c_1.32v",
+          "tt_125c_1.32v",
+          "ff_-40c_1.08v",
+          "ff_27c_1.08v",
+          "ff_125c_1.08v",
+          "ff_-40c_1.20v",
+          "ff_27c_1.20v",
+          "ff_125c_1.20v",
+          "ff_-40c_1.32v",
+          "ff_27c_1.32v",
+          "ff_125c_1.32v",
+          "ss_-40c_1.08v",
+          "ss_27c_1.08v",
+          "ss_125c_1.08v",
+          "ss_-40c_1.20v",
+          "ss_27c_1.20v",
+          "ss_125c_1.20v",
+          "ss_-40c_1.32v",
+          "ss_27c_1.32v",
+          "ss_125c_1.32v",
+          "fs_-40c_1.08v",
+          "fs_27c_1.08v",
+          "fs_125c_1.08v",
+          "fs_-40c_1.20v",
+          "fs_27c_1.20v",
+          "fs_125c_1.20v",
+          "fs_-40c_1.32v",
+          "fs_27c_1.32v",
+          "fs_125c_1.32v",
+          "sf_-40c_1.08v",
+          "sf_27c_1.08v",
+          "sf_125c_1.08v",
+          "sf_-40c_1.20v",
+          "sf_27c_1.20v",
+          "sf_125c_1.20v",
+          "sf_-40c_1.32v",
+          "sf_27c_1.32v",
+          "sf_125c_1.32v"
+        ],
+        "points_expected": 45,
+        "points_failing": 45,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/125C",
+            "point": "ff_125c_1.32v",
+            "value": 38.7798
+          },
+          "min": {
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 27.9043
+          }
+        },
+        "verdict": "FAIL"
+      },
+      "sub_bound": "average power at 33.3 MHz, INCLUDING the tail-bias reference branch",
+      "target": {
+        "bound": "not specified",
+        "points_expected": 45,
+        "points_missing_or_invalid": [],
+        "points_valid": 45,
+        "range": {
+          "max": {
+            "corner_id": "mos_ff/vsup=1.320_vsupa=1.320V/125C",
+            "point": "ff_125c_1.32v",
+            "value": 38.7798
+          },
+          "min": {
+            "corner_id": "mos_ss/vsup=1.080_vsupa=1.080V/-40C",
+            "point": "ss_-40c_1.08v",
+            "value": 27.9043
+          }
+        },
+        "verdict": "NOT SPECIFIED"
+      },
+      "tool_gap": null,
+      "unit": "uW"
+    }
+  ],
+  "schema": "sg13g2-comparator/characterization-report/1",
+  "scope": "Schematic DUT only (design/comparator.spice, sim/dut.json provenance 'schematic'). No extracted/post-layout number is in this report; a later post-layout characterization is a NEW report directory that supersedes this one by being cited instead of it, and nothing here or in the source campaign is rewritten.",
+  "spec_source": "spec/decision-records/0002-target-spec-ratification.md",
+  "status": "fail",
+  "status_meaning": "Top-level status 'pass' iff every DR-0002 sub-bound with a ratified Target has Target verdict PASS on complete, valid schematic evidence; any FAIL, INCOMPLETE, GAP, INVALID_DUT or REJECTED_EVIDENCE gives 'fail'. A per-row PASS is a per-point sample statistic against the bound (Row 1: 3 x sample sigma at N = 60 per point; Row 2: grid-wide mean of probit-slope sigma), not a yield or population-compliance claim (that is issue #63).",
+  "t1_item": 8,
+  "target_compliance": {
+    "all_bounded_targets_pass": false,
+    "blocking": [
+      {
+        "id": "2",
+        "sub_bound": "differential, input-referred, total integrated rms; compliance path = whole-latch transient-noise decision statistics with seeds and run counts committed",
+        "target_verdict": "FAIL"
+      },
+      {
+        "id": "4a",
+        "sub_bound": "peak transient injected charge per decision edge, per side: Q_kick = max_t |integral of i_kick dt'| over 30 ... 45 ns, referenced to the node's pre-decision level at 29 ns",
+        "target_verdict": "FAIL"
+      }
+    ],
+    "bounded_target_rows": [
+      "1",
+      "2",
+      "3a",
+      "3b",
+      "3c",
+      "4a",
+      "4b",
+      "5a"
+    ],
+    "passing": [
+      "1",
+      "3a",
+      "3b",
+      "3c",
+      "4b",
+      "5a"
+    ]
+  },
+  "verdict_counts": {
+    "stretch": {
+      "FAIL": 5,
+      "NOT SPECIFIED": 4,
+      "PASS": 1
+    },
+    "target": {
+      "FAIL": 2,
+      "NOT SPECIFIED": 2,
+      "PASS": 6
+    }
+  }
+}

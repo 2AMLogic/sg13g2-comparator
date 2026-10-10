@@ -207,6 +207,34 @@ attempt, as the committed pex attempt does. Do not relax the spec, do not pass
 `--allow-toolchain-drift` to manufacture evidence, and do not fall back to a
 locally launched grid.
 
+## Characterization report (T1 item 8)
+
+`sim/characterize.sh` is a harness; the aggregated per-row report is a separate,
+simulation-free step (issue #64):
+
+```bash
+./sim/characterize.sh report          # regenerate sim/characterization/20261009-d73a9ac-schematic/
+./sim/characterize.sh report check    # re-hash every indexed source; fail if anything is stale
+```
+
+Stdlib `python3` only: no PDK, ngspice, `klt` or batch submit. It reads one
+explicitly named committed campaign (`REPORT_CAMPAIGN`, default
+`20261009-d73a9ac`; never "newest"), grades it with the committed
+`sim/kltsim/grade.py` (read-only, so the DR-0002 reduction rules are not
+duplicated and the campaign is not rewritten), requires the result to equal the
+campaign's committed `grading.json`, and writes `input-index.json` (evidence
+paths, sha256 digests, DR-0002 bounds, DUT identity, grader digest), `report.json`,
+`report.md` (every DR-0002 row and sub-bound: value, unit, Target/Stretch bound
+and verdict, binding point, population, statistical basis, sources) and the
+generic `envelope.json` (`t1_item: 8`). The envelope's `status` mirrors
+bounded-Target compliance of the schematic DUT (today `fail`: Rows 2 and 4a),
+not report generation; FAIL, INCOMPLETE, GAP, INVALID_DUT, REJECTED_EVIDENCE,
+REPORTED and NOT SPECIFIED stay distinct. Stale, tampered, non-finite or
+inconsistent inputs are refused and write nothing. The manifest pins the hash of
+`input-index.json`; see `manifests/README.md`, "Item 8". Unit tests:
+`PYTHONPATH=sim python3 -m unittest kltsim.tests.test_characterization`
+(also run by the `kltsim` discover step in "What CI runs").
+
 ## Reproducing one record
 
 Every record ends with the exact command that regenerates it. It is always:
