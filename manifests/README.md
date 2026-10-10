@@ -342,7 +342,7 @@ index names. That is a limit of the native grader, so
 and the index itself, rejects a changed or missing source, requires
 `report.json`, `report.md`, the index and the envelope to regenerate
 byte-for-byte, and requires this manifest's item 8 citation to match. It runs in
-CI (`sim-unit-tests`). Note that on a `status: fail` envelope the native grader
+CI (the `signoff-manifest-parity` job; unit tests run in `harness-unit-tests`). Note that on a `status: fail` envelope the native grader
 reports `check_failed` whatever the pin says, so the pin is only observable by
 the native grader once the envelope passes; the repo-side check covers it either
 way.
