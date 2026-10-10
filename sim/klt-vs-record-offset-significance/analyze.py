@@ -106,7 +106,7 @@ P(f"record: all points share the single stream: mean pairwise corr = {mr:.3f}")
 
 # ---- step 1b: bootstrap SE of each grid mean preserving the structure ----
 rng = np.random.default_rng(82)
-B = 20000
+B = 4000  # bootstrap resamples
 def boot(M, joint):
     """Resample draw indices; joint=True uses the SAME indices at every point
     (record: points share draws), False resamples each point independently."""
@@ -118,7 +118,6 @@ def boot(M, joint):
             s = [three_sig(M[i][rng.integers(0, N, N)]) for i in range(len(M))]
         means[b] = np.mean(s)
     return means
-B = 4000
 def boot_groups(M, groups):
     """klt: resample the draw index jointly inside each seed group, independently across groups."""
     means = np.empty(B)
