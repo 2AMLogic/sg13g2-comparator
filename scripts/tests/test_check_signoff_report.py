@@ -97,7 +97,7 @@ class TestParity(ParityBase):
     def test_non_json_stdout_fails(self):
         rc, _, err = self.run_main(self.fake_klt("not json {", raw=True))
         self.assertEqual(rc, 1)
-        self.assertIn("not valid JSON", err)
+        self.assertIn("not a valid JSON report object", err)
 
     def test_mutated_leaf_names_path_and_values(self):
         fresh = _copy(COMMITTED)
@@ -151,15 +151,111 @@ class TestParity(ParityBase):
         self.assertIn("does not exist", err)
 
 
+class TestStructure(ParityBase):
+    def fail_with(self, fresh, committed=None, code=3):
+        if committed is not None:
+            self.write_report(committed)
+        rc, _, err = self.run_main(self.fake_klt(fresh, code))
+        self.assertEqual(rc, 1, err)
+        return err
+
+    def test_reordered_object_keys_pass(self):
+        fresh = {
+            "items": COMMITTED["items"],
+            "build": {"dirty": False, "version": "0.6.0+gaaaa"},
+            "t1_item_count": 2, "t1_met_count": 1, "tier": "none",
+        }
+        for code in (0, 3):
+            rc, _, err = self.run_main(self.fake_klt(fresh, code))
+            self.assertEqual(rc, 0, err)
+
+    def test_int_float_equivalence(self):
+        fresh = _copy(COMMITTED)
+        fresh["t1_met_count"] = 1.0
+        rc, _, err = self.run_main(self.fake_klt(fresh, 3))
+        self.assertEqual(rc, 0, err)
+
+    def test_added_empty_field_fails(self):
+        for empty in ({}, []):
+            fresh = _copy(COMMITTED)
+            fresh["extra"] = empty
+            err = self.fail_with(fresh, COMMITTED)
+            self.assertIn(".extra", err)
+            self.assertIn("<absent in committed>", err)
+
+    def test_removed_empty_field_fails(self):
+        committed = _copy(COMMITTED)
+        committed["extra"] = []
+        err = self.fail_with(COMMITTED, committed)
+        self.assertIn(".extra", err)
+        self.assertIn("<absent in fresh>", err)
+
+    def test_empty_object_vs_array_fails(self):
+        committed = _copy(COMMITTED)
+        committed["extra"] = []
+        fresh = _copy(COMMITTED)
+        fresh["extra"] = {}
+        err = self.fail_with(fresh, committed)
+        self.assertIn(".extra", err)
+
+    def test_empty_object_vs_array_nested_in_array_fails(self):
+        committed = _copy(COMMITTED)
+        committed["items"][1]["notes"] = [[]]
+        fresh = _copy(COMMITTED)
+        fresh["items"][1]["notes"] = [{}]
+        err = self.fail_with(fresh, committed)
+        self.assertIn(".items[1].notes[0]", err)
+
+    def test_bool_vs_number_fails(self):
+        for a, b in ((True, 1), (False, 0), (1, True)):
+            committed = _copy(COMMITTED)
+            committed["flag"] = a
+            fresh = _copy(COMMITTED)
+            fresh["flag"] = b
+            err = self.fail_with(fresh, committed)
+            self.assertIn(".flag", err)
+
+    def test_array_length_mismatch_reported(self):
+        fresh = _copy(COMMITTED)
+        fresh["items"].append({"id": 3, "status": "met"})
+        err = self.fail_with(fresh)
+        self.assertIn(".items.length", err)
+        self.assertIn(".items[2]", err)
+
+    def test_array_order_matters(self):
+        fresh = _copy(COMMITTED)
+        fresh["items"].reverse()
+        self.fail_with(fresh)
+
+    def test_nan_in_fresh_fails_controlled(self):
+        body = json.dumps(COMMITTED).replace('"none"', "NaN")
+        rc, _, err = self.run_main(self.fake_klt(body, 3, raw=True))
+        self.assertEqual(rc, 1)
+        self.assertIn("NaN", err)
+
+    def test_infinity_in_committed_fails_controlled(self):
+        self.report.write_text(json.dumps(COMMITTED).replace('"none"', "Infinity"))
+        rc, _, err = self.run_main(self.fake_klt(COMMITTED, 3))
+        self.assertEqual(rc, 1)
+        self.assertIn("Infinity", err)
+
+    def test_non_object_roots_fail(self):
+        rc, _, err = self.run_main(self.fake_klt([], 3, raw=False))
+        self.assertEqual(rc, 1)
+        self.assertIn("root must be a JSON object", err)
+        self.write_report([])
+        rc, _, err = self.run_main(self.fake_klt(COMMITTED, 3))
+        self.assertEqual(rc, 1)
+        self.assertIn("root must be a JSON object", err)
+
+    def test_malformed_committed_report_fails_controlled(self):
+        self.report.write_text("{oops")
+        rc, _, err = self.run_main(self.fake_klt(COMMITTED, 3))
+        self.assertEqual(rc, 1)
+        self.assertIn("committed report", err)
+
+
 class TestHelpers(unittest.TestCase):
-    def test_flatten_nested(self):
-        got = dict(chk._flatten({"b": [1, {"c": 2}], "a": 3}))
-        self.assertEqual(got, {".a": 3, ".b[0]": 1, ".b[1].c": 2})
-
-    def test_flatten_key_order_sorted(self):
-        keys = [k for k, _ in chk._flatten({"z": 1, "a": 2})]
-        self.assertEqual(keys, [".a", ".z"])
-
     def test_first_differences_none_when_equal(self):
         self.assertEqual(chk._first_differences(COMMITTED, _copy(COMMITTED)), [])
 
@@ -170,6 +266,10 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual([d[0] for d in diffs], [".k0", ".k1", ".k2"])
         self.assertEqual(diffs[0], (".k0", 0, 1))
         self.assertEqual(len(chk._first_differences(fresh, committed)), 5)
+
+    def test_type_mismatch_reported_before_scalars(self):
+        diffs = chk._first_differences({"a": {}}, {"a": []})
+        self.assertEqual(diffs, [(".a", [], {})])
 
 
 if __name__ == "__main__":
