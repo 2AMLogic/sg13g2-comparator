@@ -395,7 +395,10 @@ class RepoBudget(unittest.TestCase):
         self.assertEqual(b["baseline"]["sim_blobs"], 96352)
         self.assertEqual(b["total_ceiling_bytes"], 489675829 + 47 * 1048576)
         extras = chk.validate_budget(str(ROOT), "HEAD", b)
-        self.assertEqual(extras, {})
+        # Issue #167: exactly the two DR-0005 raises (validate_budget has already
+        # required a decision record carrying each exact path and byte count).
+        self.assertEqual(set(extras), {"sim", "sim/klt-corner-verification/campaigns/20261010-n200"})
+        self.assertTrue(all(v > 0 for v in extras.values()))
         self.assertEqual(sum(1 for _ in b["units"]), len(b["units"]))
 
     def test_head_within_committed_budget(self):
