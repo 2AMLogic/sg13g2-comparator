@@ -1,0 +1,99 @@
+{
+  "_comment": "T1 item 9 testbench inventory: every claimed measurement's committed testbench and its cold-start invocation. Cold-start environment (pinned PDK sim/pdk.json, ngspice >= 46 with OSDI, sim/tools/build-osdi.sh, python3 sim/run_corners.py --check-env) is documented in sim/README.md 'Cold start'. This record lists what is committed; it does not re-run any simulation. Bound by manifests/evidence/item9-testbenches.envelope.json (content hash pinned in manifests/sg13g2-comparator.json): editing this file after the attestation renders the row stale_evidence.",
+  "schema_version": 1,
+  "pinned_pdk": "sim/pdk.json",
+  "cold_start_doc": "sim/README.md#cold-start",
+  "environment_check": "python3 sim/run_corners.py --check-env",
+  "harness_selftest": "./sim/selftest.sh",
+  "measurements": [
+    {
+      "spec_row": "Offset sigma (lower bound, front end only)",
+      "testbench": [
+        "sim/comparator-offset-mc/testbench/tb.json",
+        "sim/comparator-offset-mc/testbench/tb_offset_mc.spice"
+      ],
+      "cold_start": "python3 sim/run_corners.py comparator-offset-mc -j 2",
+      "docs": "sim/comparator-offset-mc/README.md"
+    },
+    {
+      "spec_row": "Offset sigma (whole latch)",
+      "testbench": [
+        "sim/comparator-offset-transient-mc/testbench/tb.json",
+        "sim/comparator-offset-transient-mc/testbench/tb_offset_transient_mc.spice"
+      ],
+      "cold_start": "python3 sim/run_corners.py comparator-offset-transient-mc -j 2",
+      "docs": "sim/comparator-offset-transient-mc/README.md"
+    },
+    {
+      "spec_row": "Input-referred noise (reportable lower bound, .noise)",
+      "testbench": [
+        "sim/comparator-preamp-noise/testbench/tb.json",
+        "sim/comparator-preamp-noise/testbench/tb_preamp_noise.spice"
+      ],
+      "cold_start": "python3 sim/run_corners.py comparator-preamp-noise -j 2",
+      "docs": "sim/comparator-preamp-noise/README.md"
+    },
+    {
+      "spec_row": "Input-referred noise (compliance path, whole-latch transient noise)",
+      "testbench": [
+        "sim/comparator-transient-noise/testbench/tb.json",
+        "sim/comparator-transient-noise/testbench/tb_transient_noise.spice"
+      ],
+      "cold_start": "python3 sim/run_corners.py comparator-transient-noise -j 2",
+      "docs": "sim/comparator-transient-noise/README.md"
+    },
+    {
+      "spec_row": "Decision time vs overdrive and metastability (tau)",
+      "testbench": [
+        "sim/comparator-regeneration/testbench/tb.json",
+        "sim/comparator-regeneration/testbench/tb_regeneration.spice"
+      ],
+      "cold_start": "python3 sim/run_corners.py comparator-regeneration -j 2",
+      "docs": "sim/comparator-regeneration/README.md"
+    },
+    {
+      "spec_row": "Kickback",
+      "testbench": [
+        "sim/comparator-kickback/testbench/tb.json",
+        "sim/comparator-kickback/testbench/tb_kickback.spice"
+      ],
+      "cold_start": "python3 sim/run_corners.py comparator-kickback -j 2",
+      "docs": "sim/comparator-kickback/README.md"
+    },
+    {
+      "spec_row": "Supply / power (average power at 33.3 MHz, from the regeneration bench)",
+      "testbench": [
+        "sim/klt-corner-verification/benches/regeneration.circuit.spice"
+      ],
+      "cold_start": "python3 sim/run_klt_corner_verification.py run --campaign <new-id> --bench regeneration --klt <pinned klt>",
+      "docs": "sim/klt-corner-verification/README.md"
+    }
+  ],
+  "klt_sim_corner_verification": {
+    "note": "The same DR-0002 rows re-measured as klt sim corner-matrix envelopes over the 45-point grid; benches under sim/klt-corner-verification/benches/, rows in sim/klt-corner-verification/rows.json, graded by sim/kltsim/grade.py. Cold start: build, run per bench, grade (sim/klt-corner-verification/README.md).",
+    "benches": [
+      "sim/klt-corner-verification/benches/offset_mc.circuit.spice",
+      "sim/klt-corner-verification/benches/transient_noise.circuit.spice",
+      "sim/klt-corner-verification/benches/transient_noise_full.circuit.spice",
+      "sim/klt-corner-verification/benches/regeneration.circuit.spice",
+      "sim/klt-corner-verification/benches/kickback.circuit.spice",
+      "sim/klt-corner-verification/benches/kickback_fixture.circuit.spice"
+    ],
+    "rows": "sim/klt-corner-verification/rows.json",
+    "cold_start": [
+      "python3 sim/run_klt_corner_verification.py build --campaign <new-id>",
+      "python3 sim/run_klt_corner_verification.py run --campaign <new-id> --bench <bench> --klt <pinned klt>",
+      "python3 sim/run_klt_corner_verification.py grade --campaign <new-id>"
+    ]
+  },
+  "other_committed_benches": [
+    {
+      "purpose": "confirm shipped per-instance mismatch models",
+      "testbench": [
+        "sim/device-mismatch-confirm/testbench/tb_lv_mismatch_pair.spice.tmpl"
+      ],
+      "cold_start": "./sim/device-mismatch-confirm/run_mismatch_check.sh"
+    }
+  ],
+  "known_limits": "Local ngspice runs need ngspice >= 46 with OSDI; the batch route and its limits are in sim/README.md 'Backend readiness'. Post-layout (pex) measurement is not claimed: sim/comparator-pex/ holds adapter inputs only."
+}

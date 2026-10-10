@@ -65,8 +65,8 @@ GDS="${CELL_DIR}/comparator.gds"
 TOP="comparator"
 PORTS="vinp,vinn,clk,vbias,dout,doutb,vdd,vss"
 
-KLT_PIN="e8ca621a6961879cec1af60cc932c3b3d58ddcaa"
-KLAYOUT_PIN="0.30.10"  # the KLayout this klt build was tested against
+KLT_PIN="3a75c3ae705b7ad3803625255de93bcd982e70c6"
+KLAYOUT_PIN="0.30.12"  # the KLayout this klt build was tested against
 
 MODE="run"
 case "${1:-}" in

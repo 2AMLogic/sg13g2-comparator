@@ -1,0 +1,32 @@
+{
+  "_comment": "T1 item 10 hygiene checklist (an AUTHOR assertion: klt signoff does not re-audit it). Each check names what was inspected. Bound by manifests/evidence/item10-repo-hygiene.envelope.json (hash pinned in manifests/sg13g2-comparator.json).",
+  "schema_version": 1,
+  "checks": [
+    {
+      "requirement": "README states what the block is",
+      "status": "pass",
+      "evidence": "README.md (title and opening paragraph: dynamic latched comparator on IHP SG13G2)"
+    },
+    {
+      "requirement": "README carries the spec table",
+      "status": "pass",
+      "evidence": "README.md '## Target specification (ratified - DR-0002)', ratified by spec/decision-records/0002-target-spec-ratification.md"
+    },
+    {
+      "requirement": "README states how to reproduce every result",
+      "status": "pass",
+      "evidence": "README.md '## Reproducing the results' indexes the cold-start and regeneration commands for design, simulation, layout and signoff"
+    },
+    {
+      "requirement": "a license",
+      "status": "pass",
+      "evidence": "LICENSE (Apache-2.0); README.md '## License'"
+    },
+    {
+      "requirement": "CI that keeps the harness and evidence formats valid",
+      "status": "pass",
+      "evidence": ".github/workflows/ci.yml jobs: signoff-manifest-parity, layout-reproducibility, harness-unit-tests, append-only-evidence"
+    }
+  ],
+  "not_asserted": "This checklist makes no claim that the design meets its spec: several README spec rows are NOT MET and stay so (item 5 / item 8 are graded separately)."
+}

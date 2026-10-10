@@ -101,7 +101,7 @@ jobs:
       - name: Install klt (pinned, see manifests/README.md)
         run: |
           python3 -m pip install --disable-pip-version-check \
-            "klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@e8ca621a6961879cec1af60cc932c3b3d58ddcaa"
+            "klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@3a75c3ae705b7ad3803625255de93bcd982e70c6"
           klt --version
 
       # Issue #64: the T1 item 8 characterization report. Stdlib only, no
@@ -151,8 +151,8 @@ jobs:
       - name: Install klt (pinned) + KLayout
         run: |
           python3 -m pip install --disable-pip-version-check \
-            "klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@e8ca621a6961879cec1af60cc932c3b3d58ddcaa" \
-            "klayout==0.30.10"
+            "klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@3a75c3ae705b7ad3803625255de93bcd982e70c6" \
+            "klayout==0.30.12"
           klt --version
 
       - name: Regenerate and verify the committed layout
