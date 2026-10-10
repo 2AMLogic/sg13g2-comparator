@@ -424,6 +424,13 @@ def reference_circuit() -> str:
     return compose_circuit(NOMINAL_PERIOD_NS, True, round_step_uv(1), tables)
 
 
+def meas_name(kind: str, h: str, m: int | None = None) -> str:
+    """Measurement names are LOWER CASE: ngspice folds .meas names to lower
+    case in its log, and the pinned klt (0.5.0) matches the log case-
+    sensitively, so a mixed-case name is reported as 'produced no value'."""
+    return (f"lo_{h}_meas" if kind == "lo" else f"{kind}_{h}_{m}").lower()
+
+
 def measurements(period_ns: float, first: bool) -> list[dict]:
     ck = clock_times_ns(period_ns)
     ts = _ns(ck["t_sample_ns"])
@@ -432,15 +439,15 @@ def measurements(period_ns: float, first: bool) -> list[dict]:
         {"name": "temp_meas", "spice": ".meas tran temp_meas find v(tcheck) at=1n", "unit": "C"},
     ]
     for h in HISTORIES:
-        meas.append({"name": f"lo_{h}_meas",
-                     "spice": f".meas tran lo_{h}_meas find v(lo{h}) at=1n", "unit": "uV"})
+        meas.append({"name": meas_name("lo", h), "spice":
+                     f".meas tran {meas_name('lo', h)} find v(lo{h}) at=1n", "unit": "uV"})
     mult = list(range(0, FANOUT + 1)) if first else list(range(1, FANOUT))
     for h in HISTORIES:
         for m in mult:
-            meas.append({"name": f"d_{h}_{m}",
-                         "spice": f".meas tran d_{h}_{m} find v(d{h}{m}) at={ts}", "unit": "V/V"})
-            meas.append({"name": f"s_{h}_{m}",
-                         "spice": f".meas tran s_{h}_{m} find v(s{h}{m}) at={ts}", "unit": "V"})
+            meas.append({"name": meas_name("d", h, m), "spice":
+                         f".meas tran {meas_name('d', h, m)} find v(d{h}{m}) at={ts}", "unit": "V/V"})
+            meas.append({"name": meas_name("s", h, m), "spice":
+                         f".meas tran {meas_name('s', h, m)} find v(s{h}{m}) at={ts}", "unit": "V"})
     return meas
 
 
@@ -587,17 +594,17 @@ def extract_round(env: dict, period_ns: float, first: bool, plan: dict[tuple, di
         if problem is None:
             for h in HISTORIES:
                 lo_planned = planned[h]["lo"]
-                lo = vals.get(f"lo_{h}_meas")
+                lo = vals.get(meas_name("lo", h))
                 if lo is None or abs(lo - lo_planned) > PROBE_TOL_UV:
                     problem = f"bracket lookup lo_{h}={lo} uV disagrees with plan {lo_planned} uV"
                     break
         if problem is None:
             for h in HISTORIES:
                 for m, p in zip(mult, planned[h]["probes"]):
-                    d = vals.get(f"d_{h}_{m}")
-                    s = vals.get(f"s_{h}_{m}")
+                    d = vals.get(meas_name("d", h, m))
+                    s = vals.get(meas_name("s", h, m))
                     if d is None or s is None:
-                        problem = f"missing d_{h}_{m}/s_{h}_{m}"
+                        problem = f"missing {meas_name('d', h, m)}/{meas_name('s', h, m)}"
                         break
                     if abs(s * 1e6 - p) > PROBE_TOL_UV:
                         problem = f"applied probe {s * 1e6:.3f} uV disagrees with plan {p} uV ({h}{m})"

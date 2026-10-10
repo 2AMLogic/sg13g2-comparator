@@ -285,8 +285,8 @@ class NetlistContractTests(unittest.TestCase):
             self.assertEqual(ck["t_sample_ns"], t_sample)
             self.assertEqual(ck["reset_ns"], period - 10.0)
             meas = {m["name"]: m["spice"] for m in mem.measurements(period, True)}
-            self.assertIn(f"at={mem._ns(t_sample)}", meas["d_P_5"])
-            self.assertIn(f"at={mem._ns(t_sample)}", meas["s_N_0"])
+            self.assertIn(f"at={mem._ns(t_sample)}", meas["d_p_5"])
+            self.assertIn(f"at={mem._ns(t_sample)}", meas["s_n_0"])
             # the input changes after the third strobe has fallen and before the fourth rises
             self.assertGreater(ck["t_switch_ns"], ck["rise_ns"][2] + 10.2)
             self.assertLess(ck["t_switch_ns"] + 0.1, ck["rise_ns"][3])
@@ -299,6 +299,12 @@ class NetlistContractTests(unittest.TestCase):
         self.assertEqual(mem.SHORT_RESET_PERIOD_NS - mem.HIGH_NS, 1.0)
         self.assertIn("10n 110n)", self.circuit(period=110.0))
         self.assertIn("10n 11n)", self.circuit(period=11.0))
+
+    def test_measurement_names_are_lower_case(self):
+        for first in (True, False):
+            for m in mem.measurements(30.0, first):
+                self.assertEqual(m["name"], m["name"].lower())
+                self.assertIn(f".meas tran {m['name']} ", m["spice"])
 
     def test_measurement_set_and_no_limits(self):
         first = mem.measurements(30.0, True)
@@ -351,10 +357,10 @@ def synthetic_env(plan, thresholds, key, period=30.0, first=True, **overrides):
     vals = {"vdd_meas": supply, "temp_meas": float(temp)}
     mult = list(range(0, 11)) if first else list(range(1, 10))
     for h in mem.HISTORIES:
-        vals[f"lo_{h}_meas"] = float(plan[key][h]["lo"])
+        vals[mem.meas_name("lo", h)] = float(plan[key][h]["lo"])
         for m, p in zip(mult, plan[key][h]["probes"]):
-            vals[f"d_{h}_{m}"] = 1.0 if p > thresholds[h] else -1.0
-            vals[f"s_{h}_{m}"] = p * 1e-6
+            vals[mem.meas_name("d", h, m)] = 1.0 if p > thresholds[h] else -1.0
+            vals[mem.meas_name("s", h, m)] = p * 1e-6
     vals.update(overrides)
     return {"corners": [_corner(proc, supply, temp, vals)]}
 
@@ -382,7 +388,7 @@ class ReplayTests(unittest.TestCase):
         self.assertLessEqual(abs(float(shift) + 5555), 10)
 
     def test_applied_probe_mismatch_rejects_the_point(self):
-        ps = self.drive({"P": 0, "N": 0}, s_P_3=0.0123)
+        ps = self.drive({"P": 0, "N": 0}, s_p_3=0.0123)
         self.assertIn("applied probe", ps.problem)
         self.assertFalse(ps.P.done)
 
@@ -391,7 +397,7 @@ class ReplayTests(unittest.TestCase):
         self.assertIn("supply probe", ps.problem)
 
     def test_bracket_lookup_mismatch_rejects_the_point(self):
-        ps = self.drive({"P": 0, "N": 0}, lo_N_meas=-1.0)
+        ps = self.drive({"P": 0, "N": 0}, lo_n_meas=-1.0)
         self.assertIn("bracket lookup", ps.problem)
 
     def test_missing_corner_is_a_problem_not_a_pass(self):
