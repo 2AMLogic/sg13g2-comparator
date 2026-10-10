@@ -64,6 +64,8 @@ text below it is kept as the record of the earlier attempt. The same
 (`batch_no_capacity`, 30 pools). Record: `reports/batch-probe.regeneration.pvt.20261010.{md,json}`.
 The PVT and Monte Carlo rows remain not run; no local grid was launched.
 
+A second probe the same day (`reports/batch-probe.regeneration.pvt.20261010-b.{md,json}`) was refused identically (`batch_no_capacity`, 30 pools).
+
 ## What ran, and what it proved
 
 | Artifact | What it is |
