@@ -887,7 +887,6 @@ def check(campaign_id: str = DEFAULT_CAMPAIGN_ID, source_rel: str = SOURCE_CAMPA
         problems.append(f"--offset-n {offset_n} does not match the campaign's declared "
                         f"offset N {decl_n if decl_n is not None else 60}")
     rows_sel = tuple(declared.get("rows") or ROWS_BOTH)
-    out_rel = f"{OUT_ROOT}/{campaign_id}"
     if index.get("source", {}).get("campaign") != source_rel:
         problems.append(f"index records source {index.get('source', {}).get('campaign')!r}, "
                         f"checked against {source_rel!r} (stale source)")

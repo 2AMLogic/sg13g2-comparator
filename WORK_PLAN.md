@@ -17,14 +17,13 @@ _None._
 
 Human-approved issues ready for implementation (`loom:issue`).
 
-- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
+_None._
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-- **#63**: Monte Carlo: mint a klt yield report for the statistical spec rows (offset sigma) and cite it (T1 item 6)
-- **#117**: Unit tests for the CI-gating scripts: signoff parity, ERC judge, netlist generator
+_None._
 
 ## PRs Awaiting Review
 
@@ -36,19 +35,20 @@ _None._
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
-_None._
+- **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
 
 ## Proposed
 
 Issues carrying `loom:curated`.
 
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
-- **#63**: Monte Carlo: mint a klt yield report for the statistical spec rows (offset sigma) and cite it (T1 item 6) *(curated)*
-- **#65**: Cite artifact-anchored evidence for T1 items 1, 9 and 10 (design sources, testbenches, repo hygiene) *(curated)*
+- **#157**: CI: pinned pyflakes-class static check over harness, kltsim and guard scripts *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-- **#142**: Capture verified Git provenance before PVT simulation *(architect)*
+- **#157**: CI: pinned pyflakes-class static check over harness, kltsim and guard scripts *(architect)*
+- **#159**: Memory / hysteresis characterization bench: does the previous decision bias the next? *(architect)*
+- **#167**: T1 statistical signoff: larger offset populations at every PVT point *(architect)*
 
 ## Epics
 
@@ -60,11 +60,11 @@ Issues carrying `loom:curated`.
 |------|-------|
 | Operator merge-risk holds | 0 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 1 |
-| In Progress (`loom:building`) | 2 |
+| Ready (`loom:issue`) | 0 |
+| In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 0 |
-| Curated | 3 |
-| Architect / Hermit proposals | 1 |
+| Approved PRs awaiting merge | 1 |
+| Curated | 2 |
+| Architect / Hermit proposals | 3 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->

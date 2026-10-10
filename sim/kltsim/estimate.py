@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-from pathlib import Path
 
 from . import build as build_mod
 

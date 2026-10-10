@@ -66,6 +66,11 @@ jobs:
             /sim/harness/
             /sim/kltsim/
             /sim/comparator-pex/
+            /sim/run_*.py
+            /sim/comparator-transient-noise/*.py
+            /sim/comparator-transient-noise-full/*.py
+            /sim/device-mismatch-confirm/*.py
+            /scripts/
             /sim/comparator-regeneration/testbench/
             /sim/comparator-kickback/testbench/
             /sim/dut/
@@ -210,6 +215,18 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
+
+      # Issue #157: pinned pyflakes-class static check (F rules only: undefined
+      # names, unused imports/locals, redefinitions). CI-only tool; the exact
+      # pin lives here and nowhere else. Needs no PDK, ngspice or KLayout.
+      - name: Install ruff (pinned)
+        run: python3 -m pip install ruff==0.17.0
+
+      - name: Static check (ruff F rules) over harness, kltsim, run_*.py, guards, design and layout tooling
+        run: |
+          ruff check --select F design layout scripts sim/harness sim/kltsim \
+            sim/comparator-pex sim/run_*.py sim/comparator-transient-noise \
+            sim/comparator-transient-noise-full sim/device-mismatch-confirm
 
       - name: Run sim harness unit tests
         run: PYTHONPATH=sim python3 -m unittest discover -t sim -s harness.tests -p 'test_*.py'

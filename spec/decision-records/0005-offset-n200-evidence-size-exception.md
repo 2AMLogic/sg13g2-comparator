@@ -5,7 +5,13 @@
   line of `spec/` or `README.md`'s target table. It authorizes two exact
   raises of the evidence-size ceilings in `sim/evidence-size-budget.json`
   (issue [#132](https://github.com/2AMLogic/sg13g2-comparator/issues/132)'s
-  contract) so one campaign can be committed.
+  contract) so one campaign can be committed. The record takes effect with
+  the reviewed merge of the PR that lands it (the merge commit is the
+  record of acceptance, as for DR-0001 to DR-0003); the drafting agent does
+  not merge it. Number 0005 is used because 0004 is reserved by the
+  in-flight, unmerged DR-0004 draft (input common-mode range row; see
+  [#164](https://github.com/2AMLogic/sg13g2-comparator/issues/164),
+  [#165](https://github.com/2AMLogic/sg13g2-comparator/issues/165)).
 - **Date**: 2026-10-10
 - **Decided by**: Builder agent, issue
   [#167](https://github.com/2AMLogic/sg13g2-comparator/issues/167); reviewers
