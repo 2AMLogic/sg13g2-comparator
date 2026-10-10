@@ -321,6 +321,15 @@ older than 2026-09-17 does **not** know item 11 and renders a ten-item
 report; the pinned build renders all eleven. If the pinned build moves,
 the manifest, the freeze, and the pin move in one change.
 
+[`klt-pin.json`](klt-pin.json) is the single source of truth for the pin
+(`klt_commit`, `klt_version`, `klayout_version`). CI runs
+`python3 scripts/check_klt_pin.py` (stdlib only) in the signoff job, which
+fails if any machine-read copy disagrees with it: both `ci.yml` install
+lines and its `klayout==` pin, `layout/run_flow.sh` `KLT_PIN`/`KLAYOUT_PIN`,
+this report's `build.git_commit`/`build.version`, and the `provenance`
+block of the DRC, LVS and ERC reports under `layout/comparator/`.
+`pex_report.json` is deliberately on a different build and is not checked.
+
 ```bash
 klt signoff --manifest manifests/sg13g2-comparator.json --format json > /tmp/fresh.json
 klt signoff --manifest manifests/sg13g2-comparator.json --format text

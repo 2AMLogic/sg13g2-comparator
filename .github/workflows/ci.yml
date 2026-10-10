@@ -53,6 +53,15 @@ jobs:
         with:
           python-version: '3.13'
 
+      # Issue #135: manifests/klt-pin.json is the single source of truth for
+      # the pinned klt/KLayout build. Every machine-read copy (both install
+      # lines below, layout/run_flow.sh, the frozen signoff report's `build`
+      # block, DRC/LVS/ERC report provenance) must agree, so a partial pin
+      # bump fails here, naming both locations. Stdlib only, runs before any
+      # install. pex_report.json is deliberately a different build: excluded.
+      - name: Pinned klt/KLayout build drift guard (manifests/klt-pin.json)
+        run: python3 scripts/check_klt_pin.py
+
       # Pinned to the exact klt build that froze the committed report --
       # a different build (different tier doc item set, different grading
       # rules, different `build` block) is itself a parity divergence.
@@ -202,5 +211,7 @@ jobs:
           esac
           python3 scripts/check_append_only_evidence.py --base "$base" --head "$head"
 
-      - name: Run evidence guard unit tests
+      # Runs every scripts/tests/test_*.py: the evidence guard tests above
+      # and the klt pin drift guard tests (issue #135).
+      - name: Run scripts/ guard unit tests (evidence, klt pin)
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
