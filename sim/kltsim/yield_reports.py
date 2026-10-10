@@ -40,6 +40,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import build as build_mod
+from . import declared_n
 from . import grade
 from . import benches as BENCH_MODS
 from .benches import BENCHES
@@ -469,7 +470,7 @@ def derive_inputs(source_dir: Path, offset_n: int | None = None,
     expected_off = int(offset_n) if offset_n is not None else int(row1["expected_n"])
     with_noise = rows_sel == ROWS_BOTH
     names = (OFFSET["bench"], NOISE["bench"]) if with_noise else (OFFSET["bench"],)
-    benches = grade.load_campaign(Path(source_dir), bench_names=names, offset_n=offset_n)
+    benches = declared_n.load_campaign(Path(source_dir), offset_n, bench_names=names)
     off_bench = benches[OFFSET["bench"]]
     dut = grade.load_dut_reference()
     for b in [benches[n] for n in names]:
@@ -629,7 +630,7 @@ def build_index(campaign_id: str, source_rel: str, derived: dict, reports: dict,
     source_dir = REPO_ROOT / source_rel
     out_rel = f"{OUT_ROOT}/{campaign_id}"
     offset_n, with_noise = derived["offset_n"], derived["rows_sel"] == ROWS_BOTH
-    grader = grade.grade_campaign(source_dir, offset_n=offset_n)
+    grader = declared_n.grade_campaign(source_dir, offset_n)
     g_rows = {r["id"]: r for r in grader["rows"]}
 
     # ---- row 1 ----

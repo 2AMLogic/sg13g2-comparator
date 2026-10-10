@@ -1,5 +1,11 @@
 # `klt-yield/`: `klt yield` evidence for the statistical DR-0002 rows (T1 item 6)
 
+> **Update (issue [#167](https://github.com/2AMLogic/sg13g2-comparator/issues/167)):
+> item 6 now cites the larger campaign `campaigns/20261010-n200/` (see
+> "Larger offset campaign (N = 200)" below) and renders `met`. Everything
+> below this note describes the N = 60 campaign `20261010-d73a9ac`, which is
+> kept unchanged, still passes `check`, and is no longer the cited one.**
+
 Issue [#63](https://github.com/2AMLogic/sg13g2-comparator/issues/63). The
 Monte Carlo evidence in `sim/comparator-offset-mc/`,
 `sim/comparator-offset-transient-mc/` and the whole-latch `klt sim` campaign
@@ -8,6 +14,54 @@ signoff` item 6 accepts one kind of evidence: a `klt yield` JSON report. This
 directory mints those reports from the committed campaign. It runs **no
 simulation** (nothing new is submitted to the batch fleet) and edits no source
 envelope.
+
+## Larger offset campaign (N = 200), issue #167
+
+What was run, and where:
+
+| step | command | where |
+|---|---|---|
+| size estimate (before submission) | `python3 sim/run_klt_corner_verification.py estimate --offset-n 200` | local, git only |
+| seed/mismatch preflight (N = 4, mismatch on vs off, `tt` 1.2 V 27 C) | `fleet-smoke ... --n 4` into `campaigns/20261010-n200/smoke/` | batch, job `klt-sim-a82d00356e9b`: distinct mismatch seeds, spread 4.24 mV with mismatch, exactly 0 without |
+| the grid | `build --campaign 20261010-n200 --bench offset_mc --offset-n 200`, then `run` (5 process parts x 45/5 PVT points x 200 draws = 9,000 units) | batch, jobs `klt-sim-a610e88262ca` (tt), `-baf15b090f40` (ff), `-7d2da164281f` (ss), `-eef2fb7c986d` (fs), `-c59c423d02f7` (sf); client = the campaign pin `0.5.0+ge8ca621a6961`; all 1800/1800 corners pass the validity gates |
+| grading | `grade --campaign 20261010-n200 --offset-n 200` | local, stdlib |
+| yield evidence | `python3 sim/run_klt_yield.py generate --campaign-id 20261010-n200 --source sim/klt-corner-verification/campaigns/20261010-n200 --offset-n 200 --rows offset` | local, pinned native engine |
+
+Selection is explicit: `--offset-n` declares the draw count (the saved
+requests must carry exactly it; a wrong or undeclared N is a chain problem
+and `check` rejects an `--offset-n` that disagrees with the campaign's own
+declaration) and `--rows offset` analyses the offset row only, so no noise
+population is run or re-analysed and none is cited. The N = 60 default and
+the both-rows form are unchanged byte for byte (a unit test regenerates the
+historical index and compares).
+
+Result, from the report itself and recorded under `declared` in `index.json`:
+
+- 45 populations, each exactly 200 attempted / 200 usable, no exclusions, 200
+  distinct recorded sample seeds each, never pooled.
+- The pinned engine reports `sample_size.verdict = sufficient` at all 45
+  points (required N 183, observed half-width below the 0.01 target), and the
+  derived over-limit control `detected` at 45/45.
+- Zero observed failures of the +/-15 mV window at any point. As in the N = 60
+  report this is a lower bound ("at least 98.17 % at 95 % confidence"), not
+  proof of 100 % yield. No yield target is ratified, so none is declared.
+- The ratified Row 1 statistic (3 x population sigma net of staircase
+  quantization) is a separate number, worst 11.41 mV at `ff_125c_1.08v`
+  against the unchanged 15 mV Target (Stretch 8 mV still fails, as before).
+  Several populations are flagged non-normal by the engine's own warnings;
+  the empirical estimate is the reported one.
+- Issue [#82](https://github.com/2AMLogic/sg13g2-comparator/issues/82) is not
+  settled by a larger sample; its discrepancy warning is carried in the index.
+- The campaign unit is 61,709,133 B and needed an exact budget exception,
+  `spec/decision-records/0005-offset-n200-evidence-size-exception.md`.
+
+Reproduce / verify (the host `RUSTC_WRAPPER` may point at an absent
+`sccache`; clear it for the one-off source build of the native extension):
+
+```bash
+RUSTC_WRAPPER= python3 sim/run_klt_yield.py check --campaign-id 20261010-n200 \
+  --source sim/klt-corner-verification/campaigns/20261010-n200 --offset-n 200 --require-cited
+```
 
 ## Verdict
 

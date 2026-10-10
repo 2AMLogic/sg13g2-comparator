@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from kltsim import benches, cli, estimate, grade
+from kltsim import benches, cli, declared_n, estimate, grade
 from kltsim import yield_reports as yr
 from kltsim.tests.test_grade import GRID
 from kltsim.tests.test_yield_reports import offset_bench
@@ -134,7 +134,7 @@ class DeclaredNAtTheLoadingBoundary(unittest.TestCase):
             _write_chain(self.dir, tag)
 
     def problems(self, n):
-        return grade.load_campaign(self.dir, bench_names=("offset_mc",), offset_n=n)["offset_mc"].chain_problems
+        return declared_n.load_campaign(self.dir, n, bench_names=("offset_mc",))["offset_mc"].chain_problems
 
     def test_declared_n_matches_the_saved_request(self):
         self.assertEqual(self.problems(200), [])
@@ -150,9 +150,9 @@ class DeclaredNAtTheLoadingBoundary(unittest.TestCase):
 
     def test_grade_rows_use_the_declared_n_and_nothing_else_changes(self):
         rows = json.loads((grade.build_mod.EXPERIMENT_DIR / "rows.json").read_text())
-        same = grade.with_offset_n(rows, None)
+        same = declared_n.with_offset_n(rows, None)
         self.assertIs(same, rows)
-        spec = grade.with_offset_n(rows, 200)
+        spec = declared_n.with_offset_n(rows, 200)
         offset = [r for r in spec["rows"] if r["evidence"].get("bench") == "offset_mc"
                   and r["evidence"].get("expected_n")]
         self.assertTrue(offset and all(r["evidence"]["expected_n"] == 200 for r in offset))
@@ -161,7 +161,7 @@ class DeclaredNAtTheLoadingBoundary(unittest.TestCase):
         self.assertEqual(other, orig)
         self.assertEqual(rows["rows"][0]["evidence"].get("expected_n") in (60, None), True)
         with self.assertRaises(ValueError):
-            grade.with_offset_n(rows, 1)
+            declared_n.with_offset_n(rows, 1)
 
 
 class PopulationsAreExactlyTheDeclaredN(unittest.TestCase):
@@ -258,6 +258,37 @@ class CheckRejectsStaleDeclarations(unittest.TestCase):
 
     def test_historical_campaign_still_checks_clean(self):
         self.assertEqual(yr.check(yr.DEFAULT_CAMPAIGN_ID), [])
+
+
+class CommittedLargerCampaign(unittest.TestCase):
+    campaign = grade.build_mod.EXPERIMENT_DIR / "campaigns" / "20261010-n200"
+
+    def test_committed_grading_regenerates_from_the_declared_n(self):
+        result = declared_n.grade_campaign(self.campaign, 200)
+        self.assertEqual(result["declared_offset_n"], 200)
+        committed = (self.campaign / "grading.json").read_text(encoding="utf-8")
+        self.assertEqual(grade.dumps_strict(result, indent=2) + "\n", committed)
+        row1 = next(r for r in result["rows"] if r["id"] == "1")
+        self.assertEqual(row1["target_verdict"], "PASS")
+        self.assertEqual(row1["target"]["points_valid"], 45)
+
+    def test_committed_requests_carry_the_declared_n_and_nothing_else_differs(self):
+        hist = grade.build_mod.EXPERIMENT_DIR / "campaigns" / "20261009-d73a9ac"
+        for path in sorted(self.campaign.glob("offset_mc.*.request.json")):
+            new = json.loads(path.read_text())
+            old = json.loads((hist / path.name).read_text())
+            self.assertEqual(new["monte_carlo"]["n"], 200)
+            new["monte_carlo"]["n"] = old["monte_carlo"]["n"]
+            new["_comment"], old["_comment"] = None, None
+            self.assertEqual(new, old)
+
+    def test_historical_load_is_the_unchanged_grade_path(self):
+        a = declared_n.load_campaign(grade.build_mod.EXPERIMENT_DIR / "campaigns" / "20261009-d73a9ac",
+                                     None, bench_names=("offset_mc",))["offset_mc"]
+        self.assertEqual(a.chain_problems, [])
+        wrong = declared_n.load_campaign(grade.build_mod.EXPERIMENT_DIR / "campaigns" / "20261009-d73a9ac",
+                                         200, bench_names=("offset_mc",))["offset_mc"]
+        self.assertTrue(wrong.chain_problems)
 
 
 class SizeEstimate(unittest.TestCase):

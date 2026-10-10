@@ -36,6 +36,7 @@ import time
 from pathlib import Path
 
 from . import build as build_mod
+from . import declared_n as declared_n_mod
 from . import estimate as estimate_mod
 from . import fixture as fixture_mod
 from . import grade as grade_mod
@@ -535,7 +536,7 @@ def cmd_grade(args) -> int:
         except ValueError as exc:
             print(f"grade: {exc}", file=sys.stderr)
             return 2
-    result = grade_mod.grade_campaign(out_dir, offset_n=offset_n)
+    result = declared_n_mod.grade_campaign(out_dir, offset_n)
     (out_dir / "grading.json").write_text(grade_mod.dumps_strict(result, indent=2) + "\n", encoding="utf-8")
     (out_dir / "grading.md").write_text(grade_mod.render_markdown(result), encoding="utf-8")
     print(grade_mod.render_summary(result))
