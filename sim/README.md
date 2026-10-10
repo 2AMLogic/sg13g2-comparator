@@ -349,6 +349,59 @@ against the schematic, `dut.json` and the source benches, also stdlib only.
 Commands and regeneration:
 [`comparator-pex/README.md`](comparator-pex/README.md#freshness-check-ci-and-intentional-regeneration).
 
+## Append-only evidence guard
+
+`sim/` results are append-only, and CI enforces it (issue #116): the
+`append-only-evidence` job in `.github/workflows/ci.yml` runs
+`scripts/check_append_only_evidence.py` (stdlib only, no PDK).
+
+**Protected:** every file under `sim/<bench>/{records,corners,netlist-snapshots,campaigns,reports}/`
+for any bench name (matched by path component), including campaign request
+JSON, copied DUTs, generated decks, probes, failed attempts, and
+`comparator-pex/reports/`. A protected path present at the base must exist at
+the head with the same blob ID and mode; additions are always fine. Edits,
+deletions, type/mode changes, and moves *away* from a protected path fail (a
+move is a deletion plus an addition; moving a file *into* a protected
+directory, or copying evidence unchanged, passes).
+
+**Not protected (mutable sources):** `sim/*/testbench/`,
+`sim/klt-corner-verification/benches/`, `sim/comparator-pex/{dut,requests}/`,
+harness/adapter code, READMEs, manifests, and
+`layout/comparator/{comparator.pex.spice,pex_report.json}`.
+
+**Comparison modes (CI):** pull request -- `git merge-base base head` to the
+actual PR head SHA; push to main -- event `before` to `after` (empty tree if
+`before` is all zeros); workflow_dispatch -- `HEAD^` to `HEAD`, a last-commit
+audit only. Missing revisions fail the job (exit 2), never skip. Exit 1 means
+a violation or an invalid exception registry. Locally:
+
+```bash
+python3 scripts/check_append_only_evidence.py --base "$(git merge-base origin/main HEAD)" --head HEAD
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+```
+
+**Exceptions:** there is no bypass flag or environment override. A deliberate,
+justified change needs an entry in `sim/evidence-exceptions.json` *and* a
+tracked decision record under `spec/decision-records/*.md` containing a fenced
+`json` block with the identical authorization tuple. Each entry authorizes
+exactly one old-path transition (no globs, prefixes, or traversal; unique
+paths; deletions use null `new_oid`/`new_mode`):
+
+```json
+{"version": 1, "exceptions": [{
+  "path": "sim/comparator-offset/records/example.json",
+  "old_oid": "<40-hex blob id at base>", "old_mode": "100644",
+  "new_oid": "<40-hex blob id at head, or null>", "new_mode": "100644",
+  "decision_record": "spec/decision-records/0004-example.md",
+  "reason": "why this evidence must change"
+}]}
+```
+
+The decision record must contain a fenced json block with the same
+`path`, `old_oid`, `old_mode`, `new_oid`, `new_mode`. Stale entries never
+authorize a different base blob or destination. Reviewers judge the
+rationale in the record as well as the change.
+
 ## Rules
 
 - **No claim without a testbench.** A number that is not in a record under

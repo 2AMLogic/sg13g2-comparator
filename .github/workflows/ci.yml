@@ -137,3 +137,66 @@ jobs:
 
       - name: Run post-layout freshness unit tests
         run: python3 -m unittest discover -s sim/comparator-pex/tests -p 'test_*.py'
+
+  # Append-only sim evidence guard (issue #116): protected paths under
+  # sim/<bench>/{records,corners,netlist-snapshots,campaigns,reports}/ may
+  # not be modified, deleted, moved away or mode-changed relative to the base
+  # (exceptions only via sim/evidence-exceptions.json + a decision record).
+  # Needs full history for merge-base. Stdlib only. See sim/README.md.
+  append-only-evidence:
+    name: append-only sim evidence (stdlib only, no PDK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Check evidence is append-only
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+          GITHUB_SHA_CUR: ${{ github.sha }}
+        run: |
+          set -eu
+          empty_tree=4b825dc642cb6eb9a060e54bf8d69288fbee4904
+          case "$EVENT_NAME" in
+            pull_request)
+              # Actual PR head (not the synthetic merge commit) vs merge base.
+              git cat-file -e "$PR_BASE_SHA^{commit}" || { echo "::error::PR base $PR_BASE_SHA unavailable"; exit 2; }
+              git cat-file -e "$PR_HEAD_SHA^{commit}" || { echo "::error::PR head $PR_HEAD_SHA unavailable"; exit 2; }
+              base=$(git merge-base "$PR_BASE_SHA" "$PR_HEAD_SHA") || { echo "::error::no merge base for $PR_BASE_SHA..$PR_HEAD_SHA"; exit 2; }
+              head=$PR_HEAD_SHA
+              echo "mode: pull_request, merge-base $base -> head $head"
+              ;;
+            push)
+              head=$PUSH_AFTER
+              if [ "$PUSH_BEFORE" = 0000000000000000000000000000000000000000 ]; then
+                base=$empty_tree
+                echo "mode: initial push, empty tree -> $head"
+              else
+                git cat-file -e "$PUSH_BEFORE^{commit}" || { echo "::error::push base $PUSH_BEFORE unavailable"; exit 2; }
+                base=$PUSH_BEFORE
+                echo "mode: push, $base -> $head"
+              fi
+              ;;
+            workflow_dispatch)
+              # Last-commit audit only; not a full-history audit.
+              git rev-parse --verify --quiet "$GITHUB_SHA_CUR^" >/dev/null || { echo "::error::no parent commit for last-commit audit"; exit 2; }
+              base=$GITHUB_SHA_CUR^
+              head=$GITHUB_SHA_CUR
+              echo "mode: workflow_dispatch LAST-COMMIT AUDIT, $base -> $head"
+              ;;
+            *)
+              echo "::error::unsupported event $EVENT_NAME"; exit 2 ;;
+          esac
+          python3 scripts/check_append_only_evidence.py --base "$base" --head "$head"
+
+      - name: Run evidence guard unit tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
