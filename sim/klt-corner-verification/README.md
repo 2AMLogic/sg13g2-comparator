@@ -114,6 +114,13 @@ python3 sim/run_klt_corner_verification.py run   --campaign <new-id> --bench tra
 python3 sim/run_klt_corner_verification.py grade --campaign <new-id>
 ```
 
+A larger offset-only population (issue #167) is requested with
+`build --campaign <new-id> --bench offset_mc --offset-n N` (rejected unless it is
+the only bench and `2 <= N <= 1000`), checked against the budget first with
+`estimate --offset-n N`, and graded with `grade --campaign <id> --offset-n N`; the
+saved requests must carry exactly that N. The committed instance is
+`20261010-n200` (N = 200); the historical `20261009-d73a9ac` is unchanged.
+
 Re-grading the committed campaign needs no simulator:
 `python3 sim/run_klt_corner_verification.py grade --campaign 20261009-d73a9ac`.
 Rules tests (stdlib only, also run in CI and in `sim/selftest.sh`):

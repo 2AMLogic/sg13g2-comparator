@@ -61,9 +61,13 @@ populations of the campaign above into `klt yield` reports, one measurement per
 PVT point (45 populations per row, never pooled), with the ratified
 statistics carried beside the yield numbers. One command regenerates it:
 `python3 sim/run_klt_yield.py generate`; `check` verifies it without the
-engine. It runs no simulation. Item 6 is cited and renders `unmet` /
-`undersized_sample`: see its README for why, and for what the reports do and
-do not establish.
+engine. It runs no simulation. The N = 60 reports render item 6 `unmet` /
+`undersized_sample`; issue #167 added a larger offset-only campaign
+(`klt-corner-verification/campaigns/20261010-n200`, N = 200 per PVT point,
+requested with `build --offset-n 200`, size-estimated with `estimate
+--offset-n 200` before submission) whose `klt yield` report item 6 now cites
+and renders `met`. See the README for what the reports do and do not
+establish.
 
 **Whole-latch offset across a common-mode band (issue #79).**
 [`comparator-offset-cm-band/`](comparator-offset-cm-band/) runs the whole-latch
@@ -525,7 +529,7 @@ inputs):
 |---|---|
 | signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
-| harness-unit-tests | `sim/{harness,kltsim,comparator-pex}/`, the `comparator-{regeneration,kickback}/testbench/` source benches, `sim/dut.json`, `sim/dut/`, `sim/klt-corner-verification/{benches/,rows.json}`, the top-level `*.json`/`*.spice` of campaign `20261009-d73a9ac`, `campaigns/20261009-issue78/fixture/`, the `smoke/offset_mc-mismatch-vs-negctrl.envelope.json` control, `sim/klt-yield/`, `manifests/klt-pin.json`, `design/`, `layout/{tests/,common_sg13g2.py,comparator/erc_tool.py,comparator/erc_report.json}` |
+| harness-unit-tests | `sim/{harness,kltsim,comparator-pex}/`, the `comparator-{regeneration,kickback}/testbench/` source benches, `sim/dut.json`, `sim/dut/`, `sim/klt-corner-verification/{benches/,rows.json}`, the top-level `*.json`/`*.jsonl`/`*.spice` of campaigns `20261009-d73a9ac` and `20261010-n200` (the N = 200 offset campaign the cited item 6 report is derived from), `campaigns/20261009-issue78/fixture/`, the `smoke/offset_mc-mismatch-vs-negctrl.envelope.json` control, `sim/klt-yield/`, `manifests/{klt-pin.json,t1-signoff-report.json}` (the frozen report the item 6 test compares with the citation), `design/`, `layout/{tests/,common_sg13g2.py,comparator/erc_tool.py,comparator/erc_report.json}` |
 | append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` |
 
 A new input a job starts reading must be added to its patterns in the same
