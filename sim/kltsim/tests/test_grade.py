@@ -1040,6 +1040,79 @@ class CampaignChainTests(unittest.TestCase):
         self.assertNotEqual(row["target_verdict"], grade.REJECTED_EVIDENCE)
 
 
+class ProbeUnitTests(unittest.TestCase):
+    """Issue #152: supply/temperature probes are only evidence of the applied
+    corner when their units say so."""
+
+    def setUp(self):
+        self.dut = grade.load_dut_reference()
+
+    def _grade(self, name, env, body, row="3a"):
+        return grade.grade(_spec([_row(row)]), {name: _evidence(name, env, body)}, self.dut)
+
+    @staticmethod
+    def _probe(corner, name):
+        return next(m for m in corner["measurements"] if m["name"] == name)
+
+    def test_corner_problems_units(self):
+        body = _body("regeneration")
+        c = regeneration_envelope(body)["corners"][0]
+        self.assertIsNone(grade._corner_problems(c, "regeneration", []))
+        v = self._probe(c, "vdd_meas")
+        v["value"], v["unit"] = v["value"] * 1000.0, "mV"
+        self.assertIsNone(grade._corner_problems(c, "regeneration", []))
+        for unit in ("s", None, "", 5, "C"):
+            v["unit"] = unit
+            why = grade._corner_problems(c, "regeneration", [])
+            self.assertIn("vdd_meas", why)
+            self.assertIn(repr(unit) if unit != "C" else "'C'", why)
+        v["value"], v["unit"] = 1000.0 * 1.5, "mV"
+        self.assertIn("does not match", grade._corner_problems(c, "regeneration", []))
+        v["value"], v["unit"] = c["supply_v"]["vsup"], "V"
+        t = self._probe(c, "temp_meas")
+        for unit in ("K", "F", None, "mV", "degC", 3):
+            t["unit"] = unit
+            why = grade._corner_problems(c, "regeneration", [])
+            self.assertIn("temp_meas", why)
+            self.assertIn(repr(unit), why)
+
+    def test_mv_supply_probe_keeps_pass(self):
+        body = _body("regeneration")
+        env = regeneration_envelope(body)
+        ref = self._grade("regeneration", regeneration_envelope(body), body)["rows"][0]
+        for c in env["corners"]:
+            v = self._probe(c, "vdd_meas")
+            v["value"], v["unit"] = v["value"] * 1000.0, "mV"
+        row = self._grade("regeneration", env, body)["rows"][0]
+        self.assertEqual(row["target_verdict"], ref["target_verdict"])
+        self.assertEqual(row["target_verdict"], grade.PASS)
+
+    def test_full_grid_cannot_pass_with_changed_unit(self):
+        body = _body("regeneration")
+        for probe, unit in (("vdd_meas", "s"), ("temp_meas", "V"), ("temp_meas", None)):
+            env = regeneration_envelope(body)
+            self._probe(env["corners"][3], probe)["unit"] = unit
+            row = self._grade("regeneration", env, body)["rows"][0]
+            self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+            self.assertNotEqual(row["stretch_verdict"], grade.PASS)
+            self.assertEqual(row["target"]["points_valid"], 44)
+            why = row["target"]["points_missing_or_invalid"][0]["why"]
+            self.assertIn(probe, why)
+            self.assertIn(repr(unit), why)
+
+    def test_monte_carlo_path(self):
+        body = _body("offset_mc")
+        env = offset_envelope(body)
+        ok = self._grade("offset_mc", offset_envelope(body), body, "1")["rows"][0]
+        self.assertEqual(ok["target_verdict"], grade.PASS)
+        self._probe(env["corners"][5], "temp_meas")["unit"] = "K"
+        row = self._grade("offset_mc", env, body, "1")["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.INCOMPLETE)
+        c = offset_envelope(body)["corners"][0]
+        self._probe(c, "vdd_meas")["unit"] = "s"
+        self.assertIn("vdd_meas", grade._corner_problems(c, "offset_mc", []))
+
+
 class MeasurementUniquenessTests(unittest.TestCase):
     """Issue #150: a measurement name repeated within ONE corner is ambiguous
     evidence. The point is rejected whatever the copies' order or values
