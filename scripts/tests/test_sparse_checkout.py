@@ -107,7 +107,9 @@ def sh(args, cwd, env=None, check=True):
 
 def klt_matches_pin():
     import json
-    pin = json.loads((ROOT / "manifests" / "klt-pin.json").read_text())
+    # Read from the commit, not the working tree: this test itself runs in the
+    # append-only job's sparse cone, which does not contain manifests/.
+    pin = json.loads(sh(["git", "show", "HEAD:manifests/klt-pin.json"], ROOT).stdout)
     try:
         out = sh(["klt", "--version"], ROOT, check=False).stdout
     except OSError:
@@ -205,6 +207,13 @@ class SparseCones(unittest.TestCase):
             if name == SIZE_JOB:
                 self.assertTrue((dst / "sim/evidence-size-budget.json").is_file())
                 self.assertFalse((dst / "sim/dut.json").exists())
+                # This very test module runs un-nested in that job's cone in CI
+                # (the step above sets NESTED); its own inputs must be there.
+                # The klt case is cheap (skips) unless the pinned klt is on PATH.
+                env.pop(NESTED)
+                r = sh(["python3", "-m", "unittest", "scripts.tests.test_sparse_checkout"
+                        ".SparseCones.test_klt_jobs_from_sparse_clone"], dst, env, check=False)
+                self.assertEqual(r.returncode, 0, r.stdout[-3000:])
 
     def test_size_check_fails_closed_fast_in_a_blob_filtered_clone(self):
         """The pre-fix layout (sparse-checkout input => blob:none) must exit 2
