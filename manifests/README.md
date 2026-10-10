@@ -45,7 +45,7 @@ why, is the rest of this document.
 |---|---|---|
 | `block` | `sg13g2-comparator` | **Required** — identifies this block's row in the fleet roll-up (2AMLogic/2am#956), which consumes exactly this file |
 | `kind` | `analog` | confirmed against the block itself, not taken from the filing: the DUT is a single-tail StrongARM dynamic latch (`design/comparator.spice`, DR-0001) on `sg13_lv_nmos`/`sg13_lv_pmos` — a continuous-time-analog comparator with no digital partition, no RTL, no standard cells, and no mixed-signal boundary to declare. The spec rows are offset-σ, input-referred noise, metastability/decision time, and kickback — all analog measurements (`README.md`'s target-spec table). Analog satisfies the Analog column only, which is the column every row below is graded against. |
-| `evidence` | items `1`, `2`, `3`, `4`, `5`, `7`, `8`, `9`, `10` and `11` | item 3 cites the `klt drc` envelope, item 4 the `klt lvs` envelope, item 5 a `klt sim` corner-matrix envelope whose own verdict is a Target **fail** (below), item 11 the compound of a `klt erc` supply-spec envelope and that same LVS envelope; items 1, 2, 9 and 10 cite artifact-anchored generic envelopes (below); every other item is deliberately uncited — see "What is deliberately uncited, and why" |
+| `evidence` | items `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `10` and `11` | item 3 cites the `klt drc` envelope, item 4 the `klt lvs` envelope, item 6 a `klt yield` report (`unmet`, `undersized_sample`), item 5 a `klt sim` corner-matrix envelope whose own verdict is a Target **fail** (below), item 11 the compound of a `klt erc` supply-spec envelope and that same LVS envelope; items 1, 2, 9 and 10 cite artifact-anchored generic envelopes (below); every other item is deliberately uncited — see "What is deliberately uncited, and why" |
 
 ## Items 1, 2, 9 and 10: artifact-anchored citations (#65)
 
@@ -96,13 +96,18 @@ row:
 - **Item 5 (Full corner verification vs a ratified spec)** — cited since
   #62, and still `unmet`, because two ratified Targets fail on the evidence.
   See "Item 5" below.
-- **Item 6 (Statistical claims carry Monte Carlo evidence)** — the
-  machine-checkable evidence is a `klt yield` JSON report; this repo's
-  Monte-Carlo offset evidence (`sim/comparator-offset-mc/`,
-  `sim/comparator-offset-transient-mc/`, seeds and run counts committed) is
-  real but in the repo's own record format, not `klt yield` output. When a
-  `klt yield` campaign is minted it gets cited here with a pinned
-  `content_hash`.
+- **Item 6 (Statistical claims carry Monte Carlo evidence)** — cited since
+  #63, and `unmet` / `undersized_sample`. The evidence is a `klt yield` report
+  (`sim/klt-yield/campaigns/20261010-d73a9ac/offset.yield.json`), 45 separate
+  per-PVT offset populations (N = 60 each, ratified seed and N) with a declared
+  over-limit negative control that `klt yield` reports `detected`. The pinned
+  grader refuses it because N = 60 with zero failures does not meet `klt
+  yield`'s default precision target (needs 183). The `content_hash` pinned is
+  the sha256 of the report's `samples` document
+  (`inputs/offset.samples.json`), which is what the pinned grader hashes for a
+  yield report. The noise row's yield report is committed but not cited: a hit
+  fraction is not the ratified noise sigma, whose Target fails. See
+  `sim/klt-yield/README.md`.
 - **Item 7 (Post-layout verification)** — an analog block's item 7 accepts
   a `klt pex` report and nothing else. It is **cited** (since #61) at
   `layout/comparator/pex_report.json`, `content_hash` pinned to the layout
@@ -400,7 +405,7 @@ diff /tmp/fresh.json manifests/t1-signoff-report.json   # regeneration = update 
 ```
 
 Exit `0` means every T1 item met (this repo is **not** there: exit `3`,
-`tier: null`, `7/11` item rows met at the time of freezing: items 1, 2, 3, 4, 9, 10 and 11; items 5, 7 and 8 are cited but render `unmet`). Exit codes
+`tier: null`, `7/11` item rows met at the time of freezing: items 1, 2, 3, 4, 9, 10 and 11; items 5, 6, 7 and 8 are cited but render `unmet`). Exit codes
 `0` and `3` are both clean runs; exit `1` is an error and must be fixed,
 not committed around.
 
@@ -426,11 +431,12 @@ not committed around.
 
 | File | What it is |
 |---|---|
-| `sg13g2-comparator.json` | the block manifest — `block`, `kind`, per-item pinned evidence citations (items 1, 2, 3, 4, 5, 7, 8, 9, 10 and 11 cited; the rest deliberately uncited — see above). **The stable path a fleet roll-up points at.** |
+| `sg13g2-comparator.json` | the block manifest — `block`, `kind`, per-item pinned evidence citations (items 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 and 11 cited; the rest deliberately uncited — see above). **The stable path a fleet roll-up points at.** |
 | `../sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json` | the cited item 5 evidence (`klt sim` envelope, status `fail`); the rest of that campaign, its grading and its reproduction are in `../sim/klt-corner-verification/README.md` |
 | `../layout/comparator/drc_report.json` | the cited item 3 evidence (`klt drc` envelope), regenerated by `layout/run_flow.sh` |
 | `../layout/comparator/lvs_report.json` | the cited item 4 evidence (`klt lvs` envelope), with its derived inputs `lvs_extracted.spice`, `lvs_reference.spice`, `lvs_request.json`, regenerated by `layout/run_flow.sh` |
 | `../layout/comparator/erc_report.json`, `../layout/comparator/erc_supply_spec.json` | the cited item 11 `klt erc` evidence and its derived request, regenerated by `layout/run_flow.sh` (item 11 also cites `lvs_report.json`) |
+| `../sim/klt-yield/campaigns/20261010-d73a9ac/` | the cited item 6 evidence (`offset.yield.json`, pinned by the sha256 of `inputs/offset.samples.json`), the uncited noise report, and the index; regenerated by `sim/run_klt_yield.py generate` |
 | `../sim/characterization/20261009-d73a9ac-schematic/` | the cited item 8 evidence (`envelope.json`, generic) with `report.md`/`report.json` and the hashed `input-index.json`, regenerated by `sim/characterize.sh report` |
 | `evidence/` | the four generic envelopes for items 1, 2, 9, 10 plus the testbench inventory and hygiene checklist they bind |
 | `t1-signoff-report.json` | `klt signoff --manifest sg13g2-comparator.json --format json` output, frozen at the pinned `klt`; CI diff-checks a fresh render against it |
