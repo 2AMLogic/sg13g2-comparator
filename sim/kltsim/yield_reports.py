@@ -50,6 +50,10 @@ OUT_ROOT = "sim/klt-yield/campaigns"
 DEFAULT_CAMPAIGN_ID = "20261010-d73a9ac"
 PIN_FILE = "manifests/klt-pin.json"
 SMOKE_CONTROL = "smoke/offset_mc-mismatch-vs-negctrl.envelope.json"
+#: Issue #167: a larger-N campaign's own seed/mismatch preflight (fleet-smoke,
+#: N = 4, mismatch on vs off), recorded beside its requests before the grid
+#: is submitted. Preferred over the historical campaign's smoke when present.
+PREFLIGHT = "smoke/offset_mc-preflight-seed-mismatch.envelope.json"
 INDEX_SCHEMA = "sg13g2-comparator/klt-yield-index/1"
 
 #: Row 1: the per-draw +/-15 mV window is the Target the bench itself encodes.
@@ -575,12 +579,13 @@ def generate(campaign_id: str = DEFAULT_CAMPAIGN_ID, klt_cmd: list[str] | None =
     return out_dir
 
 
-def smoke_control(source_dir: Path) -> dict:
+def smoke_control(source_dir: Path, source_rel: str = SOURCE_CAMPAIGN) -> dict:
     """The committed mismatch-off smoke evidence, read as-is: same point,
     mismatch models on vs off. It shows the injection mechanism moves the
     spread; it is NOT a known-bad yield control (the off population sits
     inside the limits)."""
-    path = Path(source_dir) / SMOKE_CONTROL
+    name = PREFLIGHT if (Path(source_dir) / PREFLIGHT).is_file() else SMOKE_CONTROL
+    path = Path(source_dir) / name
     raw = path.read_bytes()
     env = json.loads(raw)
     vos = next(m for m in env["measurements"] if m["name"] == "vos_mv")
@@ -589,8 +594,8 @@ def smoke_control(source_dir: Path) -> dict:
     off = next((e for c, e in by.items() if not c.split("/")[0].endswith("_mismatch")), None)
     if on is None or off is None:
         raise YieldInputError("smoke control: mismatch-on / mismatch-off populations not both present")
-    return {
-        "path": f"{SOURCE_CAMPAIGN}/{SMOKE_CONTROL}", "sha256": sha256_bytes(raw),
+    out = {
+        "path": f"{source_rel}/{name}", "sha256": sha256_bytes(raw),
         "mismatch_on": {"corner_id": on["corner_id"], "n": on["n"], "stddev_mv": on["stddev"]},
         "mismatch_off": {"corner_id": off["corner_id"], "n": off["n"], "stddev_mv": off["stddev"]},
         "limits_mv": [-15.0, 15.0],
@@ -600,6 +605,23 @@ def smoke_control(source_dir: Path) -> dict:
                     "it is not a known-bad yield control; that role is played by the derived "
                     "over-limit control carried in inputs/offset.samples.json."),
     }
+    if name == PREFLIGHT:
+        seeds = [c["monte_carlo"]["mismatch_seed"] for c in env["corners"]
+                 if c["corner_id"].startswith("mos_tt_mismatch/") and c.get("monte_carlo")]
+        out["preflight"] = {
+            "role": "seed/mismatch preflight run before the grid was submitted (issue #167)",
+            "mismatch_on_draws": len(seeds),
+            "mismatch_seeds_distinct": len(set(seeds)) == len(seeds) and len(seeds) >= 2,
+            "mismatch_on_spread_nonzero": bool(on["stddev"]) and on["stddev"] > 0,
+            "mismatch_off_spread_zero": off["stddev"] == 0,
+            "batch_job": ((env.get("environment") or {}).get("remote") or {}).get("job_id"),
+        }
+        if not (out["preflight"]["mismatch_seeds_distinct"]
+                and out["preflight"]["mismatch_on_spread_nonzero"]
+                and out["preflight"]["mismatch_off_spread_zero"]):
+            raise YieldInputError("seed/mismatch preflight failed: stop and resolve issue #82 "
+                                  "before relying on the grid")
+    return out
 
 
 def build_index(campaign_id: str, source_rel: str, derived: dict, reports: dict,
@@ -732,7 +754,7 @@ def build_index(campaign_id: str, source_rel: str, derived: dict, reports: dict,
                 "populations": off_points,
             },
         ],
-        "mismatch_off_smoke_control": smoke_control(source_dir),
+        "mismatch_off_smoke_control": smoke_control(source_dir, source_rel),
         "limitations": [
             "Transient-noise draws are not reproducible (ngspice-46 TRNOISE ignores klt's "
             "per-sample seed); the recorded seeds identify samples, not noise streams "

@@ -8,7 +8,7 @@ committed evidence only; do not edit. Reproduce and freshness-check with
 
 **Status: `fail`.** Top-level status 'pass' iff every DR-0002 sub-bound with a ratified Target has Target verdict PASS on complete, valid schematic evidence; any FAIL, INCOMPLETE, GAP, INVALID_DUT or REJECTED_EVIDENCE gives 'fail'. A per-row PASS is a per-point sample statistic against the bound (Row 1: 3 x sample sigma at N = 60 per point; Row 2: grid-wide mean of probit-slope sigma), not a yield or population-compliance claim (that is issue #63).
 
-DUT `design/comparator.spice` sha256 `b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90` (`sim/dut.json` id `comparator-dr0001`, provenance `schematic`); grid 45 PVT points; spec `spec/decision-records/0002-target-spec-ratification.md`; input index `sim/characterization/20261009-d73a9ac-schematic/input-index.json` sha256 `8a15e4b89531af55e5265d5cfc91754a22e65ca799b1bd2ac04ba3cff1ddda6f`.
+DUT `design/comparator.spice` sha256 `b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90` (`sim/dut.json` id `comparator-dr0001`, provenance `schematic`); grid 45 PVT points; spec `spec/decision-records/0002-target-spec-ratification.md`; input index `sim/characterization/20261009-d73a9ac-schematic/input-index.json` sha256 `5d61ee0aca8614cc5b10555b9ff960ca948d447f0f1e052ba9c44c067a1a1497`.
 
 Bounded Target rows: 1, 2, 3a, 3b, 3c, 4a, 4b, 5a; passing: 1, 3a, 3b, 3c, 4b, 5a; blocking: Row 2 (FAIL); Row 4a (FAIL).
 
