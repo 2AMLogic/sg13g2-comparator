@@ -194,6 +194,8 @@ class SparseCones(unittest.TestCase):
             for step, script in job["runs"]:
                 if "pip install" in script:
                     continue  # tool provisioning, not a repo input
+                if script.lstrip().startswith("ruff ") and shutil.which("ruff") is None:
+                    continue  # CI-only linter (pinned in ci.yml); not a repo input
                 r = sh(["bash", "-eu", "-c", script], dst, env, check=False)
                 self.assertEqual(r.returncode, 0, f"{name} / {step} failed in sparse clone:\n{r.stdout[-3000:]}")
                 # A test that skips because its input is outside the cone is a

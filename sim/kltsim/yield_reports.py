@@ -749,7 +749,6 @@ def check(campaign_id: str = DEFAULT_CAMPAIGN_ID, source_rel: str = SOURCE_CAMPA
     engine and requires identical report bytes."""
     problems: list[str] = []
     out_dir = REPO_ROOT / OUT_ROOT / campaign_id
-    out_rel = f"{OUT_ROOT}/{campaign_id}"
     try:
         derived = derive_inputs(REPO_ROOT / source_rel)
     except YieldInputError as exc:
