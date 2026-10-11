@@ -3,7 +3,7 @@
 - **Status**: proposed. **This record covers the evidence budget only.** It
   ratifies no bound and relaxes no Target or Stretch number. It authorizes one
   raise of the `sim/` total ceiling in `sim/evidence-size-budget.json` (issue
-  #132's contract), exactly the measured overage of 133537 B. It takes effect
+  #132's contract), exactly the measured overage of 133526 B. It takes effect
   with the reviewed merge of the PR that lands it, as for DR-0005 to DR-0021.
   The drafting agent does not merge it.
 - **Date**: 2026-10-11
@@ -30,7 +30,7 @@ exception. The growth is:
 | `sim/comparator-transient-noise-full/README.md` | pointer to the re-analysis | ~1000 |
 | `sim/evidence-size-budget.json` | extended cumulative entry | 100 |
 
-The exact total is the measured overage, 133537 B. The historical issue #81
+The exact total is the measured overage, 133526 B. The historical issue #81
 `noise_full.*` is not modified or regenerated (the command now refuses to
 overwrite existing output); the new analysis reproduces its numbers. The
 per-point JSON was written compactly to limit the growth; the tests were not
@@ -38,17 +38,17 @@ trimmed to fit.
 
 ## Decision
 
-Raise the `sim/` total ceiling by exactly **133537 B**. The single `sim` entry
-carries the cumulative 28036022 + 133537 = **28169559 B** and cites this
+Raise the `sim/` total ceiling by exactly **133526 B**. The single `sim` entry
+carries the cumulative 28036022 + 133526 = **28169548 B** and cites this
 record. No ratified spec bound is relaxed or changed.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 28169559}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 28169548}
 ```
 
-(Cumulative: 28036022 B from DR-0005 to DR-0021 and 133537 B authorized here.)
+(Cumulative: 28036022 B from DR-0005 to DR-0021 and 133526 B authorized here.)
 
 ## Consequences
 
