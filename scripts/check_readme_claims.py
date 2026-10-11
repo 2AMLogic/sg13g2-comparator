@@ -31,9 +31,12 @@ source, named per claim through the `SOURCES` registry:
     min/max/mean, Target/Stretch point counts, N per point.
 
 Each source is identity-checked before any figure is compared (record/campaign
-id, bench name, N, point count), so a changed or substituted campaign cannot
-satisfy a claim by coincidence; failures name the claim, the source id/path and
-the expected value. Only committed files are read (stdlib, offline).
+id, bench name, N, point count, and -- issue #217 -- the complete 5-process x
+3-temperature x 3-supply physical PVT grid each `N/45` claim describes, with
+the offset record's per-point corner/temp/supply metadata required to agree
+with its corner_id), so a changed or substituted campaign cannot satisfy a
+claim by coincidence; failures name the claim, the source id/path and the
+expected value. Only committed files are read (stdlib, offline).
 
 Anything in the table that is NOT in either allowlist is listed as UNCHECKED,
 never silently passed: every `N/45`, `N of 45` count, and the number of
@@ -121,6 +124,20 @@ OFFSET_TARGET_MV, OFFSET_STRETCH_MV = 15.0, 8.0
 #: Grid size of every PVT campaign this guard maps.
 N_POINTS = 45
 
+# Issue #217: the physical PVT population behind every `N/45` claim. Each
+# registered source must carry EXACTLY this grid -- 5 process x 3 temperature
+# x 3 supply, the axes of sim/harness/corners.py -- under its own process
+# convention: the noise campaign sweeps the mismatch-free `mos` set, the
+# historical offset record ran the `mos_mismatch` set. Explicit and local on
+# purpose (the issue #217 review: a small reviewed set beats importing the
+# harness into this sparse, stdlib-only guard); the id format below is the
+# ratified `<process>_<temp>c_<supply>v` convention of PvtPoint.corner_id.
+PVT_TEMPS_C: tuple[float, ...] = (-40.0, 27.0, 125.0)
+PVT_SUPPLIES_V: tuple[float, ...] = (1.08, 1.20, 1.32)
+NOISE_PROCESSES: tuple[str, ...] = ("tt", "ff", "ss", "fs", "sf")
+OFFSET_PROCESSES: tuple[str, ...] = ("tt_mismatch", "ff_mismatch", "ss_mismatch",
+                                     "fs_mismatch", "sf_mismatch")
+
 
 class SourceError(Exception):
     """A registered evidence source is missing, malformed or the wrong population."""
@@ -158,6 +175,45 @@ def _read_json(path: Path):
         raise SourceError(f"not valid JSON: {exc}") from None
 
 
+def _pvt_id(process: str, temp_c: float, vdd: float) -> str:
+    """The ratified corner id `<process>_<temp>c_<supply>v`, formatted exactly
+    as sim/harness/corners.py PvtPoint.corner_id does (temp `:g`, supply
+    `:.2f`, so 1.2 V renders `1.20v`)."""
+    return f"{process}_{temp_c:g}c_{vdd:.2f}v"
+
+
+def _validate_pvt_population(ids, processes: tuple[str, ...], id_field: str):
+    """Issue #217: `ids` (one per point, in point order) must be exactly the
+    complete physical PVT grid for `processes` before any claim statistic is
+    computed. Order-free (a permuted grid passes); duplicates, identifiers
+    outside the grid and missing expected corners each fail, naming the
+    offending id."""
+    expected = frozenset(
+        _pvt_id(p, t, v) for p in processes for t in PVT_TEMPS_C for v in PVT_SUPPLIES_V
+    )
+    first_at: dict[str, int] = {}
+    for i, pid in enumerate(ids):
+        _expect(isinstance(pid, str), f"point {i} field {id_field!r} is not a string: {pid!r}")
+        if pid in first_at:
+            raise SourceError(
+                f"{id_field} {pid!r} appears at points {first_at[pid]} and {i}: "
+                "duplicate identities are not distinct physical corners")
+        first_at[pid] = i
+    unknown, missing = sorted(set(ids) - expected), sorted(expected - set(ids))
+    if unknown or missing:
+        detail = []
+        if unknown:
+            detail.append(f"unknown {id_field} {', '.join(repr(u) for u in unknown[:3])}"
+                          + (f" (+{len(unknown) - 3} more)" if len(unknown) > 3 else ""))
+        if missing:
+            detail.append(f"missing {id_field} {', '.join(repr(m) for m in missing[:3])}"
+                          + (f" (+{len(missing) - 3} more)" if len(missing) > 3 else ""))
+        raise SourceError(
+            f"{'; '.join(detail)}: the population is not the complete "
+            f"{len(processes)} process x {len(PVT_TEMPS_C)} temperature x "
+            f"{len(PVT_SUPPLIES_V)} supply physical PVT grid")
+
+
 def load_noise_full(path: Path) -> dict:
     """Issue #81 complete-injection noise summary (`both` = whole injection)."""
     d = _read_json(path)
@@ -169,6 +225,9 @@ def load_noise_full(path: Path) -> dict:
     pts = _need(d, "points")
     _expect(isinstance(pts, list) and len(pts) == N_POINTS,
             f"points has {len(pts) if isinstance(pts, list) else '?'} entries, expected {N_POINTS}")
+    # Issue #217: the complete physical grid (5 process x 3 temp x 3 supply,
+    # mismatch-free corner names) before any claim statistic is computed.
+    _validate_pvt_population([_need(p, "point") for p in pts], NOISE_PROCESSES, "point")
     both = _need(d, "configs", "both")
     _need(d, "configs", "fe")
     for i, p in enumerate(pts):
@@ -212,7 +271,16 @@ def load_offset_record(path: Path) -> dict:
                 f"point {i} ({p.get('corner_id')!r}) n_samples != 60")
         v3.append(_num(p, "measurements", "vos_3sig_mv"))
         ids.append(_need(p, "corner_id"))
-    _expect(len(set(ids)) == N_POINTS, "corner_ids are not 45 distinct points")
+    # Issue #217: the complete physical grid (5 mismatch process x 3 temp x 3
+    # supply) before any claim statistic is computed; the record also carries
+    # per-point corner/temp_c/vdd metadata, which must agree with the id.
+    _validate_pvt_population(ids, OFFSET_PROCESSES, "corner_id")
+    for i, p in enumerate(pts):
+        corner, temp, vdd = _need(p, "corner"), _num(p, "temp_c"), _num(p, "vdd")
+        _expect(corner in OFFSET_PROCESSES and temp in PVT_TEMPS_C
+                and vdd in PVT_SUPPLIES_V and _pvt_id(corner, temp, vdd) == ids[i],
+                f"point {i} corner_id {ids[i]!r} disagrees with its physical metadata "
+                f"(corner={corner!r}, temp_c={temp}, vdd={vdd})")
     summ = _need(d, "summary", "vos_3sig_mv")
     stats = {
         "n_samples": 60,

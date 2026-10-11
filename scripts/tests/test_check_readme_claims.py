@@ -201,6 +201,101 @@ class SourceRegistry(unittest.TestCase):
         self.assertIn("no longer matches", err)
         self.assertIn(f"[source {NOISE_ID}]", err)
 
+
+class PvtPopulationIdentity(unittest.TestCase):
+    """Issue #217: a registered source must carry the complete physical PVT
+    population -- the 5-process x 3-temperature x 3-supply grid behind every
+    N/45 claim -- not merely 45 entries with arbitrary identifiers."""
+
+    # ---- noise source (points[].point, no physical metadata) ----
+
+    def test_noise_all_entries_same_point_id_fails(self):
+        noise = _clone(NOISE)
+        for p in noise["points"]:
+            p["point"] = "tt_27c_1.20v"
+        code, _, err = _run(README, REPORT, noise=noise)
+        self.assertEqual(code, 1)
+        self.assertIn(f"source {NOISE_ID}", err)
+        self.assertIn("'tt_27c_1.20v' appears at points 0 and 1", err)
+        self.assertIn("cannot be verified", err)  # fails before the claim can pass
+
+    def test_noise_duplicate_point_id_fails(self):
+        noise = _clone(NOISE)
+        noise["points"][0]["point"] = noise["points"][1]["point"]
+        self.assertNotEqual(noise["points"][0]["point"], NOISE["points"][0]["point"])
+        code, _, err = _run(README, REPORT, noise=noise)
+        self.assertEqual(code, 1)
+        self.assertIn(f"source {NOISE_ID}", err)
+        self.assertIn("duplicate identities are not distinct physical corners", err)
+
+    def test_noise_replaced_corner_reports_unknown_and_missing(self):
+        noise = _clone(NOISE)
+        noise["points"][0]["point"] = "tt_-40c_1.44v"  # plausible corner, off-grid supply
+        code, _, err = _run(README, REPORT, noise=noise)
+        self.assertEqual(code, 1)
+        self.assertIn(f"source {NOISE_ID}", err)
+        self.assertIn("unknown point 'tt_-40c_1.44v'", err)
+        self.assertIn("missing point 'tt_-40c_1.08v'", err)
+
+    def test_noise_permuted_grid_passes(self):
+        noise = _clone(NOISE)
+        noise["points"].reverse()
+        code, _, err = _run(README, REPORT, noise=noise)
+        self.assertEqual(code, 0, err)
+
+    # ---- offset source (points[].corner_id + corner/temp_c/vdd metadata) ----
+
+    def test_offset_arbitrary_distinct_ids_fail_despite_consistent_summary(self):
+        off = _clone(OFFSET)
+        orig_ids = [p["corner_id"] for p in OFFSET["points"]]
+        summ = off["summary"]["vos_3sig_mv"]
+        for i, p in enumerate(off["points"]):
+            p["corner_id"] = f"unrecognized_{i}"
+        summ["at_min"] = f"unrecognized_{orig_ids.index(summ['at_min'])}"
+        summ["at_max"] = f"unrecognized_{orig_ids.index(summ['at_max'])}"
+        code, _, err = _run(README, REPORT, offset=off)
+        self.assertEqual(code, 1)
+        self.assertIn(f"source {OFFSET_ID}", err)
+        self.assertIn("unknown corner_id 'unrecognized_0'", err)
+        self.assertIn("cannot be verified", err)
+
+    def test_offset_duplicate_corner_id_fails(self):
+        off = _clone(OFFSET)
+        off["points"][0]["corner_id"] = off["points"][1]["corner_id"]
+        code, _, err = _run(README, REPORT, offset=off)
+        self.assertEqual(code, 1)
+        self.assertIn(f"source {OFFSET_ID}", err)
+        self.assertIn("appears at points 0 and 1", err)
+
+    def test_offset_consistent_substitution_of_a_different_corner_fails(self):
+        # Even a corner whose *metadata* is updated to match must not slip in:
+        # the grid contract is on the population, not the formatting.
+        off = _clone(OFFSET)
+        donor = next(p for p in off["points"] if p["corner_id"] == "fs_mismatch_-40c_1.08v")
+        victim = off["points"][0]
+        self.assertEqual(victim["corner_id"], "tt_mismatch_-40c_1.08v")
+        victim.update(corner=donor["corner"], temp_c=donor["temp_c"],
+                      vdd=donor["vdd"], corner_id=donor["corner_id"])
+        code, _, err = _run(README, REPORT, offset=off)
+        self.assertEqual(code, 1)
+        self.assertIn(f"source {OFFSET_ID}", err)
+        self.assertIn("duplicate identities are not distinct physical corners", err)
+        self.assertIn("'fs_mismatch_-40c_1.08v'", err)
+
+    def test_offset_metadata_identifier_disagreement_fails(self):
+        off = _clone(OFFSET)
+        off["points"][0]["temp_c"] = -39.0  # corner_id still says tt_mismatch_-40c_1.08v
+        code, _, err = _run(README, REPORT, offset=off)
+        self.assertEqual(code, 1)
+        self.assertIn(f"source {OFFSET_ID}", err)
+        self.assertIn("'tt_mismatch_-40c_1.08v' disagrees with its physical metadata", err)
+
+    def test_offset_permuted_grid_passes(self):
+        off = _clone(OFFSET)
+        off["points"].reverse()
+        code, _, err = _run(README, REPORT, offset=off)
+        self.assertEqual(code, 0, err)
+
     def test_source_value_mutations_fail_naming_source(self):
         # A consistently changed campaign (summary follows the points) is a
         # different population: the README claim must fail against it.
