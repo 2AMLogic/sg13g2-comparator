@@ -18,7 +18,7 @@ own `tn_full_*` bench contract), envelope input hash, embedded schematic DUT
 and body injection configuration before any sigma is computed; a failing
 configuration is rejected, never `complete`. The re-analysis of the unchanged
 `20261009-issue81` inputs is in
-[`analysis-20261011-issue236/`](analysis-20261011-issue236/noise_full.md)
+[`reports/analysis-20261011-issue236/`](reports/analysis-20261011-issue236/noise_full.md)
 (all six configurations validate; the numbers are identical to the historical
 `noise_full.*` above, which stays untouched as append-only evidence). The
 command refuses to overwrite existing output; use

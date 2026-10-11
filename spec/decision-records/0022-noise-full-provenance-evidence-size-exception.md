@@ -25,7 +25,7 @@ exception. The growth is:
 
 | Path | Nature | Approx. bytes |
 |---|---|---|
-| `sim/comparator-transient-noise-full/analysis-20261011-issue236/` | new evidence namespace: provenance-validated re-analysis of the unchanged issue #81 inputs (`noise_full.json` compact, `noise_full.md`) | 112019 |
+| `sim/comparator-transient-noise-full/reports/analysis-20261011-issue236/` | new evidence namespace: provenance-validated re-analysis of the unchanged issue #81 inputs (`noise_full.json` compact, `noise_full.md`) | 112019 |
 | `sim/kltsim/noise_full.py`, `cli.py`, `tests/test_noise_full.py` | validation code and temporary-fixture tests | ~20000 |
 | `sim/comparator-transient-noise-full/README.md` | pointer to the re-analysis | ~1000 |
 | `sim/evidence-size-budget.json` | extended cumulative entry | 100 |

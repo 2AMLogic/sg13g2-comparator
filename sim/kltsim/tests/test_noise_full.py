@@ -122,7 +122,6 @@ class GridUncertaintyTest(unittest.TestCase):
 # issue #236: provenance validation before the noise arithmetic
 # --------------------------------------------------------------------------- #
 
-import copy
 import gzip
 import hashlib
 import json
