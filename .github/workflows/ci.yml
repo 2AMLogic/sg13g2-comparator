@@ -234,7 +234,7 @@ jobs:
         run: |
           export PATH="$RUNNER_TEMP/xschem/bin:$PATH"
           test "$(command -v xschem)" = "$RUNNER_TEMP/xschem/bin/xschem"
-          xschem --version | head -1
+          xschem --version 2>&1 | grep -m1 '^XSCHEM V'
           python3 design/netlist.py --check
           test -z "$(git status --porcelain)"
 

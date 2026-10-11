@@ -38,7 +38,9 @@ case "$what" in
       && ./configure --prefix="$dest" >/dev/null \
       && make -j2 >/dev/null \
       && make install >/dev/null)
-    got=$("$dest/bin/xschem" --version 2>&1 | head -1)
+    # A fresh HOME makes xschem print "Created ~/.xschem dir ..." before the
+    # version line, so match the version line rather than taking line 1.
+    got=$("$dest/bin/xschem" --version 2>&1 | grep -m1 '^XSCHEM V' || true)
     test "$got" = "XSCHEM V${XSCHEM_VERSION}" || { echo "xschem version is '$got', pinned ${XSCHEM_VERSION}" >&2; exit 1; }
     echo "provisioned $got in $dest"
     ;;
