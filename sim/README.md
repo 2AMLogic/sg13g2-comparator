@@ -77,6 +77,13 @@ point). It is **characterization**: DR-0002 ratifies the offset row at
 `dut_vcm` only and no whole-latch common-mode range, so nothing there is a
 compliance verdict.
 
+**Decision time across a common-mode band (issue #164).**
+[`comparator-decision-cm-band/`](comparator-decision-cm-band/README.md) reruns the
+issue #62 `regeneration` bench at `dut_vcm` - 50 mV, `dut_vcm` (reproduction
+gate) and `dut_vcm` + 50 mV as three 45-point `klt sim` campaigns on the batch
+fleet, graded against the unchanged DR-0002 Row 3 bounds. Evidence for the
+DR-0004 candidate CM-range row; no row is ratified or edited by it.
+
 **Clock-edge, strobe-width and supply-disturbance sensitivity (issue #173).**
 [`comparator-clock-supply-sensitivity/`](comparator-clock-supply-sensitivity/README.md)
 characterizes the whole latch against 500 ps / 2 ns clock edges, 5 / 15 ns
