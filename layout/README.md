@@ -257,9 +257,10 @@ deck, both controls detected. Device inventory, LVS netlist and sizing are
 unchanged (`lvs_*` files byte-identical). Extracted parasitics may differ:
 `pex_report.json` and everything under `sim/comparator-pex/` still describe the
 previous GDS (`67e44380...`) and are not rewritten; re-extraction belongs to
-the PEX campaign (#61/#191). `layout/tests/test_implant_geometry.py` (needs the
-klayout module; skipped otherwise) checks the committed GDS and that the old
-geometry is detected.
+the PEX campaign (#61/#191). `layout/tests/klayout_test_implant_geometry.py` checks the committed GDS and
+that the old geometry is detected. It needs the klayout module, so it is kept
+out of the stdlib-only CI discovery (`test_*.py`) and runs on demand:
+`uvx --from klayout==0.30.12 python -I -m unittest discover -s layout/tests -p 'klayout_test_*.py'`.
 
 **Negative controls.** Two temp copies of the stream, each with one deliberate
 defect drawn clear of the cell (a 0.10 um Metal1 sliver; a GatPoly stripe with

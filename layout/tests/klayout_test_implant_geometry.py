@@ -1,8 +1,9 @@
 """pSD geometry regression for issue #184 (needs the klayout Python module).
 
-Skipped (not failed) where `klayout.db` is absent, so the stdlib-only CI job is
-unaffected; run it with
-`uvx --from klayout==0.30.12 python -I -m unittest discover -s layout/tests`.
+On demand only: the name deliberately does not match the `test_*.py` pattern
+of the stdlib-only CI discovery over layout/tests (which forbids skipped
+tests). Run it from the repo root with
+`uvx --from klayout==0.30.12 python -I -m unittest discover -s layout/tests -p 'klayout_test_*.py'`.
 Checks the committed GDS against pSD.i (0.30 enclosure of a PFET gate) and
 pSD.b (0.31 space/notch), and proves both checks detect the pre-fix geometry
 (0.18 enclosure per island) while treating a joined implant as legal.
@@ -16,10 +17,7 @@ LAYOUT = Path(__file__).resolve().parents[1]
 GDS = LAYOUT / "comparator" / "comparator.gds"
 sys.path.insert(0, str(LAYOUT))
 
-try:
-    import klayout.db as db
-except ImportError:  # pragma: no cover
-    db = None
+import klayout.db as db  # required: this module is never run without klayout
 
 PSD_I = 0.30
 PSD_B = 0.31
@@ -48,7 +46,6 @@ def _violations(activ, poly, psd):
     return bad_i.count(), bad_b.count()
 
 
-@unittest.skipIf(db is None, "klayout.db not installed")
 class TestImplantGeometry(unittest.TestCase):
     def test_committed_gds_clean(self):
         ly = db.Layout()
