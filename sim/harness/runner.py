@@ -269,6 +269,38 @@ def parse_measurements(text: str) -> dict[str, float]:
     return parse_measurements_checked(text)[0]
 
 
+def _stream_text(data: str | bytes | None) -> str:
+    """Normalize a captured stream from ``TimeoutExpired`` to text.
+
+    ``TimeoutExpired.stdout``/``stderr`` may be ``bytes`` (a known CPython
+    quirk even under ``text=True``), ``str`` or ``None``. Bytes are decoded as
+    UTF-8 with ``errors="replace"`` (undecodable bytes become U+FFFD) so a
+    truncated multi-byte sequence cannot lose the rest of the diagnostics.
+    """
+    if data is None:
+        return ""
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+    return data
+
+
+def _timeout_log(timeout_s: int, stdout: str | bytes | None, stderr: str | bytes | None) -> str:
+    """Per-corner log body for a timed-out run: marker plus labelled streams."""
+    out, err = _stream_text(stdout), _stream_text(stderr)
+    return (
+        f"TIMEOUT after {timeout_s}s\n"
+        "(partial output follows; run incomplete, no measurements accepted;"
+        " bytes decoded as UTF-8 with errors=replace)\n"
+        "===== partial stdout =====\n"
+        + (out if not out or out.endswith("\n") else out + "\n")
+        + ("" if out else "(none captured)\n")
+        + "===== partial stderr =====\n"
+        + (err if not err or err.endswith("\n") else err + "\n")
+        + ("" if err else "(none captured)\n")
+        + "===== end partial output =====\n"
+    )
+
+
 def run_point(
     tb: Testbench,
     pdk: Pdk,
@@ -319,9 +351,11 @@ def run_point(
         returncode = proc.returncode
     except FileNotFoundError as exc:
         raise NgspiceMissing(str(exc)) from exc
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         elapsed = time.monotonic() - started
-        log_path.write_text(f"TIMEOUT after {timeout_s}s\n")
+        # Keep the partial simulator diagnostics as evidence. The point is
+        # always an error: partial output is never parsed for measurements.
+        log_path.write_text(_timeout_log(timeout_s, exc.stdout, exc.stderr))
         return PointResult(
             point=point,
             status="error",
