@@ -493,7 +493,7 @@ def regen_points(env: dict) -> Evidence:
         if key not in EXPECTED_REGEN_KEYS:
             problem = problem or "point is not on the ratified 45-point grid"
 
-        def ok(tag_):
+        def ok(tag_, v=v):
             first, end = v[f"dout_{tag_}_first"], v[f"dout_{tag_}_end"]
             if first is None or end is None:
                 return None
