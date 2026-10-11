@@ -109,6 +109,66 @@ class Synthetic(unittest.TestCase):
         self.assertTrue(self.render(rows)[0]["delay_compliance_extracted"]["regeneration.td_a"]
                         .startswith("not established: 44/45"))
 
+    def grid(self):
+        return [(p, v, t) for p in sorted(mdt.GRID[0]) for v in ("1.08", "1.2", "1.32") for t in (-40, 27, 125)]
+
+    def test_45_spellings_of_one_point_rejected(self):
+        rows = [row("regeneration.pvt.td_a", "tt/1.2" + "0" * n + "V/27C", 7e-10, 1e-9) for n in range(45)]
+        with self.assertRaisesRegex(ValueError, "repeats the physical point"):
+            self.render(rows)
+        # the same spellings on an unmapped key are not graded, and count as one physical point
+        out, _ = self.render([row("regeneration.pvt.offset_sigma", c["corner_id"], 1, 1) for c in rows])
+        self.assertEqual(out["pvt_grid_points"], 1)
+        self.assertIn("at 1 corner(s)", out["statistical_basis"])
+
+    def test_distinct_spellings_cover_full_grid(self):
+        # every point written with a different decimal spelling still counts once each
+        rows = [row("regeneration.pvt.td_a", f"{p}/{v}{'0' * (i % 4)}V/{t}C", 7e-10, 1e-9)
+                for i, (p, v, t) in enumerate(self.grid())]
+        out, _ = self.render(rows)
+        self.assertTrue(out["delay_compliance_extracted"]["regeneration.td_a"].startswith("met at every"))
+        self.assertEqual(out["pvt_grid_points"], 45)
+
+    def test_missing_point_not_full_grid(self):
+        rows = [row("regeneration.pvt.td_a", f"{p}/{v}V/{t}C", 7e-10, 1e-9) for p, v, t in self.grid()]
+        out, _ = self.render(rows[1:] + [row("regeneration.pvt.td_a", "tt/1.5V/27C", 7e-10, 1e-9)])
+        self.assertTrue(out["delay_compliance_extracted"]["regeneration.td_a"].startswith("not established: 44/45"))
+        self.assertEqual(out["pvt_grid_points"], 44)
+
+    def test_nominal_pvt_alias_rejected(self):
+        for ex in (1e-9, 9e-9):  # contradictory or identical evidence: both ambiguous
+            with self.subTest(ex=ex), self.assertRaisesRegex(ValueError, "repeats the physical point"):
+                self.render([row("regeneration.nominal.td_a", "tt/1.200V/27C", 7e-10, 1e-9),
+                             row("regeneration.pvt.td_a", "tt/1.2V/27C", 7e-10, ex)])
+        self.render([row("regeneration.nominal.td_a", TT, 7e-10, 1e-9),  # different measurement: fine
+                     row("regeneration.pvt.td_c", "tt/1.2V/27C", 7e-10, 1e-9)])
+
+    def test_negative_delay_invalid(self):
+        for corner in (TT, "tt/1.500V/27C"):  # in or out of grid
+            with self.subTest(corner=corner), self.assertRaises(ValueError) as cm:
+                self.render([row("regeneration.pvt.td_a", "ss/1.080V/125C", 7e-10, 1e-9),
+                             row("regeneration.pvt.td_a", corner, 7e-10, -1e-9)])
+            self.assertIn(f"delta[1]: regeneration.pvt.td_a @ {corner}", str(cm.exception))
+            self.assertIn("negative", str(cm.exception))
+        grid = [row("regeneration.pvt.td_a", f"{p}/{v}V/{t}C", 7e-10, 1e-9) for p, v, t in self.grid()]
+        grid[7]["extracted_value"] = -1e-9
+        with self.assertRaisesRegex(ValueError, "delta\\[7\\].*negative"):
+            self.render(grid)
+
+    def test_zero_delay_graded_against_upper_bound_only(self):
+        out, _ = self.render([row("regeneration.pvt.td_a", TT, 7e-10, 0.0)])
+        self.assertEqual(by(out)["regeneration.pvt.td_a", TT]["interpretation"]["verdict"], "within")
+
+    def test_cli_negative_delay_exit_2(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "env.json").write_text(json.dumps({"delta": [row("regeneration.pvt.td_a", TT, 1e-9, -1e-9)]}))
+            res = subprocess.run([sys.executable, "-B", str(PEX / "make_delta_table.py"), str(d / "env.json"),
+                                  str(d / "out")], capture_output=True, text=True, timeout=60)
+            self.assertEqual(res.returncode, 2)
+            self.assertIn(f"regeneration.pvt.td_a @ {TT}", res.stderr)
+            self.assertEqual(sorted(p.name for p in d.iterdir()), ["env.json"])
+
     def test_malformed_rejected(self):
         good = row("regeneration.pvt.td_a", TT, 1e-9, 1e-9)
         bad = [{}, {"delta": []}, {"delta": "x"}, {"delta": [{"spec_row": "a.b"}]},
