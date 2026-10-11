@@ -4,6 +4,20 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-11
 
+- **PR #225**: Reject incomplete reproduction and non-finite CM probes in decision-band validation
+- **PR #222**: ci: fail closed when sparse checkout omits ruff lint inputs
+- **PR #221**: Preflight CM-band run submissions and report failed parts
+- **PR #219**: pex: require distinct physical corners and valid delay evidence
+- **PR #215**: docs: reconcile harness-unit-tests sparse row in sim/README.md with ci.yml (#187)
+- **PR #214**: Layout: repair PDK-deck DRC findings pSD.b and pSD.i (#184)
+- **Issue #209** (closed): Reject incomplete reproduction and non-finite CM probes in decision-band validation
+- **Issue #216** (closed): CI: fail when sparse checkout omits intended Ruff input files
+- **Issue #194** (closed): CM-band offset runner: preflight existing envelopes and report failed parts
+- **Issue #211** (closed): PEX renderer: require distinct physical corners and valid delay evidence
+- **Issue #210** (closed): Guard telemetry: retain detached reset protection unless disposal is proven
+- **Issue #187** (closed): Docs: sim/README.md sparse-cone table omits harness-unit-tests' new pdk_drc inputs
+- **Issue #184** (closed): Layout: repair PDK-deck DRC findings pSD.b (x10) and pSD.i (x52)
+
 - **Issue #177** (closed): Reject ambiguous repeated ngspice output in the local PVT harness
 - **Issue #178** (closed): Validate local testbench check bounds before simulation
 - **Issue #180** (closed): Layout: verify physical rules outside the curated DRC deck
