@@ -895,6 +895,12 @@ def compare_supplement(series_dir: Path, *,
     if missing:
         cause = ("the report is incomplete (missing/malformed envelopes above), so "
                  "no cause conclusion is drawn")
+    elif incomplete and all("batch_job_failed" in str(i["reason"]) for i in incomplete):
+        cause = ("the batch jobs themselves failed before any simulation result was "
+                 "produced (batch_job_failed; see the envelopes' environment.remote), so "
+                 "this run says nothing about the max step, a bench artifact, or a "
+                 "convergence weakness; the question remains open until a successful "
+                 "re-submission")
     elif incomplete:
         cause = ("the tighter max step did not clear every draw at the two target "
                  "points (see the failures reported as-is above); whether the aborts "

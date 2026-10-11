@@ -88,3 +88,17 @@ points. It keeps the same seed and is never merged into this campaign's
 population. Separately, `klt sim` reports the abort only as "measurement
 produced no value", and the reason appears only in the kept `ngspice.log`.
 That tool gap is tracked at 2AMLogic/klayout-tools#2918.
+
+### Supplementary max-step attempt (#89), not yet successful
+
+`campaigns/20261011-33aef587e-maxstep20p/` is the first submission of the
+supplementary campaign (`tran 100p 990n 0 20p`, seed 20260916, N=60, all three
+conditions at the two points). **It produced no simulation data**: all six
+batch jobs failed within about 5 s (`batch_job_failed`, runner exit 87) because
+the fleet runner ran klt 0.5.0 while the client was 0.7.0+g04ca88ce427c
+(`environment.remote.runner_compatibility = mismatch`). The retained envelopes
+are evidence of that failed attempt only. They say nothing about the max step,
+a bench artifact, or a convergence weakness, so the question above stays open.
+The 43/45 result of the parent campaign is unchanged. Re-submission needs a
+fleet runner image compatible with the client; `supplement-report` regenerates
+the report from whichever envelopes exist.
