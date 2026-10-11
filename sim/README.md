@@ -77,6 +77,13 @@ point). It is **characterization**: DR-0002 ratifies the offset row at
 `dut_vcm` only and no whole-latch common-mode range, so nothing there is a
 compliance verdict.
 
+**Clock-edge, strobe-width and supply-disturbance sensitivity (issue #173).**
+[`comparator-clock-supply-sensitivity/`](comparator-clock-supply-sensitivity/README.md)
+characterizes the whole latch against 500 ps / 2 ns clock edges, 5 / 15 ns
+strobes and +/-50 mV supply steps (45-point regeneration grid, 20-point paired
+offset grid, N = 16 draws) on the batch fleet. Characterization only; no row is
+changed.
+
 Plus one supporting confirmation, not a spec-row bench:
 
 ```
