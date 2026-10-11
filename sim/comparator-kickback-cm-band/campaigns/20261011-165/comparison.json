@@ -1,0 +1,1923 @@
+{
+  "issue": 165,
+  "series": "20261011-165",
+  "reference_campaign": "20261009-d73a9ac",
+  "residue_target_uv": 100.0,
+  "residue_stretch_uv": 30.0,
+  "reproduction": {
+    "ok": true,
+    "values_compared": 1215,
+    "expected_values": 1215,
+    "mismatches": [],
+    "problems": []
+  },
+  "series_usable_for_dr0004": true,
+  "conditions": {
+    "vcm-m050": {
+      "condition": "vcm-m050",
+      "vcm_v": 0.55,
+      "vcm_delta_v": -0.05,
+      "envelope_status": "fail",
+      "points_expected": 45,
+      "points_valid": 44,
+      "rejected": [
+        {
+          "key": "ss/1.200V/-40C",
+          "reason": "validity gate dout_float_big_end=6.81045e-09 failed"
+        }
+      ],
+      "structural_notes": [],
+      "residue_uv": {
+        "min": 1.72805,
+        "min_at": "ff/1.320V/125C",
+        "max": 15.8868,
+        "max_at": "ss/1.080V/-40C"
+      },
+      "qkick_p_fc": {
+        "min": 21.3787,
+        "max": 28.763
+      },
+      "qkick_n_fc": {
+        "min": 21.6186,
+        "max": 29.3759
+      },
+      "qkick_fc": {
+        "min": 21.6186,
+        "max": 29.3759
+      },
+      "kick_1k_peak_mv": {
+        "min": 79.1527,
+        "max": 131.903
+      },
+      "qkick_limit_failures": 26,
+      "verdict": {
+        "target": "INCOMPLETE",
+        "stretch": "INCOMPLETE",
+        "basis": "44/45 valid points; rejected points are named, not repaired"
+      },
+      "inputs": {
+        "body_sha256": "20be5bae9f9763bc761899099dcb1ab6807224bc3eaaaa30d82c06c0c0a789f0",
+        "request_sha256": "26a54482d1b47217ebd8392fb646e8f682a68248d5d438c8fe998312f28f8afc",
+        "envelope_sha256": "80b5a47368af0ea1ce1462b37916922a1d5e9497c8529bf9c62c8e2d19747131"
+      },
+      "invocation": {
+        "klt_version": "klt 0.5.0+ge8ca621a6961",
+        "env": {
+          "KLT_SIM_BACKEND": "batch"
+        },
+        "request_sha256": "26a54482d1b47217ebd8392fb646e8f682a68248d5d438c8fe998312f28f8afc",
+        "exit_code": 3,
+        "started_utc": "2026-10-11T14:21:14+00:00",
+        "finished_utc": "2026-10-11T14:24:10+00:00",
+        "envelope_sha256": "80b5a47368af0ea1ce1462b37916922a1d5e9497c8529bf9c62c8e2d19747131",
+        "request_sha256_matches": true
+      },
+      "remote": {
+        "provider": "aws-batch-fleet",
+        "job_id": "klt-sim-ad4fa3daaaff",
+        "instance_type": "c7i.4xlarge",
+        "lifecycle": "spot",
+        "state": "failed"
+      }
+    },
+    "vcm-nom": {
+      "condition": "vcm-nom",
+      "vcm_v": 0.6,
+      "vcm_delta_v": 0.0,
+      "envelope_status": "fail",
+      "points_expected": 45,
+      "points_valid": 45,
+      "rejected": [],
+      "structural_notes": [],
+      "residue_uv": {
+        "min": 2.03423,
+        "min_at": "fs/1.320V/125C",
+        "max": 15.6327,
+        "max_at": "ss/1.080V/-40C"
+      },
+      "qkick_p_fc": {
+        "min": 23.355,
+        "max": 30.8702
+      },
+      "qkick_n_fc": {
+        "min": 23.5817,
+        "max": 31.4623
+      },
+      "qkick_fc": {
+        "min": 23.5817,
+        "max": 31.4623
+      },
+      "kick_1k_peak_mv": {
+        "min": 87.6633,
+        "max": 143.284
+      },
+      "qkick_limit_failures": 39,
+      "verdict": {
+        "target": "MET",
+        "stretch": "MET",
+        "basis": "max over 45/45 valid points = 15.6327 uV vs Target <= 100 uV / Stretch <= 30 uV"
+      },
+      "inputs": {
+        "body_sha256": "5d7c8b20db96fb84edcfe3bc039a2950f0a34a146a0dbba24a6dda271593afb2",
+        "request_sha256": "fe037cb5ec14d7b0e78311ca83e9c66206207048c8c700da4db0765ae68dff18",
+        "envelope_sha256": "392ef2410a93dea723ebb8464430477026d2bd6701e6ae79374b76f2a63be5bf"
+      },
+      "invocation": {
+        "klt_version": "klt 0.5.0+ge8ca621a6961",
+        "env": {
+          "KLT_SIM_BACKEND": "batch"
+        },
+        "request_sha256": "fe037cb5ec14d7b0e78311ca83e9c66206207048c8c700da4db0765ae68dff18",
+        "exit_code": 3,
+        "started_utc": "2026-10-11T14:18:20+00:00",
+        "finished_utc": "2026-10-11T14:21:14+00:00",
+        "envelope_sha256": "392ef2410a93dea723ebb8464430477026d2bd6701e6ae79374b76f2a63be5bf",
+        "request_sha256_matches": true
+      },
+      "remote": {
+        "provider": "aws-batch-fleet",
+        "job_id": "klt-sim-a40b80ecb926",
+        "instance_type": "m7i.4xlarge",
+        "lifecycle": "spot",
+        "state": "failed"
+      }
+    },
+    "vcm-p050": {
+      "condition": "vcm-p050",
+      "vcm_v": 0.65,
+      "vcm_delta_v": 0.05,
+      "envelope_status": "fail",
+      "points_expected": 45,
+      "points_valid": 44,
+      "rejected": [
+        {
+          "key": "ss/1.080V/-40C",
+          "reason": "validity gate dout_float_small_end=6.17971e-09 failed"
+        }
+      ],
+      "structural_notes": [],
+      "residue_uv": {
+        "min": 2.45784,
+        "min_at": "fs/1.320V/125C",
+        "max": 15.2322,
+        "max_at": "ss/1.320V/-40C"
+      },
+      "qkick_p_fc": {
+        "min": 25.7889,
+        "max": 33.0018
+      },
+      "qkick_n_fc": {
+        "min": 26.007,
+        "max": 33.5699
+      },
+      "qkick_fc": {
+        "min": 26.007,
+        "max": 33.5699
+      },
+      "kick_1k_peak_mv": {
+        "min": 96.5909,
+        "max": 154.7
+      },
+      "qkick_limit_failures": 44,
+      "verdict": {
+        "target": "INCOMPLETE",
+        "stretch": "INCOMPLETE",
+        "basis": "44/45 valid points; rejected points are named, not repaired"
+      },
+      "inputs": {
+        "body_sha256": "747f858dc8b287fa945aafe89b488bf593d5da491540b69784118af01c09cc63",
+        "request_sha256": "fe06a3678fefafd63ec58b9db32e5a4347a27fbc8ce4ed09ef75fa9bca0fecb0",
+        "envelope_sha256": "24203b18b3a730f925ec9a1554469a4acee1587b4d2cfaf8d0b85e6d50ed30c2"
+      },
+      "invocation": {
+        "klt_version": "klt 0.5.0+ge8ca621a6961",
+        "env": {
+          "KLT_SIM_BACKEND": "batch"
+        },
+        "request_sha256": "fe06a3678fefafd63ec58b9db32e5a4347a27fbc8ce4ed09ef75fa9bca0fecb0",
+        "exit_code": 3,
+        "started_utc": "2026-10-11T14:24:10+00:00",
+        "finished_utc": "2026-10-11T14:26:35+00:00",
+        "envelope_sha256": "24203b18b3a730f925ec9a1554469a4acee1587b4d2cfaf8d0b85e6d50ed30c2",
+        "request_sha256_matches": true
+      },
+      "remote": {
+        "provider": "aws-batch-fleet",
+        "job_id": "klt-sim-3f1e556c4534",
+        "instance_type": "m6i.4xlarge",
+        "lifecycle": "spot",
+        "state": "failed"
+      }
+    }
+  },
+  "per_point": [
+    {
+      "key": "tt/1.080V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.8765,
+        "qkick_p_fc": 22.9357,
+        "qkick_n_fc": 23.1844,
+        "qkick_fc": 23.1844,
+        "kick_1k_peak_mv": 93.9592,
+        "kick_cm_uv": -1203.35,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.1927
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.6838,
+        "qkick_p_fc": 25.003,
+        "qkick_n_fc": 25.2417,
+        "qkick_fc": 25.2417,
+        "kick_1k_peak_mv": 103.727,
+        "kick_cm_uv": -1191.31,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.4411,
+        "qkick_p_fc": 27.1096,
+        "qkick_n_fc": 27.3194,
+        "qkick_fc": 27.3194,
+        "kick_1k_peak_mv": 113.338,
+        "kick_cm_uv": -1179.5,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.2427
+      }
+    },
+    {
+      "key": "tt/1.080V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 9.31894,
+        "qkick_p_fc": 23.7067,
+        "qkick_n_fc": 24.0338,
+        "qkick_fc": 24.0338,
+        "kick_1k_peak_mv": 96.0128,
+        "kick_cm_uv": -753.856,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.05892
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 9.26002,
+        "qkick_p_fc": 25.7382,
+        "qkick_n_fc": 26.0444,
+        "qkick_fc": 26.0444,
+        "kick_1k_peak_mv": 105.159,
+        "kick_cm_uv": -741.346,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 9.28506,
+        "qkick_p_fc": 27.8117,
+        "qkick_n_fc": 28.0909,
+        "qkick_fc": 28.0909,
+        "kick_1k_peak_mv": 114.127,
+        "kick_cm_uv": -729.289,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.02504
+      }
+    },
+    {
+      "key": "tt/1.080V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 3.25048,
+        "qkick_p_fc": 24.9899,
+        "qkick_n_fc": 25.4262,
+        "qkick_fc": 25.4262,
+        "kick_1k_peak_mv": 99.795,
+        "kick_cm_uv": -124.845,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.01599
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 3.23449,
+        "qkick_p_fc": 26.9765,
+        "qkick_n_fc": 27.3966,
+        "qkick_fc": 27.3966,
+        "kick_1k_peak_mv": 108.291,
+        "kick_cm_uv": -117.098,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 3.40295,
+        "qkick_p_fc": 28.9944,
+        "qkick_n_fc": 29.3929,
+        "qkick_fc": 29.3929,
+        "kick_1k_peak_mv": 116.581,
+        "kick_cm_uv": -110.04,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.16846
+      }
+    },
+    {
+      "key": "tt/1.200V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.6655,
+        "qkick_p_fc": 23.8954,
+        "qkick_n_fc": 24.2081,
+        "qkick_fc": 24.2081,
+        "kick_1k_peak_mv": 103.522,
+        "kick_cm_uv": -1206.61,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.0444
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.6211,
+        "qkick_p_fc": 25.9965,
+        "qkick_n_fc": 26.2691,
+        "qkick_fc": 26.2691,
+        "kick_1k_peak_mv": 114.377,
+        "kick_cm_uv": -1195.03,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.4787,
+        "qkick_p_fc": 28.0991,
+        "qkick_n_fc": 28.3635,
+        "qkick_fc": 28.3635,
+        "kick_1k_peak_mv": 125.249,
+        "kick_cm_uv": -1183.67,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.1424
+      }
+    },
+    {
+      "key": "tt/1.200V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 9.35588,
+        "qkick_p_fc": 24.6963,
+        "qkick_n_fc": 25.078,
+        "qkick_fc": 25.078,
+        "kick_1k_peak_mv": 105.606,
+        "kick_cm_uv": -756.12,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.09548
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 9.2604,
+        "qkick_p_fc": 26.7433,
+        "qkick_n_fc": 27.1043,
+        "qkick_fc": 27.1043,
+        "kick_1k_peak_mv": 115.818,
+        "kick_cm_uv": -744.044,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 9.02732,
+        "qkick_p_fc": 28.8241,
+        "qkick_n_fc": 29.1689,
+        "qkick_fc": 29.1689,
+        "kick_1k_peak_mv": 125.991,
+        "kick_cm_uv": -732.489,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.23308
+      }
+    },
+    {
+      "key": "tt/1.200V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 3.18103,
+        "qkick_p_fc": 25.9684,
+        "qkick_n_fc": 26.4937,
+        "qkick_fc": 26.4937,
+        "kick_1k_peak_mv": 108.893,
+        "kick_cm_uv": -124.843,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.17952
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 3.00151,
+        "qkick_p_fc": 27.9687,
+        "qkick_n_fc": 28.4609,
+        "qkick_fc": 28.4609,
+        "kick_1k_peak_mv": 118.364,
+        "kick_cm_uv": -117.309,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 3.12282,
+        "qkick_p_fc": 29.9979,
+        "qkick_n_fc": 30.4723,
+        "qkick_fc": 30.4723,
+        "kick_1k_peak_mv": 127.763,
+        "kick_cm_uv": -110.318,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.12131
+      }
+    },
+    {
+      "key": "tt/1.320V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.1487,
+        "qkick_p_fc": 24.8526,
+        "qkick_n_fc": 25.2202,
+        "qkick_fc": 25.2202,
+        "kick_1k_peak_mv": 111.37,
+        "kick_cm_uv": -1209.19,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.1132
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.2619,
+        "qkick_p_fc": 26.9659,
+        "qkick_n_fc": 27.2972,
+        "qkick_fc": 27.2972,
+        "kick_1k_peak_mv": 123.036,
+        "kick_cm_uv": -1198.1,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.1874,
+        "qkick_p_fc": 29.0944,
+        "qkick_n_fc": 29.386,
+        "qkick_fc": 29.386,
+        "kick_1k_peak_mv": 134.754,
+        "kick_cm_uv": -1187.01,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.0745
+      }
+    },
+    {
+      "key": "tt/1.320V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 8.86895,
+        "qkick_p_fc": 25.6656,
+        "qkick_n_fc": 26.1187,
+        "qkick_fc": 26.1187,
+        "kick_1k_peak_mv": 113.565,
+        "kick_cm_uv": -758.018,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.09431
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 8.77464,
+        "qkick_p_fc": 27.7154,
+        "qkick_n_fc": 28.1452,
+        "qkick_fc": 28.1452,
+        "kick_1k_peak_mv": 124.544,
+        "kick_cm_uv": -746.229,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 8.76969,
+        "qkick_p_fc": 29.8157,
+        "qkick_n_fc": 30.2149,
+        "qkick_fc": 30.2149,
+        "kick_1k_peak_mv": 135.563,
+        "kick_cm_uv": -735.048,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.00495
+      }
+    },
+    {
+      "key": "tt/1.320V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.99825,
+        "qkick_p_fc": 26.9143,
+        "qkick_n_fc": 27.4978,
+        "qkick_fc": 27.4978,
+        "kick_1k_peak_mv": 116.576,
+        "kick_cm_uv": -124.573,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.05104
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.94721,
+        "qkick_p_fc": 28.9314,
+        "qkick_n_fc": 29.5008,
+        "qkick_fc": 29.5008,
+        "kick_1k_peak_mv": 126.761,
+        "kick_cm_uv": -117.082,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.95268,
+        "qkick_p_fc": 30.958,
+        "qkick_n_fc": 31.5171,
+        "qkick_fc": 31.5171,
+        "kick_1k_peak_mv": 136.977,
+        "kick_cm_uv": -110.366,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.00547
+      }
+    },
+    {
+      "key": "ff/1.080V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.1373,
+        "qkick_p_fc": 24.8401,
+        "qkick_n_fc": 25.0876,
+        "qkick_fc": 25.0876,
+        "kick_1k_peak_mv": 110.84,
+        "kick_cm_uv": -870.944,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.1319
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.2692,
+        "qkick_p_fc": 27.0195,
+        "qkick_n_fc": 27.2432,
+        "qkick_fc": 27.2432,
+        "kick_1k_peak_mv": 121.921,
+        "kick_cm_uv": -859.612,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.0722,
+        "qkick_p_fc": 29.2198,
+        "qkick_n_fc": 29.4243,
+        "qkick_fc": 29.4243,
+        "kick_1k_peak_mv": 132.833,
+        "kick_cm_uv": -848.819,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.197
+      }
+    },
+    {
+      "key": "ff/1.080V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.03062,
+        "qkick_p_fc": 25.5995,
+        "qkick_n_fc": 25.9383,
+        "qkick_fc": 25.9383,
+        "kick_1k_peak_mv": 112.883,
+        "kick_cm_uv": -425.324,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.44007
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.47069,
+        "qkick_p_fc": 27.7332,
+        "qkick_n_fc": 28.0486,
+        "qkick_fc": 28.0486,
+        "kick_1k_peak_mv": 123.352,
+        "kick_cm_uv": -414.171,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.69344,
+        "qkick_p_fc": 29.8894,
+        "qkick_n_fc": 30.1768,
+        "qkick_fc": 30.1768,
+        "kick_1k_peak_mv": 133.632,
+        "kick_cm_uv": -403.965,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.22275
+      }
+    },
+    {
+      "key": "ff/1.080V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 1.76225,
+        "qkick_p_fc": 26.8291,
+        "qkick_n_fc": 27.2999,
+        "qkick_fc": 27.2999,
+        "kick_1k_peak_mv": 116.204,
+        "kick_cm_uv": -9.06203,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.79266
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.55491,
+        "qkick_p_fc": 28.9136,
+        "qkick_n_fc": 29.364,
+        "qkick_fc": 29.364,
+        "kick_1k_peak_mv": 125.982,
+        "kick_cm_uv": -8.71103,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 3.26124,
+        "qkick_p_fc": 31.0214,
+        "qkick_n_fc": 31.454,
+        "qkick_fc": 31.454,
+        "kick_1k_peak_mv": 135.502,
+        "kick_cm_uv": -8.93587,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.70633
+      }
+    },
+    {
+      "key": "ff/1.200V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.6033,
+        "qkick_p_fc": 25.8413,
+        "qkick_n_fc": 26.1494,
+        "qkick_fc": 26.1494,
+        "kick_1k_peak_mv": 119.995,
+        "kick_cm_uv": -873.171,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.0511
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.6544,
+        "qkick_p_fc": 28.0336,
+        "qkick_n_fc": 28.3151,
+        "qkick_fc": 28.3151,
+        "kick_1k_peak_mv": 132.144,
+        "kick_cm_uv": -862.27,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.9422,
+        "qkick_p_fc": 30.2442,
+        "qkick_n_fc": 30.5136,
+        "qkick_fc": 30.5136,
+        "kick_1k_peak_mv": 144.236,
+        "kick_cm_uv": -851.575,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.2878
+      }
+    },
+    {
+      "key": "ff/1.200V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 6.83961,
+        "qkick_p_fc": 26.5983,
+        "qkick_n_fc": 27.0062,
+        "qkick_fc": 27.0062,
+        "kick_1k_peak_mv": 122.005,
+        "kick_cm_uv": -426.066,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.56544
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.40505,
+        "qkick_p_fc": 28.7447,
+        "qkick_n_fc": 29.1171,
+        "qkick_fc": 29.1171,
+        "kick_1k_peak_mv": 133.501,
+        "kick_cm_uv": -415.031,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.39093,
+        "qkick_p_fc": 30.9126,
+        "qkick_n_fc": 31.2698,
+        "qkick_fc": 31.2698,
+        "kick_1k_peak_mv": 144.923,
+        "kick_cm_uv": -405.323,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.01412
+      }
+    },
+    {
+      "key": "ff/1.200V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 1.80557,
+        "qkick_p_fc": 27.8046,
+        "qkick_n_fc": 28.3544,
+        "qkick_fc": 28.3544,
+        "kick_1k_peak_mv": 124.733,
+        "kick_cm_uv": -8.9434,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.46559
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.27116,
+        "qkick_p_fc": 29.9094,
+        "qkick_n_fc": 30.4338,
+        "qkick_fc": 30.4338,
+        "kick_1k_peak_mv": 135.463,
+        "kick_cm_uv": -8.68476,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 3.1632,
+        "qkick_p_fc": 32.0198,
+        "qkick_n_fc": 32.5215,
+        "qkick_fc": 32.5215,
+        "kick_1k_peak_mv": 146.105,
+        "kick_cm_uv": -8.94112,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.89204
+      }
+    },
+    {
+      "key": "ff/1.320V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.3058,
+        "qkick_p_fc": 26.8129,
+        "qkick_n_fc": 27.1901,
+        "qkick_fc": 27.1901,
+        "kick_1k_peak_mv": 127.508,
+        "kick_cm_uv": -874.724,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.0769
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.2289,
+        "qkick_p_fc": 29.0109,
+        "qkick_n_fc": 29.3604,
+        "qkick_fc": 29.3604,
+        "kick_1k_peak_mv": 140.385,
+        "kick_cm_uv": -864.07,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.5482,
+        "qkick_p_fc": 31.2312,
+        "qkick_n_fc": 31.5675,
+        "qkick_fc": 31.5675,
+        "kick_1k_peak_mv": 153.333,
+        "kick_cm_uv": -853.902,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.3193
+      }
+    },
+    {
+      "key": "ff/1.320V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 6.24009,
+        "qkick_p_fc": 27.5682,
+        "qkick_n_fc": 28.0311,
+        "qkick_fc": 28.0311,
+        "kick_1k_peak_mv": 129.532,
+        "kick_cm_uv": -426.203,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.38969
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 6.62978,
+        "qkick_p_fc": 29.7322,
+        "qkick_n_fc": 30.1706,
+        "qkick_fc": 30.1706,
+        "kick_1k_peak_mv": 141.768,
+        "kick_cm_uv": -415.943,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.05873,
+        "qkick_p_fc": 31.902,
+        "qkick_n_fc": 32.318,
+        "qkick_fc": 32.318,
+        "kick_1k_peak_mv": 154.028,
+        "kick_cm_uv": -406.096,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.42895
+      }
+    },
+    {
+      "key": "ff/1.320V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 1.72805,
+        "qkick_p_fc": 28.763,
+        "qkick_n_fc": 29.3759,
+        "qkick_fc": 29.3759,
+        "kick_1k_peak_mv": 131.903,
+        "kick_cm_uv": -8.9072,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.55652
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.28457,
+        "qkick_p_fc": 30.8702,
+        "qkick_n_fc": 31.4623,
+        "qkick_fc": 31.4623,
+        "kick_1k_peak_mv": 143.284,
+        "kick_cm_uv": -8.72327,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 3.00425,
+        "qkick_p_fc": 33.0018,
+        "qkick_n_fc": 33.5699,
+        "qkick_fc": 33.5699,
+        "kick_1k_peak_mv": 154.7,
+        "kick_cm_uv": -8.95705,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.71968
+      }
+    },
+    {
+      "key": "ss/1.080V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 15.8868,
+        "qkick_p_fc": 21.3787,
+        "qkick_n_fc": 21.6186,
+        "qkick_fc": 21.6186,
+        "kick_1k_peak_mv": 79.1527,
+        "kick_cm_uv": -1680.73,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.2541
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 15.6327,
+        "qkick_p_fc": 23.355,
+        "qkick_n_fc": 23.5817,
+        "qkick_fc": 23.5817,
+        "kick_1k_peak_mv": 87.6633,
+        "kick_cm_uv": -1664.7,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": false,
+        "reason": "validity gate dout_float_small_end=6.17971e-09 failed",
+        "kick_sigdep_uv": 2.24978,
+        "qkick_p_fc": 24.7342,
+        "qkick_n_fc": 24.9264,
+        "qkick_fc": 24.9264,
+        "kick_1k_peak_mv": 96.095,
+        "kick_cm_uv": -1254.63,
+        "vcm_meas": 0.65
+      }
+    },
+    {
+      "key": "ss/1.080V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.7132,
+        "qkick_p_fc": 22.1236,
+        "qkick_n_fc": 22.4307,
+        "qkick_fc": 22.4307,
+        "kick_1k_peak_mv": 80.8456,
+        "kick_cm_uv": -1233.12,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.2233
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.4899,
+        "qkick_p_fc": 24.0713,
+        "qkick_n_fc": 24.3324,
+        "qkick_fc": 24.3324,
+        "kick_1k_peak_mv": 88.7723,
+        "kick_cm_uv": -1220.33,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.7015,
+        "qkick_p_fc": 26.0471,
+        "qkick_n_fc": 26.2995,
+        "qkick_fc": 26.2995,
+        "kick_1k_peak_mv": 96.5909,
+        "kick_cm_uv": -1207.5,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.2116
+      }
+    },
+    {
+      "key": "ss/1.080V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.23335,
+        "qkick_p_fc": 23.3673,
+        "qkick_n_fc": 23.7708,
+        "qkick_fc": 23.7708,
+        "kick_1k_peak_mv": 84.6069,
+        "kick_cm_uv": -494.501,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.14014
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.09321,
+        "qkick_p_fc": 25.2671,
+        "qkick_n_fc": 25.6454,
+        "qkick_fc": 25.6454,
+        "kick_1k_peak_mv": 91.929,
+        "kick_cm_uv": -481.718,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.12388,
+        "qkick_p_fc": 27.2029,
+        "qkick_n_fc": 27.5595,
+        "qkick_fc": 27.5595,
+        "kick_1k_peak_mv": 99.1091,
+        "kick_cm_uv": -469.383,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.03067
+      }
+    },
+    {
+      "key": "ss/1.200V/-40C",
+      "vcm-m050": {
+        "valid": false,
+        "reason": "validity gate dout_float_big_end=6.81045e-09 failed",
+        "kick_sigdep_uv": 2.14838,
+        "qkick_p_fc": 21.6095,
+        "qkick_n_fc": 21.9141,
+        "qkick_fc": 21.9141,
+        "kick_1k_peak_mv": 89.1626,
+        "kick_cm_uv": -1241.92,
+        "vcm_meas": 0.55
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 15.4906,
+        "qkick_p_fc": 24.2794,
+        "qkick_n_fc": 24.5443,
+        "qkick_fc": 24.5443,
+        "kick_1k_peak_mv": 98.8741,
+        "kick_cm_uv": -1669.57,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 15.2168,
+        "qkick_p_fc": 26.3021,
+        "qkick_n_fc": 26.5537,
+        "qkick_fc": 26.5537,
+        "kick_1k_peak_mv": 108.659,
+        "kick_cm_uv": -1653.69,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.2738
+      }
+    },
+    {
+      "key": "ss/1.200V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.4566,
+        "qkick_p_fc": 23.0769,
+        "qkick_n_fc": 23.4495,
+        "qkick_fc": 23.4495,
+        "kick_1k_peak_mv": 90.9557,
+        "kick_cm_uv": -1237.52,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.142
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.3146,
+        "qkick_p_fc": 25.0402,
+        "qkick_n_fc": 25.375,
+        "qkick_fc": 25.375,
+        "kick_1k_peak_mv": 100.027,
+        "kick_cm_uv": -1225.24,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.2453,
+        "qkick_p_fc": 27.0174,
+        "qkick_n_fc": 27.3415,
+        "qkick_fc": 27.3415,
+        "kick_1k_peak_mv": 109.112,
+        "kick_cm_uv": -1213.19,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.0693
+      }
+    },
+    {
+      "key": "ss/1.200V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 6.98707,
+        "qkick_p_fc": 24.3347,
+        "qkick_n_fc": 24.8251,
+        "qkick_fc": 24.8251,
+        "kick_1k_peak_mv": 94.3082,
+        "kick_cm_uv": -496.457,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.19297
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 6.7941,
+        "qkick_p_fc": 26.2553,
+        "qkick_n_fc": 26.7183,
+        "qkick_fc": 26.7183,
+        "kick_1k_peak_mv": 102.652,
+        "kick_cm_uv": -484.088,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 6.68312,
+        "qkick_p_fc": 28.1971,
+        "qkick_n_fc": 28.638,
+        "qkick_fc": 28.638,
+        "kick_1k_peak_mv": 110.941,
+        "kick_cm_uv": -472.056,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.11098
+      }
+    },
+    {
+      "key": "ss/1.320V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 15.3173,
+        "qkick_p_fc": 23.2014,
+        "qkick_n_fc": 23.5555,
+        "qkick_fc": 23.5555,
+        "kick_1k_peak_mv": 97.2569,
+        "kick_cm_uv": -1688.6,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.2527
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 15.0646,
+        "qkick_p_fc": 25.214,
+        "qkick_n_fc": 25.534,
+        "qkick_fc": 25.534,
+        "kick_1k_peak_mv": 107.838,
+        "kick_cm_uv": -1673.47,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 15.2322,
+        "qkick_p_fc": 27.244,
+        "qkick_n_fc": 27.5359,
+        "qkick_fc": 27.5359,
+        "kick_1k_peak_mv": 118.554,
+        "kick_cm_uv": -1657.76,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.1676
+      }
+    },
+    {
+      "key": "ss/1.320V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.2902,
+        "qkick_p_fc": 24.0203,
+        "qkick_n_fc": 24.4563,
+        "qkick_fc": 24.4563,
+        "kick_1k_peak_mv": 99.2569,
+        "kick_cm_uv": -1240.88,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.1961
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.0941,
+        "qkick_p_fc": 25.9944,
+        "qkick_n_fc": 26.3978,
+        "qkick_fc": 26.3978,
+        "kick_1k_peak_mv": 109.159,
+        "kick_cm_uv": -1229.1,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 12.2514,
+        "qkick_p_fc": 27.9982,
+        "qkick_n_fc": 28.3751,
+        "qkick_fc": 28.3751,
+        "kick_1k_peak_mv": 119.137,
+        "kick_cm_uv": -1217.34,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.1573
+      }
+    },
+    {
+      "key": "ss/1.320V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 6.63429,
+        "qkick_p_fc": 25.265,
+        "qkick_n_fc": 25.8376,
+        "qkick_fc": 25.8376,
+        "kick_1k_peak_mv": 102.41,
+        "kick_cm_uv": -497.888,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.00074
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 6.63355,
+        "qkick_p_fc": 27.1879,
+        "qkick_n_fc": 27.7344,
+        "qkick_fc": 27.7344,
+        "kick_1k_peak_mv": 111.519,
+        "kick_cm_uv": -485.703,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 6.44076,
+        "qkick_p_fc": 29.1469,
+        "qkick_n_fc": 29.6738,
+        "qkick_fc": 29.6738,
+        "kick_1k_peak_mv": 120.647,
+        "kick_cm_uv": -474.066,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.19279
+      }
+    },
+    {
+      "key": "fs/1.080V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.8564,
+        "qkick_p_fc": 24.301,
+        "qkick_n_fc": 24.5416,
+        "qkick_fc": 24.5416,
+        "kick_1k_peak_mv": 98.2414,
+        "kick_cm_uv": -1037.84,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.0053
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.8511,
+        "qkick_p_fc": 26.4284,
+        "qkick_n_fc": 26.6431,
+        "qkick_fc": 26.6431,
+        "kick_1k_peak_mv": 107.696,
+        "kick_cm_uv": -1026.1,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.8735,
+        "qkick_p_fc": 28.579,
+        "qkick_n_fc": 28.7711,
+        "qkick_fc": 28.7711,
+        "kick_1k_peak_mv": 116.906,
+        "kick_cm_uv": -1014.7,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.0224
+      }
+    },
+    {
+      "key": "fs/1.080V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 8.26368,
+        "qkick_p_fc": 25.111,
+        "qkick_n_fc": 25.4165,
+        "qkick_fc": 25.4165,
+        "kick_1k_peak_mv": 99.8875,
+        "kick_cm_uv": -588.109,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.09072
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 8.3544,
+        "qkick_p_fc": 27.1878,
+        "qkick_n_fc": 27.4713,
+        "qkick_fc": 27.4713,
+        "kick_1k_peak_mv": 108.718,
+        "kick_cm_uv": -576.103,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 8.70859,
+        "qkick_p_fc": 29.2991,
+        "qkick_n_fc": 29.5732,
+        "qkick_fc": 29.5732,
+        "kick_1k_peak_mv": 117.294,
+        "kick_cm_uv": -564.64,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.35419
+      }
+    },
+    {
+      "key": "fs/1.080V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.1521,
+        "qkick_p_fc": 26.4325,
+        "qkick_n_fc": 26.8663,
+        "qkick_fc": 26.8663,
+        "kick_1k_peak_mv": 103.456,
+        "kick_cm_uv": -44.5082,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.20555
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.35765,
+        "qkick_p_fc": 28.4692,
+        "qkick_n_fc": 28.8823,
+        "qkick_fc": 28.8823,
+        "kick_1k_peak_mv": 111.602,
+        "kick_cm_uv": -40.5894,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.8459,
+        "qkick_p_fc": 30.5299,
+        "qkick_n_fc": 30.9234,
+        "qkick_fc": 30.9234,
+        "kick_1k_peak_mv": 119.482,
+        "kick_cm_uv": -37.338,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.48825
+      }
+    },
+    {
+      "key": "fs/1.200V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.8498,
+        "qkick_p_fc": 25.2971,
+        "qkick_n_fc": 25.5799,
+        "qkick_fc": 25.5799,
+        "kick_1k_peak_mv": 109.331,
+        "kick_cm_uv": -1040.4,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.0384
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.8882,
+        "qkick_p_fc": 27.4207,
+        "qkick_n_fc": 27.6978,
+        "qkick_fc": 27.6978,
+        "kick_1k_peak_mv": 120.062,
+        "kick_cm_uv": -1028.99,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.5114,
+        "qkick_p_fc": 29.6012,
+        "qkick_n_fc": 29.8416,
+        "qkick_fc": 29.8416,
+        "kick_1k_peak_mv": 130.72,
+        "kick_cm_uv": -1018.25,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.3768
+      }
+    },
+    {
+      "key": "fs/1.200V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 8.00964,
+        "qkick_p_fc": 26.1214,
+        "qkick_n_fc": 26.4891,
+        "qkick_fc": 26.4891,
+        "kick_1k_peak_mv": 110.971,
+        "kick_cm_uv": -589.672,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.02819
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.98145,
+        "qkick_p_fc": 28.2239,
+        "qkick_n_fc": 28.5744,
+        "qkick_fc": 28.5744,
+        "kick_1k_peak_mv": 121.015,
+        "kick_cm_uv": -578.024,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 8.17807,
+        "qkick_p_fc": 30.344,
+        "qkick_n_fc": 30.6779,
+        "qkick_fc": 30.6779,
+        "kick_1k_peak_mv": 130.941,
+        "kick_cm_uv": -567.025,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.19662
+      }
+    },
+    {
+      "key": "fs/1.200V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.01402,
+        "qkick_p_fc": 27.4237,
+        "qkick_n_fc": 27.9449,
+        "qkick_fc": 27.9449,
+        "kick_1k_peak_mv": 113.973,
+        "kick_cm_uv": -44.292,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.23727
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.25129,
+        "qkick_p_fc": 29.488,
+        "qkick_n_fc": 29.9816,
+        "qkick_fc": 29.9816,
+        "kick_1k_peak_mv": 123.221,
+        "kick_cm_uv": -40.4221,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.58591,
+        "qkick_p_fc": 31.5638,
+        "qkick_n_fc": 32.0382,
+        "qkick_fc": 32.0382,
+        "kick_1k_peak_mv": 132.339,
+        "kick_cm_uv": -37.2044,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.33462
+      }
+    },
+    {
+      "key": "fs/1.320V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.3453,
+        "qkick_p_fc": 26.2814,
+        "qkick_n_fc": 26.6201,
+        "qkick_fc": 26.6201,
+        "kick_1k_peak_mv": 118.307,
+        "kick_cm_uv": -1042.57,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.2195
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.5648,
+        "qkick_p_fc": 28.4329,
+        "qkick_n_fc": 28.748,
+        "qkick_fc": 28.748,
+        "kick_1k_peak_mv": 129.959,
+        "kick_cm_uv": -1031.46,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 11.7596,
+        "qkick_p_fc": 30.6105,
+        "qkick_n_fc": 30.8981,
+        "qkick_fc": 30.8981,
+        "kick_1k_peak_mv": 141.603,
+        "kick_cm_uv": -1020.77,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.1948
+      }
+    },
+    {
+      "key": "fs/1.320V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.60867,
+        "qkick_p_fc": 27.1023,
+        "qkick_n_fc": 27.5388,
+        "qkick_fc": 27.5388,
+        "kick_1k_peak_mv": 120.045,
+        "kick_cm_uv": -590.808,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.55979
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 8.16846,
+        "qkick_p_fc": 29.2078,
+        "qkick_n_fc": 29.6277,
+        "qkick_fc": 29.6277,
+        "kick_1k_peak_mv": 130.982,
+        "kick_cm_uv": -578.994,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 7.80982,
+        "qkick_p_fc": 31.3583,
+        "qkick_n_fc": 31.7496,
+        "qkick_fc": 31.7496,
+        "kick_1k_peak_mv": 141.889,
+        "kick_cm_uv": -568.436,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.35864
+      }
+    },
+    {
+      "key": "fs/1.320V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 1.91813,
+        "qkick_p_fc": 28.4033,
+        "qkick_n_fc": 28.9882,
+        "qkick_fc": 28.9882,
+        "kick_1k_peak_mv": 122.696,
+        "kick_cm_uv": -43.8349,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.1161
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.03423,
+        "qkick_p_fc": 30.4634,
+        "qkick_n_fc": 31.0263,
+        "qkick_fc": 31.0263,
+        "kick_1k_peak_mv": 132.778,
+        "kick_cm_uv": -40.0724,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 2.45784,
+        "qkick_p_fc": 32.5415,
+        "qkick_n_fc": 33.0983,
+        "qkick_fc": 33.0983,
+        "kick_1k_peak_mv": 142.816,
+        "kick_cm_uv": -37.0929,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.42361
+      }
+    },
+    {
+      "key": "sf/1.080V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 14.4161,
+        "qkick_p_fc": 21.702,
+        "qkick_n_fc": 21.9632,
+        "qkick_fc": 21.9632,
+        "kick_1k_peak_mv": 89.6008,
+        "kick_cm_uv": -1441.87,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.2819
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 14.1342,
+        "qkick_p_fc": 23.7324,
+        "qkick_n_fc": 23.9582,
+        "qkick_fc": 23.9582,
+        "kick_1k_peak_mv": 99.6684,
+        "kick_cm_uv": -1428.96,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 13.8966,
+        "qkick_p_fc": 25.7889,
+        "qkick_n_fc": 26.007,
+        "qkick_fc": 26.007,
+        "kick_1k_peak_mv": 109.668,
+        "kick_cm_uv": -1415.92,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.2376
+      }
+    },
+    {
+      "key": "sf/1.080V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.8922,
+        "qkick_p_fc": 22.4428,
+        "qkick_n_fc": 22.7756,
+        "qkick_fc": 22.7756,
+        "kick_1k_peak_mv": 91.9198,
+        "kick_cm_uv": -988.451,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.0326
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.8596,
+        "qkick_p_fc": 24.4319,
+        "qkick_n_fc": 24.729,
+        "qkick_fc": 24.729,
+        "kick_1k_peak_mv": 101.39,
+        "kick_cm_uv": -975.635,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.6975,
+        "qkick_p_fc": 26.4511,
+        "qkick_n_fc": 26.7245,
+        "qkick_fc": 26.7245,
+        "kick_1k_peak_mv": 110.79,
+        "kick_cm_uv": -963.161,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.1621
+      }
+    },
+    {
+      "key": "sf/1.080V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 5.20981,
+        "qkick_p_fc": 23.6585,
+        "qkick_n_fc": 24.0953,
+        "qkick_fc": 24.0953,
+        "kick_1k_peak_mv": 95.8446,
+        "kick_cm_uv": -288.329,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.16063
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 5.04918,
+        "qkick_p_fc": 25.606,
+        "qkick_n_fc": 26.0254,
+        "qkick_fc": 26.0254,
+        "kick_1k_peak_mv": 104.68,
+        "kick_cm_uv": -277.288,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 5.05107,
+        "qkick_p_fc": 27.5793,
+        "qkick_n_fc": 27.9803,
+        "qkick_fc": 27.9803,
+        "kick_1k_peak_mv": 113.406,
+        "kick_cm_uv": -266.726,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.00189
+      }
+    },
+    {
+      "key": "sf/1.200V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 13.9153,
+        "qkick_p_fc": 22.6387,
+        "qkick_n_fc": 22.9515,
+        "qkick_fc": 22.9515,
+        "kick_1k_peak_mv": 97.8107,
+        "kick_cm_uv": -1445.94,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 7.30967
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 6.60563,
+        "qkick_p_fc": 24.2989,
+        "qkick_n_fc": 24.588,
+        "qkick_fc": 24.588,
+        "kick_1k_peak_mv": 108.832,
+        "kick_cm_uv": -1386.16,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 13.9179,
+        "qkick_p_fc": 26.7595,
+        "qkick_n_fc": 27.0161,
+        "qkick_fc": 27.0161,
+        "kick_1k_peak_mv": 119.915,
+        "kick_cm_uv": -1420.92,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 7.31227
+      }
+    },
+    {
+      "key": "sf/1.200V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.637,
+        "qkick_p_fc": 23.4059,
+        "qkick_n_fc": 23.8042,
+        "qkick_fc": 23.8042,
+        "kick_1k_peak_mv": 100.201,
+        "kick_cm_uv": -991.897,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": -0.2585
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.8955,
+        "qkick_p_fc": 25.409,
+        "qkick_n_fc": 25.7792,
+        "qkick_fc": 25.7792,
+        "kick_1k_peak_mv": 110.606,
+        "kick_cm_uv": -979.438,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.994,
+        "qkick_p_fc": 27.4339,
+        "qkick_n_fc": 27.7863,
+        "qkick_fc": 27.7863,
+        "kick_1k_peak_mv": 121.019,
+        "kick_cm_uv": -967.453,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.0985
+      }
+    },
+    {
+      "key": "sf/1.200V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 5.15048,
+        "qkick_p_fc": 24.614,
+        "qkick_n_fc": 25.1253,
+        "qkick_fc": 25.1253,
+        "kick_1k_peak_mv": 103.724,
+        "kick_cm_uv": -289.121,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.24023
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 4.91025,
+        "qkick_p_fc": 26.5658,
+        "qkick_n_fc": 27.0667,
+        "qkick_fc": 27.0667,
+        "kick_1k_peak_mv": 113.405,
+        "kick_cm_uv": -278.343,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 4.81819,
+        "qkick_p_fc": 28.5544,
+        "qkick_n_fc": 29.0325,
+        "qkick_fc": 29.0325,
+        "kick_1k_peak_mv": 123.082,
+        "kick_cm_uv": -268.168,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.09206
+      }
+    },
+    {
+      "key": "sf/1.320V/-40C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 13.8141,
+        "qkick_p_fc": 23.5771,
+        "qkick_n_fc": 23.9477,
+        "qkick_fc": 23.9477,
+        "kick_1k_peak_mv": 104.7,
+        "kick_cm_uv": -1449.05,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.106
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 13.7081,
+        "qkick_p_fc": 25.6383,
+        "qkick_n_fc": 25.9782,
+        "qkick_fc": 25.9782,
+        "kick_1k_peak_mv": 116.383,
+        "kick_cm_uv": -1437.06,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 13.4167,
+        "qkick_p_fc": 27.7132,
+        "qkick_n_fc": 28.0387,
+        "qkick_fc": 28.0387,
+        "kick_1k_peak_mv": 128.193,
+        "kick_cm_uv": -1424.91,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.2914
+      }
+    },
+    {
+      "key": "sf/1.320V/27C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.4944,
+        "qkick_p_fc": 24.3238,
+        "qkick_n_fc": 24.7899,
+        "qkick_fc": 24.7899,
+        "kick_1k_peak_mv": 107.185,
+        "kick_cm_uv": -994.514,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.0748
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.4196,
+        "qkick_p_fc": 26.3452,
+        "qkick_n_fc": 26.7832,
+        "qkick_fc": 26.7832,
+        "kick_1k_peak_mv": 118.2,
+        "kick_cm_uv": -982.516,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 10.2851,
+        "qkick_p_fc": 28.3923,
+        "qkick_n_fc": 28.7954,
+        "qkick_fc": 28.7954,
+        "kick_1k_peak_mv": 129.374,
+        "kick_cm_uv": -971.184,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": -0.1345
+      }
+    },
+    {
+      "key": "sf/1.320V/125C",
+      "vcm-m050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 4.67745,
+        "qkick_p_fc": 25.5331,
+        "qkick_n_fc": 26.1205,
+        "qkick_fc": 26.1205,
+        "kick_1k_peak_mv": 110.463,
+        "kick_cm_uv": -289.777,
+        "vcm_meas": 0.55,
+        "residue_delta_vs_nom_uv": 0.06667
+      },
+      "vcm-nom": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 4.61078,
+        "qkick_p_fc": 27.4999,
+        "qkick_n_fc": 28.0671,
+        "qkick_fc": 28.0671,
+        "kick_1k_peak_mv": 120.763,
+        "kick_cm_uv": -279.15,
+        "vcm_meas": 0.6
+      },
+      "vcm-p050": {
+        "valid": true,
+        "reason": null,
+        "kick_sigdep_uv": 4.69245,
+        "qkick_p_fc": 29.4833,
+        "qkick_n_fc": 30.0388,
+        "qkick_fc": 30.0388,
+        "kick_1k_peak_mv": 131.138,
+        "kick_cm_uv": -269.065,
+        "vcm_meas": 0.65,
+        "residue_delta_vs_nom_uv": 0.08167
+      }
+    }
+  ]
+}
