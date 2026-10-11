@@ -76,6 +76,14 @@ def _check_env(allow_drift: bool) -> int:
         )
         return 1
     print(f"OSDI models: all {len(pdk_mod.REQUIRED_OSDI)} present in {pdk.osdi_dir}")
+    try:
+        ident = pdk_mod.osdi_identity(pdk.osdi_dir)
+    except pdk_mod.OsdiIdentityError as exc:
+        print(f"OSDI bytes : UNREADABLE ({exc})", file=sys.stderr)
+        return 1
+    build = ident["build_provenance"]
+    print(f"OSDI bytes : inventory sha256 {ident['inventory_sha256'][:16]} (identity only); "
+          f"build provenance {build['status']}: {build.get('reason') or build['compiler']}")
 
     try:
         banner = runner_mod.ngspice_version()
@@ -213,6 +221,12 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 3
+    # Issue #196: identify the model bytes the grid will load, before it runs.
+    try:
+        osdi_before = pdk_mod.osdi_identity(pdk.osdi_dir)
+    except pdk_mod.OsdiIdentityError as exc:
+        print(f"OSDI IDENTITY NOT CAPTURED -- refusing to simulate: {exc}", file=sys.stderr)
+        return 8
 
     corner_names = args.corners if args.corners else list(tb.corners)
     corner_list = corners_mod.resolve_corners(corner_names)
@@ -348,6 +362,18 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  {completed}/{len(results)} points completed -- "
           f"{'PASS' if passed else 'FAIL'}")
 
+    try:
+        osdi_after = pdk_mod.osdi_identity(pdk.osdi_dir)
+        changed = "" if osdi_after == osdi_before else "OSDI identity changed"
+    except pdk_mod.OsdiIdentityError as exc:
+        changed = f"OSDI model unreadable after the grid: {exc}"
+    if changed:
+        reservation.release_scratch()
+        print(f"OSDI MODELS NOT STABLE DURING THE RUN -- refusing to certify: {changed}"
+              f" (inventory before {osdi_before['inventory_sha256'][:16]}); no record "
+              f"written, logs kept in sim/{tb.experiment}/corners/{rid}/", file=sys.stderr)
+        return 9
+
     if sabotaged:
         # Under sabotage a FAIL is the desired outcome: it proves the per-axis
         # process-sensitivity checks would have caught a runner stuck on typical.
@@ -363,6 +389,7 @@ def main(argv: list[str] | None = None) -> int:
             "dirty": bool(dirty_at_start),
             "dirty_paths": dirty_at_start[:20],
             "pdk": pdk.provenance(),
+            "osdi": {**osdi_before, "rehashed_after_grid": "unchanged"},
             "toolchain": chain.as_dict(),
             **dut.provenance_record(),
         }

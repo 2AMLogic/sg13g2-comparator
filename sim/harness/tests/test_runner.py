@@ -659,18 +659,26 @@ class FrozenInputsTest(unittest.TestCase):
             path.write_text(text)
         self.decks = []
 
-    def run_cli(self, mutate=False):
+    def run_cli(self, mutate=False, osdi_edit=None):
+        osdi = self.root / "osdi"
+        osdi.mkdir(exist_ok=True)
+        for name in cli.pdk_mod.REQUIRED_OSDI:
+            with open(osdi / name, "wb") as fh:
+                fh.write(name.encode())
+
         def fake(cmd, **kw):
             deck = Path(cmd[-1]).read_text()
             incs = re.findall(r'^\.include "(.*)"$', deck, re.M)
             self.decks.append((deck, incs, [Path(i).read_text() for i in incs]))
             for path, text in self.live.items() if mutate else ():
                 path.write_text(text.replace("ln lp", "qq lp") + "*edit\n")
+            if osdi_edit:
+                osdi_edit(osdi / "r3_cmc.osdi")
             return _fake_completed("m_m = 1.0\n")
 
         pdk = types.SimpleNamespace(
             variant="v", version="0" * 40, missing_osdi=list, mos_corner_lib=Path("/l"),
-            osdi_dir=Path("/o"), provenance=lambda: dict.fromkeys(
+            osdi_dir=osdi, provenance=lambda: dict.fromkeys(
                 ("variant", "release_version", "discovered_via"), "x"))
         chain = types.SimpleNamespace(drift=[], as_dict=lambda: {
             "observed": {"ngspice": "n", "python": "3"}, "drift": []})
@@ -697,6 +705,10 @@ class FrozenInputsTest(unittest.TestCase):
         self.assertEqual([ctx["dut_netlist_sha256"], ctx["dut_config_sha256"],
                           tb["netlist_sha256"], tb["manifest_sha256"]], sha)
         self.assertEqual(ctx["dut_netlist"], "sim/d.spice")
+        self.assertEqual(ctx["osdi"], {**cli.pdk_mod.osdi_identity(self.root / "osdi"),
+                                       "rehashed_after_grid": "unchanged"})
+        self.assertNotIn(str(self.root / "osdi"), json.dumps(ctx["osdi"]))
+        self.assertIn("unchanged after the grid", path.with_suffix(".md").read_text())
         snap = (self.sim / f"exp/netlist-snapshots/{rec['record_id']}.spice").read_text()
         self.assertIn(_DUT_NET + "\n* -", snap)
         self.assertTrue(snap.endswith("FRAGMENT ----------------\n* tb\n"))
@@ -725,6 +737,26 @@ class FrozenInputsTest(unittest.TestCase):
         run.assert_not_called()
         self.assertEqual(_tree(self.sim / "exp"), before)
         self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+
+    def test_osdi_changed_or_unreadable_mid_grid_is_not_certified(self):
+        """Issue #196: no record, logs kept, explicit non-zero exit."""
+        for edit in (lambda p: p.write_bytes(b"rebuilt"), lambda p: p.unlink(missing_ok=True)):
+            with self.subTest(edit=edit):
+                shutil.rmtree(self.sim / "exp/corners", ignore_errors=True)
+                rc, _ = self.run_cli(osdi_edit=edit)
+                self.assertEqual(rc, 9)
+                self.assertFalse((self.sim / "exp/records").exists())
+                (logs,) = (self.sim / "exp/corners").iterdir()
+                self.assertEqual(len(list(logs.glob("*.log"))), 2)
+                self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+
+    def test_unreadable_osdi_before_grid_refuses_to_simulate(self):
+        with mock.patch.object(cli.pdk_mod, "osdi_identity",
+                               side_effect=cli.pdk_mod.OsdiIdentityError("x: denied")):
+            rc, run = self.run_cli()
+        self.assertEqual(rc, 8)
+        run.assert_not_called()
+        self.assertFalse((self.sim / "exp/corners").exists())
 
 if __name__ == "__main__":
     unittest.main()

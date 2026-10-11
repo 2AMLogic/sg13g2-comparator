@@ -42,6 +42,7 @@ ported from ``2AMLogic/gf180-sar-adc``). ADAPTED FOR SG13G2, structurally:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass
@@ -71,6 +72,48 @@ BUILTIN_SEARCH_ROOTS = (
 #: --check-env even though today's placeholder DUT only instantiates the
 #: first three, because a DUT swap must not silently need a rebuild.
 REQUIRED_OSDI: tuple[str, ...] = ("psp103.osdi", "psp103_nqs.osdi", "r3_cmc.osdi", "mosvar.osdi")
+
+#: Machine-local receipt sim/tools/build-osdi.sh writes next to its outputs.
+OSDI_RECEIPT = ".build-osdi-receipt.json"
+_RECEIPT_KEYS = ("compiler", "platform", "build_flags", "sources", "pdk_release_marker")
+
+
+class OsdiIdentityError(RuntimeError):
+    """A required OSDI binary is missing or unreadable: it has no byte identity."""
+
+
+def osdi_identity(osdi_dir: Path) -> dict:
+    """Issue #196: path-independent SHA-256 identity of the REQUIRED_OSDI bytes.
+
+    ``inventory_sha256`` is the sha256 of ``sha256sum``-style lines
+    (``<hex>  <name>``, sorted by name). Equal hashes mean equal bytes, nothing
+    more: they do not prove a compiler version or PDK authenticity, and they
+    say nothing about loadability (``build-osdi.sh --check``). Missing or
+    unreadable files raise :class:`OsdiIdentityError`, never a partial result.
+    """
+    files = {}
+    for name in REQUIRED_OSDI:
+        try:
+            files[name] = hashlib.sha256((osdi_dir / name).read_bytes()).hexdigest()
+        except OSError as exc:
+            raise OsdiIdentityError(f"{name}: {exc.strerror or exc}") from exc
+    lines = "".join(f"{h}  {n}\n" for n, h in sorted(files.items()))
+    return {"inventory_sha256": hashlib.sha256(lines.encode()).hexdigest(),
+            "files": files, "build_provenance": _build_provenance(osdi_dir, files)}
+
+
+def _build_provenance(osdi_dir: Path, files: dict) -> dict:
+    """Attribution from build-osdi.sh's receipt only if it names exactly these bytes."""
+    try:
+        receipt = json.loads((osdi_dir / OSDI_RECEIPT).read_text())
+        outputs = receipt["outputs"]
+        if {n: outputs.get(n) for n in files} != files:
+            return {"status": "unknown", "reason": "receipt output hashes do not match these bytes"}
+    except FileNotFoundError:
+        return {"status": "unknown", "reason": f"no {OSDI_RECEIPT} (not built by build-osdi.sh here)"}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        return {"status": "unknown", "reason": f"unusable receipt: {exc!r}"}
+    return {"status": "receipt", **{k: receipt.get(k, "unknown") for k in _RECEIPT_KEYS}}
 
 INSTALL_HINT = """\
 IHP SG13G2 PDK not found.

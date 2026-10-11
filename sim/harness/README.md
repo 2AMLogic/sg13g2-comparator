@@ -108,6 +108,30 @@ tarball with a checksum-pinned OpenVAF-Reloaded compiler; no third-party
 path** (`sim/README.md` "Cold start"), run once per PDK install, not a
 manual workaround outside the command surface above.
 
+### OSDI identity, loadability and authenticity (issue #196)
+
+Three separate questions, three separate checks:
+
+- **Identity** — *which bytes?* `pdk.osdi_identity()` hashes the four
+  required files (sha256 per file, plus `inventory_sha256` over sorted
+  `<sha256>  <name>` lines; no absolute path). The runner captures it before
+  the grid (exit 8 if a model is missing or unreadable), re-hashes after it,
+  and refuses to certify (exit 9, no record, logs kept) if anything changed or
+  became unreadable. New records carry it as `context.osdi`. Two installs
+  with the same `.fetched-version` but different binaries now differ here.
+- **Loadability** — *does ngspice accept them?* `missing_osdi()` and
+  `build-osdi.sh --check` (an `op` with every model `pre_osdi`-loaded).
+- **Authenticity / build origin** — *not established by hashes.* Hashes
+  prove neither the compiler version nor that the sources were IHP's. When
+  `build-osdi.sh` compiles, it writes a machine-local
+  `osdi/.build-osdi-receipt.json` tying the output hashes to the compiler pin
+  (asset sha256), platform, flags, PDK release marker and a sha256 over each
+  Verilog-A source directory. `build_provenance.status` is `receipt` only if
+  the receipt names exactly the loaded bytes; otherwise it is `unknown` with a
+  reason (e.g. models reused from an older build). Records written before
+  issue #196 have no `osdi` field: their binary identity is unavailable, not
+  implied.
+
 ## Checks, and what they are for
 
 A `checks` entry names a measurement and bounds it. The vocabulary:

@@ -376,6 +376,10 @@ it:
   working Git checkout therefore require no-write mode;
 - the **PDK** variant and release version, and the **toolchain** observed,
   plus any accepted drift;
+- the **OSDI model-byte identity** (sha256 inventory, re-checked after the
+  grid; exit 8/9 if unreadable or changed) and whether a local build receipt
+  matches it — identity only, not authenticity (`harness/README.md`
+  "OSDI identity, loadability and authenticity");
 - the **corner matrix** actually run and how many points completed;
 - for a Monte-Carlo record, the **seed, draw count and σ derivation**
   (`CLAUDE.md` requires all three);
