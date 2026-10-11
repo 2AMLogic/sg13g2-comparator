@@ -255,5 +255,106 @@ class OsdiIdentityTest(PdkTestBase):
         self.assertEqual(pdk.osdi_identity(p.osdi_dir)["build_provenance"]["status"], "unknown")
 
 
+def _models(root: Path, coeff: str = "1.0") -> pdk.Pdk:
+    """A fake variant: release marker, OSDI bytes and a two-level SPICE model tree."""
+    p = _osdi(root)
+    (p.mos_corner_lib).write_text(
+        ".LIB mos_tt\n.param sg13g2_lv_nmos_vfbo_mm=1\n  .include sg13g2_moslv_mod.lib\n"
+        ".ENDL mos_tt\n")
+    (p.models_dir / "sg13g2_moslv_mod.lib").write_text(f".param vfb={coeff}\n")
+    (p.models_dir / "sub").mkdir()
+    (p.models_dir / "sub" / "z.lib").write_text("* nested\n")
+    return p
+
+
+class ModelSourceIdentityTest(PdkTestBase):
+    """Issue #203: runtime SPICE model-source identity and its disclosed scope."""
+
+    def ident(self, p: pdk.Pdk) -> dict:
+        return pdk.model_source_identity(p.models_dir, roots=(p.mos_corner_lib,))
+
+    def test_changed_coefficient_differs_with_same_release_and_osdi(self) -> None:
+        a, c = _models(self.tmp / "a"), _models(self.tmp / "c", coeff="1.01")
+        self.assertEqual(a.version, c.version)
+        self.assertEqual(pdk.osdi_identity(a.osdi_dir), pdk.osdi_identity(c.osdi_dir))
+        self.assertNotEqual(self.ident(a)["inventory_sha256"], self.ident(c)["inventory_sha256"])
+        self.assertNotEqual(self.ident(a)["files"]["sg13g2_moslv_mod.lib"],
+                            self.ident(c)["files"]["sg13g2_moslv_mod.lib"])
+
+    def test_same_tree_at_other_path_is_identical_relative_and_sorted(self) -> None:
+        ia, ib = self.ident(_models(self.tmp / "a")), self.ident(_models(self.tmp / "deep/b"))
+        self.assertEqual(ia, ib)
+        self.assertEqual(list(ia["files"]), ["cornerMOSlv.lib", "sg13g2_moslv_mod.lib", "sub/z.lib"])
+        self.assertNotIn(str(self.tmp), json.dumps(ia))
+        scope = ia["scope"]
+        self.assertEqual((scope["kind"], scope["tree"], scope["roots"], scope["complete"]),
+                         ("whole-tree", "libs.tech/ngspice/models", ["cornerMOSlv.lib"], True))
+        self.assertIn("not PDK authenticity", scope["note"])
+
+    def test_unreadable_vanished_or_nonregular_source_has_no_identity(self) -> None:
+        p = _models(self.tmp / "a")
+        real_open = open
+
+        def deny(path, *a, **kw):
+            if str(path).endswith("sg13g2_moslv_mod.lib"):
+                raise PermissionError(13, "denied", str(path))
+            return real_open(path, *a, **kw)
+
+        with mock.patch("builtins.open", side_effect=deny):
+            with self.assertRaisesRegex(pdk.ModelSourceIdentityError,
+                                        "sg13g2_moslv_mod.lib: denied"):
+                self.ident(p)
+        (p.models_dir / "gone.lib").symlink_to(p.models_dir / "nothing.lib")  # dangling
+        with self.assertRaisesRegex(pdk.ModelSourceIdentityError, "gone.lib"):
+            self.ident(p)
+        (p.models_dir / "gone.lib").unlink()
+        if hasattr(os, "mkfifo"):
+            os.mkfifo(p.models_dir / "pipe")
+            with self.assertRaisesRegex(pdk.ModelSourceIdentityError, "pipe: not a regular"):
+                self.ident(p)
+            (p.models_dir / "pipe").unlink()
+        shutil.rmtree(p.models_dir)
+        with self.assertRaises(pdk.ModelSourceIdentityError):
+            self.ident(p)
+
+    def test_root_outside_tree_is_refused(self) -> None:
+        p = _models(self.tmp / "a")
+        elsewhere = self.tmp / "cornerMOSlv.lib"
+        elsewhere.write_text("* outside\n")
+        with self.assertRaisesRegex(pdk.ModelSourceIdentityError, "not inside the inventoried"):
+            pdk.model_source_identity(p.models_dir, roots=(elsewhere,))
+
+    def test_links_and_references_leaving_the_tree_are_disclosed(self) -> None:
+        p = _models(self.tmp / "a")
+        base = self.ident(p)
+        ext = self.tmp / "ext"
+        (ext / "d").mkdir(parents=True)
+        (ext / "x.lib").write_text(".param k=1\n")
+        (ext / "d" / "y.lib").write_text("* y\n")
+        (p.models_dir / "in.lib").symlink_to(p.models_dir / "sg13g2_moslv_mod.lib")
+        inside = self.ident(p)
+        self.assertTrue(inside["scope"]["complete"])
+        self.assertEqual(inside["scope"]["links"], {"in.lib": "in-tree:sg13g2_moslv_mod.lib"})
+        (p.models_dir / "x.lib").symlink_to(ext / "x.lib")
+        (p.models_dir / "linkdir").symlink_to(ext / "d")
+        (p.models_dir / "sub" / "z.lib").write_text(
+            f'.include "{ext}/x.lib"\n.lib ../../missing.lib mos_tt\n.lib section_only\n'
+            ".inc absent.lib\n")
+        got = self.ident(p)
+        scope = got["scope"]
+        self.assertFalse(scope["complete"])
+        self.assertEqual(scope["outside_tree_links"], ["linkdir", "x.lib"])
+        self.assertEqual(scope["uninventoried_dirs"], ["linkdir/"])
+        self.assertNotIn("linkdir/y.lib", got["files"])
+        self.assertIn("x.lib", got["files"])  # bytes read through the link are hashed
+        self.assertEqual([(r["ref"], r["reason"]) for r in scope["uninventoried_references"]],
+                         [(f"{ext}/x.lib", "outside tree"), ("../../missing.lib", "outside tree"),
+                          ("absent.lib", "not in inventory")])
+        self.assertNotEqual(got["inventory_sha256"], base["inventory_sha256"])
+        # Editing the external target through the link changes the identity.
+        (ext / "x.lib").write_text(".param k=2\n")
+        self.assertNotEqual(self.ident(p)["inventory_sha256"], got["inventory_sha256"])
+
+
 if __name__ == "__main__":
     unittest.main()

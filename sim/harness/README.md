@@ -132,6 +132,31 @@ Three separate questions, three separate checks:
   issue #196 have no `osdi` field: their binary identity is unavailable, not
   implied.
 
+### Four provenance questions about the device models (issue #203)
+
+| Question | Field | What it establishes — and what it does not |
+|---|---|---|
+| Release naming | `context.pdk.release_version` | The tag in the install's `.fetched-version` marker. A *name*: editing a model file leaves it unchanged. |
+| Runtime SPICE source identity | `context.model_sources` | sha256 per file of the whole `libs.tech/ngspice/models/` tree (relative POSIX paths, sorted; `inventory_sha256` over `<sha256>  <path>` lines, no absolute path) — the `.lib`/`.include` parameter files ngspice parses, incl. corner and mismatch coefficients. |
+| Compiled binary identity | `context.osdi` | The four `pre_osdi`-loaded binaries (issue #196 above). Says nothing about the SPICE parameter files. |
+| Authenticity | — | **Not established by any hash here.** Equal hashes mean equal bytes, not that the bytes are IHP's. |
+
+`pdk.model_source_identity()` is a deliberately conservative **whole-tree**
+inventory, not an ngspice dependency parser: it changes when an *unused*
+model file changes, and it is not the exact closure of the selected `.LIB`
+sections. Its `scope` discloses what it does not cover: file symlinks
+leaving the tree (their bytes are hashed, but flagged), symlinked
+directories outside the tree (not descended), and `.include`/`.inc`/`.lib
+<file>` references that resolve outside the tree or to no inventoried file.
+Any of those sets `scope.complete = false`, which the Markdown record prints
+as **Inventory scope INCOMPLETE**. The deck root (`cornerMOSlv.lib`) must lie
+inside the tree. The runner captures it before the grid (exit 8 if a source
+is unreadable, vanishes, is not a regular file, or the root is outside the
+tree), re-hashes after it, and refuses to certify (exit 9, no record, logs
+kept) if anything changed or became unreadable. Records written before
+issue #203 have no `model_sources` field: their source identity is
+unavailable, not implied.
+
 ## Checks, and what they are for
 
 A `checks` entry names a measurement and bounds it. The vocabulary:

@@ -45,6 +45,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -114,6 +116,126 @@ def _build_provenance(osdi_dir: Path, files: dict) -> dict:
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         return {"status": "unknown", "reason": f"unusable receipt: {exc!r}"}
     return {"status": "receipt", **{k: receipt.get(k, "unknown") for k in _RECEIPT_KEYS}}
+
+
+#: Issue #203: the inventoried runtime SPICE model-source tree, relative to the
+#: variant directory. Recorded verbatim so evidence states its own scope.
+MODEL_SOURCE_TREE = "libs.tech/ngspice/models"
+MODEL_SOURCE_SCOPE_NOTE = (
+    "whole-tree inventory: equal hashes mean byte-identical files under this tree, "
+    "not PDK authenticity; it also changes when an unused model file changes and is "
+    "not the exact dependency closure of the selected .LIB sections")
+
+# `.include`/`.inc`/`.lib <file> [section]` -- a disclosure scan for references
+# that leave the tree, NOT a dependency parser (a one-token `.lib name` is a
+# section header and is skipped).
+_SPICE_REF_RE = re.compile(rb"^[ \t]*\.(inc\w*|lib)[ \t]+(\S+)([ \t]+\S+)?", re.I | re.M)
+
+
+class ModelSourceIdentityError(RuntimeError):
+    """A runtime SPICE model source is unreadable or outside the inventory scope."""
+
+
+def _inside(path: str, root: str) -> bool:
+    return os.path.commonpath([path, root]) == root
+
+
+def model_source_identity(models_dir: Path, roots: tuple = ()) -> dict:
+    """Issue #203: path-independent SHA-256 inventory of the SPICE model tree.
+
+    Every file under ``models_dir`` (recursively, symlinks to files followed and
+    hashed as the bytes ngspice would read) is hashed; ``inventory_sha256`` is
+    the sha256 of sorted ``<hex>  <relative/posix/path>`` lines, so the same
+    tree at two absolute paths has the same identity. ``scope`` discloses what
+    the inventory does NOT cover: symlinks leaving the tree, symlinked
+    directories outside it (not descended), and ``.include``/``.lib`` file
+    references that resolve outside the tree or to no inventoried file --
+    ``scope.complete`` is false whenever any of those exist. ``roots`` (the
+    corner libraries decks reference) must lie inside the inventory.
+    Unreadable, vanishing or non-regular files raise
+    :class:`ModelSourceIdentityError`, never a partial result.
+    """
+    root = os.path.realpath(models_dir)
+
+    def _fail(exc: OSError, where: str = "") -> None:
+        name = where or os.path.relpath(exc.filename or root, root)
+        raise ModelSourceIdentityError(f"{name}: {exc.strerror or exc}") from exc
+
+    if not os.path.isdir(root):
+        raise ModelSourceIdentityError(f"{MODEL_SOURCE_TREE}: not a directory")
+    files: dict[str, str] = {}
+    links: dict[str, str] = {}
+    uninventoried: list[str] = []
+    contents: dict[str, tuple[str, bytes]] = {}
+    for dirpath, dirnames, filenames in os.walk(root, onerror=_fail):
+        dirnames.sort()
+        for name in list(dirnames):
+            full = os.path.join(dirpath, name)
+            if os.path.islink(full):
+                dirnames.remove(name)  # never descended; its real path is walked if in-tree
+                rel = Path(os.path.relpath(full, root)).as_posix()
+                target = os.path.realpath(full)
+                if _inside(target, root):
+                    links[rel] = "in-tree:" + Path(os.path.relpath(target, root)).as_posix()
+                else:
+                    links[rel] = "outside-tree"
+                    uninventoried.append(rel + "/")
+        for name in sorted(filenames):
+            full = os.path.join(dirpath, name)
+            rel = Path(os.path.relpath(full, root)).as_posix()
+            if os.path.islink(full):
+                target = os.path.realpath(full)
+                links[rel] = ("in-tree:" + Path(os.path.relpath(target, root)).as_posix()
+                              if _inside(target, root) else "outside-tree")
+            try:
+                if not stat.S_ISREG(os.stat(full).st_mode):
+                    raise ModelSourceIdentityError(f"{rel}: not a regular file")
+                with open(full, "rb") as fh:
+                    data = fh.read()
+            except OSError as exc:
+                _fail(exc, rel)
+            files[rel] = hashlib.sha256(data).hexdigest()
+            contents[rel] = (dirpath, data)
+
+    references = []
+    for rel, (dirpath, data) in sorted(contents.items()):
+        for match in _SPICE_REF_RE.finditer(data):
+            if match.group(1).lower() == b"lib" and match.group(3) is None:
+                continue  # `.LIB section` header, not a file reference
+            ref = match.group(2).strip(b"\"'").decode("utf-8", "replace")
+            target = os.path.realpath(os.path.join(dirpath, os.path.expanduser(ref)))
+            if not _inside(target, root):
+                references.append({"from": rel, "ref": ref, "reason": "outside tree"})
+            elif Path(os.path.relpath(target, root)).as_posix() not in files:
+                references.append({"from": rel, "ref": ref, "reason": "not in inventory"})
+
+    root_rels = []
+    for lib in roots:
+        target = os.path.realpath(lib)
+        rel = Path(os.path.relpath(target, root)).as_posix() if _inside(target, root) else None
+        if rel not in files:
+            raise ModelSourceIdentityError(
+                f"{Path(lib).name}: deck-referenced library is not inside the inventoried "
+                f"{MODEL_SOURCE_TREE} tree")
+        root_rels.append(rel)
+
+    lines = "".join(f"{h}  {n}\n" for n, h in sorted(files.items()))
+    outside_links = sorted(k for k, v in links.items() if v == "outside-tree")
+    return {
+        "inventory_sha256": hashlib.sha256(lines.encode()).hexdigest(),
+        "files": dict(sorted(files.items())),
+        "scope": {
+            "kind": "whole-tree",
+            "tree": MODEL_SOURCE_TREE,
+            "roots": root_rels,
+            "complete": not (outside_links or uninventoried or references),
+            "links": dict(sorted(links.items())),
+            "outside_tree_links": outside_links,
+            "uninventoried_dirs": sorted(uninventoried),
+            "uninventoried_references": references,
+            "note": MODEL_SOURCE_SCOPE_NOTE,
+        },
+    }
 
 INSTALL_HINT = """\
 IHP SG13G2 PDK not found.

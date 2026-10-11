@@ -123,6 +123,9 @@ def compose_deck(
         "* not survive ngspice's parse of it (confirmed empirically, issue #8;",
         "* see this module's docstring).",
     ]
+    # Issue #203: this .lib (and every file its sections include) is an
+    # external runtime input; cli.py inventories pdk.models_dir around the grid
+    # (pdk.model_source_identity) and refuses if this root is outside it.
     for section in point.corner.sections:
         lines.append(f'.lib "{pdk.mos_corner_lib}" {section}')
 
