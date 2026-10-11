@@ -136,7 +136,7 @@ class AnalysisTests(unittest.TestCase):
         self._drop(b, "vcm_meas")
         rep = cd.reproduction(a, b)
         self.assertTrue(rep["bit_identical"])
-        self.assertEqual(rep["values_compared"], 45 * 9 + 45 * 0 + 45 * len(cd.GATES))
+        self.assertEqual(rep["values_compared"], 45 * 9 + 45 * len(cd.GATES))
 
     def test_reproduction_missing_corner_and_malformed_lists(self):
         a, b = _env(), _env()
