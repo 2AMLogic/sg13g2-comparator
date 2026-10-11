@@ -547,7 +547,7 @@ inputs):
 |---|---|
 | signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
-| harness-unit-tests | `ci.yml` patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_offset_cm_band.py,dut.json,tools/build-osdi.sh}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py,comparator/{erc_tool.py,erc_report.json,pdk_drc.py,pdk_drc_report.json,comparator.gds,pex_report.json}}` |
+| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
 | append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` |
 
 A new input a job starts reading must be added to its patterns in the same
@@ -561,6 +561,15 @@ size checker gets a complete clone, and that the size step exits 2 quickly in
 a `blob:none` clone. The two jobs that need the pinned `klt` run there only when the
 pinned build is first on `PATH`; otherwise they are skipped locally and proven
 by the real CI jobs.
+
+The harness job's lint population is guarded by
+`scripts/check_lint_population.py` (issue #216): with F-only rules ruff only
+warns about a missing root, and a glob expands to whatever the cone checked
+out, so the preflight derives the intended set from git's tracked inventory
+(`ls-tree` of `HEAD`), fails naming every omitted path before ruff runs, and
+keeps the ruff step's argument list (`LINT_ROOTS`) in one maintained copy.
+The sparse-cone tests add dropping-a-pattern and undefined-name negative
+controls (the pinned ruff is installed for them in the guard job too).
 
 Reproduce locally:
 
