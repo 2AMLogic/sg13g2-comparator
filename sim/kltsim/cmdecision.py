@@ -34,7 +34,7 @@ from pathlib import Path
 from . import build as build_mod
 from . import cmband
 from . import grade as grade_mod
-from .benches import REGENERATION, SUPPLIES_V, TEMPERATURES_C, Meas
+from .benches import REGENERATION, SUPPLIES_V, TEMPERATURES_C
 
 EXPERIMENT_DIR = build_mod.SIM_DIR / "comparator-decision-cm-band"
 SERIES_DIR = EXPERIMENT_DIR / "campaigns"
