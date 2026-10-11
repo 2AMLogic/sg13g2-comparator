@@ -18,8 +18,10 @@ without a real testbench/PDK/DUT.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import math
+import re
 import shutil
 import subprocess
 import sys
@@ -29,12 +31,14 @@ import types
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from harness.corners import CORNERS, PvtPoint  # noqa: E402
-from harness import report as report_mod  # noqa: E402
+from harness import cli, report as report_mod  # noqa: E402
+from harness import dut as dut_mod  # noqa: E402
 from harness.report import _json_num, _strict_point, summarize  # noqa: E402
 from harness.runner import PointResult, parse_measurements_checked, run_grid, run_point  # noqa: E402
 
@@ -558,6 +562,108 @@ class GitProvenanceTest(ReservationTestBase):
         text = report_mod.render_record(tb, [], {}, ctx)
         self.assertIn("NOT VERIFIED", text)
 
+
+_DUT_NET = """.subckt comparator_dut vinp vinn clk ibias dout doutb vdd vss
+.ends
+.subckt comparator_dut_analog vinp vinn ibias aop aon vdd vss
+.ends
+.subckt comparator_dut_latch inp inn clk dout doutb vdd vss
+.ends
+.subckt c vss
+XM3 ln lp np vss n
+.ends
+"""
+
+
+class FrozenInputsTest(unittest.TestCase):
+    """Issue #179: points and record use inputs captured before the grid."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.sim = sim = self.root / "sim"
+        (sim / "exp" / "testbench").mkdir(parents=True)
+        noise = {"subckt": "c", "inner": "x1", "instances": ["x0"], "ts": 1e-11,
+                 "rails": {"vss": "0"}, "devices": {"XM3": {"g": 1e-3}}}
+        self.live = {
+            sim / "d.spice": _DUT_NET,
+            sim / "dut.json": json.dumps({"netlist": "d.spice", "id": "d", "provenance": "schematic"}),
+            sim / "exp/testbench/t.spice": "* tb\n",
+            sim / "exp/testbench/tb.json": json.dumps(
+                {"netlist": "t.spice", "corners": ["tt"], "temperatures_c": [27, 85],
+                 "supply_tolerance": 0, "measure": {"m": "1"}, "internal_noise": noise}),
+        }
+        for path, text in self.live.items():
+            path.write_text(text)
+        self.decks = []
+
+    def run_cli(self, mutate=False):
+        def fake(cmd, **kw):
+            deck = Path(cmd[-1]).read_text()
+            incs = re.findall(r'^\.include "(.*)"$', deck, re.M)
+            self.decks.append((deck, incs, [Path(i).read_text() for i in incs]))
+            for path, text in self.live.items() if mutate else ():
+                path.write_text(text.replace("ln lp", "qq lp") + "*edit\n")
+            return _fake_completed("m_m = 1.0\n")
+
+        pdk = types.SimpleNamespace(
+            variant="v", version="0" * 40, missing_osdi=list, mos_corner_lib=Path("/l"),
+            osdi_dir=Path("/o"), provenance=lambda: dict.fromkeys(
+                ("variant", "release_version", "discovered_via"), "x"))
+        chain = types.SimpleNamespace(drift=[], as_dict=lambda: {
+            "observed": {"ngspice": "n", "python": "3"}, "drift": []})
+        with mock.patch.multiple(cli, REPO_ROOT=self.root, SIM_DIR=self.sim,
+                                 WORK_DIR=self.sim / ".work"), \
+             mock.patch.multiple(dut_mod, REPO_ROOT=self.root, SIM_DIR=self.sim), \
+             mock.patch.object(cli.pdk_mod, "find_pdk", return_value=pdk), \
+             mock.patch("harness.runner.ngspice_version", return_value="n"), \
+             mock.patch("harness.toolchain.check", return_value=chain), \
+             mock.patch.object(report_mod, "capture_git_provenance",
+                               return_value=report_mod.GitProvenance(COMMIT, (), True)), \
+             mock.patch("harness.runner.subprocess.run", side_effect=fake) as run, \
+             redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            rc = cli.main(["exp", "--dut", str(self.sim / "dut.json")])
+        return rc, run
+
+    def check_frozen(self, mutate):
+        rc, _ = self.run_cli(mutate)
+        self.assertEqual(rc, 0)
+        sha = [hashlib.sha256(t.encode()).hexdigest() for t in self.live.values()]
+        (path,) = (self.sim / "exp/records").glob("*.json")
+        rec = json.loads(path.read_text())
+        ctx, tb = rec["context"], rec["testbench"]
+        self.assertEqual([ctx["dut_netlist_sha256"], ctx["dut_config_sha256"],
+                          tb["netlist_sha256"], tb["manifest_sha256"]], sha)
+        self.assertEqual(ctx["dut_netlist"], "sim/d.spice")
+        snap = (self.sim / f"exp/netlist-snapshots/{rec['record_id']}.spice").read_text()
+        self.assertIn(_DUT_NET + "\n* -", snap)
+        self.assertTrue(snap.endswith("FRAGMENT ----------------\n* tb\n"))
+        self.assertEqual(len(self.decks), 2)
+        for deck, incs, texts in self.decks:
+            self.assertTrue(all(f"/{rec['record_id']}/inputs/" in i for i in incs))
+            self.assertEqual(texts, [_DUT_NET, "* tb\n"])
+            self.assertIn("x0.x1.ln x0.x1.np", deck)  # noise hook reads the snapshot
+        self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+        return [p.read_text() for p in self.live]
+
+    def test_live_edits_mid_grid_do_not_reach_points_or_record(self):
+        self.assertIn("*edit", self.check_frozen(True)[0])
+
+    def test_unchanged_run(self):
+        self.assertEqual(self.check_frozen(False), list(self.live.values()))
+
+    def test_capture_failure_aborts_before_simulation(self):
+        old = self.sim / "exp/corners/old/tt.log"
+        old.parent.mkdir(parents=True)
+        old.write_text("committed\n")
+        before = _tree(self.sim / "exp")
+        with mock.patch.object(Path, "write_bytes", side_effect=OSError("disk full")):
+            rc, run = self.run_cli()
+        self.assertEqual(rc, 7)
+        run.assert_not_called()
+        self.assertEqual(_tree(self.sim / "exp"), before)
+        self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
 
 if __name__ == "__main__":
     unittest.main()
