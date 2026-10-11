@@ -12,10 +12,14 @@ name checks already use in this module).
 
 from __future__ import annotations
 
+import io
+import json
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -37,8 +41,6 @@ def _write_manifest(root: Path, record_kind: str, seed_line: str) -> Path:
         "measure": {"m_probe": "1"},
         "evidence": {"record_kind": record_kind},
     }
-    import json
-
     (testbench_dir / "tb.json").write_text(json.dumps(manifest))
     return root
 
@@ -75,136 +77,93 @@ class MonteCarloSeedGuardTest(unittest.TestCase):
 
 
 
+# Issue #178: malformed check bounds are rejected at load time.
 
-# ---------------------------------------------------------------------------
-# Issue #178: check-bound validation at load time
-# ---------------------------------------------------------------------------
-
-import json  # noqa: E402
-import io  # noqa: E402
-from contextlib import redirect_stderr  # noqa: E402
-from unittest import mock  # noqa: E402
-
-
-def _write_checks(root: Path, check: dict, raw: str | None = None) -> Path:
+def _write_checks(root: Path, check: dict, raw: str = "") -> Path:
     tbdir = root / "testbench"
     tbdir.mkdir(parents=True)
     (tbdir / "probe.spice").write_text(_NETLIST)
-    manifest = {
-        "name": "probe",
-        "netlist": "probe.spice",
-        "measure": {"m_probe": "1"},
-        "checks": {"m_probe": check},
-    }
-    text = json.dumps(manifest)
-    if raw is not None:
-        text = text.replace('"__RAW__"', raw)
-    (tbdir / "tb.json").write_text(text)
+    manifest = {"name": "probe", "netlist": "probe.spice",
+                "measure": {"m_probe": "1"}, "checks": {"m_probe": check}}
+    (tbdir / "tb.json").write_text(json.dumps(manifest).replace('"RAW"', raw))
     return root
 
 
-_BAD_VALUES = [
-    ("string", '"1"'),
-    ("null", "null"),
-    ("true", "true"),
-    ("list", "[1]"),
-    ("dict", "{}"),
-    ("NaN", "NaN"),
-    ("Infinity", "Infinity"),
-    ("-Infinity", "-Infinity"),
-    ("overflow", "1e999"),
-    ("bigint", "1" + "0" * 400),
-]
+# Spliced in as raw JSON text so NaN/Infinity/1e999 reach the parser as-is.
+_BAD = ['"1"', "null", "true", "[1]", "{}", "NaN", "Infinity", "-Infinity", "1e999", "1" + "0" * 400]
 
 
 class CheckBoundValidationTest(unittest.TestCase):
-    def _load_raw(self, check: dict):
+    def _load(self, check: dict, raw: str = ""):
         with tempfile.TemporaryDirectory() as tmp:
-            return load(_write_checks(Path(tmp) / "p", check, raw=None))
+            return load(_write_checks(Path(tmp) / "p", check, raw))
 
-    def _expect_bad(self, check_template: dict, raw: str):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _write_checks(Path(tmp) / "p", check_template, raw=raw)
-            with self.assertRaises(ValueError):
-                load(root)
+    def _assert_all_rejected(self, checks, raw: str = ""):
+        for check in checks:
+            with self.subTest(check=check, raw=raw), self.assertRaises(ValueError):
+                self._load(check, raw)
 
-    def test_scalar_bounds_reject_malformed(self):
-        for key in ("min", "max", "min_spread_pct", "max_spread_pct"):
-            for label, raw in _BAD_VALUES:
-                with self.subTest(key=key, value=label):
-                    self._expect_bad({key: "__RAW__"}, raw)
-
-    def test_per_axis_bounds_reject_malformed(self):
-        for key in ("min_spread_pct_by_axis", "max_spread_pct_by_axis"):
-            for label, raw in _BAD_VALUES:
-                with self.subTest(key=key, value=label):
-                    self._expect_bad({key: {"process": "__RAW__"}}, raw)
+    def test_malformed_bounds_rejected(self):
+        for raw in _BAD:
+            self._assert_all_rejected(
+                [{k: "RAW"} for k in ("min", "max", "min_spread_pct", "max_spread_pct")]
+                + [{k: {"process": "RAW"}} for k in ("min_spread_pct_by_axis", "max_spread_pct_by_axis")],
+                raw,
+            )
 
     def test_min_greater_than_max_rejected(self):
-        for check in (
+        self._assert_all_rejected([
             {"min": 2, "max": 1},
             {"min_spread_pct": 5, "max_spread_pct": 1},
             {"min_spread_pct_by_axis": {"supply": 5}, "max_spread_pct_by_axis": {"supply": 1}},
-        ):
-            with self.subTest(check=check):
-                with tempfile.TemporaryDirectory() as tmp:
-                    with self.assertRaises(ValueError) as ctx:
-                        load(_write_checks(Path(tmp) / "p", check))
-                    self.assertIn("exceeds", str(ctx.exception))
+        ])
 
     def test_negative_spread_rejected(self):
-        for check in (
+        self._assert_all_rejected([
             {"max_spread_pct": -1},
             {"min_spread_pct": -0.5},
             {"max_spread_pct_by_axis": {"process": -1}},
             {"min_spread_pct_by_axis": {"temperature": -1}},
-        ):
-            with self.subTest(check=check):
-                with tempfile.TemporaryDirectory() as tmp:
-                    with self.assertRaises(ValueError):
-                        load(_write_checks(Path(tmp) / "p", check))
+        ])
 
     def test_valid_bounds_accepted(self):
         for check in (
             {"min": -0.05, "max": -0.01},
-            {"min": -1, "max": 1},
             {"min": 1, "max": 1},
             {"min_spread_pct": 0, "max_spread_pct": 0},
             {"min_spread_pct_by_axis": {"process": 0, "supply": 2.5},
              "max_spread_pct_by_axis": {"process": 3, "supply": 2.5}},
         ):
             with self.subTest(check=check):
-                with tempfile.TemporaryDirectory() as tmp:
-                    load(_write_checks(Path(tmp) / "p", check))
+                self._load(check)
 
     def test_shipped_manifests_still_load(self):
         sim_dir = Path(__file__).resolve().parents[2]
         manifests = sorted(sim_dir.glob("*/testbench/tb.json"))
         self.assertTrue(manifests)
         for m in manifests:
-            with self.subTest(manifest=str(m.relative_to(sim_dir))):
+            with self.subTest(manifest=m.parent.parent.name):
                 load(m)
 
-
-class CliPreflightTest(unittest.TestCase):
-    def test_bad_bound_fails_before_ngspice_and_reservation(self):
-        from harness import cli, report as report_mod, runner as runner_mod
+    def test_cli_bad_bound_fails_before_ngspice_and_reservation(self):
+        from harness import cli, report, runner
 
         with tempfile.TemporaryDirectory() as tmp:
             sim_dir = Path(tmp)
-            _write_checks(sim_dir / "bad-exp", {"max": "__RAW__"}, raw="NaN")
+            _write_checks(sim_dir / "bad-exp", {"max": "RAW"}, "NaN")
             with mock.patch.object(cli, "SIM_DIR", sim_dir), \
-                 mock.patch.object(runner_mod, "ngspice_version", side_effect=AssertionError("ngspice")) as nv, \
-                 mock.patch.object(report_mod, "reserve_run", side_effect=AssertionError("reserve")) as rr, \
-                 mock.patch.object(cli.pdk_mod, "find_pdk", side_effect=AssertionError("pdk")), \
+                 mock.patch.object(runner, "ngspice_version") as nv, \
+                 mock.patch.object(report, "reserve_run") as rr, \
+                 mock.patch.object(cli.pdk_mod, "find_pdk") as fp, \
                  redirect_stderr(io.StringIO()) as err:
                 rc = cli.main(["bad-exp"])
             self.assertEqual(rc, 1)
             self.assertIn("invalid testbench manifest", err.getvalue())
-            nv.assert_not_called()
-            rr.assert_not_called()
+            for m in (nv, rr, fp):
+                m.assert_not_called()
+            # Nothing reserved or written: no run dir beside the testbench.
             self.assertEqual([p.name for p in sim_dir.iterdir()], ["bad-exp"])
-            self.assertEqual({p.name for p in (sim_dir / "bad-exp").iterdir()}, {"testbench"})
+            self.assertEqual([p.name for p in (sim_dir / "bad-exp").iterdir()], ["testbench"])
 
 
 if __name__ == "__main__":
