@@ -39,6 +39,7 @@ CI = ROOT / ".github" / "workflows" / "ci.yml"
 NESTED = "LOOM_SPARSE_TEST_NESTED"
 ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
 KLT_JOBS = {"signoff-manifest-parity", "layout-reproducibility"}
+NETLIST_JOB = "netlist-regeneration"
 SIZE_JOB = "append-only-evidence"
 SIZE_STEP = "Check tracked sim/ evidence size budget"
 NARROW = "git sparse-checkout set --no-cone --stdin <<'EOF'\n"
@@ -138,7 +139,7 @@ class SparseCones(unittest.TestCase):
         self.assertEqual(
             set(self.jobs),
             {"signoff-manifest-parity", "layout-reproducibility",
-             "harness-unit-tests", SIZE_JOB})
+             NETLIST_JOB, "harness-unit-tests", SIZE_JOB})
         for name, job in self.jobs.items():
             co = job["checkout"]
             self.assertTrue(job["patterns"], name)
@@ -202,7 +203,7 @@ class SparseCones(unittest.TestCase):
             env = self._env(dst)
             ran = 0
             for step, script in job["runs"]:
-                if "pip install" in script:
+                if "pip install" in script or "apt-get" in script or "provision_netlist_env" in script:
                     continue  # tool provisioning, not a repo input
                 if script.lstrip().startswith("ruff ") and shutil.which("ruff") is None:
                     continue  # CI-only linter (pinned in ci.yml); not a repo input
@@ -275,6 +276,38 @@ class SparseCones(unittest.TestCase):
             self.assertEqual(r.returncode, 1, r.stdout[-3000:])
             self.assertIn("source noise-full-issue81", r.stdout)
             self.assertIn("source offset-whole-latch-ea40b57", r.stdout)
+
+    def test_netlist_job_inputs_are_in_its_cone(self):
+        """Issue #224: the cone holds the generator, schematics, symbols, the
+        committed netlist, imported harness modules, the PDK pin and the
+        provisioner. Runs the job's real check step only when a real xschem
+        and PDK are available (SKIPPED, never passed, otherwise; CI always
+        provisions both). A cone missing an input fails the real command."""
+        job = self.jobs[NETLIST_JOB]
+        check = next(s for n, s in job["runs"] if "netlist.py --check" in s)
+        xs = shutil.which("xschem")
+        pdk_root = os.environ.get("PDK_ROOT")
+        if not xs or not pdk_root:
+            self.skipTest("real xschem and PDK_ROOT not available (CI provisions both)")
+        # same step as ci.yml, with the ambient xschem standing in for the
+        # provisioned one (the provisioned-path assertion line is dropped)
+        script = "\n".join(l for l in check.splitlines() if "command -v" not in l)
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, job["checkout"])
+            tracked = sh(["git", "ls-tree", "-r", "--name-only", "HEAD", "design/"], ROOT).stdout.split()
+            for t in tracked:
+                if t.startswith("design/tests/"):
+                    continue
+                self.assertTrue((dst / t).is_file(), f"{t} missing from the netlist cone")
+            env = {**self._env(dst), "PATH": os.environ["PATH"], "PDK_ROOT": pdk_root,
+                   "PWD": str(dst), "RUNNER_TEMP": tmp}
+            r = sh(["bash", "-eu", "-c", script], dst, env, check=False)
+            self.assertEqual(r.returncode, 0, r.stdout[-3000:])
+            self.assertIn("is up to date", r.stdout)
+            # negative control: dropping a symbol from the cone must FAIL
+            (dst / "design" / "comparator_dut.sym").unlink()
+            r = sh(["bash", "-eu", "-c", script], dst, env, check=False)
+            self.assertNotEqual(r.returncode, 0, r.stdout[-3000:])
 
     def test_klt_jobs_from_sparse_clone(self):
         if not klt_matches_pin():
