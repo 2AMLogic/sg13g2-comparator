@@ -2,6 +2,44 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-11
+
+- **Issue #177** (closed): Reject ambiguous repeated ngspice output in the local PVT harness
+- **Issue #178** (closed): Validate local testbench check bounds before simulation
+- **Issue #180** (closed): Layout: verify physical rules outside the curated DRC deck
+- **Issue #181** (closed): PEX reporting: distinguish raw measurement success from circuit compliance
+- **Issue #179** (closed): Freeze local PVT source inputs before executing the grid
+- **Issue #186** (closed): Unit tests for the CM-band campaign runner (retry, resubmit and append-only guards)
+- **Issue #192** (closed): Noise analysis: retain shared-draw disclosures and bound grid-mean uncertainty
+- **Issue #197** (closed): Preserve partial ngspice diagnostics when local PVT points time out
+- **Issue #196** (closed): Record compiled OSDI model identity in local PVT evidence
+- **Issue #193** (closed): README claims: verify offset and full-noise figures against their own evidence populations
+- **Issue #188** (closed): Guard telemetry: package alternate-index wrapper reproduction for upstream handoff
+- **Issue #203** (closed): Record runtime SPICE model-source identity in local PVT evidence
+- **Issue #173** (closed): Clock-edge, strobe-width and supply-disturbance sensitivity characterization of the whole latch
+- **Issue #164** (closed): sim: decision time / metastability at dut_vcm -/+50 mV as klt sim corner campaigns (evidence for DR-0004 CM-range row)
+- **PR #183**: Reject ambiguous repeated ngspice output in the local PVT harness
+- **PR #182**: Validate local testbench check bounds before simulation
+- **PR #185**: layout: supplemental DRC against IHP's own deck (#180)
+- **PR #189**: PEX delta table: separate measurement availability from compliance (#181)
+- **PR #190**: harness: freeze local PVT source inputs before executing the grid (Closes #179)
+- **PR #195**: test: unit tests for CM-band campaign runner retry and append-only guards
+- **PR #198**: Noise analysis: retain shared-draw disclosures and bound grid-mean uncertainty
+- **PR #201**: runner: preserve partial ngspice diagnostics on local PVT timeout
+- **PR #202**: Record compiled OSDI model identity in local PVT evidence (#196)
+- **PR #204**: README claims: verify offset and full-noise figures against their own evidence populations
+- **PR #205**: feat(diagnostics): alternate-index wrapper guard reproduction for upstream handoff
+- **PR #206**: harness: record runtime SPICE model-source identity in PVT evidence (#203)
+- **PR #207**: sim: clock-edge, strobe-width and supply-disturbance sensitivity characterization (#173)
+- **PR #208**: sim: decision time / metastability at dut_vcm -/+50 mV as klt sim campaigns (#164)
+
+### 2026-10-10
+
+- **Issue #174** (closed): CI guard: README spec-table figures must match the committed characterization report
+- **Issue #82** (closed): Offset 3σ: klt sim per-draw campaign reads 13 % above the whole-latch record (systematic, cause unknown)
+- **PR #175**: ci: guard README spec-table figures against the characterization report
+- **PR #176**: analysis: klt-vs-record offset shift is 1.3 sigma once CRN is accounted for (#82)
+
 ### 2026-10-10
 
 - **PR #170**: T1 statistical signoff: N=200 offset populations at every PVT point (Closes #167)
