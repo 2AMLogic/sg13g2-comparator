@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -132,6 +133,32 @@ def _require(manifest: dict, key: str, path: Path):
     return manifest[key]
 
 
+def _check_bound(value, *, path: Path, name: str, key: str, axis: str | None = None,
+                 nonneg: bool = False) -> float:
+    """Require a finite real number (no bool/str/null/container/NaN/Inf).
+
+    Raised at load time so a malformed bound fails before any simulation is
+    spent, instead of crashing grading afterwards (or, for NaN, silently never
+    failing).
+    """
+    where = f"{path}: check {name!r}: {key}" + (f"[{axis!r}]" if axis else "")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{where} must be a finite number, got {type(value).__name__} {value!r}")
+    try:
+        finite = math.isfinite(value)
+    except OverflowError:  # integer too large for a float
+        finite = False
+    if not finite:
+        raise ValueError(f"{where} must be finite, got {value!r}")
+    if nonneg and value < 0:
+        raise ValueError(f"{where} must be >= 0, got {value!r}")
+    return value
+
+
+def _reject_json_constant(token: str):
+    raise ValueError(f"non-finite JSON constant {token} is not allowed in a testbench manifest")
+
+
 def _validate_checks(checks: dict[str, dict], measure: dict[str, str], path: Path) -> None:
     for name, spec in checks.items():
         if name not in measure:
@@ -147,6 +174,25 @@ def _validate_checks(checks: dict[str, dict], measure: dict[str, str], path: Pat
                 f"{path}: check {name!r} has unknown key(s) {', '.join(unknown)}; "
                 f"known: {', '.join(CHECK_KEYS)}"
             )
+        for key in ("min", "max"):
+            if key in spec:
+                _check_bound(spec[key], path=path, name=name, key=key)
+        for key in ("min_spread_pct", "max_spread_pct"):
+            if key in spec:
+                _check_bound(spec[key], path=path, name=name, key=key, nonneg=True)
+        if "min" in spec and "max" in spec and spec["min"] > spec["max"]:
+            raise ValueError(
+                f"{path}: check {name!r}: min ({spec['min']!r}) exceeds max ({spec['max']!r})"
+            )
+        if (
+            "min_spread_pct" in spec
+            and "max_spread_pct" in spec
+            and spec["min_spread_pct"] > spec["max_spread_pct"]
+        ):
+            raise ValueError(
+                f"{path}: check {name!r}: min_spread_pct ({spec['min_spread_pct']!r}) "
+                f"exceeds max_spread_pct ({spec['max_spread_pct']!r})"
+            )
         for axis_key in ("min_spread_pct_by_axis", "max_spread_pct_by_axis"):
             axes = spec.get(axis_key)
             if axes is None:
@@ -158,6 +204,16 @@ def _validate_checks(checks: dict[str, dict], measure: dict[str, str], path: Pat
                 raise ValueError(
                     f"{path}: check {name!r}: unknown axis/axes {', '.join(unknown_axes)} in "
                     f"{axis_key}; known: {', '.join(AXES)}"
+                )
+            for axis, bound in axes.items():
+                _check_bound(bound, path=path, name=name, key=axis_key, axis=axis, nonneg=True)
+        mins = spec.get("min_spread_pct_by_axis") or {}
+        maxs = spec.get("max_spread_pct_by_axis") or {}
+        for axis in sorted(set(mins) & set(maxs)):
+            if mins[axis] > maxs[axis]:
+                raise ValueError(
+                    f"{path}: check {name!r}: min_spread_pct_by_axis[{axis!r}] ({mins[axis]!r}) "
+                    f"exceeds max_spread_pct_by_axis[{axis!r}] ({maxs[axis]!r})"
                 )
 
 
@@ -203,7 +259,7 @@ def load(directory: str | Path) -> Testbench:
     if not manifest_path.is_file():
         raise FileNotFoundError(f"no {MANIFEST_NAME} in {directory}")
 
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text(), parse_constant=_reject_json_constant)
 
     netlist = directory / _require(manifest, "netlist", manifest_path)
     if not netlist.is_file():
