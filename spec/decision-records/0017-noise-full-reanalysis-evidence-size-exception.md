@@ -3,7 +3,7 @@
 - **Status**: proposed. **This record covers the evidence budget only.** It
   ratifies no bound and relaxes no Target or Stretch number. It authorizes one
   raise of the `sim/` total ceiling in `sim/evidence-size-budget.json`
-  (issue #132's contract), exactly the measured overage of 132178 B. It takes
+  (issue #132's contract), exactly the measured overage of 132725 B. It takes
   effect with the reviewed merge of the PR that lands it, as for DR-0005 to
   DR-0016. The drafting agent does not merge it.
 - **Date**: 2026-10-11
@@ -37,24 +37,24 @@ an identity that already holds a report.
 |---|---|
 | `sim/klt-corner-verification/campaigns/20261011-issue81-reanalysis-issue192/noise_full.json` (new unit) | 118006 |
 | `sim/klt-corner-verification/campaigns/20261011-issue81-reanalysis-issue192/noise_full.md` (new unit) | 11647 |
-| `sim/kltsim/tests/test_noise_full.py` | 1677 |
-| `sim/kltsim/cli.py` | 730 |
+| `sim/kltsim/tests/test_noise_full.py` | 2183 |
+| `sim/kltsim/cli.py` | 771 |
 | `sim/evidence-size-budget.json` (this exception entry) | 118 |
-| **Total** | **132178** |
+| **Total** | **132725** |
 
 ## Decision
 
-Raise the `sim/` total ceiling by exactly **132178 B**. The single `sim` entry
-carries the cumulative 26503473 + 132178 = **26635651 B** and cites this
+Raise the `sim/` total ceiling by exactly **132725 B**. The single `sim` entry
+carries the cumulative 26503473 + 132725 = **26636198 B** and cites this
 record. The new unit is far below the new-unit ceiling.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 26635651}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 26636198}
 ```
 
-(Cumulative: 26503473 B from DR-0005 to DR-0016 and 132178 B authorized here.)
+(Cumulative: 26503473 B from DR-0005 to DR-0016 and 132725 B authorized here.)
 
 ## Consequences
 
