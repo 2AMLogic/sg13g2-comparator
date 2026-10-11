@@ -14,7 +14,7 @@ one-command flow that regenerates and checks it (issue #58, T1 item 2).
 | `common_sg13g2.py` | SG13G2 layer table, rule values and drawing primitives (boxes, contacts, vias). |
 | `run_flow.sh` | One command that regenerates the stream and runs every check below. |
 | `pdk_drc.sh`, `comparator/pdk_drc.py` | **Supplemental** check against IHP's own DRC deck (issue #180); see "Supplemental PDK-deck DRC". Not part of `run_flow.sh` or CI. |
-| `comparator/pdk_drc_report.json` | **Committed supplemental evidence (issue #180).** Status `violations`: 62 markers in pSD.b / pSD.i. Not cited by the manifest. |
+| `comparator/pdk_drc_report.json` | **Committed supplemental evidence (issue #180).** Status `clean` (0 markers, 862 rules executed, both negative controls detected) after the pSD repair of issue #184. Not cited by the manifest. |
 
 Downstream work reads the stream at `layout/comparator/comparator.gds`, top
 cell `comparator`. That covers DRC #59, LVS #60, post-layout #61 and
@@ -198,7 +198,7 @@ Three tiers, kept apart on purpose:
 | Tier | What | Verdict of record |
 |---|---|---|
 | Curated DRC | klt's `sg13g2` deck, stage 6 of `run_flow.sh`, committed `drc_report.json`, cited by the manifest | `clean`, 0 violations. **Unchanged.** |
-| Supplemental verification | IHP's own KLayout deck (IHP-Open-PDK v0.3.0, the release `sim/pdk.json` pins), run by `pdk_drc.sh`, committed `pdk_drc_report.json` | `violations`: pSD.b x10, pSD.i x52. **Not cited by the manifest**; the curated verdict and its citation are left as they were until a reviewed evidence update. |
+| Supplemental verification | IHP's own KLayout deck (IHP-Open-PDK v0.3.0, the release `sim/pdk.json` pins), run by `pdk_drc.sh`, committed `pdk_drc_report.json` | `clean`: 0 markers (was pSD.b x10, pSD.i x52 before issue #184). **Not cited by the manifest.** |
 | Remaining gaps | foundry signoff, density/fill, seal ring, antenna, latch-up beyond the deck's own rules | not checked (below) |
 
 ```bash
@@ -246,10 +246,21 @@ fill, so a result on a standalone cell would be meaningless), antenna, and the
 PDK pre-check set. Gat.c, Cnt.e, Cnt.f, NW.*, LU.* and the other pSD rules
 ran on drawn Activ/GatPoly/Cont/pSD/NWell and gave 0 markers.
 
-**Findings, kept visible.** pSD.b (min pSD space 0.31 um, 10 markers) and
-pSD.i (min pSD enclosure of PFET gate 0.30 um, 52 markers). The markers are in
-the report for a follow-up repair of the generator; this issue does not change
-`comparator.gds`, so the findings stand.
+**Findings and repair (issue #184).** The first run (GDS sha256 `67e44380...`)
+found pSD.b (min pSD space 0.31 um, 10 markers) and pSD.i (min pSD enclosure of
+PFET gate 0.30 um, 52 markers). Cause: PMOS pSD used the 0.18 um Activ
+enclosure (`PSD_C`) on every island, too small for pSD.i and leaving 0.04 um
+implant gaps between default 0.40 um island gaps. The generator now encloses
+PMOS islands by `PSD_G = 0.30` um (taps keep `PSD_C`), so neighbouring island
+implants overlap and merge. Result on GDS `583e99c6...`: 0 markers, same pinned
+deck, both controls detected. Device inventory, LVS netlist and sizing are
+unchanged (`lvs_*` files byte-identical). Extracted parasitics may differ:
+`pex_report.json` and everything under `sim/comparator-pex/` still describe the
+previous GDS (`67e44380...`) and are not rewritten; re-extraction belongs to
+the PEX campaign (#61/#191). `layout/tests/klayout_test_implant_geometry.py` checks the committed GDS and
+that the old geometry is detected. It needs the klayout module, so it is kept
+out of the stdlib-only CI discovery (`test_*.py`) and runs on demand:
+`uvx --from klayout==0.30.12 python -I -m unittest discover -s layout/tests -p 'klayout_test_*.py'`.
 
 **Negative controls.** Two temp copies of the stream, each with one deliberate
 defect drawn clear of the cell (a 0.10 um Metal1 sliver; a GatPoly stripe with
@@ -263,7 +274,7 @@ against the committed GDS hash and the pinned deck identity, and tests the
 unavailable paths. The deck run itself is local-only, because CI has neither
 the PDK nor a KLayout executable.
 
-**Follow-ups.** Repairing the findings: issue #184. Tool gap (no klt runner for
+**Follow-ups.** Tool gap (no klt runner for
 a vendor Ruby deck, no `unavailable` convention):
 [2AMLogic/klayout-tools#3076](https://github.com/2AMLogic/klayout-tools/issues/3076).
 
@@ -360,7 +371,7 @@ ratified row.
   - latch-up tap distance.
 
   Those were not checked by the curated deck; the supplemental PDK-deck run
-  below does exercise them (and finds pSD.b / pSD.i violations). There is no
+  below does exercise them (clean since issue #184). There is no
   density fill or seal ring.
 - **Connectivity.** Stage 4 is the committed LVS evidence (#60); see its
   limits above (power and body verdicts `unchecked`).
