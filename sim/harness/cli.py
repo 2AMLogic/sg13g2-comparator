@@ -155,7 +155,11 @@ def main(argv: list[str] | None = None) -> int:
     if not directory.is_dir():
         print(f"no experiment directory sim/{args.experiment}", file=sys.stderr)
         return 1
-    tb = tb_mod.load(directory)
+    try:
+        tb = tb_mod.load(directory)
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"invalid testbench manifest: {exc}", file=sys.stderr)
+        return 1
 
     try:
         pdk = pdk_mod.find_pdk()

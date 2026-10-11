@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -132,6 +133,25 @@ def _require(manifest: dict, key: str, path: Path):
     return manifest[key]
 
 
+def _check_bound(value, where: str, nonneg: bool = False) -> None:
+    """Reject a bound that is not a finite real number (bool, str, null,
+    container, NaN, Inf, or an int too large for a float) at load time."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{where} must be a finite number, got {value!r}")
+    try:
+        finite = math.isfinite(value)
+    except OverflowError:
+        finite = False
+    if not finite:
+        raise ValueError(f"{where} must be finite, got {value!r}")
+    if nonneg and value < 0:
+        raise ValueError(f"{where} must be >= 0, got {value!r}")
+
+
+def _reject_json_constant(token: str):
+    raise ValueError(f"non-finite JSON constant {token} is not allowed")
+
+
 def _validate_checks(checks: dict[str, dict], measure: dict[str, str], path: Path) -> None:
     for name, spec in checks.items():
         if name not in measure:
@@ -147,6 +167,10 @@ def _validate_checks(checks: dict[str, dict], measure: dict[str, str], path: Pat
                 f"{path}: check {name!r} has unknown key(s) {', '.join(unknown)}; "
                 f"known: {', '.join(CHECK_KEYS)}"
             )
+        where = f"{path}: check {name!r}: "
+        for key in ("min", "max", "min_spread_pct", "max_spread_pct"):
+            if key in spec:
+                _check_bound(spec[key], where + key, nonneg="spread" in key)
         for axis_key in ("min_spread_pct_by_axis", "max_spread_pct_by_axis"):
             axes = spec.get(axis_key)
             if axes is None:
@@ -159,6 +183,17 @@ def _validate_checks(checks: dict[str, dict], measure: dict[str, str], path: Pat
                     f"{path}: check {name!r}: unknown axis/axes {', '.join(unknown_axes)} in "
                     f"{axis_key}; known: {', '.join(AXES)}"
                 )
+            for axis, bound in axes.items():
+                _check_bound(bound, f"{where}{axis_key}[{axis!r}]", nonneg=True)
+        mins = spec.get("min_spread_pct_by_axis") or {}
+        maxs = spec.get("max_spread_pct_by_axis") or {}
+        pairs = [("min", spec.get("min"), spec.get("max")),
+                 ("min_spread_pct", spec.get("min_spread_pct"), spec.get("max_spread_pct"))]
+        pairs += [(f"min_spread_pct_by_axis[{ax!r}]", mins[ax], maxs[ax])
+                  for ax in sorted(set(mins) & set(maxs))]
+        for key, lo, hi in pairs:
+            if lo is not None and hi is not None and lo > hi:
+                raise ValueError(f"{where}{key} ({lo!r}) exceeds its max ({hi!r})")
 
 
 def _validate_monte_carlo_seed(evidence: dict, analyses, path: Path) -> None:
@@ -203,7 +238,7 @@ def load(directory: str | Path) -> Testbench:
     if not manifest_path.is_file():
         raise FileNotFoundError(f"no {MANIFEST_NAME} in {directory}")
 
-    manifest = json.loads(manifest_path.read_text())
+    manifest = json.loads(manifest_path.read_text(), parse_constant=_reject_json_constant)
 
     netlist = directory / _require(manifest, "netlist", manifest_path)
     if not netlist.is_file():
