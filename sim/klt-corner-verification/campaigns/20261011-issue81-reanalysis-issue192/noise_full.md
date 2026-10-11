@@ -1,0 +1,100 @@
+# Whole-latch transient noise with internal injection (issue #81)
+
+Per-point sigma = two-rung probit slope (od_x = 1.0 mV, N = 80 per rung); +/- is one standard error (delta method). `fe` = front-end source only, `int` = regenerative-pair + reset-device sources only (1x), `both` = complete injection; `zero` = negative control (internal densities scaled to 0, front end on); `int_x4` / `int_x8` = internal only, every internal density scaled up (sensitivity runs, not spec configurations).
+
+The grid mean has two standard errors. `SE (indep.)` is the quadrature sum / n and is CONDITIONAL on the included points being independent. `SE (corr. bound)` is the sum of the per-point errors / n, the conservative bound if the points were fully correlated; no correlation coefficient or effective sample size is estimated. A grid mean over fewer points than expected is marked PARTIAL and is ungraded.
+
+| config | valid points | grid mean (mV) | SE (indep., conditional) | SE (corr. bound) | min | max | saturated points | 95 % upper bound (mV) |
+|---|---|---|---|---|---|---|---|---|
+| fe | 45/45 | 1.356 | 0.032 | 0.206 | 0.843 | 1.672 | - | - |
+| int | 0/45 | - | - | - | - | - | 45 | <= 0.56 |
+| both | 45/45 | 1.305 | 0.029 | 0.192 | 0.910 | 1.773 | - | - |
+| zero | 45/45 | 1.379 | 0.034 | 0.215 | 0.965 | 2.384 | - | - |
+| int_x4 | 42/45 | 0.730 PARTIAL, ungraded | 0.014 | 0.084 | 0.446 | 1.478 | 1 | <= 0.56 |
+| int_x8 | 45/45 | 1.414 | 0.043 | 0.241 | 0.710 | 2.817 | - | - |
+
+## Shared raw-noise draws across grid points (from the Row 2 grader)
+
+- `fe`: 1685 samples at 45 points repeat a raw draw seen at another point. Grader note: 1685/3600 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated).
+- `int`: 1391 samples at 45 points repeat a raw draw seen at another point. Grader note: 1391/3600 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated).
+- `both`: 1509 samples at 45 points repeat a raw draw seen at another point. Grader note: 1509/3600 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated).
+- `zero`: 1265 samples at 45 points repeat a raw draw seen at another point. Grader note: 1265/3600 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated).
+- `int_x4`: 1664 samples at 45 points repeat a raw draw seen at another point. Grader note: 1664/3600 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated).
+- `int_x8`: 1450 samples at 45 points repeat a raw draw seen at another point. Grader note: 1450/3600 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated).
+
+Quadrature split over 45 points with `fe` and `both` valid (grid means of the per-point values, mV):
+
+- front end alone: 1.356
+- total (both): 1.305
+- internal increment sqrt(both^2 - fe^2): 0.289 (23 points had both <= fe, counted as 0)
+- internal alone at 1x, read as sigma(8x)/8 over 45 points: 0.177
+- predicted total sqrt(fe^2 + int^2), grid mean: 1.368 (measured `both` grid mean 1.305; the per-point increment above is dominated by sampling scatter, +/- 0.2 mV per point, and is NOT a measurement of the internal term)
+- mean per-point closure sqrt(fe^2 + int^2)/both: 1.067
+
+Linearity of the x8 read-out, sigma(8x)/(2 sigma(4x)), 42 points: mean 1.000 (min 0.655, max 1.557); 1.000 is exactly linear.
+
+Negative control (`zero` vs `fe`, same N, two-proportion z on every rung of every point): 135 comparisons, |z| > 2 in 5 (identical populations would give about 6.1), |z| > 3 in 0. The z assumes independent rungs and points; shared draws between the compared configurations would make it approximate.
+
+## Timestep convergence (tt / 1.20 V / 27 C, `both`, front end + internal)
+
+The move in SE assumes the timestep runs are statistically independent of one another; shared noise draws between them are not checked here.
+
+| tran args | N | p(+od_x) | p(-od_x) | p(0) | sigma (mV) | +/- SE | move vs 20p (in SE) |
+|---|---|---|---|---|---|---|---|
+| 20p 5.1n 0 20p | 160 | 0.775 | 0.225 | 0.537 | 1.324 | 0.136 | - |
+| 10p 5.1n 0 10p | 160 | 0.850 | 0.225 | 0.469 | 1.116 | 0.102 | -1.22 |
+| 5p 5.1n 0 5p | 160 | 0.731 | 0.212 | 0.506 | 1.414 | 0.154 | +0.44 |
+
+## As measured against the unchanged DR-0002 Row 2 bounds
+
+Grid-wide mean, complete injection: **1.305 mV rms** (SE 0.029 if points independent; 0.192 conservative fully-correlated bound); Target <= 1.0 mV: **NOT MET**; Stretch <= 0.6 mV: **NOT MET**.
+
+## Per point (sigma, mV)
+
+| point | fe | int | both | zero | int_x4 | int_x8 | internal increment |
+|---|---|---|---|---|---|---|---|
+| tt_-40c_1.08v | 1.563 +/- 0.262 | <= 0.56 (sat.) | 1.478 +/- 0.236 | 1.347 +/- 0.200 | 0.629 +/- 0.064 | 1.433 +/- 0.223 | 0.000 |
+| tt_27c_1.08v | 1.527 +/- 0.250 | <= 0.56 (sat.) | 1.243 +/- 0.173 | 1.503 +/- 0.245 | 0.802 +/- 0.085 | 1.783 +/- 0.334 | 0.000 |
+| tt_125c_1.08v | 1.126 +/- 0.145 | <= 0.56 (sat.) | 1.187 +/- 0.159 | 1.405 +/- 0.218 | 0.928 +/- 0.109 | 1.906 +/- 0.379 | 0.376 |
+| tt_-40c_1.20v | 1.417 +/- 0.220 | <= 0.56 (sat.) | 1.142 +/- 0.150 | 1.563 +/- 0.262 | 0.535 +/- 0.057 | 0.842 +/- 0.094 | 0.000 |
+| tt_27c_1.20v | 1.555 +/- 0.260 | <= 0.56 (sat.) | 1.274 +/- 0.181 | 1.527 +/- 0.250 | 0.695 +/- 0.071 | 1.319 +/- 0.192 | 0.000 |
+| tt_125c_1.20v | 1.515 +/- 0.251 | <= 0.56 (sat.) | 1.188 +/- 0.159 | 1.481 +/- 0.237 | 0.982 +/- 0.119 | 2.250 +/- 0.524 | 0.000 |
+| tt_-40c_1.32v | 0.843 +/- 0.092 | <= 0.56 (sat.) | 1.285 +/- 0.183 | 1.313 +/- 0.191 | 0.446 +/- 0.054 | 0.710 +/- 0.074 | 0.971 |
+| tt_27c_1.32v | 1.361 +/- 0.203 | <= 0.56 (sat.) | 1.253 +/- 0.175 | 1.040 +/- 0.127 | 0.476 +/- 0.055 | 0.959 +/- 0.112 | 0.000 |
+| tt_125c_1.32v | 1.407 +/- 0.221 | <= 0.56 (sat.) | 1.483 +/- 0.237 | 1.347 +/- 0.200 | 0.716 +/- 0.076 | 1.464 +/- 0.233 | 0.468 |
+| ff_-40c_1.08v | 1.285 +/- 0.183 | <= 0.56 (sat.) | 1.438 +/- 0.224 | 1.478 +/- 0.236 | 0.683 +/- 0.071 | 1.218 +/- 0.167 | 0.644 |
+| ff_27c_1.08v | 1.572 +/- 0.264 | <= 0.56 (sat.) | 1.773 +/- 0.331 | 2.045 +/- 0.433 | 0.790 +/- 0.085 | 1.426 +/- 0.222 | 0.819 |
+| ff_125c_1.08v | 1.313 +/- 0.191 | <= 0.56 (sat.) | 1.668 +/- 0.295 | 1.672 +/- 0.296 | 1.073 +/- 0.136 | 1.426 +/- 0.222 | 1.029 |
+| ff_-40c_1.20v | 1.619 +/- 0.279 | <= 0.56 (sat.) | 1.319 +/- 0.192 | 1.324 +/- 0.193 | 0.476 +/- 0.055 | 0.843 +/- 0.092 | 0.000 |
+| ff_27c_1.20v | 1.274 +/- 0.181 | <= 0.56 (sat.) | 1.555 +/- 0.260 | 1.347 +/- 0.200 | 0.572 +/- 0.061 | 1.098 +/- 0.139 | 0.891 |
+| ff_125c_1.20v | 1.371 +/- 0.208 | <= 0.56 (sat.) | 1.673 +/- 0.296 | 1.400 +/- 0.213 | 0.915 +/- 0.104 | 1.902 +/- 0.377 | 0.959 |
+| ff_-40c_1.32v | 1.187 +/- 0.159 | <= 0.56 (sat.) | 1.338 +/- 0.198 | 1.253 +/- 0.175 | 0.446 +/- 0.054 | 0.754 +/- 0.079 | 0.616 |
+| ff_27c_1.32v | 1.399 +/- 0.213 | <= 0.56 (sat.) | 1.527 +/- 0.250 | 1.472 +/- 0.235 | <= 0.56 (sat.) | 1.127 +/- 0.146 | 0.612 |
+| ff_125c_1.32v | 1.285 +/- 0.183 | <= 0.56 (sat.) | 1.503 +/- 0.245 | 1.122 +/- 0.145 | 0.682 +/- 0.074 | 1.615 +/- 0.278 | 0.780 |
+| ss_-40c_1.08v | 1.358 +/- 0.202 | <= 0.56 (sat.) | 0.910 +/- 0.103 | 1.218 +/- 0.167 | 0.515 +/- 0.060 | 1.433 +/- 0.223 | 0.000 |
+| ss_27c_1.08v | 1.319 +/- 0.192 | <= 0.56 (sat.) | 1.347 +/- 0.200 | 1.524 +/- 0.249 | 0.798 +/- 0.085 | 1.572 +/- 0.264 | 0.272 |
+| ss_125c_1.08v | 1.243 +/- 0.173 | <= 0.56 (sat.) | 1.399 +/- 0.213 | 1.150 +/- 0.151 | 1.358 +/- 0.202 | 2.817 +/- 0.808 | 0.641 |
+| ss_-40c_1.20v | 1.142 +/- 0.150 | <= 0.56 (sat.) | 1.154 +/- 0.152 | 1.224 +/- 0.170 | 0.535 +/- 0.057 | 1.361 +/- 0.203 | 0.167 |
+| ss_27c_1.20v | 1.096 +/- 0.141 | <= 0.56 (sat.) | 1.218 +/- 0.167 | 1.281 +/- 0.182 | 0.695 +/- 0.071 | 1.361 +/- 0.203 | 0.530 |
+| ss_125c_1.20v | 1.672 +/- 0.296 | <= 0.56 (sat.) | 0.987 +/- 0.117 | 1.354 +/- 0.201 | 0.940 +/- 0.108 | 2.404 +/- 0.600 | 0.000 |
+| ss_-40c_1.32v | 0.937 +/- 0.108 | <= 0.56 (sat.) | 1.142 +/- 0.150 | 1.040 +/- 0.127 | 0.446 +/- 0.054 | 0.822 +/- 0.089 | 0.653 |
+| ss_27c_1.32v | 1.042 +/- 0.128 | <= 0.56 (sat.) | 0.959 +/- 0.112 | 1.358 +/- 0.202 | invalid: probit needs 0 < p < 1, got 1.0 (saturat | 0.994 +/- 0.120 | 0.000 |
+| ss_125c_1.32v | 1.281 +/- 0.185 | <= 0.56 (sat.) | 1.323 +/- 0.193 | 0.965 +/- 0.113 | 0.772 +/- 0.082 | 1.619 +/- 0.279 | 0.328 |
+| fs_-40c_1.08v | 1.563 +/- 0.262 | <= 0.56 (sat.) | 1.324 +/- 0.193 | 1.324 +/- 0.193 | 0.728 +/- 0.076 | 1.319 +/- 0.192 | 0.000 |
+| fs_27c_1.08v | 1.572 +/- 0.264 | <= 0.56 (sat.) | 1.438 +/- 0.224 | 1.527 +/- 0.250 | 0.910 +/- 0.103 | 1.438 +/- 0.224 | 0.000 |
+| fs_125c_1.08v | 1.662 +/- 0.293 | <= 0.56 (sat.) | 1.027 +/- 0.126 | 2.384 +/- 0.581 | 1.478 +/- 0.236 | 1.936 +/- 0.393 | 0.000 |
+| fs_-40c_1.20v | 1.319 +/- 0.192 | <= 0.56 (sat.) | 1.305 +/- 0.190 | 1.361 +/- 0.203 | 0.572 +/- 0.061 | 1.122 +/- 0.145 | 0.000 |
+| fs_27c_1.20v | 1.361 +/- 0.203 | <= 0.56 (sat.) | 1.288 +/- 0.184 | 1.285 +/- 0.183 | 0.824 +/- 0.089 | 1.478 +/- 0.236 | 0.000 |
+| fs_125c_1.20v | 1.572 +/- 0.264 | <= 0.56 (sat.) | 1.169 +/- 0.157 | 1.399 +/- 0.213 | 0.889 +/- 0.100 | 1.971 +/- 0.404 | 0.000 |
+| fs_-40c_1.32v | 1.116 +/- 0.144 | <= 0.56 (sat.) | 1.157 +/- 0.152 | 1.220 +/- 0.167 | invalid: probit needs 0 < p < 1, got 0.0 (saturat | 0.710 +/- 0.074 | 0.304 |
+| fs_27c_1.32v | 1.426 +/- 0.222 | <= 0.56 (sat.) | 1.142 +/- 0.150 | 1.196 +/- 0.163 | 0.497 +/- 0.057 | 1.069 +/- 0.133 | 0.000 |
+| fs_125c_1.32v | 1.371 +/- 0.208 | <= 0.56 (sat.) | 1.249 +/- 0.174 | 1.249 +/- 0.174 | 0.572 +/- 0.061 | 1.782 +/- 0.334 | 0.000 |
+| sf_-40c_1.08v | 1.107 +/- 0.143 | <= 0.56 (sat.) | 1.169 +/- 0.157 | 1.281 +/- 0.182 | 0.666 +/- 0.069 | 1.096 +/- 0.141 | 0.374 |
+| sf_27c_1.08v | 1.042 +/- 0.128 | <= 0.56 (sat.) | 1.285 +/- 0.183 | 1.095 +/- 0.139 | 0.892 +/- 0.100 | 1.622 +/- 0.279 | 0.752 |
+| sf_125c_1.08v | 1.395 +/- 0.212 | <= 0.56 (sat.) | 1.374 +/- 0.212 | 1.615 +/- 0.278 | 1.070 +/- 0.133 | 2.192 +/- 0.496 | 0.000 |
+| sf_-40c_1.20v | 1.196 +/- 0.163 | <= 0.56 (sat.) | 1.243 +/- 0.173 | 1.819 +/- 0.349 | 0.446 +/- 0.054 | 0.952 +/- 0.111 | 0.338 |
+| sf_27c_1.20v | 1.607 +/- 0.276 | <= 0.56 (sat.) | 1.187 +/- 0.159 | 1.319 +/- 0.192 | 0.673 +/- 0.068 | 1.481 +/- 0.237 | 0.000 |
+| sf_125c_1.20v | 1.622 +/- 0.279 | <= 0.56 (sat.) | 1.381 +/- 0.210 | 1.531 +/- 0.255 | 0.868 +/- 0.096 | 2.034 +/- 0.430 | 0.000 |
+| sf_-40c_1.32v | 1.358 +/- 0.202 | <= 0.56 (sat.) | 1.438 +/- 0.224 | 0.990 +/- 0.117 | 0.476 +/- 0.055 | 0.822 +/- 0.089 | 0.471 |
+| sf_27c_1.32v | 1.527 +/- 0.250 | <= 0.56 (sat.) | 1.481 +/- 0.237 | 1.703 +/- 0.308 | 0.476 +/- 0.055 | 0.846 +/- 0.092 | 0.000 |
+| sf_125c_1.32v | 1.481 +/- 0.237 | <= 0.56 (sat.) | 1.288 +/- 0.184 | 1.016 +/- 0.122 | 0.715 +/- 0.074 | 1.281 +/- 0.182 | 0.000 |

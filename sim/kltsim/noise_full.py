@@ -32,9 +32,19 @@ bounds, read from ``rows.json`` so they are never restated here.
 Precision (delta method). With rung hit fractions p over N trials,
 z = PhiInv(p) has variance p(1-p) / (N phi(z)^2); sigma = 2 od_x /
 (z+ - z-) therefore has relative variance (var z+ + var z-) / (z+ - z-)^2.
-Per-point only: the grid mean's standard error is the quadrature sum of the
-per-point errors / 45 (points are independent apart from the shared-draw note
-``grade`` already raises).
+The grid mean carries TWO standard errors, never one unlabelled number:
+
+* ``grid_mean_se_independent`` -- quadrature sum of the per-point errors / n,
+  CONDITIONAL on the included points being statistically independent;
+* ``grid_mean_se_fully_correlated_bound`` -- sum of the per-point errors / n,
+  the conservative upper bound if the points were fully correlated. No
+  correlation coefficient or effective sample size is invented.
+
+The grader's shared-draw notes and per-point counts (raw noise draws repeated
+at ANOTHER grid point) are preserved next to them. Their absence is not a
+certificate of independence: only exact repeats of the probed draws are
+detectable. An incomplete grid labels its mean and both errors PARTIAL and
+ungraded.
 """
 
 from __future__ import annotations
@@ -116,7 +126,8 @@ def read_envelope_bytes(path: Path) -> bytes | None:
     return None
 
 
-def _details(campaign_dir: Path, bench_name: str, ev: dict, grid: dict) -> list[dict]:
+def _details(campaign_dir: Path, bench_name: str, ev: dict, grid: dict
+             ) -> tuple[list[dict], list[str]]:
     envelopes = []
     shas = {}
     for section in PROCESSES:
@@ -129,11 +140,11 @@ def _details(campaign_dir: Path, bench_name: str, ev: dict, grid: dict) -> list[
     # independence probes by the bench name `transient_noise`, whose
     # measurement names these circuits share.
     evidence = grade_mod.BenchEvidence("transient_noise", envelopes, None, shas)
-    details, _notes = grade_mod.mc_probit_noise(evidence, ev, grid)
+    details, notes = grade_mod.mc_probit_noise(evidence, ev, grid)
     for d in details:
         if d["sigma"] is not None:
             _, d["sigma_se"] = sigma_se(d["p_plus"], d["p_minus"], d["n"], float(ev["od_x_mv"]))
-    return details
+    return details, notes
 
 
 def _present(campaign_dir: Path, bench_name: str) -> bool:
@@ -141,17 +152,42 @@ def _present(campaign_dir: Path, bench_name: str) -> bool:
                for sec in PROCESSES)
 
 
-def _summarise(details: list[dict]) -> dict:
+def grid_mean_uncertainty(ses: list[float]) -> dict:
+    """The two grid-mean standard errors from the included points' per-point
+    standard errors: quadrature / n (valid only if the points are independent)
+    and the sum / n (conservative fully-correlated upper bound)."""
+    n = len(ses)
+    return {"independent": math.sqrt(sum(se**2 for se in ses)) / n,
+            "fully_correlated_bound": sum(ses) / n}
+
+
+def _summarise(details: list[dict], notes: list[str] | None = None) -> dict:
     valid = [d for d in details if d["sigma"] is not None]
-    item: dict = {"points_valid": len(valid), "points_expected": len(details)}
+    shared = [d.get("samples_sharing_a_draw_with_another_point", 0) or 0 for d in details]
+    item: dict = {"points_valid": len(valid), "points_expected": len(details),
+                  "complete": len(valid) == len(details),
+                  "shared_draw_samples": sum(shared),
+                  "shared_draw_points": sum(1 for x in shared if x),
+                  "shared_draw_notes": list(notes or [])}
     if valid:
         mean = sum(d["sigma"] for d in valid) / len(valid)
+        unc = grid_mean_uncertainty([d["sigma_se"] for d in valid])
         item.update({
             "grid_mean": mean,
-            "grid_mean_se": math.sqrt(sum(d["sigma_se"] ** 2 for d in valid)) / len(valid),
+            "grid_mean_se_independent": unc["independent"],
+            "grid_mean_se_fully_correlated_bound": unc["fully_correlated_bound"],
+            "uncertainty_basis": (
+                "independent: conditional on the included points being independent; "
+                "fully_correlated_bound: sum of per-point SEs / included points, a "
+                "conservative upper bound; no correlation or effective N is estimated; "
+                "no detected shared draw is not proof of independence"),
             "min": min(d["sigma"] for d in valid), "max": max(d["sigma"] for d in valid),
-            "complete": len(valid) == len(details),
         })
+        if not item["complete"]:
+            item["partial"] = True
+            item["partial_label"] = (
+                f"PARTIAL/ungraded: mean and both errors cover only {len(valid)} of "
+                f"{len(details)} grid points")
     bounded = [d["sigma_ub95"] for d in details if d.get("sigma_ub95") is not None]
     if bounded:
         item["saturated_points"] = len(bounded)
@@ -166,13 +202,15 @@ def analyse(campaign_dir: Path) -> dict:
     ev = row2["evidence"]
     od_x = float(ev["od_x_mv"])
     names = {**CONFIGS, **{c: b for c, b in EXTRA.items() if _present(campaign_dir, b)}}
-    per_cfg = {cfg: _details(campaign_dir, bench, ev, grid) for cfg, bench in names.items()}
+    det_notes = {cfg: _details(campaign_dir, bench, ev, grid) for cfg, bench in names.items()}
+    per_cfg = {cfg: dn[0] for cfg, dn in det_notes.items()}
     for details in per_cfg.values():
         for d in details:
             if (d["sigma"] is None and (d.get("problem") or "").startswith("probit needs")
                     and d.get("p_plus") == 1.0 and d.get("p_minus") == 0.0):
                 d["sigma_ub95"] = sigma_upper_bound_95(d["n"], od_x)
-    keys = ("sigma", "sigma_se", "sigma_ub95", "p_plus", "p_minus", "p_zero", "n", "problem")
+    keys = ("sigma", "sigma_se", "sigma_ub95", "p_plus", "p_minus", "p_zero", "n", "problem",
+            "samples_sharing_a_draw_with_another_point")
     points = []
     for i, d_fe in enumerate(per_cfg["fe"]):
         entry: dict = {"point": d_fe["point"],
@@ -199,7 +237,7 @@ def analyse(campaign_dir: Path) -> dict:
         "od_x_mv": ev["od_x_mv"], "expected_n": ev["expected_n"],
         "target_max_mv": row2["target"]["max"], "stretch_max_mv": row2["stretch"]["max"],
         "unit": "mV rms", "points": points,
-        "configs": {cfg: _summarise(d) for cfg, d in per_cfg.items()},
+        "configs": {cfg: _summarise(d, det_notes[cfg][1]) for cfg, d in per_cfg.items()},
     }
     splits = [p["split"] for p in points if "split" in p]
     if splits:
@@ -247,10 +285,16 @@ def analyse(campaign_dir: Path) -> dict:
             "grid_mean_mv": m,
             "target": "MET" if m <= out["target_max_mv"] else "NOT MET",
             "stretch": "MET" if m <= out["stretch_max_mv"] else "NOT MET",
+            "grid_mean_se_independent": both["grid_mean_se_independent"],
+            "grid_mean_se_fully_correlated_bound": both["grid_mean_se_fully_correlated_bound"],
+            "shared_draw_samples": both["shared_draw_samples"],
         }
     else:
         out["as_measured"] = {"incomplete": True,
                               "why": "not every grid point of the `both` configuration is valid"}
+        if "grid_mean" in both:
+            out["as_measured"]["partial_grid_mean_mv"] = both["grid_mean"]
+            out["as_measured"]["partial_label"] = both["partial_label"]
     return out
 
 
@@ -262,14 +306,30 @@ def render_markdown(result: dict) -> str:
           "sources only (1x), `both` = complete injection; `zero` = negative control (internal "
           "densities scaled to 0, front end on); `int_x4` / `int_x8` = internal only, every "
           "internal density scaled up (sensitivity runs, not spec configurations).", ""]
-    L += ["| config | valid points | grid mean (mV) | +/- SE of mean | min | max | saturated points | 95 % upper bound (mV) |",
-          "|---|---|---|---|---|---|---|---|"]
+    L += ["The grid mean has two standard errors. `SE (indep.)` is the quadrature sum / n and is "
+          "CONDITIONAL on the included points being independent. `SE (corr. bound)` is the sum of the "
+          "per-point errors / n, the conservative bound if the points were fully correlated; no "
+          "correlation coefficient or effective sample size is estimated. A grid mean over fewer "
+          "points than expected is marked PARTIAL and is ungraded.", ""]
+    L += ["| config | valid points | grid mean (mV) | SE (indep., conditional) | SE (corr. bound) | min | max | saturated points | 95 % upper bound (mV) |",
+          "|---|---|---|---|---|---|---|---|---|"]
     for cfg, c in result["configs"].items():
-        mean = (f"{c['grid_mean']:.3f} | {c['grid_mean_se']:.3f} | {c['min']:.3f} | {c['max']:.3f}"
-                if "grid_mean" in c else "- | - | - | -")
+        part = " PARTIAL, ungraded" if c.get("partial") else ""
+        mean = (f"{c['grid_mean']:.3f}{part} | {c['grid_mean_se_independent']:.3f} | "
+                f"{c['grid_mean_se_fully_correlated_bound']:.3f} | {c['min']:.3f} | {c['max']:.3f}"
+                if "grid_mean" in c else "- | - | - | - | -")
         sat = (f"{c['saturated_points']} | <= {c['sigma_ub95_mv']:.2f}"
                if "saturated_points" in c else "- | -")
         L.append(f"| {cfg} | {c['points_valid']}/{c['points_expected']} | {mean} | {sat} |")
+    L += ["", "## Shared raw-noise draws across grid points (from the Row 2 grader)", ""]
+    for cfg, c in result["configs"].items():
+        if c.get("shared_draw_samples"):
+            L.append(f"- `{cfg}`: {c['shared_draw_samples']} samples at {c['shared_draw_points']} "
+                     "points repeat a raw draw seen at another point. Grader note: "
+                     + (" ".join(c.get("shared_draw_notes") or []) or "(none)"))
+        else:
+            L.append(f"- `{cfg}`: no exact cross-point repeat detected. This is NOT proof of "
+                     "independence; only exact repeats of the probed raw draws are detectable.")
     sg = result.get("split_grid")
     if sg:
         L += ["", f"Quadrature split over {sg['points']} points with `fe` and `both` valid "
@@ -295,10 +355,13 @@ def render_markdown(result: dict) -> str:
         L += ["", f"Negative control (`zero` vs `fe`, same N, two-proportion z on every rung of every point): "
               f"{nc['comparisons']} comparisons, |z| > 2 in {nc['abs_z_gt_2']} "
               f"(identical populations would give about {nc['expected_abs_z_gt_2_if_identical']:.1f}), "
-              f"|z| > 3 in {nc['abs_z_gt_3']}."]
+              f"|z| > 3 in {nc['abs_z_gt_3']}. The z assumes independent rungs and points; "
+              "shared draws between the compared configurations would make it approximate."]
     ts = result.get("timestep")
     if ts:
         L += ["", "## Timestep convergence (tt / 1.20 V / 27 C, `both`, front end + internal)", "",
+              "The move in SE assumes the timestep runs are statistically independent of one "
+              "another; shared noise draws between them are not checked here.", "",
               "| tran args | N | p(+od_x) | p(-od_x) | p(0) | sigma (mV) | +/- SE | move vs 20p (in SE) |",
               "|---|---|---|---|---|---|---|---|"]
         for step, t in ts["steps"].items():
@@ -310,8 +373,13 @@ def render_markdown(result: dict) -> str:
     L += ["", "## As measured against the unchanged DR-0002 Row 2 bounds", ""]
     if am.get("incomplete"):
         L.append(f"INCOMPLETE: {am['why']}.")
+        if "partial_grid_mean_mv" in am:
+            L.append(f"{am['partial_label']}: mean {am['partial_grid_mean_mv']:.3f} mV rms (not graded).")
     else:
-        L.append(f"Grid-wide mean, complete injection: **{am['grid_mean_mv']:.3f} mV rms**; "
+        L.append(f"Grid-wide mean, complete injection: **{am['grid_mean_mv']:.3f} mV rms** "
+                 f"(SE {am['grid_mean_se_independent']:.3f} if points independent; "
+                 f"{am['grid_mean_se_fully_correlated_bound']:.3f} conservative fully-correlated "
+                 "bound); "
                  f"Target <= {result['target_max_mv']} mV: **{am['target']}**; "
                  f"Stretch <= {result['stretch_max_mv']} mV: **{am['stretch']}**.")
     cfgs = list(result["configs"])

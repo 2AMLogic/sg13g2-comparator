@@ -559,6 +559,17 @@ def cmd_noise_full(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     result = noise_full_mod.analyse(out_dir)
     result["campaign"] = out_dir.name
+    if args.identity:
+        # Append-only evidence: a revised analysis lands under a NEW identity
+        # (directory), never over the committed campaign's reports.
+        result["source_campaign"] = out_dir.name
+        result["campaign"] = args.identity
+        out_dir = _campaign_dir(args.identity)
+        if (out_dir / "noise_full.json").exists():
+            print(f"noise-full: {out_dir} already holds a report; choose a new identity",
+                  file=sys.stderr)
+            return 2
+        out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "noise_full.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     text = noise_full_mod.render_markdown(result)
     (out_dir / "noise_full.md").write_text(text, encoding="utf-8")
@@ -684,6 +695,8 @@ def main(argv: list[str] | None = None) -> int:
 
     nf = sub.add_parser("noise-full", help="issue #81: analyse the tn_full_* configurations of a campaign")
     nf.add_argument("--campaign", required=True)
+    nf.add_argument("--identity", help="write the report under this NEW campaign directory name "
+                    "instead of the source campaign (append-only evidence)")
     nf.set_defaults(func=cmd_noise_full)
 
     args = ap.parse_args(argv)
