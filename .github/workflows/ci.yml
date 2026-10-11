@@ -260,7 +260,7 @@ jobs:
       - name: Post-layout input freshness check (sim/comparator-pex)
         run: |
           rc=0
-          for gen in make_reference make_testbenches make_requests; do
+          for gen in make_reference make_testbenches make_requests make_devonly; do
             python3 "sim/comparator-pex/$gen.py" --check || rc=1
           done
           test -z "$(git status --porcelain)" || { git status --porcelain; rc=1; }
