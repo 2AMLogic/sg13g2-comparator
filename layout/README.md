@@ -232,11 +232,18 @@ rule categories are emitted. Scope is this standalone cell only.
 **Report** (`pdk_drc_report.json`, deterministic, no timestamps or host
 paths): the GDS path and sha256 plus the layers actually drawn; the deck
 release, `.fetched-version`, tree sha256 and entry point; the KLayout version;
-the invocation; every violated rule with its description and marker
-coordinates; a `targeted` table giving, for each rule the section above listed
+the invocation; every violated rule with its description and its markers
+(one marker per lyrdb `<item>`, a list of all that item's values; counts are
+items, never flattened values); a `targeted` table giving, for each rule the section above listed
 as unchecked (Gat.c, Cnt.e/Cnt.f, the pSD, NWell and latch-up rules), whether
 the deck executed it and how many markers it produced; `skipped`;
 `not_covered`; and the negative controls.
+
+**Malformed deck output fails closed.** A lyrdb with a missing
+`<categories>`/`<items>` container, a blank or duplicate category, an item
+whose category is blank or undeclared, or an item with no usable values is
+rejected (exit 1, `FAIL: malformed deck report`) and the committed report is
+not written; it can never reduce to `clean`.
 
 **Checked vs skipped.** "Executed" means the deck emitted a result category
 for the rule. A rule whose layers are not drawn here (pads, MiM, HBT, seal

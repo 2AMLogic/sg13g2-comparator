@@ -199,7 +199,7 @@ def run_deck(pdk: pathlib.Path, binary: str, gds: pathlib.Path, workdir: pathlib
     """Run the PDK's run_drc.py (main + maximal sets, density off) on ``gds``.
 
     Returns the parsed lyrdb: (executed {rule: description},
-    violations {rule: [marker strings]}).
+    violations {rule: [marker = list of value strings]}).
     """
     shim = workdir / "bin"
     shim.mkdir(parents=True)
@@ -231,17 +231,48 @@ def run_deck(pdk: pathlib.Path, binary: str, gds: pathlib.Path, workdir: pathlib
     return parse_lyrdb(dbs[0])
 
 
+class MalformedReport(ValueError):
+    """The deck's lyrdb cannot be interpreted; it must never certify clean."""
+
+
 def parse_lyrdb(path: pathlib.Path):
-    root = ET.parse(path).getroot()
+    """Parse a lyrdb into (executed {rule: description}, violations
+    {rule: [marker]}). One XML <item> is one marker, a list of all its
+    non-blank values; counts are derived from markers, never from values.
+    Anything uninterpretable raises MalformedReport."""
+    try:
+        root = ET.parse(path).getroot()
+    except (ET.ParseError, OSError) as e:
+        raise MalformedReport(f"{path}: unreadable lyrdb: {e}") from e
+    cats = root.find("categories")
+    items = root.find("items")
+    if cats is None:
+        raise MalformedReport(f"{path}: missing <categories> container")
+    if items is None:
+        raise MalformedReport(f"{path}: missing <items> container")
     executed = {}
-    for cat in root.find("categories"):
-        name = (cat.findtext("name") or "").strip("'")
+    for i, cat in enumerate(cats):
+        name = (cat.findtext("name") or "").strip().strip("'").strip()
+        if not name:
+            raise MalformedReport(f"{path}: category #{i} has a blank name")
+        if name in executed:
+            raise MalformedReport(f"{path}: duplicate category declaration {name!r}")
         executed[name] = " ".join((cat.findtext("description") or "").split())
-    violations: dict[str, list[str]] = {}
-    for item in root.find("items"):
-        rule = (item.findtext("category") or "").strip("'")
-        vals = [" ".join((v.text or "").split()) for v in item.find("values")]
-        violations.setdefault(rule, []).extend(vals)
+    violations: dict[str, list[list[str]]] = {}
+    for i, item in enumerate(items):
+        rule = (item.findtext("category") or "").strip().strip("'").strip()
+        if not rule:
+            raise MalformedReport(f"{path}: item #{i} has a blank category")
+        if rule not in executed:
+            raise MalformedReport(f"{path}: item #{i} references undeclared category {rule!r}")
+        vals_el = item.find("values")
+        if vals_el is None:
+            raise MalformedReport(f"{path}: item #{i} ({rule}) has no <values> container")
+        vals = [" ".join((v.text or "").split()) for v in vals_el]
+        vals = [v for v in vals if v]
+        if not vals:
+            raise MalformedReport(f"{path}: item #{i} ({rule}) has no usable values")
+        violations.setdefault(rule, []).append(vals)
     return executed, {k: sorted(v) for k, v in sorted(violations.items())}
 
 
@@ -373,13 +404,21 @@ def main() -> int:
     before = sha256_file(gds)
     with tempfile.TemporaryDirectory() as td:
         td = pathlib.Path(td)
-        executed, violations = run_deck(pdk, binary, gds, td / "committed")
+        try:
+            executed, violations = run_deck(pdk, binary, gds, td / "committed")
+        except MalformedReport as e:
+            print(f"FAIL: malformed deck report, nothing written: {e}", file=sys.stderr)
+            return 1
         controls = []
         if not a.no_controls:
             for kind in CONTROLS:
                 tmp = td / f"broken_{kind.replace('.', '_')}.gds"
                 broken_copy(gds, tmp, kind)
-                ex2, v2 = run_deck(pdk, binary, tmp, td / f"ctl_{kind.replace('.', '_')}")
+                try:
+                    ex2, v2 = run_deck(pdk, binary, tmp, td / f"ctl_{kind.replace('.', '_')}")
+                except MalformedReport as e:
+                    print(f"FAIL: malformed deck report, nothing written: {e}", file=sys.stderr)
+                    return 1
                 ok = kind in ex2 and kind in v2 and kind not in violations
                 controls.append({
                     "mutation": {"M1.a": "Metal1 sliver 0.10 um wide", "Gat.c": "GatPoly endcap 0.05 um over a scratch Activ"}[kind],

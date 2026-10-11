@@ -113,6 +113,73 @@ class Parse(unittest.TestCase):
         self.assertEqual(list(violations), ["pSD.b"])
         self.assertEqual(len(violations["pSD.b"]), 2)
 
+    def _parse(self, xml):
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "x.lyrdb"
+            p.write_text(xml)
+            return pd.parse_lyrdb(p)
+
+    @staticmethod
+    def _doc(cats="<category><name>pSD.b</name></category>", items="", wrap=True):
+        c = f"<categories>{cats}</categories>" if cats is not None else ""
+        i = f"<items>{items}</items>" if items is not None else ""
+        return f"<report-database>{c}{i}</report-database>"
+
+    def test_multi_value_item_is_one_marker(self):
+        item = ("<item><category>'pSD.b'</category><values>"
+                "<value>polygon: (0,0;1,1)</value><value>text: ('x',0,0)</value>"
+                "</values></item>")
+        _, v = self._parse(self._doc(items=item))
+        self.assertEqual(len(v["pSD.b"]), 1)
+        self.assertEqual(v["pSD.b"][0], ["polygon: (0,0;1,1)", "text: ('x',0,0)"])
+
+    def test_empty_values_fails(self):
+        for body in ("<values/>", "<values><value> </value></values>", ""):
+            item = f"<item><category>'pSD.b'</category>{body}</item>"
+            with self.assertRaises(pd.MalformedReport, msg=body):
+                self._parse(self._doc(items=item))
+
+    def test_structure_errors_fail(self):
+        ok = "<item><category>'pSD.b'</category><values><value>a</value></values></item>"
+        cases = {
+            "no categories": self._doc(cats=None, items=ok),
+            "no items": self._doc(items=None),
+            "blank category name": self._doc(cats="<category><name> </name></category>"),
+            "duplicate category": self._doc(cats="<category><name>pSD.b</name></category>" * 2),
+            "undeclared item category": self._doc(items=ok.replace("pSD.b", "M1.a")),
+            "blank item category": self._doc(items=ok.replace("'pSD.b'", "")),
+            "not xml": "<report-database>",
+        }
+        for label, xml in cases.items():
+            with self.assertRaises(pd.MalformedReport, msg=label):
+                self._parse(xml)
+
+    def test_no_items_is_clean(self):
+        ex, v = self._parse(self._doc(items=""))
+        self.assertEqual(v, {})
+        self.assertEqual(set(ex), {"pSD.b"})
+
+    def test_report_counts_items_not_values(self):
+        markers = {"pSD.b": [["a", "b"], ["c"]]}
+        with mock.patch.object(pd, "drawn_layers", return_value=[]):
+            r = pd.build_report(GDS, {"pSD.b": "d"}, markers, "0", "v", "t", [])
+        self.assertEqual(r["rules"]["violation_count"], 2)
+        self.assertEqual(r["rules"]["violated"][0]["count"], 2)
+        self.assertEqual(r["rules"]["violated"][0]["markers"], [["a", "b"], ["c"]])
+        self.assertEqual(r["status"], "violations")
+
+    def test_malformed_run_leaves_report_untouched(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "r.json"
+            out.write_text("KEEP")
+            args = ["pdk_drc.py", str(GDS), "-o", str(out), "--no-controls"]
+            with mock.patch.object(sys, "argv", args), \
+                 mock.patch.object(pd, "resolve_prereqs", return_value=(Path(td), "kl", "1", "fv", "t")), \
+                 mock.patch.object(pd, "run_deck", side_effect=pd.MalformedReport("bad")):
+                rc = pd.main()
+            self.assertEqual(rc, 1)
+            self.assertEqual(out.read_text(), "KEEP")
+
 
 class CommittedReport(unittest.TestCase):
     def setUp(self):
