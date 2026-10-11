@@ -93,6 +93,10 @@ class Testbench:
     #: Optional internal-noise hook request (harness/internal_noise.py). Empty
     #: (the default) => compose_deck emits nothing extra.
     internal_noise: dict = field(default_factory=dict)
+    # Issue #179: fragment bytes and hashes captured once by load().
+    netlist_bytes: bytes = field(default=b"", repr=False)
+    netlist_sha256: str = ""
+    manifest_sha256: str = ""
 
     @property
     def experiment(self) -> str:
@@ -103,14 +107,6 @@ class Testbench:
     def experiment_dir(self) -> Path:
         """``sim/<experiment-slug>/`` -- where records/corners/snapshots live."""
         return self.directory.parent
-
-    @property
-    def netlist_sha256(self) -> str:
-        return hashlib.sha256(self.netlist.read_bytes()).hexdigest()
-
-    @property
-    def manifest_sha256(self) -> str:
-        return hashlib.sha256((self.directory / MANIFEST_NAME).read_bytes()).hexdigest()
 
     def provenance(self) -> dict:
         return {
@@ -238,7 +234,8 @@ def load(directory: str | Path) -> Testbench:
     if not manifest_path.is_file():
         raise FileNotFoundError(f"no {MANIFEST_NAME} in {directory}")
 
-    manifest = json.loads(manifest_path.read_text(), parse_constant=_reject_json_constant)
+    raw = manifest_path.read_bytes()
+    manifest = json.loads(raw, parse_constant=_reject_json_constant)
 
     netlist = directory / _require(manifest, "netlist", manifest_path)
     if not netlist.is_file():
@@ -278,6 +275,7 @@ def load(directory: str | Path) -> Testbench:
 
     _validate_monte_carlo_seed(evidence, manifest.get("analyses", ("op",)), manifest_path)
 
+    data = netlist.read_bytes()
     tb = Testbench(
         directory=directory,
         name=manifest.get("name", directory.parent.name),
@@ -297,6 +295,9 @@ def load(directory: str | Path) -> Testbench:
         options=tuple(manifest.get("options", ())),
         evidence=evidence,
         internal_noise=dict(manifest.get("internal_noise") or {}),
+        netlist_bytes=data,
+        netlist_sha256=hashlib.sha256(data).hexdigest(),
+        manifest_sha256=hashlib.sha256(raw).hexdigest(),
     )
     if tb.internal_noise:
         internal_noise_mod.validate_block(tb.internal_noise)
@@ -312,7 +313,7 @@ def validate_netlist(tb: Testbench) -> None:
     room temperature.
     """
     problems: list[str] = []
-    for lineno, raw in enumerate(tb.netlist.read_text().splitlines(), start=1):
+    for lineno, raw in enumerate(tb.netlist_bytes.decode().splitlines(), start=1):
         line = raw.strip().lower()
         if not line.startswith("."):
             continue

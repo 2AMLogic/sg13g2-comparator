@@ -17,6 +17,9 @@ equivalent step.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import dataclasses
+import os
 import sys
 from pathlib import Path
 
@@ -105,6 +108,19 @@ def _check_env(allow_drift: bool) -> int:
     experiments = tb_mod.discover(SIM_DIR)
     print(f"experiments: {len(experiments)} -> {', '.join(p.name for p in experiments)}")
     return 0 if ok else 2
+
+
+def _freeze_inputs(tb, dut, workdir: Path) -> list:
+    """Issue #179: write the bytes load() captured into this run's private
+    dir and return tb/dut bound to those copies, so every point includes
+    (and internal-noise reads) one frozen input set, never the live files."""
+    frozen = []
+    for obj, sub in ((tb, "tb"), (dut, "dut")):
+        path = workdir / "inputs" / sub / obj.netlist.name
+        path.parent.mkdir(parents=True)
+        path.write_bytes(obj.netlist_bytes)
+        frozen.append(dataclasses.replace(obj, netlist=path))
+    return frozen
 
 
 def _list() -> int:
@@ -244,6 +260,14 @@ def main(argv: list[str] | None = None) -> int:
     rid = reservation.rid
     workdir = reservation.workdir
     log_dir = reservation.log_dir
+    try:
+        run_tb, run_dut = _freeze_inputs(tb, dut, workdir)
+    except OSError as exc:
+        reservation.release_scratch()
+        with contextlib.suppress(OSError):
+            os.rmdir(log_dir)  # still empty: nothing was simulated
+        print(f"INPUT CAPTURE FAILED -- refusing to simulate: {exc}", file=sys.stderr)
+        return 7
 
     banner_bits = [
         f"experiment sim/{tb.experiment}",
@@ -269,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         results = runner_mod.run_grid(
-            tb, pdk, dut, points, workdir,
+            run_tb, pdk, run_dut, points, workdir,
             jobs=max(1, args.jobs),
             timeout_s=args.timeout,
             on_result=_progress,
@@ -345,7 +369,7 @@ def main(argv: list[str] | None = None) -> int:
             **dut.provenance_record(),
         }
         try:
-            path = report_mod.write_record(tb, results, summaries, context, dut.netlist)
+            path = report_mod.write_record(run_tb, results, summaries, context, run_dut.netlist)
         except report_mod.EvidenceCollision as exc:
             reservation.release_scratch()
             print(f"EVIDENCE NOT WRITTEN: {exc}", file=sys.stderr)
