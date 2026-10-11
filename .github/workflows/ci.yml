@@ -223,6 +223,7 @@ jobs:
             /layout/comparator/pdk_drc_report.json
             /layout/comparator/comparator.gds
             /layout/comparator/pex_report.json
+            /layout/comparator/comparator.pex.spice
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
@@ -260,7 +261,7 @@ jobs:
       - name: Post-layout input freshness check (sim/comparator-pex)
         run: |
           rc=0
-          for gen in make_reference make_testbenches make_requests; do
+          for gen in make_reference make_testbenches make_requests make_devonly; do
             python3 "sim/comparator-pex/$gen.py" --check || rc=1
           done
           test -z "$(git status --porcelain)" || { git status --porcelain; rc=1; }

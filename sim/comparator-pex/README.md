@@ -75,6 +75,36 @@ A second probe the same day (`reports/batch-probe.regeneration.pvt.20261010-b.{m
 
 A third probe (`reports/batch-probe.pvt.20261010-c.md`) ran the full `klt pex` over both staged PVT requests on `--backend batch`, and this time capacity was granted. Result: all 1350 delta rows errored (`reports/pex.batch-probe.pvt.20261010-c.json`). A direct `klt sim` submit (`reports/batch-probe.regeneration.pvt.20261010-c.json`, job `klt-sim-f07e181de148`) shows the cause: `batch_runner_version_mismatch` (runner klt 0.5.0, client 0.7.0), the same as on 2026-10-09. The blocker is now the runner image, not capacity. The `model_mismatch` block in both pex envelopes is a count-only (finger) difference with identical model sets, not a flavour divergence (filed upstream as klayout-tools#3054).
 
+## Update 2026-10-11: extracted-device-only diagnostic leg (issue #191)
+
+A controlled attribution study, **not compliance evidence**; the original full
+PEX above remains the item-7 artifact and DR-0002 is untouched. Three legs on
+the same regeneration stimulus and wrapper (tt / 1.20 V / 27 C, deterministic,
+no sigma): schematic, extracted-device-only, full PEX.
+
+- `make_devonly.py [--check]` derives `dut/comparator.devonly.sp` from
+  `layout/comparator/comparator.pex.spice` (sha256 `9bd443be...980a`): 64
+  fingers kept with model/W/L/AS/AD/PS/PD verbatim; 252 terminal series R
+  collapsed onto their parent nets; 16 ground C and 52 coupling C removed; the
+  DC substrate tie kept. It refuses unknown elements/directives, non-terminal
+  series R, duplicate or orphan terminal R, unresolved `__t` device nodes and
+  C on terminal nodes (`tests/test_devonly.py`). Also generates
+  `dut/tb_regeneration.devonly.sp` and `requests/regeneration.devonly.{nominal,pvt}.json`
+  (checked in CI with the other generators).
+- Report: `reports/devonly-attribution.20261011.{md,json}` (rendered by
+  `make_devonly_report.py` from `reports/devonly-nominal-sim.20261011.json` and
+  the `klt pex` re-run, which reproduced the 20261009 schematic/full values
+  exactly). `td_a` 0.710 -> 1.536 -> 2.040 ns. The increments (+0.826 ns
+  device representation/junction geometry, +0.504 ns routing RC) are
+  conditional differences in a nonlinear circuit, not an additive
+  decomposition; finger count and junction geometry are not separated from
+  each other. `td_c` has a value on the device-only leg (2.230 ns) and none on
+  full PEX.
+- PVT: the 45-point device-only request went to `--backend batch` once
+  (`reports/devonly-pvt-batch.20261011.json`, job `klt-sim-5e70ae964e3a`): all
+  45 points errored, `batch_runner_version_mismatch` (runner klt 0.5.0). No
+  local grid was launched.
+
 ## What ran, and what it proved
 
 | Artifact | What it is |
