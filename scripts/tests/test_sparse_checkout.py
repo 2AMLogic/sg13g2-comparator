@@ -23,6 +23,8 @@ the size check slipped past an earlier version of this test).
 The test uses committed state (HEAD): commit before running it.
 """
 
+import fnmatch
+import importlib.util
 import os
 import re
 import shutil
@@ -41,6 +43,14 @@ SIZE_JOB = "append-only-evidence"
 SIZE_STEP = "Check tracked sim/ evidence size budget"
 NARROW = "git sparse-checkout set --no-cone --stdin <<'EOF'\n"
 UPLOAD_PACK = "git -c uploadpack.allowFilter=true upload-pack"
+
+# The lint-scope preflight (issue #216): its LINT_ROOTS is the maintained
+# copy of the ruff step's argument list that both ci.yml and the cone below
+# must agree with. Loaded, not redefined, so there is exactly one list.
+PREFLIGHT = ROOT / "scripts" / "check_lint_population.py"
+_spec = importlib.util.spec_from_file_location("check_lint_population", PREFLIGHT)
+preflight = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(preflight)
 
 
 def parse_jobs(text):
@@ -272,6 +282,123 @@ class SparseCones(unittest.TestCase):
         for name in sorted(KLT_JOBS):
             with self.subTest(job=name):
                 self._run_job(name)
+
+    # --- issue #216: the harness job's lint population is complete ---------
+
+    @staticmethod
+    def _covered(patterns, path):
+        """True when a non-cone sparse pattern list checks `path` out.
+
+        Restricted to the grammar test_every_job_declares... enforces:
+        anchored, basename globs only (`*` never crosses `/`), directory
+        patterns cover their subtree.
+        """
+        rel = path.split("/")
+        for pat in patterns:
+            parts = pat.strip("/").split("/")
+            if len(parts) <= len(rel) and all(
+                    fnmatch.fnmatchcase(a, b) for a, b in zip(rel, parts)):
+                return True
+        return False
+
+    def _ruff_step(self):
+        return next(s for _, s in self.jobs["harness-unit-tests"]["runs"]
+                    if "ruff check" in s)
+
+    def _in_scope_tracked(self):
+        tracked = sh(["git", "ls-tree", "-r", "--name-only", "HEAD"], ROOT).stdout.splitlines()
+        return [p for p in tracked if preflight.in_scope(p)]
+
+    def test_harness_cone_covers_every_tracked_lint_input(self):
+        """Every tracked .py under the reviewed lint roots (issue #157's
+        scope, held by the preflight's LINT_ROOTS) must be inside the
+        harness job's sparse cone, and ci.yml's ruff command must name
+        exactly those roots -- otherwise the lint population silently
+        shrinks (issue #216)."""
+        job = self.jobs["harness-unit-tests"]
+        self.assertEqual(preflight.ci_ruff_arguments(), preflight.LINT_ROOTS)
+        self.assertIn("/.github/workflows/ci.yml", job["patterns"],
+                      "the preflight reads ci.yml; it must be in the cone")
+        inscope = self._in_scope_tracked()
+        # sentinels from every root the old cone omitted, so a broken
+        # in_scope cannot make this test pass vacuously
+        for sentinel in ("scripts/check_klt_pin.py", "sim/run_corners.py",
+                         "sim/comparator-transient-noise/probit.py",
+                         "sim/comparator-transient-noise-full/calibrate.py",
+                         "sim/device-mismatch-confirm/summarize_dvgs.py",
+                         "layout/comparator/check_stream.py"):
+            self.assertIn(sentinel, inscope)
+        uncovered = [p for p in inscope if not self._covered(job["patterns"], p)]
+        self.assertEqual(uncovered, [],
+                         "tracked lint inputs outside the harness cone")
+
+    def test_preflight_fails_when_cone_omits_a_lint_root(self):
+        """Dropping /scripts/ from the cone must fail the preflight with the
+        omitted paths named -- even though ruff itself exits zero on the
+        rump cone (F-only missing-root warnings). The preflight script is
+        copied in after the clone: it is the checker here, not a subject."""
+        job = self.jobs["harness-unit-tests"]
+        cut = dict(job["checkout"],
+                   patterns=[p for p in job["patterns"] if p != "/scripts/"])
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, cut)
+            (dst / "scripts").mkdir(exist_ok=True)
+            shutil.copy(PREFLIGHT, dst / "scripts" / "check_lint_population.py")
+            r = sh(["python3", "scripts/check_lint_population.py"], dst,
+                   self._env(dst), check=False)
+            self.assertEqual(r.returncode, 1, r.stdout[-3000:])
+            self.assertIn("scripts/check_klt_pin.py", r.stdout)
+            if shutil.which("ruff"):
+                r2 = sh(["bash", "-eu", "-c", self._ruff_step()], dst,
+                        self._env(dst), check=False)
+                self.assertEqual(r2.returncode, 0,
+                                 "ruff alone should stay green here; the "
+                                 "preflight is what fails:\n" + r2.stdout[-2000:])
+
+    def test_preflight_fails_when_run_entry_point_glob_underexpands(self):
+        """The pre-fix cone shape: one run entry point checked out, so the
+        ruff step's `sim/run_*.py` glob silently expands to a subset. The
+        preflight derives the intended set from git's tracked inventory and
+        must fail naming the omitted entry points, while ruff stays green."""
+        job = self.jobs["harness-unit-tests"]
+        patterns = [p if p != "/sim/run_*.py" else "/sim/run_offset_cm_band.py"
+                    for p in job["patterns"]]
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, dict(job["checkout"], patterns=patterns))
+            r = sh(["python3", "scripts/check_lint_population.py"], dst,
+                   self._env(dst), check=False)
+            self.assertEqual(r.returncode, 1, r.stdout[-3000:])
+            for omitted in ("sim/run_corners.py", "sim/run_klt_yield.py"):
+                self.assertIn(omitted, r.stdout)
+            if shutil.which("ruff"):
+                r2 = sh(["bash", "-eu", "-c", self._ruff_step()], dst,
+                        self._env(dst), check=False)
+                self.assertEqual(r2.returncode, 0,
+                                 "the under-expanded glob must not fail ruff; "
+                                 "only the preflight catches it:\n" + r2.stdout[-2000:])
+
+    def test_undefined_name_in_previously_omitted_root_fails_static_check(self):
+        """Negative control for the coverage itself: an undefined name in
+        sim/device-mismatch-confirm (absent from the pre-fix cone) reaches
+        ruff -- the population is complete, the preflight stays green and
+        the F821 fails the static check."""
+        if shutil.which("ruff") is None:
+            self.skipTest("ruff not on PATH (CI installs the pinned version "
+                          "for this control)")
+        job = self.jobs["harness-unit-tests"]
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, job["checkout"])
+            victim = dst / "sim" / "device-mismatch-confirm" / "summarize_dvgs.py"
+            victim.write_text(victim.read_text()
+                              + "\nNEGATIVE_CONTROL = undefined_name_for_control\n")
+            r = sh(["python3", "scripts/check_lint_population.py"], dst,
+                   self._env(dst), check=False)
+            self.assertEqual(r.returncode, 0, r.stdout[-3000:])
+            r2 = sh(["bash", "-eu", "-c", self._ruff_step()], dst,
+                    self._env(dst), check=False)
+            self.assertNotEqual(r2.returncode, 0, r2.stdout[-3000:])
+            self.assertIn("F821", r2.stdout)
+            self.assertIn("sim/device-mismatch-confirm/summarize_dvgs.py", r2.stdout)
 
 
 if __name__ == "__main__":
