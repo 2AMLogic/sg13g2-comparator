@@ -588,6 +588,13 @@ def render_record(
         f"- **Toolchain**: {context['toolchain']['observed']['ngspice']}, "
         f"Python {context['toolchain']['observed']['python']}",
     ]
+    osdi = context.get("osdi")
+    if osdi:
+        lines.append(
+            f"- **OSDI model bytes**: inventory sha256 `{osdi['inventory_sha256'][:16]}` "
+            f"({len(osdi['files'])} files, unchanged after the grid; byte identity, "
+            "not compiler or PDK authenticity); build provenance "
+            f"**{osdi['build_provenance']['status']}**")
     if context["toolchain"]["drift"]:
         lines.append("- **TOOLCHAIN DRIFT ACCEPTED** (`--allow-toolchain-drift`):")
         lines += [f"  - {d}" for d in context["toolchain"]["drift"]]

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -186,6 +188,71 @@ class PdkDataclassTest(PdkTestBase):
         p.osdi_dir.mkdir(parents=True)
         (p.osdi_dir / "psp103.osdi").write_text("")
         self.assertNotIn("psp103.osdi", p.missing_osdi())
+
+
+BUILD_OSDI = Path(__file__).resolve().parents[2] / "tools" / "build-osdi.sh"
+
+
+def _osdi(root: Path, tweak: bytes = b"") -> pdk.Pdk:
+    p = pdk.Pdk(path=_make_variant(root), variant="ihp-sg13g2", source="t")
+    (p.path / ".fetched-version").write_text("0.3.0\n")
+    p.osdi_dir.mkdir(parents=True)
+    for name in pdk.REQUIRED_OSDI:
+        (p.osdi_dir / name).write_bytes(b"\x7fELF " + name.encode() + tweak)
+    return p
+
+
+class OsdiIdentityTest(PdkTestBase):
+    """Issue #196: model-byte identity, failure modes and build receipts."""
+
+    def test_same_release_changed_bytes_differ_and_path_is_irrelevant(self) -> None:
+        a, b, c = (_osdi(self.tmp / n, t) for n, t in (("a", b""), ("b", b""), ("c", b"!")))
+        ia, ib, ic = (pdk.osdi_identity(p.osdi_dir) for p in (a, b, c))
+        self.assertEqual(a.version, c.version)
+        self.assertEqual(ia, ib)  # same bytes at a different absolute path
+        self.assertNotEqual(ia["inventory_sha256"], ic["inventory_sha256"])
+        self.assertEqual(sorted(ia["files"]), sorted(pdk.REQUIRED_OSDI))
+        self.assertNotIn(str(self.tmp), json.dumps(ia))
+        self.assertEqual(ia["build_provenance"]["status"], "unknown")
+
+    def test_missing_or_unreadable_model_has_no_identity(self) -> None:
+        p = _osdi(self.tmp / "a")
+        with mock.patch.object(Path, "read_bytes", side_effect=PermissionError(13, "denied")):
+            with self.assertRaisesRegex(pdk.OsdiIdentityError, "denied"):
+                pdk.osdi_identity(p.osdi_dir)
+        (p.osdi_dir / "mosvar.osdi").unlink()
+        with self.assertRaisesRegex(pdk.OsdiIdentityError, "mosvar.osdi"):
+            pdk.osdi_identity(p.osdi_dir)
+
+    def _script(self, p: pdk.Pdk, call: str) -> str:
+        va = p.path / "libs.tech" / "verilog-a"
+        for sub in ("psp103", "r3_cmc", "mosvar"):
+            (va / sub).mkdir(parents=True, exist_ok=True)
+            (va / sub / f"{sub}.va").write_text(f"// {sub}\n")
+        env = {"PATH": os.environ["PATH"], "OSDI_DIR": str(p.osdi_dir), "VA_DIR": str(va),
+               "PDK_ROOT": str(p.path.parent), "PDK": p.variant, "asset": "a.tgz",
+               "sha": "f" * 64, "uname_s": "Linux", "uname_m": "x86_64",
+               "OPENVAF_EXTRA_LD_LIBRARY_PATH": ""}
+        out = subprocess.run(["bash", "-c", f'source "$1"; {call}', "t", str(BUILD_OSDI)],
+                             env=env, capture_output=True, text=True, check=True)
+        return out.stdout
+
+    @unittest.skipUnless(shutil.which("bash"), "bash not available")
+    def test_receipt_matches_outputs_and_unknown_origin_is_disclosed(self) -> None:
+        p = _osdi(self.tmp / "a")
+        self.assertIn("UNKNOWN for psp103.osdi psp103_nqs", self._script(p, "report_provenance"))
+        self.assertIn("names every output", self._script(p, "write_receipt; report_provenance"))
+        ident = pdk.osdi_identity(p.osdi_dir)
+        build = ident["build_provenance"]
+        receipt = json.loads((p.osdi_dir / pdk.OSDI_RECEIPT).read_text())
+        self.assertEqual(receipt["outputs"], ident["files"])
+        self.assertEqual((build["status"], build["build_flags"], build["platform"]),
+                         ("receipt", "-D__NGSPICE__", "Linux/x86_64"))
+        self.assertEqual(build["compiler"]["tag"], "v24.0.1mob")
+        self.assertEqual(sorted(build["sources"]), ["mosvar/", "psp103/", "r3_cmc/"])
+        (p.osdi_dir / "r3_cmc.osdi").write_bytes(b"replaced")
+        self.assertIn("UNKNOWN for r3_cmc.osdi", self._script(p, "report_provenance"))
+        self.assertEqual(pdk.osdi_identity(p.osdi_dir)["build_provenance"]["status"], "unknown")
 
 
 if __name__ == "__main__":
