@@ -486,14 +486,12 @@ machine-checked contract (issue #132). The `append-only-evidence` job runs
 external storage) is deliberately out of scope here; this only measures and
 caps growth, and never edits, moves or externalizes existing evidence.
 
-**Before requesting review.** Run `python3 scripts/check_evidence_size.py
---tree HEAD` on the final committed candidate and record the tested SHA, exit
-status (0 within budget, 1 violation, 2 measurement error) and measured size in
-the PR; re-run after any HEAD change. A failure follows the Exceptions policy
-below (decision record plus exact budget entry); this paragraph grants none. If
-Python is unavailable, state that local validation is unavailable and cite the
-successful `append-only-evidence` CI result for that exact commit; a skipped
-check is not success.
+**Before review.** Run `python3 scripts/check_evidence_size.py --tree HEAD` on
+the final commit; the PR states that SHA, exit status (0 ok, 1 violation, 2
+error) and size; re-run after any HEAD change. Failures follow Exceptions
+below; this grants none. No Python: say local validation is unavailable and
+cite the passing `append-only-evidence` CI for that commit (skipped is not
+success).
 
 **Accounting.** Bytes are Git blob sizes from `git ls-tree -rl <tree>` of the
 named commit/tree -- not working-tree or pack sizes. The checker reports
@@ -503,8 +501,8 @@ repository-wide and `sim/` totals plus per **evidence unit**: the entry
 non-numeric size fails closed (exit 2), so never use a blob filter. The checker
 also refuses a partial clone up front (`extensions.partialClone` or a
 `remote.<name>.promisor` remote: exit 2, naming the cause) and runs git with
-`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error rather than one network
-round trip per blob (~97k; that is how CI run 38029844566 hung). A shallow
+`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error, not a lazy fetch
+(CI run 38029844566 hung that way). A shallow
 clone is accepted: it holds every blob of the commits it has.
 
 **Baseline and grandfathering.** The budget file records the baseline commit
@@ -547,8 +545,7 @@ clones, harmless for them). The `append-only-evidence` job measures blob
 sizes, so it must be a complete clone: its checkout has `fetch-depth: 0` and
 **no** `sparse-checkout:` input, and the next step applies its patterns with
 `git sparse-checkout set --no-cone --stdin` (failing with exit 2 if the clone
-is partial). The full fetch is small (~60 MiB packed; the transient full
-working tree costs seconds). Cones (each must hold the job's complete
+is partial). Cones (each must hold the job's complete
 transitive inputs):
 
 | Job | Inputs beyond its own scripts |
