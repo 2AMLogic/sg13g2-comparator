@@ -38,9 +38,20 @@ itself turns its own internal errors into an empty-stdout allow:
 
 | Guard process result | Reported decision |
 |---|---|
-| exit 0, zero-byte stdout | `allow` |
-| exit 0, a single JSON object with `.hookSpecificOutput.permissionDecision` of `allow` / `ask` / `deny` | that value. `ask` and `deny` stay separate. |
+| exit 0, zero-byte stdout | `allow` (defers to the normal permission flow) |
+| exit 0, a single JSON object with `.hookSpecificOutput.permissionDecision` of `ask` / `deny` | that value. `ask` and `deny` stay separate. |
+| exit 0, a single JSON object with `permissionDecision` `allow` | `allow-json`. An explicit allow bypasses the permission prompt, so it is a different outcome from empty stdout and is never shown as plain `allow`. |
+| the `jq` serialization of the payload failed, or the payload did not round-trip the command string (the guard is not run; the exit column shows `-`) | `ERROR` |
 | nonzero exit, a timeout (60 s), whitespace-only or invalid JSON, more than one object, or a missing or unknown decision | `ERROR`, never `allow` |
+| the guard's own internal-error log (`<guard dir>/../logs/hook-errors.log`) grew during the case, whatever the decision looked like | `ERROR` |
+
+The payload is written to a scratch file first and checked (jq exit 0,
+non-empty, `.tool_input.command` equal to the input) before the guard reads
+it. Without that check a failed `jq` would hand the guard empty stdin, which
+it answers with an empty-stdout allow. The internal-error log is only
+inspected by size. A missing log is fine. Because that log is shared with any
+live hook invocations of the same guard copy, unrelated concurrent growth
+can cause a spurious `ERROR`. That fails closed, so rerun if it happens.
 
 Exit status: `0` means every case gave a valid observation. `1` means at least
 one `ERROR`, or the Git index or worktree-status fingerprint changed during
@@ -64,7 +75,8 @@ missing or unreadable. For example:
 ### Observed matrix — 2026-10-11
 
 Command: `scripts/diagnostics/guard_index_scope.sh --canonical /home/ubuntu/GitHub/repo/hooks/repo/guard-destructive.sh`.
-The run started at 2026-10-11T08:10:32Z on a Loom AWS dispatch worker with
+The run started at 2026-10-11T08:16:16Z (re-recorded after the strict-parsing
+fixes; identical to the 08:10:32Z run) on a Loom AWS dispatch worker with
 GNU bash 5.2.21 and jq-1.7. Every invocation of both guards exited `0`, so
 only the decision field tells the cases apart.
 
@@ -139,20 +151,25 @@ policy (`deny` downstream, `ask` canonical) for the negative controls.
   deletes. One caveat: the guard's own internal-error log
   (`hook-errors.log`, written next to the guard under the gitignored
   `.loom/logs/`) has no override variable. If the guard hits an internal
-  error, it still writes there.
+  error, it still writes there. The script only reads that file's size, and
+  reports growth as `ERROR`.
 - **Strict parsing.** Only a successful, zero-byte stdout counts as `allow`.
-  Disposable stubs that were not committed confirmed this:
+  Disposable stubs that were not committed confirmed this. Each row is all
+  eight cases:
 
   | Stub output | Reported decision | Exit status |
   |---|---|---|
   | empty stdout | `allow` | 0 |
   | JSON `ask` | `ask` | 0 |
   | JSON `deny` | `deny` | 0 |
+  | JSON `allow` | `allow-json` | 0 |
   | malformed text | `ERROR` | 1 |
   | whitespace only | `ERROR` | 1 |
   | two JSON objects | `ERROR` | 1 |
   | unknown decision | `ERROR` | 1 |
   | exit 3 | `ERROR` | 1 |
+  | exit 0, empty stdout, appends to `../logs/hook-errors.log` | `ERROR` | 1 |
+  | installed guard, `jq` wrapper on `PATH` failing for `-n` | `ERROR` (exit `-`) | 1 |
 
   A missing guard or missing `jq` exits `2` with a clear message.
 

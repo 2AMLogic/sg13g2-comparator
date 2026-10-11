@@ -25,9 +25,21 @@
 #   exit 0 + zero-byte stdout                      -> allow
 #   exit 0 + one JSON object whose
 #     .hookSpecificOutput.permissionDecision is
-#     "allow" | "ask" | "deny"                     -> that decision
-#   anything else (nonzero exit, timeout, invalid
-#     JSON, missing/unknown decision field)        -> ERROR (never allow)
+#     "ask" | "deny"                               -> that decision
+#     "allow"                                      -> allow-json (explicit
+#                                                     allow; bypasses the
+#                                                     prompt, so kept distinct
+#                                                     from empty-stdout allow)
+#   anything else (payload serialization failure,
+#     nonzero exit, timeout, invalid JSON,
+#     missing/unknown decision field)              -> ERROR (never allow)
+#   any case during which the guard's own
+#     <guard dir>/../logs/hook-errors.log grew     -> ERROR (the guard's ERR
+#                                                     trap masks internal
+#                                                     errors as empty stdout)
+#   The payload is built with jq into a file and checked (jq exit 0, non-empty,
+#   .tool_input.command round-trips) before the guard is run; on failure the
+#   guard is not run and the exit column shows "-".
 #
 # Exit status:
 #   0  every case on every guard produced a valid observation
@@ -148,6 +160,26 @@ STATE_BEFORE="$(snapshot_state)"
 
 sha_of() { sha256sum < "$1" | cut -d' ' -f1; }
 
+# Path of the guard's own internal-error log, resolved the way the guard
+# resolves it (<guard dir>/../logs, or <repo>/.loom/logs for a guard under
+# a `defaults/` source tree). Read-only: only its size is ever inspected.
+guard_error_log() {
+    local dir parent
+    dir="$(cd "$(dirname "$1")" && pwd)"
+    parent="${dir%/*}"
+    if [[ "${parent##*/}" == "defaults" ]]; then
+        printf '%s/.loom/logs/hook-errors.log' "${parent%/*}"
+    else
+        printf '%s/../logs/hook-errors.log' "$dir"
+    fi
+}
+# Size in bytes, or "absent". Never fails.
+log_size() {
+    local f
+    f="$(guard_error_log "$1")"
+    if [[ -f "$f" ]]; then stat -c %s -- "$f" 2>/dev/null || echo unreadable; else echo absent; fi
+}
+
 ERRORS=0
 
 # observe LABEL GUARD_PATH IDX
@@ -155,17 +187,36 @@ observe() {
     local label="$1" guard="$2" idx="$3"
     local id="${CASE_IDS[$idx]}" cmd="${CASE_CMDS[$idx]}"
     local out="$SCRATCH/$label.$id.out" err="$SCRATCH/$label.$id.err"
-    local status decision reason=""
+    local payload="$SCRATCH/$label.$id.json"
+    local status="-" decision reason="" jq_rc echoed log_before log_after
 
-    # Payload is serialized only; the guard is the program under observation.
+    # Payload is serialized only, into a file, and verified before the guard
+    # sees it: a failed serialization must never reach the guard as empty
+    # stdin (which the guard would answer with an empty-stdout "allow").
     jq -n --arg cmd "$cmd" --arg cwd "$REPO_ROOT" \
         '{hook_event_name:"PreToolUse", tool_name:"Bash",
-          tool_input:{command:$cmd}, cwd:$cwd}' \
-        | LOOM_GUARD_DECISION_LOG_FILE="$SCRATCH/$label.decisions.jsonl" \
-          timeout 60 bash "$guard" >"$out" 2>"$err"
-    status="${PIPESTATUS[1]}"
+          tool_input:{command:$cmd}, cwd:$cwd}' >"$payload" 2>"$err"
+    jq_rc=$?
+    echoed=""
+    if [[ $jq_rc -eq 0 && -s "$payload" ]]; then
+        echoed="$(jq -j '.tool_input.command' "$payload" 2>/dev/null && printf x)"
+        echoed="${echoed%x}"
+    fi
 
-    if [[ "$status" -ne 0 ]]; then
+    if [[ $jq_rc -ne 0 || ! -s "$payload" || "$echoed" != "$cmd" ]]; then
+        decision="ERROR"
+        reason="payload serialization failed (jq exit $jq_rc); guard not run"
+    else
+        log_before="$(log_size "$guard")"
+        LOOM_GUARD_DECISION_LOG_FILE="$SCRATCH/$label.decisions.jsonl" \
+            timeout 60 bash "$guard" <"$payload" >"$out" 2>"$err"
+        status=$?
+        log_after="$(log_size "$guard")"
+    fi
+
+    if [[ "${decision:-}" == "ERROR" ]]; then
+        :
+    elif [[ "$status" -ne 0 ]]; then
         decision="ERROR"
         reason="guard exited $status$( [[ $status -eq 124 ]] && echo ' (timeout)')"
     elif [[ ! -s "$out" ]]; then
@@ -178,11 +229,22 @@ observe() {
         decision="$(jq -r '.hookSpecificOutput.permissionDecision // empty' "$out")"
         case "$decision" in
             allow|ask|deny)
+                # An explicit JSON allow bypasses the permission prompt; it is
+                # a different hook outcome from empty stdout, so keep it apart.
+                [[ "$decision" == "allow" ]] && decision="allow-json"
                 reason="$(jq -r '.hookSpecificOutput.permissionDecisionReason // ""' "$out")" ;;
             *)
                 reason="missing/unknown permissionDecision: '${decision}'"
                 decision="ERROR" ;;
         esac
+    fi
+
+    # The guard's ERR trap turns its own internal errors into exit 0 + empty
+    # stdout, logging only to hook-errors.log. Growth during a case means the
+    # observation cannot be trusted, whatever the decision looked like.
+    if [[ "$status" != "-" && "$log_before" != "$log_after" ]]; then
+        reason="guard internal-error log grew ($(guard_error_log "$guard"): $log_before -> $log_after bytes); observed: $decision${reason:+ ($reason)}"
+        decision="ERROR"
     fi
 
     if [[ "$decision" == "ERROR" ]]; then
@@ -192,9 +254,9 @@ observe() {
         fi
     fi
 
-    printf '%-9s  %-16s  %4s  %-8s  %s\n' "$label" "$id" "$status" "$decision" "$cmd"
+    printf '%-9s  %-16s  %4s  %-10s  %s\n' "$label" "$id" "$status" "$decision" "$cmd"
     if [[ "$decision" == "ERROR" || ( $SHOW_REASONS -eq 1 && -n "$reason" ) ]]; then
-        printf '%-9s  %-16s  %4s  %-8s  reason: %s\n' "" "" "" "" "$reason"
+        printf '%-9s  %-16s  %4s  %-10s  reason: %s\n' "" "" "" "" "$reason"
     fi
 }
 
@@ -207,7 +269,7 @@ if [[ -n "$CANONICAL" ]]; then
 fi
 printf '# bash=%s  jq=%s  telemetry=%s (removed on exit)\n' \
     "${BASH_VERSION}" "$(jq --version)" "$SCRATCH"
-printf '%-9s  %-16s  %4s  %-8s  %s\n' "guard" "case" "exit" "decision" "command (data only, not executed)"
+printf '%-9s  %-16s  %4s  %-10s  %s\n' "guard" "case" "exit" "decision" "command (data only, not executed)"
 
 for i in "${!CASE_IDS[@]}"; do
     observe "$GUARD_LABEL" "$GUARD" "$i"
