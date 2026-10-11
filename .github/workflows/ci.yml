@@ -87,6 +87,8 @@ jobs:
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.jsonl
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.spice
             /sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md
+            /sim/klt-corner-verification/campaigns/20261009-issue81/noise_full.json
+            /sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json
             /spec/decision-records/0002-target-spec-ratification.md
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -123,6 +125,9 @@ jobs:
 
       # Issue #174: README target-spec-table figures vs the committed report
       # (stdlib only). Unmapped claims are listed as UNCHECKED, never passed.
+      # Issue #193: noise/offset claims read their own sources (the issue #81
+      # noise_full.json and the whole-latch offset record JSON); both are in
+      # this job's sparse cone above.
       - name: README spec-table figures match the committed report
         run: python3 scripts/check_readme_claims.py
 
@@ -315,6 +320,8 @@ jobs:
           /scripts/
           /README.md
           /sim/characterization/20261009-d73a9ac-schematic/report.json
+          /sim/klt-corner-verification/campaigns/20261009-issue81/noise_full.json
+          /sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json
           /sim/evidence-exceptions.json
           /sim/evidence-size-budget.json
           /spec/decision-records/

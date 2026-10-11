@@ -531,10 +531,10 @@ inputs):
 
 | Job | Inputs beyond its own scripts |
 |---|---|
-| signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
+| signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes), and the two README-claim sources of `check_readme_claims.py` (issue #193): `campaigns/20261009-issue81/noise_full.json` and `sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json` |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
 | harness-unit-tests | `sim/{harness,kltsim,comparator-pex}/`, `sim/tools/build-osdi.sh` (sourced by the OSDI receipt test), the `comparator-{regeneration,kickback}/testbench/` source benches, `sim/dut.json`, `sim/dut/`, `sim/klt-corner-verification/{benches/,rows.json}`, the top-level `*.json`/`*.jsonl`/`*.spice` of campaigns `20261009-d73a9ac` and `20261010-n200` (the N = 200 offset campaign the cited item 6 report is derived from), `campaigns/20261009-issue78/fixture/`, the `smoke/offset_mc-mismatch-vs-negctrl.envelope.json` control, `sim/klt-yield/`, `manifests/{klt-pin.json,t1-signoff-report.json}` (the frozen report the item 6 test compares with the citation), `design/`, `layout/{tests/,common_sg13g2.py,comparator/erc_tool.py,comparator/erc_report.json,comparator/pex_report.json}` |
-| append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` |
+| append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/`, the README, the characterization report and the two `check_readme_claims.py` sources above (its unit tests read them) |
 
 A new input a job starts reading must be added to its patterns in the same
 change. `scripts/tests/test_sparse_checkout.py` proves the cones: it builds a
