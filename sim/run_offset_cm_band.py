@@ -12,7 +12,10 @@ Conditions: vcm-m050 (dut_vcm - 50 mV), vcm-nom (dut_vcm), vcm-p050
 (dut_vcm + 50 mV). Each condition is one campaign under
 sim/comparator-offset-cm-band/campaigns/ID/<condition>/: one body, five
 per-process requests (backend: batch, so the grid runs on the batch fleet),
-their envelopes, invocations and every attempt. ``control`` submits the
+their envelopes, invocations and every attempt. ``run`` refuses when any
+selected part's envelope already exists (evidence is append-only);
+``--skip-existing`` is the explicit resume mode, and redoing a recorded
+result takes a new ``--series``. ``control`` submits the
 mismatch-off negative control (plain mos_tt, one PVT point) for a
 condition; ``repeat`` resubmits the first grid point of one process at full
 N as a same-seed repeatability check; both land in ID/controls/. ``smoke``
@@ -76,18 +79,39 @@ def _submit_with_retry(request: Path, out_dir: Path, tag: str, args, extra: dict
 def cmd_run(args) -> int:
     cond = cmband.condition(args.condition)
     out_dir = _series(args) / cond.name
-    rc = 0
-    for tag in cmband.part_tags():
-        if args.part and tag not in args.part:
+    selected = [t for t in cmband.part_tags() if not args.part or t in args.part]
+    # Preflight every selected part BEFORE submitting anything (issue #194):
+    # envelopes are append-only evidence, so an existing selected envelope
+    # refuses the whole run unless --skip-existing resumes; a part that would
+    # be submitted must have its request on disk. --force never reaches an
+    # existing envelope here -- that stays _submit's scratch-only escape.
+    enveloped = [t for t in selected if (out_dir / f"{t}.envelope.json").exists()]
+    if enveloped and not args.skip_existing:
+        for t in enveloped:
+            print(f"{out_dir / (t + '.envelope.json')} exists -- campaign evidence "
+                  "is append-only; resume unenveloped parts with --skip-existing, "
+                  "or redo the condition under a new --series", file=sys.stderr)
+        return 1
+    todo, missing = [], []
+    for t in selected:
+        if t in enveloped:  # resume mode: skip before requiring the request
+            print(f"{t}: envelope present, skipped", file=sys.stderr)
             continue
-        request = out_dir / f"{tag}.request.json"
-        if not request.is_file():
+        request = out_dir / f"{t}.request.json"
+        if request.is_file():
+            todo.append((t, request))
+        else:
+            missing.append(request)
+    if missing:
+        for request in missing:
             print(f"no request at {request}; run `build` first", file=sys.stderr)
-            return 1
-        if (out_dir / f"{tag}.envelope.json").exists() and args.skip_existing:
-            print(f"{tag}: envelope present, skipped", file=sys.stderr)
-            continue
-        rc = max(rc, _submit_with_retry(request, out_dir, tag, args, _extra(cond, "campaign")))
+        return 1
+    rc = 0
+    for tag, request in todo:
+        code = _submit_with_retry(request, out_dir, tag, args, _extra(cond, "campaign"))
+        if code:
+            print(f"{tag}: part failed with final code {code}", file=sys.stderr)
+        rc = max(rc, code)
     return rc
 
 
@@ -206,7 +230,11 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--series", required=True)
     r.add_argument("--condition", required=True, choices=names)
     r.add_argument("--part", action="append", choices=cmband.part_tags())
-    r.add_argument("--skip-existing", action="store_true")
+    r.add_argument("--skip-existing", action="store_true",
+                   help="resume mode: skip selected parts whose envelope already "
+                        "exists. Default refuses the run when any selected "
+                        "envelope exists (append-only evidence; redo a recorded "
+                        "result under a new --series).")
     submit_opts(r)
     r.set_defaults(func=cmd_run)
 
