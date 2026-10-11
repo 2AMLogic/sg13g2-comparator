@@ -256,7 +256,8 @@ class SparseCones(unittest.TestCase):
         """Issue #193: the guard reads two extra evidence sources; the signoff
         job's cone must hold exactly those, and dropping them must fail."""
         sources = ["/sim/klt-corner-verification/campaigns/20261009-issue81/noise_full.json",
-                   "/sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json"]
+                   "/sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json",
+                   "/sim/comparator-offset-cm-band/campaigns/20261009-5185f52/comparison.json"]
         co = self.jobs["signoff-manifest-parity"]["checkout"]
         for src in sources:
             self.assertIn(src, co["patterns"])
@@ -275,6 +276,7 @@ class SparseCones(unittest.TestCase):
             self.assertEqual(r.returncode, 1, r.stdout[-3000:])
             self.assertIn("source noise-full-issue81", r.stdout)
             self.assertIn("source offset-whole-latch-ea40b57", r.stdout)
+            self.assertIn("source offset-cm-band-5185f52", r.stdout)
 
     def test_klt_jobs_from_sparse_clone(self):
         if not klt_matches_pin():

@@ -25,7 +25,12 @@ NOISE = json.loads(chk.NOISE_PATH.read_text(encoding="utf-8"))
 OFFSET = json.loads(chk.OFFSET_PATH.read_text(encoding="utf-8"))
 
 
-def _run(readme_text, report, noise=None, offset=None, raw_noise=None, raw_offset=None):
+CMBAND = json.loads(chk.CMBAND_PATH.read_text(encoding="utf-8"))
+CM_ID = "offset-cm-band-5185f52"
+
+
+def _run(readme_text, report, noise=None, offset=None, raw_noise=None, raw_offset=None,
+         cmband=None, raw_cmband=None):
     """Run main() on temp copies; `noise`/`offset` default to the committed sources."""
     with tempfile.TemporaryDirectory() as td:
         rp, jp = Path(td, "README.md"), Path(td, "report.json")
@@ -36,10 +41,13 @@ def _run(readme_text, report, noise=None, offset=None, raw_noise=None, raw_offse
                        encoding="utf-8")
         op.write_text(raw_offset if raw_offset is not None else json.dumps(offset or OFFSET),
                       encoding="utf-8")
+        cp = Path(td, "comparison.json")
+        cp.write_text(raw_cmband if raw_cmband is not None else json.dumps(cmband or CMBAND),
+                      encoding="utf-8")
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = chk.main(["--readme", str(rp), "--report", str(jp),
-                             "--noise-full", str(np_), "--offset-record", str(op)])
+                             "--noise-full", str(np_), "--offset-record", str(op), "--cmband", str(cp)])
     return code, out.getvalue(), err.getvalue()
 
 
@@ -117,7 +125,7 @@ class SourceRegistry(unittest.TestCase):
         self.assertEqual(code, 0, err)
         n = len(chk.SOURCE_CLAIMS)
         self.assertIn(f"checked {n}/{n} source-registry README claims against "
-                      f"{NOISE_ID}, {OFFSET_ID}", out)
+                      f"{NOISE_ID}, {CM_ID}, {OFFSET_ID}", out)
         # the aggregate-report mappings are unchanged and still reported
         self.assertIn(f"checked {len(chk.CLAIMS)}/{len(chk.CLAIMS)} allowlisted", out)
 
@@ -397,6 +405,137 @@ class PvtPopulationIdentity(unittest.TestCase):
     def test_aggregate_check_without_sources_is_unchanged(self):
         failures, checked, _, src = chk.check(README, REPORT)
         self.assertEqual((failures, checked, src), ([], len(chk.CLAIMS), 0))
+
+
+class CommonModeBand(unittest.TestCase):
+    """Issue #228: the common-mode characterization counts and ranges."""
+
+    def _fails(self, expect, **kw):
+        code, _, err = _run(README, REPORT, **kw)
+        self.assertEqual(code, 1)
+        self.assertIn(expect, err)
+        return err
+
+    def test_committed_state_passes_and_all_figures_are_mapped(self):
+        code, out, err = _run(README, REPORT)
+        self.assertEqual(code, 0, err)
+        cm = [c for c in chk.SOURCE_CLAIMS if c[1] == CM_ID]
+        self.assertEqual(len(cm), 15)
+        self.assertNotIn("offset(common-mode", err)
+
+    def test_readme_mutations_name_claim_and_condition(self):
+        cases = (
+            ("`vcm-m050` **43/45 valid**", "`vcm-m050` **45/45 valid**", "common-mode vcm-m050): valid points: README says 45"),
+            ("6.89 … 11.43 mV", "6.88 … 11.43 mV", "vcm-m050): 3 sigma min mV: README says 6.88"),
+            ("6.89 … 11.43 mV", "6.89 … 11.44 mV", "vcm-m050): 3 sigma max mV: README says 11.44"),
+            ("`vcm-nom` 45/45, 6.91 … 12.09 mV", "`vcm-nom` 44/45, 6.91 … 12.09 mV",
+             "vcm-nom): valid points: README says 44"),
+            ("6.91 … 12.09 mV", "6.91 … 12.10 mV", "vcm-nom): 3 sigma max mV: README says 12.10"),
+            ("6.91 … 12.87 mV", "6.91 … 12.88 mV", "vcm-p050): 3 sigma max mV: README says 12.88"),
+            ("(`tt_-40c_1.32v`, `sf_-40c_1.20v`) are REJECTED", "(`tt_-40c_1.32v`, `sf_-40c_1.08v`) are REJECTED",
+             "rejected point 2: README says sf_-40c_1.08v"),
+            ("N = 60 per point, paired seeds", "N = 80 per point, paired seeds", "N per point: README says 80"),
+        )
+        for old, new, expect in cases:
+            with self.subTest(expect):
+                code, _, err = _run(_mutate_readme(old, new), REPORT)
+                self.assertEqual(code, 1)
+                self.assertIn(expect, err)
+                self.assertIn(f"source {CM_ID}", err)
+
+    def test_swapped_condition_ranges_in_readme_fail(self):
+        swapped = _mutate_readme("`vcm-nom` 45/45, 6.91 … 12.09 mV; `vcm-p050` 45/45, 6.91 … 12.87 mV",
+                                 "`vcm-nom` 45/45, 6.91 … 12.87 mV; `vcm-p050` 45/45, 6.91 … 12.09 mV")
+        code, _, err = _run(swapped, REPORT)
+        self.assertEqual(code, 1)
+        self.assertIn("vcm-nom): 3 sigma max mV", err)
+        self.assertIn("vcm-p050): 3 sigma max mV", err)
+
+    def test_missing_condition_in_readme_fails_loudly(self):
+        code, _, err = _run(_mutate_readme("`vcm-p050` 45/45", "`vcm-p0` 45/45"), REPORT)
+        self.assertEqual(code, 1)
+        self.assertIn("vcm-p050): valid points", err)
+        self.assertIn("no longer matches", err)
+
+    def test_swapped_condition_identity_in_source_fails(self):
+        cm = _clone(CMBAND)
+        cm["conditions"]["vcm-m050"], cm["conditions"]["vcm-p050"] = (
+            cm["conditions"]["vcm-p050"], cm["conditions"]["vcm-m050"])
+        self._fails("vcm_delta_v", cmband=cm)
+
+    def test_missing_or_extra_condition_in_source_fails(self):
+        cm = _clone(CMBAND)
+        del cm["conditions"]["vcm-p050"]
+        self._fails("conditions are", cmband=cm)
+        cm = _clone(CMBAND)
+        cm["conditions"]["vcm-p100"] = cm["conditions"]["vcm-p050"]
+        self._fails("conditions are", cmband=cm)
+
+    def test_changed_campaign_identity_fails(self):
+        for key, val, expect in (("series", "20261010-deadbee", "series is"), ("issue", 80, "issue is")):
+            with self.subTest(key):
+                cm = _clone(CMBAND)
+                cm[key] = val
+                self._fails(expect, cmband=cm)
+        cm = _clone(CMBAND)
+        cm["basis"]["n_per_point"] = 59
+        self._fails("n_per_point", cmband=cm)
+
+    def test_nonfinite_statistics_fail(self):
+        raw = json.dumps(CMBAND).replace(str(CMBAND["conditions"]["vcm-nom"]["three_sigma_mv"]["max"]), "NaN", 1)
+        self.assertIn("NaN", raw)
+        self._fails("not finite", raw_cmband=raw)
+        cm = _clone(CMBAND)
+        cm["points"][3]["stats"]["vcm-p050"]["three_sigma_mv"] = float("inf")
+        self._fails("not finite", cmband=cm)
+
+    def test_valid_rejected_accounting_must_be_consistent(self):
+        cm = _clone(CMBAND)
+        cm["conditions"]["vcm-m050"]["points_valid"] = 45  # claims full coverage
+        err = self._fails("points_valid", cmband=cm)
+        self.assertIn("vcm-m050", err)
+        cm = _clone(CMBAND)
+        cm["conditions"]["vcm-m050"]["points_rejected"].pop()  # drops a rejection
+        self._fails("rejected points", cmband=cm)
+        cm = _clone(CMBAND)  # a rejected point is silently promoted to valid
+        st = next(p for p in cm["points"] if p["point"] == "tt_-40c_1.32v")["stats"]["vcm-m050"]
+        st["rejected"], st["untrusted"], st["three_sigma_mv"] = None, 0, 7.2
+        self._fails("rejected points", cmband=cm)
+
+    def test_a_different_rejected_set_is_not_the_reviewed_population(self):
+        cm = _clone(CMBAND)
+        st = next(p for p in cm["points"] if p["point"] == "tt_27c_1.20v")["stats"]["vcm-p050"]
+        st["rejected"], st["untrusted"], st["three_sigma_mv"] = "x", 1, None
+        cm["conditions"]["vcm-p050"]["points_valid"] = 44
+        cm["conditions"]["vcm-p050"]["points_rejected"] = [{"point": "tt_27c_1.20v"}]
+        self._fails("differ from the reviewed", cmband=cm)
+
+    def test_summary_range_must_match_per_point_values(self):
+        cm = _clone(CMBAND)
+        cm["conditions"]["vcm-nom"]["three_sigma_mv"]["max"] += 0.5
+        self._fails("condition vcm-nom three_sigma_mv", cmband=cm)
+
+    def test_grid_and_n_per_point_are_validated(self):
+        cm = _clone(CMBAND)
+        cm["points"].pop()
+        self._fails("points has 44", cmband=cm)
+        cm = _clone(CMBAND)
+        cm["points"][1]["point"] = cm["points"][0]["point"]
+        self._fails("duplicate", cmband=cm)
+        cm = _clone(CMBAND)
+        cm["points"][5]["stats"]["vcm-nom"]["n"] = 59
+        self._fails("vcm-nom", cmband=cm)
+
+    def test_missing_or_malformed_source_fails_closed(self):
+        for kind, raw in (("empty", ""), ("not json", "{oops"), ("array", "[]"), ("object", "{}")):
+            with self.subTest(kind):
+                self._fails(f"source {CM_ID}", raw_cmband=raw)
+        sources = chk.load_sources({CM_ID: Path("/nonexistent/comparison.json")})
+        self.assertIn("cannot read", str(sources[CM_ID]))
+
+    def test_other_populations_stay_unchecked(self):
+        _, out, _ = _run(README, REPORT)
+        self.assertIn("UNCHECKED count in row 'Offset sigma': 13 of 45", out)
 
 
 if __name__ == "__main__":
