@@ -28,6 +28,19 @@ python3 sim/run_offset_cm_band.py repeat  --series $S --condition vcm-p050 --pro
 python3 sim/run_offset_cm_band.py compare --series $S
 ```
 
+`run` refuses by default when any selected part's envelope already exists:
+campaign evidence is append-only, so a recorded result is never resubmitted
+(the runner's hidden `--force` does not override this). `--skip-existing` is
+the explicit resume mode — enveloped parts are skipped (needing no request)
+and only unenveloped parts are submitted; a selection that is already fully
+enveloped is a successful no-op. Retrying a recorded result requires a new
+`--series`. Every selected part is checked before anything is submitted, so
+an envelope conflict or a missing request (for a part that would be
+submitted) fails the whole run with nothing sent. A part whose submission
+fails at runtime is reported with its tag and final exit code while the
+remaining eligible parts still run; the command exits with the maximum part
+code.
+
 A condition is selected by one `.param vcm_delta` in the netlist body
 (`vcm cm 0 dc {dut_vcm+vcm_delta}`; 0 for nominal); it is recorded in the body
 header, the request, and every `*.invocation.json` / `attempts.jsonl` entry.
