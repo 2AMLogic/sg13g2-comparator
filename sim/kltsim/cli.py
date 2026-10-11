@@ -555,13 +555,25 @@ def cmd_estimate(args) -> int:
 
 
 def cmd_noise_full(args) -> int:
-    """Issue #81: per-config probit sigmas + quadrature split for a campaign."""
+    """Issue #81/#236: provenance-validated per-config probit sigmas + quadrature
+    split for a campaign. Output is append-only: a report directory that already
+    holds ``noise_full.*`` is never overwritten (publish under a new namespace)."""
     out_dir = _campaign_dir(args.campaign)
+    report_dir = Path(args.report_dir) if args.report_dir else out_dir
     result = noise_full_mod.analyse(out_dir)
     result["campaign"] = out_dir.name
-    (out_dir / "noise_full.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     text = noise_full_mod.render_markdown(result)
-    (out_dir / "noise_full.md").write_text(text, encoding="utf-8")
+    targets = {report_dir / "noise_full.json": json.dumps(result, indent=2) + "\n",
+               report_dir / "noise_full.md": text}
+    clash = [str(p) for p in targets if p.exists()]
+    if clash:
+        print("noise-full: refusing to overwrite append-only evidence: " + ", ".join(clash)
+              + "; pass --report-dir <new directory>", file=sys.stderr)
+        return 1
+    report_dir.mkdir(parents=True, exist_ok=True)
+    for path, data in targets.items():
+        with open(path, "x", encoding="utf-8") as handle:
+            handle.write(data)
     print(text)
     return 0
 
@@ -684,6 +696,8 @@ def main(argv: list[str] | None = None) -> int:
 
     nf = sub.add_parser("noise-full", help="issue #81: analyse the tn_full_* configurations of a campaign")
     nf.add_argument("--campaign", required=True)
+    nf.add_argument("--report-dir", help="write noise_full.{json,md} here (new directory; "
+                    "existing files are never overwritten); default: the campaign directory")
     nf.set_defaults(func=cmd_noise_full)
 
     args = ap.parse_args(argv)

@@ -10,6 +10,20 @@ appended record. The runs themselves are the `tn_full_*` benches of the
 (analysis: `noise_full.md` / `noise_full.json` there, produced by
 `python3 sim/run_klt_corner_verification.py noise-full --campaign 20261009-issue81`).
 
+**Provenance-validated re-analysis (issue
+[#236](https://github.com/2AMLogic/sg13g2-comparator/issues/236)).**
+`noise-full` now checks each configuration's saved request/invocation hashes,
+decompressed envelope bytes, request semantics (against that configuration's
+own `tn_full_*` bench contract), envelope input hash, embedded schematic DUT
+and body injection configuration before any sigma is computed; a failing
+configuration is rejected, never `complete`. The re-analysis of the unchanged
+`20261009-issue81` inputs is in
+[`analysis-20261011-issue236/`](analysis-20261011-issue236/noise_full.md)
+(all six configurations validate; the numbers are identical to the historical
+`noise_full.*` above, which stays untouched as append-only evidence). The
+command refuses to overwrite existing output; use
+`--report-dir <new directory>`.
+
 It is **appended evidence**: the earlier record
 (`../comparator-transient-noise/records/20260921-154729-41cbc7f`, whose bench
 states it injects noise only at the DUT's input pins and is therefore a lower
