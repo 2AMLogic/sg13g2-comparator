@@ -569,10 +569,9 @@ pinned build is first on `PATH`; otherwise they are skipped locally and proven
 by the real CI jobs.
 
 The harness job's lint population is guarded by
-`scripts/check_lint_population.py` (issue #216): the preflight derives the
-intended set from git's tracked inventory, fails naming every omitted path
-before ruff runs, and keeps `LINT_ROOTS` in one maintained copy. The
-sparse-cone tests add dropping-a-pattern and undefined-name negative controls.
+`scripts/check_lint_population.py` (issue #216): it derives the intended set
+from git's tracked inventory and fails naming every omitted path before ruff
+runs. The sparse-cone tests add negative controls.
 
 Reproduce locally:
 
