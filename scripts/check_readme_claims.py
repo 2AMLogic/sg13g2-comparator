@@ -30,6 +30,13 @@ source, named per claim through the `SOURCES` registry:
     (its machine-readable twin of the `.md` record the README cites): 3 sigma
     min/max/mean, Target/Stretch point counts, N per point.
 
+  * `offset-cm-band-5185f52` -- the issue #79 common-mode characterization
+    `sim/comparator-offset-cm-band/campaigns/20261009-5185f52/comparison.json`
+    (issue #228): valid-point counts and min/max 3 sigma for vcm-m050 / vcm-nom /
+    vcm-p050, with the two intentionally rejected vcm-m050 points preserved.
+    Characterization only: no common-mode bound or verdict is checked here, and
+    a newer campaign is never selected automatically (pinned deliberately).
+
 Each source is identity-checked before any figure is compared (record/campaign
 id, bench name, N, point count, and -- issue #217 -- the complete 5-process x
 3-temperature x 3-supply physical PVT grid each `N/45` claim describes, with
@@ -42,7 +49,7 @@ Anything in the table that is NOT in either allowlist is listed as UNCHECKED,
 never silently passed: every `N/45`, `N of 45` count, and the number of
 unit-bearing figures (fC, uV, mV, ns, ps, uW) not covered by a claim. Still
 unmapped (no reliable source mapping reviewed): the front-end-only offset
-record, the common-mode characterization, the historical `.noise`/TRNOISE
+record, the historical `.noise`/TRNOISE
 figures, the earlier power record, and the Monte-Carlo seeds. Mapping more is a
 spec/curation question, not something this guard decides.
 
@@ -59,6 +66,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from decimal import ROUND_HALF_UP, Decimal
@@ -118,6 +126,8 @@ NOISE_PATH = (REPO_ROOT / "sim" / "klt-corner-verification" / "campaigns"
               / "20261009-issue81" / "noise_full.json")
 OFFSET_PATH = (REPO_ROOT / "sim" / "comparator-offset-transient-mc" / "records"
                / "20260917-060858-ea40b57.json")
+CMBAND_PATH = (REPO_ROOT / "sim" / "comparator-offset-cm-band" / "campaigns"
+               / "20261009-5185f52" / "comparison.json")
 
 #: Ratified whole-latch offset limits (3 sigma, mV): Target <= 15, Stretch <= 8.
 OFFSET_TARGET_MV, OFFSET_STRETCH_MV = 15.0, 8.0
@@ -298,12 +308,103 @@ def load_offset_record(path: Path) -> dict:
             "summary.vos_3sig_mv min/max/mean/at_* disagree with the per-point values")
     return stats
 
+#: Issue #228: the pinned common-mode characterization (issue #79) conditions:
+#: name -> (delta from nominal dut_vcm in V, absolute dut_vcm in V, rejected
+#: point ids the comparison must carry). The two vcm-m050 rejections are the
+#: intentionally incomplete negative-common-mode population (tracked in #89);
+#: they are preserved here, never counted as valid, never papered over.
+CMBAND_NOMINAL_VCM_V = 0.6
+CMBAND_CONDITIONS: dict[str, tuple[float, float, tuple[str, ...]]] = {
+    "vcm-m050": (-0.05, 0.55, ("tt_-40c_1.32v", "sf_-40c_1.20v")),
+    "vcm-nom": (0.0, 0.6, ()),
+    "vcm-p050": (0.05, 0.65, ()),
+}
+
+
+def _finite(node, *keys) -> float:
+    v = _num(node, *keys)
+    _expect(math.isfinite(v), f"field {'.'.join(map(str, keys))} is not finite: {v!r}")
+    return v
+
+
+def load_cmband_comparison(path: Path) -> dict:
+    """Issue #79 common-mode band comparison (3 conditions x 45 points, N=60).
+
+    Validates series identity, condition names/deltas, N per point, the 45-point
+    physical grid and valid/rejected accounting against the per-point data
+    before the summary min/max are accepted. Statistics are named
+    `<condition>.<field>`. The summary alone does not prove the physical
+    grid; the per-point `points[]` ids it carries are what is validated.
+    """
+    d = _read_json(path)
+    _expect(isinstance(d, dict), "top level is not an object")
+    _expect(_need(d, "series") == "20261009-5185f52",
+            f"series is {d.get('series')!r}, expected '20261009-5185f52'")
+    _expect(_need(d, "issue") == 79, f"issue is {d.get('issue')!r}, expected 79")
+    n = _need(d, "basis", "n_per_point")
+    _expect(n == 60, f"basis.n_per_point is {n!r}, expected 60")
+    conds = _need(d, "conditions")
+    _expect(isinstance(conds, dict) and set(conds) == set(CMBAND_CONDITIONS),
+            f"conditions are {sorted(conds) if isinstance(conds, dict) else conds!r}, "
+            f"expected {sorted(CMBAND_CONDITIONS)}")
+    pts = _need(d, "points")
+    _expect(isinstance(pts, list) and len(pts) == N_POINTS,
+            f"points has {len(pts) if isinstance(pts, list) else '?'} entries, expected {N_POINTS}")
+    ids = [_need(p, "point") for p in pts]
+    _validate_pvt_population(ids, NOISE_PROCESSES, "point")
+    stats: dict = {}
+    for name, (delta, vcm, rejected) in CMBAND_CONDITIONS.items():
+        c = conds[name]
+        _expect(_finite(c, "vcm_delta_v") == delta and _finite(c, "vcm_v") == vcm
+                and abs(vcm - CMBAND_NOMINAL_VCM_V - delta) < 1e-9,
+                f"condition {name} has vcm_delta_v={c.get('vcm_delta_v')!r}, "
+                f"vcm_v={c.get('vcm_v')!r}, expected {delta}, {vcm}")
+        _expect(_need(c, "points_expected") == N_POINTS,
+                f"condition {name} points_expected is {c['points_expected']!r}, expected {N_POINTS}")
+        vals, rej = {}, []
+        for i, p in enumerate(pts):
+            st = _need(p, "stats", name)
+            _expect(_need(st, "n") == n, f"condition {name} point {ids[i]!r} has n != {n}")
+            if _need(st, "rejected") is None:
+                _expect(_need(st, "untrusted") == 0,
+                        f"condition {name} point {ids[i]!r} is accepted but has untrusted draws")
+                vals[ids[i]] = _finite(st, "three_sigma_mv")
+            else:
+                _expect(st.get("three_sigma_mv") is None and _need(st, "untrusted") > 0,
+                        f"condition {name} point {ids[i]!r} is rejected yet carries a "
+                        "valid 3-sigma or no untrusted draws")
+                rej.append(ids[i])
+        listed = sorted(r["point"] for r in _need(c, "points_rejected"))
+        _expect(sorted(rej) == listed == sorted(rejected),
+                f"condition {name} rejected points {sorted(rej)} / listed {listed} "
+                f"differ from the reviewed {sorted(rejected)}")
+        valid = _need(c, "points_valid")
+        _expect(valid == len(vals) and valid + len(rej) == N_POINTS,
+                f"condition {name} points_valid {valid!r} + rejected {len(rej)} != "
+                f"{N_POINTS} (per-point data has {len(vals)} valid)")
+        s = _need(c, "three_sigma_mv")
+        lo, hi = min(vals.values()), max(vals.values())
+        _expect(abs(_finite(s, "min") - lo) < 1e-9 and abs(_finite(s, "max") - hi) < 1e-9
+                and vals[_need(s, "min_point")] == lo and vals[_need(s, "binding")] == hi,
+                f"condition {name} three_sigma_mv min/max/at_* disagree with the per-point values")
+        _expect(_need(c, "points_within_target") == sum(v <= OFFSET_TARGET_MV for v in vals.values()),
+                f"condition {name} points_within_target disagrees with the per-point values")
+        stats[f"{name}.valid"] = valid
+        stats[f"{name}.expected"] = N_POINTS
+        stats[f"{name}.min"], stats[f"{name}.max"] = lo, hi
+        for k, pid in enumerate(rejected, 1):  # README order, set-validated above
+            stats[f"{name}.rejected_{k}"] = pid
+        stats[f"{name}.within_target"] = c["points_within_target"]
+    stats["n_per_point"] = n
+    return stats
+
 
 #: id -> (default path, loader). The reviewed population list; adding a source
 #: or changing which population a claim reads is a deliberate edit here.
 SOURCES = {
     "noise-full-issue81": (NOISE_PATH, load_noise_full),
     "offset-whole-latch-ea40b57": (OFFSET_PATH, load_offset_record),
+    "offset-cm-band-5185f52": (CMBAND_PATH, load_cmband_comparison),
 }
 
 _NOISE = "| Input-referred noise"
@@ -356,6 +457,50 @@ SOURCE_CLAIMS = [
      r"whole-latch `comparator-offset-transient-mc`: N = (\d+) draws per point",
      "n_samples", "int"),
 ]
+
+_CM = r"Common-mode characterization.*?"  # anchors a pattern to the issue #79 text
+_CMID = "offset-cm-band-5185f52"
+_CM_CONDS = {
+    "vcm-m050": r"`vcm-m050` \*\*",
+    "vcm-nom": r"`vcm-nom` ",
+    "vcm-p050": r"`vcm-p050` ",
+}
+_CM_TAIL = {  # text between the condition tag and the count, and after the count
+    "vcm-m050": (r"(\d+)/\d+ valid\*\*", r"\d+/(\d+) valid\*\*"),
+    "vcm-nom": (r"(\d+)/\d+,", r"\d+/(\d+),"),
+    "vcm-p050": (r"(\d+)/\d+,", r"\d+/(\d+),"),
+}
+
+
+def _cm_claims():
+    """One claim per mapped common-mode figure, each anchored on its own
+    condition tag so swapped conditions cannot satisfy it. Each tag's pattern
+    starts at its own tag."""
+    out = []
+    for cond, tag in _CM_CONDS.items():
+        cnt, den = _CM_TAIL[cond]
+        base = _CM + tag
+        label = f"offset(common-mode {cond})"
+        out += [
+            (f"{label}: valid points", _CMID, _OFF, 3, base + cnt, f"{cond}.valid", "int"),
+            (f"{label}: grid points", _CMID, _OFF, 3, base + den, f"{cond}.expected", "int"),
+            (f"{label}: 3 sigma min mV", _CMID, _OFF, 3,
+             base + r"\d+/\d+(?: valid\*\*)?, ([\d.]+) … [\d.]+ mV", f"{cond}.min", "num"),
+            (f"{label}: 3 sigma max mV", _CMID, _OFF, 3,
+             base + r"\d+/\d+(?: valid\*\*)?, [\d.]+ … ([\d.]+) mV", f"{cond}.max", "num"),
+        ]
+    out += [
+        ("offset(common-mode vcm-m050): rejected point 1", _CMID, _OFF, 3,
+         r"The two missing `vcm-m050` points \(`([^`]+)`, `[^`]+`\)", "vcm-m050.rejected_1", "str"),
+        ("offset(common-mode vcm-m050): rejected point 2", _CMID, _OFF, 3,
+         r"The two missing `vcm-m050` points \(`[^`]+`, `([^`]+)`\)", "vcm-m050.rejected_2", "str"),
+        ("offset(common-mode): N per point", _CMID, _OFF, 3,
+         _CM + r"N = (\d+) per point", "n_per_point", "int"),
+    ]
+    return out
+
+
+SOURCE_CLAIMS += _cm_claims()
 
 
 _COUNT_RE = re.compile(r"\b\d+/45\b|\b\d+ of 45\b")
@@ -521,6 +666,8 @@ def main(argv=None) -> int:
     ap.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     ap.add_argument("--noise-full", type=Path, default=NOISE_PATH,
                     help="issue #81 noise_full.json (source noise-full-issue81)")
+    ap.add_argument("--cmband", type=Path, default=CMBAND_PATH,
+                    help="issue #79 common-mode comparison.json (source offset-cm-band-5185f52)")
     ap.add_argument("--offset-record", type=Path, default=OFFSET_PATH,
                     help="whole-latch offset record JSON (source offset-whole-latch-ea40b57)")
     args = ap.parse_args(argv)
@@ -531,7 +678,8 @@ def main(argv=None) -> int:
         print(f"FAIL: cannot read inputs: {exc}", file=sys.stderr)
         return 1
     sources = load_sources({"noise-full-issue81": args.noise_full,
-                            "offset-whole-latch-ea40b57": args.offset_record})
+                            "offset-whole-latch-ea40b57": args.offset_record,
+                            "offset-cm-band-5185f52": args.cmband})
     failures, checked, unchecked, src_checked = check(text, report, sources=sources)
     for f in failures:
         print(f"FAIL: {f}", file=sys.stderr)
