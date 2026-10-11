@@ -486,6 +486,15 @@ machine-checked contract (issue #132). The `append-only-evidence` job runs
 external storage) is deliberately out of scope here; this only measures and
 caps growth, and never edits, moves or externalizes existing evidence.
 
+**Before requesting review.** Run `python3 scripts/check_evidence_size.py
+--tree HEAD` on the final committed candidate and record the tested SHA, exit
+status (0 within budget, 1 violation, 2 measurement error) and measured size in
+the PR; re-run after any HEAD change. A failure follows the Exceptions policy
+below (decision record plus exact budget entry); this paragraph grants none. If
+Python is unavailable, state that local validation is unavailable and cite the
+successful `append-only-evidence` CI result for that exact commit; a skipped
+check is not success.
+
 **Accounting.** Bytes are Git blob sizes from `git ls-tree -rl <tree>` of the
 named commit/tree -- not working-tree or pack sizes. The checker reports
 repository-wide and `sim/` totals plus per **evidence unit**: the entry
