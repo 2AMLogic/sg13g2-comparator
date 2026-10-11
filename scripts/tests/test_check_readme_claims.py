@@ -21,15 +21,30 @@ README = chk.DEFAULT_README.read_text(encoding="utf-8")
 REPORT = chk.load_report(chk.DEFAULT_REPORT)
 
 
-def _run(readme_text, report):
+NOISE = json.loads(chk.NOISE_PATH.read_text(encoding="utf-8"))
+OFFSET = json.loads(chk.OFFSET_PATH.read_text(encoding="utf-8"))
+
+
+def _run(readme_text, report, noise=None, offset=None, raw_noise=None, raw_offset=None):
+    """Run main() on temp copies; `noise`/`offset` default to the committed sources."""
     with tempfile.TemporaryDirectory() as td:
         rp, jp = Path(td, "README.md"), Path(td, "report.json")
+        np_, op = Path(td, "noise_full.json"), Path(td, "offset.json")
         rp.write_text(readme_text, encoding="utf-8")
         jp.write_text(json.dumps(report), encoding="utf-8")
+        np_.write_text(raw_noise if raw_noise is not None else json.dumps(noise or NOISE),
+                       encoding="utf-8")
+        op.write_text(raw_offset if raw_offset is not None else json.dumps(offset or OFFSET),
+                      encoding="utf-8")
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = chk.main(["--readme", str(rp), "--report", str(jp)])
+            code = chk.main(["--readme", str(rp), "--report", str(jp),
+                             "--noise-full", str(np_), "--offset-record", str(op)])
     return code, out.getvalue(), err.getvalue()
+
+
+def _clone(x):
+    return json.loads(json.dumps(x))
 
 
 class ReadmeClaims(unittest.TestCase):
@@ -83,6 +98,210 @@ class ReadmeClaims(unittest.TestCase):
         code, _, err = _run(README, report)
         self.assertEqual(code, 1)
         self.assertIn("no row id '4a'", err)
+
+
+NOISE_ID, OFFSET_ID = "noise-full-issue81", "offset-whole-latch-ea40b57"
+
+
+def _mutate_readme(old, new):
+    mutated = README.replace(old, new)
+    assert mutated != README, old
+    return mutated
+
+
+class SourceRegistry(unittest.TestCase):
+    """Issue #193: claims verified against their own evidence populations."""
+
+    def test_all_registered_claims_pass_on_committed_state(self):
+        code, out, err = _run(README, REPORT)
+        self.assertEqual(code, 0, err)
+        n = len(chk.SOURCE_CLAIMS)
+        self.assertIn(f"checked {n}/{n} source-registry README claims against "
+                      f"{NOISE_ID}, {OFFSET_ID}", out)
+        # the aggregate-report mappings are unchanged and still reported
+        self.assertIn(f"checked {len(chk.CLAIMS)}/{len(chk.CLAIMS)} allowlisted", out)
+
+    def test_every_source_claim_names_a_registered_source(self):
+        for c in chk.SOURCE_CLAIMS:
+            self.assertIn(c[1], chk.SOURCES, c[0])
+        self.assertEqual(len({c[0] for c in chk.SOURCE_CLAIMS}), len(chk.SOURCE_CLAIMS))
+
+    def test_unmapped_populations_stay_unchecked(self):
+        _, out, _ = _run(README, REPORT)
+        self.assertIn("UNCHECKED count in row 'Offset sigma': 13 of 45", out)  # front-end record
+        self.assertIn("UNCHECKED count in row 'Input-referred noise': 45/45", out)  # historical
+
+    def test_readme_noise_mean_mutation_names_claim_source_and_value(self):
+        code, _, err = _run(_mutate_readme("grid-wide mean 1.305 mV rms",
+                                           "grid-wide mean 1.205 mV rms"), REPORT)
+        self.assertEqual(code, 1)
+        self.assertIn("noise(#81): grid mean mV rms: README says 1.205", err)
+        self.assertIn(f"source {NOISE_ID}", err)
+        self.assertIn("says 1.305", err)
+
+    def test_readme_noise_valid_point_count_mutation_fails(self):
+        code, _, err = _run(_mutate_readme("**45/45 valid points, grid-wide mean",
+                                           "**44/45 valid points, grid-wide mean"), REPORT)
+        self.assertEqual(code, 1)
+        self.assertIn("noise(#81): valid points: README says 44", err)
+        self.assertIn("says 45", err)
+
+    def test_readme_noise_min_max_and_n_mutations_fail(self):
+        for old, new, label in (("(min 0.910 … max 1.773 mV)", "(min 0.911 … max 1.773 mV)", "min"),
+                                ("(min 0.910 … max 1.773 mV)", "(min 0.910 … max 1.774 mV)", "max"),
+                                ("N = 80 trials per rung (3 rungs)", "N = 60 trials per rung (3 rungs)", "N")):
+            with self.subTest(label):
+                code, _, err = _run(_mutate_readme(old, new), REPORT)
+                self.assertEqual(code, 1)
+                self.assertIn(f"source {NOISE_ID}", err)
+
+    def test_historical_noise_figures_do_not_satisfy_the_current_claim(self):
+        # Historical 1.335 mV in place of the current 1.305 must not slip by.
+        code, _, err = _run(_mutate_readme("grid-wide mean 1.305 mV rms",
+                                           "grid-wide mean 1.335 mV rms"), REPORT)
+        self.assertEqual(code, 1)
+        self.assertIn("README says 1.335", err)
+
+    def test_readme_offset_mutations_fail_with_expected_value(self):
+        cases = (
+            ("Target MET at 45/45 points on the whole latch", "Target MET at 44/45 points on the whole latch",
+             "Target met points: README says 44"),
+            ("Stretch NOT MET at 27/45.** Whole latch", "Stretch NOT MET at 26/45.** Whole latch",
+             "Stretch missed points: README says 26"),
+            ("3σ 7.456 mV (`tt_mismatch_27c_1.32v`)", "3σ 7.457 mV (`tt_mismatch_27c_1.32v`)",
+             "3 sigma min mV: README says 7.457"),
+            ("**10.537 mV** (`tt_mismatch_125c_1.08v`)", "**10.538 mV** (`tt_mismatch_125c_1.08v`)",
+             "3 sigma max mV: README says 10.538"),
+            ("**10.537 mV** (`tt_mismatch_125c_1.08v`), mean 8.404 mV",
+             "**10.537 mV** (`tt_mismatch_125c_1.08v`), mean 8.405 mV", "3 sigma mean mV: README says 8.405"),
+            ("**10.537 mV** (`tt_mismatch_125c_1.08v`)", "**10.537 mV** (`tt_mismatch_125c_1.20v`)",
+             "3 sigma max point: README says tt_mismatch_125c_1.20v"),
+            ("N = 60 draws per point, seed `20260916`", "N = 200 draws per point, seed `20260916`",
+             "N draws per point: README says 200"),
+            ("Stretch at 27/45. Record [`20260917-060858-ea40b57`]", "Stretch at 27/45. Record [`20260916-125444-4d0cf7c`]",
+             "cited record id: README says 20260916-125444-4d0cf7c"),
+        )
+        for old, new, expect in cases:
+            with self.subTest(expect):
+                code, _, err = _run(_mutate_readme(old, new), REPORT)
+                self.assertEqual(code, 1)
+                self.assertIn(expect, err)
+                self.assertIn(f"source {OFFSET_ID}", err)
+
+    def test_front_end_offset_figures_cannot_satisfy_whole_latch_claim(self):
+        # 11.61 is the front-end-only minimum; the whole-latch claim must not take it.
+        code, _, err = _run(_mutate_readme("3σ 7.456 mV (`tt_mismatch_27c_1.32v`)",
+                                           "3σ 11.61 mV (`tt_mismatch_27c_1.32v`)"), REPORT)
+        self.assertEqual(code, 1)
+        self.assertIn("README says 11.61", err)
+
+    def test_changed_readme_structure_fails_loudly(self):
+        code, _, err = _run(README.replace("valid points, grid-wide mean", "valid points, mean"), REPORT)
+        self.assertEqual(code, 1)
+        self.assertIn("no longer matches", err)
+        self.assertIn(f"[source {NOISE_ID}]", err)
+
+    def test_source_value_mutations_fail_naming_source(self):
+        # A consistently changed campaign (summary follows the points) is a
+        # different population: the README claim must fail against it.
+        noise = _clone(NOISE)
+        for pt in noise["points"]:
+            pt["both"]["sigma"] *= 1.1
+        sig = [pt["both"]["sigma"] for pt in noise["points"]]
+        noise["configs"]["both"].update(grid_mean=sum(sig) / 45, min=min(sig), max=max(sig))
+        code, _, err = _run(README, REPORT, noise=noise)
+        self.assertEqual(code, 1)
+        self.assertIn(f"source {NOISE_ID}", err)
+        self.assertIn("noise(#81): grid mean mV rms: README says 1.305", err)
+        self.assertIn("says 1.435", err)
+        offset = _clone(OFFSET)
+        offset["points"][0]["measurements"]["vos_3sig_mv"] = 16.0  # now a Target miss
+        v3 = [pt["measurements"]["vos_3sig_mv"] for pt in offset["points"]]
+        offset["summary"]["vos_3sig_mv"].update(
+            max=16.0, mean=sum(v3) / 45, at_max=offset["points"][0]["corner_id"])
+        code, _, err = _run(README, REPORT, offset=offset)
+        self.assertEqual(code, 1)
+        self.assertIn("Target met points: README says 45", err)
+        self.assertIn(f"source {OFFSET_ID}", err)
+        self.assertIn("says 44", err)
+
+    def test_inconsistent_source_summary_is_rejected(self):
+        noise = _clone(NOISE)
+        noise["configs"]["both"]["grid_mean"] = 1.4
+        code, _, err = _run(README, REPORT, noise=noise)
+        self.assertEqual(code, 1)
+        self.assertIn(f"source {NOISE_ID}", err)
+        self.assertIn("disagree with the per-point sigmas", err)
+        noise = _clone(NOISE)
+        noise["configs"]["both"]["points_valid"] = 44
+        code, _, err = _run(README, REPORT, noise=noise)
+        self.assertEqual(code, 1)
+        self.assertIn("points_valid 44", err)
+        offset = _clone(OFFSET)
+        offset["summary"]["vos_3sig_mv"]["max"] = 10.6
+        code, _, err = _run(README, REPORT, offset=offset)
+        self.assertEqual(code, 1)
+        self.assertIn(f"source {OFFSET_ID}", err)
+        self.assertIn("disagree with the per-point values", err)
+
+    def test_different_population_cannot_match_by_coincidence(self):
+        for mut, label in (
+            (lambda d: d.update(campaign="20261009-other"), "campaign"),
+            (lambda d: d.update(expected_n=60), "expected_n"),
+            (lambda d: d["points"].pop(), "point count"),
+            (lambda d: d["points"][3]["both"].update(n=60), "per-point n"),
+        ):
+            with self.subTest("noise " + label):
+                noise = _clone(NOISE)
+                mut(noise)
+                code, _, err = _run(README, REPORT, noise=noise)
+                self.assertEqual(code, 1)
+                self.assertIn(f"source {NOISE_ID}", err)
+        for mut, label in (
+            (lambda d: d.update(record_id="20260916-125444-4d0cf7c"), "record id"),
+            (lambda d: d["testbench"].update(name="comparator-offset-mc"), "bench"),
+            (lambda d: d["points"].pop(), "point count"),
+            (lambda d: d["points"][0]["measurements"].update(n_samples=200.0), "N per point"),
+            (lambda d: d["points"][0].update(status="rejected"), "status"),
+        ):
+            with self.subTest("offset " + label):
+                offset = _clone(OFFSET)
+                mut(offset)
+                code, _, err = _run(README, REPORT, offset=offset)
+                self.assertEqual(code, 1)
+                self.assertIn(f"source {OFFSET_ID}", err)
+
+    def test_missing_malformed_or_restructured_sources_fail_clearly(self):
+        for kind, raw in (("empty", ""), ("not json", "{oops"), ("array", "[]"), ("object", "{}")):
+            with self.subTest("noise " + kind):
+                code, _, err = _run(README, REPORT, raw_noise=raw)
+                self.assertEqual(code, 1)
+                self.assertIn(f"source {NOISE_ID}", err)
+                self.assertIn("unavailable", err)
+            with self.subTest("offset " + kind):
+                code, _, err = _run(README, REPORT, raw_offset=raw)
+                self.assertEqual(code, 1)
+                self.assertIn(f"source {OFFSET_ID}", err)
+        noise = _clone(NOISE)
+        del noise["configs"]["both"]["grid_mean"]
+        code, _, err = _run(README, REPORT, noise=noise)
+        self.assertEqual(code, 1)
+        self.assertIn("missing field configs.both.grid_mean", err)
+        offset = _clone(OFFSET)
+        del offset["summary"]["vos_3sig_mv"]
+        code, _, err = _run(README, REPORT, offset=offset)
+        self.assertEqual(code, 1)
+        self.assertIn("missing field summary.vos_3sig_mv", err)
+
+    def test_missing_source_file_fails_clearly(self):
+        sources = chk.load_sources({NOISE_ID: Path("/nonexistent/noise_full.json")})
+        self.assertIsInstance(sources[NOISE_ID], chk.SourceError)
+        self.assertIn("/nonexistent/noise_full.json", str(sources[NOISE_ID]))
+        self.assertIn("cannot read", str(sources[NOISE_ID]))
+
+    def test_aggregate_check_without_sources_is_unchanged(self):
+        failures, checked, _, src = chk.check(README, REPORT)
+        self.assertEqual((failures, checked, src), ([], len(chk.CLAIMS), 0))
 
 
 if __name__ == "__main__":

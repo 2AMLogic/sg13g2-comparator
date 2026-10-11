@@ -242,6 +242,30 @@ class SparseCones(unittest.TestCase):
     def test_harness_job_from_sparse_clone(self):
         self._run_job("harness-unit-tests")
 
+    def test_readme_claims_guard_runs_in_the_signoff_cone(self):
+        """Issue #193: the guard reads two extra evidence sources; the signoff
+        job's cone must hold exactly those, and dropping them must fail."""
+        sources = ["/sim/klt-corner-verification/campaigns/20261009-issue81/noise_full.json",
+                   "/sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json"]
+        co = self.jobs["signoff-manifest-parity"]["checkout"]
+        for src in sources:
+            self.assertIn(src, co["patterns"])
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, co)
+            for src in sources:
+                self.assertTrue((dst / src.lstrip("/")).is_file(), src)
+            r = sh(["python3", "scripts/check_readme_claims.py"], dst, self._env(dst), check=False)
+            self.assertEqual(r.returncode, 0, r.stdout[-3000:])
+            self.assertIn("source-registry README claims", r.stdout)
+        # negative control: without the sources the guard fails closed, naming them
+        with tempfile.TemporaryDirectory() as tmp:
+            cut = dict(co, patterns=[p for p in co["patterns"] if p not in sources])
+            dst = self._clone(tmp, cut)
+            r = sh(["python3", "scripts/check_readme_claims.py"], dst, self._env(dst), check=False)
+            self.assertEqual(r.returncode, 1, r.stdout[-3000:])
+            self.assertIn("source noise-full-issue81", r.stdout)
+            self.assertIn("source offset-whole-latch-ea40b57", r.stdout)
+
     def test_klt_jobs_from_sparse_clone(self):
         if not klt_matches_pin():
             self.skipTest("pinned klt not on PATH (CI runs these jobs with the same patterns)")
