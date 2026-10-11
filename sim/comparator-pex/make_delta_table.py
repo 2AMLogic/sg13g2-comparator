@@ -9,11 +9,26 @@ delta_pct, kept verbatim; `pass` only means both legs produced a value (the
 requests set no limits). Interpretation: only keys in LOGIC/DELAY are graded;
 every other key stays ungraded. Measurements are deterministic, so nothing
 here implies a sigma or offset/noise compliance. Malformed input exits 2.
+
+Evidence validation (issue #211). Corners are canonicalised to a physical
+(process, voltage, temperature) identity (Decimal voltage, int temperature), so
+`tt/1.2V/27C` and `tt/1.200V/27C` are one point. For every mapped key (LOGIC or
+DELAY) a physical point may appear in at most one row, whatever the spelling or
+nominal/pvt variant; a repeat is ambiguous evidence and is rejected, never
+merged. Full-grid compliance compares the set of canonical identities that are
+`within` with the explicit Cartesian product of GRID, not a count. A negative
+mapped delay (target before trigger) is invalid evidence and is rejected with
+the row and corner. Zero is a finite measurement (target coincident with the
+trigger at the sampling resolution): it is accepted and graded against the
+upper bound only; no lower spec bound exists in DR-0002 and none is invented.
+Out-of-grid measurements stay ungraded. Raw fields and statuses are preserved.
 """
+import itertools
 import json
 import math
 import re
 import sys
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 # The benches' own polarity checks (tb.json `checks`): outputs normalised to their
@@ -24,14 +39,23 @@ LOGIC = {**{("regeneration", m): "low" for m in ("da_first", "db_first", "dc_fir
 # DR-0002 Row 3 absolute bounds (seconds); apply at every point of the PVT grid.
 DELAY = {("regeneration", "td_a"): (1.5e-9, "DR-0002 Row 3 Target: <= 1.5 ns at 50 mV overdrive"),
          ("regeneration", "td_c"): (2.0e-9, "DR-0002 Row 3 sub-row: <= 2.0 ns at 0.1 mV overdrive")}
-GRID = ({"tt", "ff", "ss", "fs", "sf"}, {1.08, 1.2, 1.32}, {-40, 27, 125})
+GRID = ({"tt", "ff", "ss", "fs", "sf"}, {Decimal("1.08"), Decimal("1.2"), Decimal("1.32")}, {-40, 27, 125})
+GRID_POINTS = frozenset(itertools.product(*GRID))
 CORNER = re.compile(r"(\w+)/([0-9.]+)V/(-?\d+)C")
 FIELDS = ("spec_row", "corner_id", "schematic_value", "extracted_value", "delta_pct", "status")
 
 
-def in_grid(corner):
+def canonical(corner):
+    """Physical identity (process, volts, deg C); unparseable labels keep their raw text."""
     m = CORNER.fullmatch(corner)
-    return bool(m) and m[1] in GRID[0] and float(m[2]) in GRID[1] and int(m[3]) in GRID[2]
+    try:
+        return (m[1], Decimal(m[2]), int(m[3])) if m else ("raw", corner)
+    except InvalidOperation:
+        return ("raw", corner)
+
+
+def in_grid(corner):
+    return canonical(corner) in GRID_POINTS
 
 
 def state(v):
@@ -63,7 +87,7 @@ def load(path):
 def render(env, source):
     if not isinstance(env, dict) or not isinstance(env.get("delta"), list) or not env["delta"]:
         raise ValueError("envelope has no delta[] rows")
-    rows, seen, got, summary = [], set(), {}, {}
+    rows, seen, phys, got, summary = [], set(), {}, {}, {}
     for i, r in enumerate(env["delta"]):
         if not isinstance(r, dict) or any(k not in r for k in FIELDS):
             raise ValueError(f"delta[{i}]: missing one of {FIELDS}")
@@ -77,18 +101,31 @@ def render(env, source):
             raise ValueError(f"delta[{i}]: duplicate {r['spec_row']} @ {r['corner_id']}")
         seen.add((r["spec_row"], r["corner_id"]))
         k = (r["spec_row"].split(".")[0], r["spec_row"].split(".")[-1])
+        if k in LOGIC or k in DELAY:
+            cid = canonical(r["corner_id"])
+            if (k, cid) in phys:
+                j = phys[k, cid]
+                raise ValueError(
+                    f"delta[{i}]: {r['spec_row']} @ {r['corner_id']} repeats the physical point of "
+                    f"delta[{j}] ({env['delta'][j]['spec_row']} @ {env['delta'][j]['corner_id']}) "
+                    f"for mapped measurement {'.'.join(k)}; ambiguous evidence")
+            phys[k, cid] = i
+        if k in DELAY and r["extracted_value"] is not None and r["extracted_value"] < 0:
+            raise ValueError(
+                f"delta[{i}]: {r['spec_row']} @ {r['corner_id']}: negative extracted delay "
+                f"{r['extracted_value']!r} s is invalid evidence (target preceded trigger)")
         has = (r["schematic_value"] is not None, r["extracted_value"] is not None)
         rows.append({**{f: r[f] for f in FIELDS}, "availability": "both legs measured" if all(has) else
                      "extracted missing" if has[0] else "schematic missing" if has[1] else
                      "neither leg measured", "interpretation": interpret(r, k)})
         if "limit_s" in rows[-1]["interpretation"]:
-            got.setdefault(k, {}).setdefault(rows[-1]["interpretation"]["verdict"], set()).add(r["corner_id"])
+            got.setdefault(k, {}).setdefault(rows[-1]["interpretation"]["verdict"], set()).add(canonical(r["corner_id"]))
     corners = sorted({r["corner_id"] for r in rows})
     for k, g in got.items():  # the bound applies at every one of the 45 grid points
         ex, ok = g.get("EXCEEDS", ()), g.get("within", ())
         summary[".".join(k)] = (
             f"NOT MET: extracted exceeds at {len(ex)} corner(s)" if ex else
-            "met at every PVT grid point" if len(ok) == 45 and len(g) == 1 else
+            "met at every PVT grid point" if set(ok) == GRID_POINTS and len(g) == 1 else
             f"not established: {len(ok)}/45 grid points within, "
             f"{len(g.get('missing: no verdict', ()))} missing") + f" ({DELAY[k][1]})"
     out = {
@@ -99,8 +136,8 @@ def render(env, source):
         "klt_status_meaning": "measurement availability (both legs produced a value; no limits "
                               "are set in the requests), not circuit compliance",
         "corners": corners,
-        "pvt_grid_points": sum(map(in_grid, corners)),
-        "statistical_basis": f"none: deterministic transient measurements at {len(corners)} corner(s)"
+        "pvt_grid_points": len({canonical(c) for c in corners} & GRID_POINTS),
+        "statistical_basis": f"none: deterministic transient measurements at {len({canonical(c) for c in corners})} corner(s)"
                              "; no Monte Carlo, no seeds; no sigma or offset/noise compliance is implied",
         "delay_compliance_extracted": summary,
         "rows": rows,
