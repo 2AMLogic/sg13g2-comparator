@@ -569,13 +569,10 @@ pinned build is first on `PATH`; otherwise they are skipped locally and proven
 by the real CI jobs.
 
 The harness job's lint population is guarded by
-`scripts/check_lint_population.py` (issue #216): with F-only rules ruff only
-warns about a missing root, and a glob expands to whatever the cone checked
-out, so the preflight derives the intended set from git's tracked inventory
-(`ls-tree` of `HEAD`), fails naming every omitted path before ruff runs, and
-keeps the ruff step's argument list (`LINT_ROOTS`) in one maintained copy.
-The sparse-cone tests add dropping-a-pattern and undefined-name negative
-controls (the pinned ruff is installed for them in the guard job too).
+`scripts/check_lint_population.py` (issue #216): the preflight derives the
+intended set from git's tracked inventory, fails naming every omitted path
+before ruff runs, and keeps `LINT_ROOTS` in one maintained copy. The
+sparse-cone tests add dropping-a-pattern and undefined-name negative controls.
 
 Reproduce locally:
 
