@@ -19,8 +19,10 @@ Parent campaign: `20261009-5185f52` (issue #79).
 - Seed pairing: each request excludes only the grid points AFTER its target
   in the request's odometer corner order, so every retained point keeps its
   parent-campaign corner_index and sample k is the parent's mismatch draw.
-  Verified structurally against the parent envelopes below (`seeds paired`),
-  never assumed.
+  Checked against the parent envelopes below (`request seeds = parent`). This is
+  a structural, request-level check of the seeds klt assigned to each requested
+  draw; it holds even for draws that produced no data and says nothing about
+  whether a draw ran (see `N valid` and `pairs`).
 - The retained points before each target are padding required by that seed
   contract; their populations are reported as additional max-step sensitivity
   evidence, never merged anywhere.
@@ -29,14 +31,14 @@ Parent campaign: `20261009-5185f52` (issue #79).
 
 2 PVT points x 3 conditions, tighter max step, same draws as the parent:
 
-| condition | point | N valid | 3σ (mV) | seeds paired vs parent | parent status |
+| condition | point | N valid / requested | 3σ (mV) | request seeds = parent (draws compared) | parent status |
 |---|---|---|---|---|---|
-| `vcm-m050` | `tt_-40c_1.32v` | 60/60 | REJECTED: 60 untrusted draw(s): mos_tt_mismatch/1.320V/-40C/mc0: errored (batch_job_failed) | yes (60) | 1 untrusted draw(s): mos_tt_mismatch/1.320V/-40C/mc12: errored (measurement) |
-| `vcm-m050` | `sf_-40c_1.20v` | 60/60 | REJECTED: 60 untrusted draw(s): mos_sf_mismatch/1.200V/-40C/mc0: errored (batch_job_failed) | yes (60) | 1 untrusted draw(s): mos_sf_mismatch/1.200V/-40C/mc23: errored (measurement) |
-| `vcm-nom` | `tt_-40c_1.32v` | 60/60 | REJECTED: 60 untrusted draw(s): mos_tt_mismatch/1.320V/-40C/mc0: errored (batch_job_failed) | yes (60) | valid population (see sensitivity below) |
-| `vcm-nom` | `sf_-40c_1.20v` | 60/60 | REJECTED: 60 untrusted draw(s): mos_sf_mismatch/1.200V/-40C/mc0: errored (batch_job_failed) | yes (60) | valid population (see sensitivity below) |
-| `vcm-p050` | `tt_-40c_1.32v` | 60/60 | REJECTED: 60 untrusted draw(s): mos_tt_mismatch/1.320V/-40C/mc0: errored (batch_job_failed) | yes (60) | valid population (see sensitivity below) |
-| `vcm-p050` | `sf_-40c_1.20v` | 60/60 | REJECTED: 60 untrusted draw(s): mos_sf_mismatch/1.200V/-40C/mc0: errored (batch_job_failed) | yes (60) | valid population (see sensitivity below) |
+| `vcm-m050` | `tt_-40c_1.32v` | 0/60 | REJECTED: 60 untrusted draw(s): mos_tt_mismatch/1.320V/-40C/mc0: errored (batch_job_failed) | yes (60) | 1 untrusted draw(s): mos_tt_mismatch/1.320V/-40C/mc12: errored (measurement) |
+| `vcm-m050` | `sf_-40c_1.20v` | 0/60 | REJECTED: 60 untrusted draw(s): mos_sf_mismatch/1.200V/-40C/mc0: errored (batch_job_failed) | yes (60) | 1 untrusted draw(s): mos_sf_mismatch/1.200V/-40C/mc23: errored (measurement) |
+| `vcm-nom` | `tt_-40c_1.32v` | 0/60 | REJECTED: 60 untrusted draw(s): mos_tt_mismatch/1.320V/-40C/mc0: errored (batch_job_failed) | yes (60) | valid population (see sensitivity below) |
+| `vcm-nom` | `sf_-40c_1.20v` | 0/60 | REJECTED: 60 untrusted draw(s): mos_sf_mismatch/1.200V/-40C/mc0: errored (batch_job_failed) | yes (60) | valid population (see sensitivity below) |
+| `vcm-p050` | `tt_-40c_1.32v` | 0/60 | REJECTED: 60 untrusted draw(s): mos_tt_mismatch/1.320V/-40C/mc0: errored (batch_job_failed) | yes (60) | valid population (see sensitivity below) |
+| `vcm-p050` | `sf_-40c_1.20v` | 0/60 | REJECTED: 60 untrusted draw(s): mos_sf_mismatch/1.200V/-40C/mc0: errored (batch_job_failed) | yes (60) | valid population (see sensitivity below) |
 
 ## Max-step sensitivity vs the parent campaign
 
@@ -45,7 +47,7 @@ Every retained population re-paired draw for draw against its parent value
 the paired mean of (tighter-step vos − parent vos); identical counts
 bit-equal pairs.
 
-| condition | point | target | pairs | identical | Δmean ± sd (mV) | max abs Δ (mV) | 3σ supp vs parent (mV) | seeds paired |
+| condition | point | target | pairs | identical | Δmean ± sd (mV) | max abs Δ (mV) | 3σ supp vs parent (mV) | request seeds = parent |
 |---|---|---|---|---|---|---|---|---|
 | `vcm-m050` | `tt_-40c_1.08v` | padding | 0 | 0 | — | — | — vs 9.438 | yes |
 | `vcm-m050` | `tt_27c_1.08v` | padding | 0 | 0 | — | — | — vs 8.379 | yes |
@@ -84,7 +86,7 @@ bit-equal pairs.
 ## Conclusion
 
 - Targets complete: 0/6 populations valid at N = 60. Failures, reported as-is: vcm-m050 `tt_-40c_1.32v`: 60 untrusted draw(s): mos_tt_mismatch/1.320V/-40C/mc0: errored (batch_job_failed); vcm-m050 `sf_-40c_1.20v`: 60 untrusted draw(s): mos_sf_mismatch/1.200V/-40C/mc0: errored (batch_job_failed); vcm-nom `tt_-40c_1.32v`: 60 untrusted draw(s): mos_tt_mismatch/1.320V/-40C/mc0: errored (batch_job_failed); vcm-nom `sf_-40c_1.20v`: 60 untrusted draw(s): mos_sf_mismatch/1.200V/-40C/mc0: errored (batch_job_failed); vcm-p050 `tt_-40c_1.32v`: 60 untrusted draw(s): mos_tt_mismatch/1.320V/-40C/mc0: errored (batch_job_failed); vcm-p050 `sf_-40c_1.20v`: 60 untrusted draw(s): mos_sf_mismatch/1.200V/-40C/mc0: errored (batch_job_failed).
-- Pairing: every compared population matches its parent seeds (yes).
+- Seed assignment (structural, request-level): every compared population's requested draw seeds match the parent's (yes).
 - Sensitivity: 0/0 re-run draws are bit-identical to the parent's; max |Δvos| = — mV.
 - Cause: the batch jobs themselves failed before any simulation result was produced (batch_job_failed; see the envelopes' environment.remote), so this run says nothing about the max step, a bench artifact, or a convergence weakness; the question remains open until a successful re-submission.
 

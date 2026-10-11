@@ -50,6 +50,7 @@ for it.
 from __future__ import annotations
 
 import dataclasses
+import gzip
 import hashlib
 import json
 import math
@@ -756,13 +757,26 @@ def _grid_key(section: str, supply: float, temp: float) -> tuple:
     return (grade_mod._process_name(section), round(float(supply), 6), float(temp))
 
 
+def _envelope_bytes(path: Path) -> bytes:
+    """The envelope's bytes, from ``path`` or its byte-exact ``gzip -9n`` copy
+    ``path.gz`` (how a no-data failed attempt's bulky envelopes are committed;
+    the hash of these bytes still matches the invocation's envelope_sha256)."""
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        gz = path.with_name(path.name + ".gz")
+        if not gz.is_file():
+            raise
+        return gzip.decompress(gz.read_bytes())
+
+
 def _supplement_envelope(path: Path) -> tuple[dict | None, str | None]:
     """Load one supplementary envelope; (None, reason) when missing/malformed."""
     try:
-        raw = path.read_bytes()
+        raw = _envelope_bytes(path)
     except FileNotFoundError:
         return None, "envelope not found (part not run)"
-    except OSError as exc:
+    except (OSError, EOFError) as exc:
         return None, f"unreadable: {exc}"
     try:
         return json.loads(raw), None
@@ -834,7 +848,7 @@ def compare_supplement(series_dir: Path, *,
             sup_path = series_dir / cond.name / f"{tag}.envelope.json"
             env, problem = _supplement_envelope(sup_path)
             if env is not None:
-                sha = hashlib.sha256(sup_path.read_bytes()).hexdigest()
+                sha = hashlib.sha256(_envelope_bytes(sup_path)).hexdigest()
                 sources[f"{cond.name}/{tag}"] = {
                     "status": env.get("status"),
                     "job_id": ((env.get("environment") or {}).get("remote") or {}).get("job_id"),
@@ -860,6 +874,10 @@ def compare_supplement(series_dir: Path, *,
             populations.append({
                 "condition": cond.name, "section": section, "point": _label(key),
                 "target": True, "stats": st,
+                # draws that produced a trusted, in-window vos (not the
+                # requested count): 0 for a batch job that never ran
+                "n_valid": sum(1 for d in (sup_s or []) if d["vos_mv"] is not None
+                               and not d["problem"] and not d["clipped"]),
                 "parent_status": (point_stats(par_s)["rejected"] if par_s else
                                   "parent population not loadable"),
                 "pairing_vs_parent": _pair_check(sup_s, par_s),
@@ -1118,8 +1136,10 @@ def render_supplement_markdown(result: dict) -> str:
         "- Seed pairing: each request excludes only the grid points AFTER its target",
         "  in the request's odometer corner order, so every retained point keeps its",
         "  parent-campaign corner_index and sample k is the parent's mismatch draw.",
-        "  Verified structurally against the parent envelopes below (`seeds paired`),",
-        "  never assumed.",
+        "  Checked against the parent envelopes below (`request seeds = parent`). This is",
+        "  a structural, request-level check of the seeds klt assigned to each requested",
+        "  draw; it holds even for draws that produced no data and says nothing about",
+        "  whether a draw ran (see `N valid` and `pairs`).",
         "- The retained points before each target are padding required by that seed",
         "  contract; their populations are reported as additional max-step sensitivity",
         "  evidence, never merged anywhere.",
@@ -1132,7 +1152,7 @@ def render_supplement_markdown(result: dict) -> str:
     out += ["", "## The six target populations", "",
             "2 PVT points x 3 conditions, tighter max step, same draws as the parent:",
             "",
-            "| condition | point | N valid | 3σ (mV) | seeds paired vs parent | parent status |",
+            "| condition | point | N valid / requested | 3σ (mV) | request seeds = parent (draws compared) | parent status |",
             "|---|---|---|---|---|---|"]
     for p in result["populations"]:
         st = p["stats"]
@@ -1142,14 +1162,14 @@ def render_supplement_markdown(result: dict) -> str:
         cell = "REJECTED: " + str(st["rejected"]) if st.get("rejected") \
             else _f(st.get("three_sigma_mv"))
         par = p["parent_status"] or "valid population (see sensitivity below)"
-        out.append(f"| `{p['condition']}` | `{p['point']}` | {st['n']}/{b['n_per_point']} | "
+        out.append(f"| `{p['condition']}` | `{p['point']}` | {p['n_valid']}/{b['n_per_point']} | "
                    f"{cell} | {seeds} | {par} |")
     out += ["", "## Max-step sensitivity vs the parent campaign", "",
             "Every retained population re-paired draw for draw against its parent value",
             "(same seed, same condition): does the step change alone move vos? Δmean is",
             "the paired mean of (tighter-step vos − parent vos); identical counts",
             "bit-equal pairs.", "",
-            "| condition | point | target | pairs | identical | Δmean ± sd (mV) | max abs Δ (mV) | 3σ supp vs parent (mV) | seeds paired |",
+            "| condition | point | target | pairs | identical | Δmean ± sd (mV) | max abs Δ (mV) | 3σ supp vs parent (mV) | request seeds = parent |",
             "|---|---|---|---|---|---|---|---|---|"]
     for s in result["sensitivity"]:
         d = s["sensitivity"]
@@ -1170,7 +1190,8 @@ def render_supplement_markdown(result: dict) -> str:
             f"/{c['targets_expected']} populations valid at N = {b['n_per_point']}."
             + ("" if not c["incomplete"] else " Failures, reported as-is: "
                + "; ".join(f"{i['population']}: {i['reason']}" for i in c["incomplete"]) + "."),
-            f"- Pairing: every compared population matches its parent seeds"
+            f"- Seed assignment (structural, request-level): every compared population's"
+            f" requested draw seeds match the parent's"
             f" ({'yes' if c['pairing_all_matched'] else '**NO**'}).",
             f"- Sensitivity: {c['pairs_identical']}/{c['pairs_compared']} re-run draws are"
             f" bit-identical to the parent's; max |Δvos| = {_f(c['max_abs_delta_mv'], 6)} mV.",

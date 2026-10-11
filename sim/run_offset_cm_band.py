@@ -249,7 +249,7 @@ def cmd_supplement_report(args) -> int:
           f"{c['max_abs_delta_mv'] if c['max_abs_delta_mv'] is not None else 'n/a'} mV")
     for p in result["populations"]:
         st = p["stats"]
-        print(f"  {p['condition']} {p['point']}: {st['n']}/"
+        print(f"  {p['condition']} {p['point']}: {p['n_valid']}/"
               f"{result['basis']['n_per_point']} valid"
               + (f", REJECTED ({st['rejected']})" if st.get("rejected") else ""))
     if result["missing_envelopes"]:

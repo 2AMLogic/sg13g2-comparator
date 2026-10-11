@@ -275,6 +275,8 @@ class HistoricalBuildUnchanged(unittest.TestCase):
     def test_parent_inputs_regenerate_byte_identically(self):
         from kltsim import build as build_mod
         from kltsim.benches import OFFSET_MC
+        # Runs in CI too: the parent's vcm-*/*.spice and *.request.json are in
+        # the harness-unit-tests sparse cone (ci.yml; sim/README.md audit).
         self.assertTrue(self.PARENT.is_dir(), "committed parent campaign missing")
         for cond in cmband.CONDITIONS:
             body = self.PARENT / cond.name / cmband.BODY_NAME
@@ -497,3 +499,36 @@ class SupplementReportTests(Base):
         self.assertEqual(rcb.cmd_supplement_report(args), 1)
         result = json.loads((self.supp / "supplement-report.json").read_text())
         self.assertTrue(any("malformed" in m for m in result["missing_envelopes"]))
+
+    def test_no_data_run_reads_zero_valid_and_gzip_envelopes(self):
+        """A batch run that produced no draws: N valid is 0/60 (not the
+        requested 60), the seed check is labelled request-level, and the
+        byte-exact ``.envelope.json.gz`` form loads with the plain JSON's hash."""
+        import gzip
+        for section in cmband.supplement_sections():
+            for cond in cmband.CONDITIONS:
+                self.full_pair(section, cond)
+                grid = cmband.supplement_grid(section)
+                dead = {(s, t): [(_seed(section, s, t, k), None) for k in range(60)]
+                        for (s, t) in grid}
+                path = self.supp / cond.name / f"offset_cm.{section}.envelope.json"
+                raw = json.dumps(_mc_envelope(section, dead, vcm=cond.vcm_v())).encode()
+                path.write_bytes(raw)
+        gz_path = self.supp / "vcm-nom" / "offset_cm.mos_tt_mismatch.envelope.json"
+        raw = gz_path.read_bytes()
+        gz_path.with_name(gz_path.name + ".gz").write_bytes(gzip.compress(raw))
+        gz_path.unlink()
+        result = cmband.compare_supplement(self.supp)
+        self.assertEqual(result["missing_envelopes"], [])
+        self.assertEqual(result["sources"]["vcm-nom/offset_cm.mos_tt_mismatch"]
+                         ["envelope_sha256"], hashlib.sha256(raw).hexdigest())
+        for p in result["populations"]:
+            self.assertEqual(p["n_valid"], 0)
+            self.assertTrue(p["pairing_vs_parent"]["seeds_paired"])
+        self.assertEqual(result["conclusion"]["pairs_compared"], 0)
+        md = cmband.render_supplement_markdown(result)
+        self.assertIn("| 0/60 |", md)
+        self.assertNotIn("| 60/60 |", md)
+        self.assertIn("request seeds = parent", md)
+        self.assertIn("structural, request-level", md)
+        self.assertIn("0/6 populations valid", md)
