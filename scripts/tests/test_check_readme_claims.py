@@ -28,10 +28,14 @@ OFFSET = json.loads(chk.OFFSET_PATH.read_text(encoding="utf-8"))
 CMBAND = json.loads(chk.CMBAND_PATH.read_text(encoding="utf-8"))
 CM_ID = "offset-cm-band-5185f52"
 
+KICKBACK = json.loads(chk.KICKBACK_PATH.read_text(encoding="utf-8"))
+KB_ID = "kickback-residue-36773c7"
+
 
 def _run(readme_text, report, noise=None, offset=None, raw_noise=None, raw_offset=None,
-         cmband=None, raw_cmband=None):
-    """Run main() on temp copies; `noise`/`offset` default to the committed sources."""
+         cmband=None, raw_cmband=None, kickback=None, raw_kickback=None):
+    """Run main() on temp copies; `noise`/`offset`/`kickback` default to the
+    committed sources."""
     with tempfile.TemporaryDirectory() as td:
         rp, jp = Path(td, "README.md"), Path(td, "report.json")
         np_, op = Path(td, "noise_full.json"), Path(td, "offset.json")
@@ -44,10 +48,14 @@ def _run(readme_text, report, noise=None, offset=None, raw_noise=None, raw_offse
         cp = Path(td, "comparison.json")
         cp.write_text(raw_cmband if raw_cmband is not None else json.dumps(cmband or CMBAND),
                       encoding="utf-8")
+        kp = Path(td, "kickback.json")
+        kp.write_text(raw_kickback if raw_kickback is not None
+                      else json.dumps(kickback or KICKBACK), encoding="utf-8")
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = chk.main(["--readme", str(rp), "--report", str(jp),
-                             "--noise-full", str(np_), "--offset-record", str(op), "--cmband", str(cp)])
+                             "--noise-full", str(np_), "--offset-record", str(op),
+                             "--cmband", str(cp), "--kickback-record", str(kp)])
     return code, out.getvalue(), err.getvalue()
 
 
@@ -125,7 +133,7 @@ class SourceRegistry(unittest.TestCase):
         self.assertEqual(code, 0, err)
         n = len(chk.SOURCE_CLAIMS)
         self.assertIn(f"checked {n}/{n} source-registry README claims against "
-                      f"{NOISE_ID}, {CM_ID}, {OFFSET_ID}", out)
+                      f"{', '.join(sorted(chk.SOURCES))}", out)
         # the aggregate-report mappings are unchanged and still reported
         self.assertIn(f"checked {len(chk.CLAIMS)}/{len(chk.CLAIMS)} allowlisted", out)
 
@@ -536,6 +544,138 @@ class CommonModeBand(unittest.TestCase):
     def test_other_populations_stay_unchecked(self):
         _, out, _ = _run(README, REPORT)
         self.assertIn("UNCHECKED count in row 'Offset sigma': 13 of 45", out)
+
+
+class KickbackResidue(unittest.TestCase):
+    """Issue #232: the README Kickback row's historical residue prose maps to
+    its own pinned harness record -- never to the newer aggregate row 4b,
+    which measures a different (klt direct-measurement) population."""
+
+    def _fails(self, expect, **kw):
+        code, _, err = _run(README, REPORT, **kw)
+        self.assertEqual(code, 1)
+        self.assertIn(expect, err)
+        return err
+
+    def test_committed_state_passes_and_residue_figures_are_mapped(self):
+        code, out, err = _run(README, REPORT)
+        self.assertEqual(code, 0, err)
+        kb = [c for c in chk.SOURCE_CLAIMS if c[1] == KB_ID]
+        self.assertEqual(len(kb), 6)
+        self.assertNotIn("kickback(residue", err)
+        # the residue coverage is now accounted for: exactly one 45/45 count
+        # stays unchecked in the Kickback row (the decision-correct figure)
+        self.assertEqual(out.count("UNCHECKED count in row '**Kickback**"), 1)
+
+    def test_readme_mutations_name_claim_and_source(self):
+        cases = (
+            ("Residue 1.70 µV", "Residue 1.71 µV", "min µV: README says 1.71"),
+            ("**15.40 µV** (`ss_-40c_1.20v`)", "**15.41 µV** (`ss_-40c_1.20v`)",
+             "max µV: README says 15.41"),
+            ("Residue 1.70 µV (`ff_125c_1.32v`)", "Residue 1.70 µV (`ff_125c_1.08v`)",
+             "min point: README says ff_125c_1.08v"),
+            ("**15.40 µV** (`ss_-40c_1.20v`)", "**15.40 µV** (`ss_-40c_1.08v`)",
+             "max point: README says ss_-40c_1.08v"),
+            ("committed bench key at 45/45 points", "committed bench key at 44/45 points",
+             "valid points: README says 44"),
+        )
+        for old, new, expect in cases:
+            with self.subTest(expect):
+                code, _, err = _run(_mutate_readme(old, new), REPORT)
+                self.assertEqual(code, 1)
+                self.assertIn(f"kickback(residue): {expect}", err)
+                self.assertIn(f"source {KB_ID}", err)
+
+    def test_aggregate_row_4b_population_does_not_satisfy_the_claims(self):
+        # Row 4b of the aggregate report measures a different population
+        # (2.03423 ... 15.6327 µV at fs_125c_1.32v ... ss_-40c_1.08v); the
+        # historical prose rewritten to it must fail, not silently pass.
+        mutated = _mutate_readme(
+            "Residue 1.70 µV (`ff_125c_1.32v`) … **15.40 µV** (`ss_-40c_1.20v`)",
+            "Residue 2.03423 µV (`fs_125c_1.32v`) … **15.6327 µV** (`ss_-40c_1.08v`)")
+        code, _, err = _run(mutated, REPORT)
+        self.assertEqual(code, 1)
+        self.assertIn("kickback(residue): min µV: README says 2.03423", err)
+        self.assertIn("kickback(residue): min point: README says fs_125c_1.32v", err)
+        self.assertIn(f"source {KB_ID}", err)
+        self.assertIn("says 1.69760", err)
+
+    def test_unit_conversion_is_explicit_and_exact(self):
+        stats = chk.load_kickback_record(chk.KICKBACK_PATH)
+        self.assertEqual((stats["min_uv"], stats["max_uv"]), (1.6976, 15.4022))
+        # a README value that only a wrong nV->µV conversion would produce
+        for got in ("1697.6", "0.0016976"):
+            code, _, err = _run(_mutate_readme("Residue 1.70 µV", f"Residue {got} µV"), REPORT)
+            self.assertEqual(code, 1)
+            self.assertIn("kickback(residue): min µV", err)
+        # a source whose payload was already scaled the other way round
+        kb = _clone(KICKBACK)
+        for p in kb["points"]:
+            p["measurements"]["kick_sigdep_nv"] *= 1000.0
+        kb["summary"]["kick_sigdep_nv"].update(min=1697600.0, max=15402200.0)
+        self._fails("kickback(residue): min µV: README says 1.70", kickback=kb)
+
+    def test_changed_record_identity_fails(self):
+        for mut, expect in (
+            (lambda d: d.update(record_id="20260916-125444-4d0cf7c"), "record_id is"),
+            (lambda d: d["testbench"].update(name="comparator-regeneration"), "testbench is"),
+            (lambda d: d["context"].update(dut_id="comparator-pex"), "DUT is"),
+            (lambda d: d["context"].update(record_id="20260916-125444-4d0cf7c"),
+             "context.record_id disagrees"),
+        ):
+            with self.subTest(expect):
+                kb = _clone(KICKBACK)
+                mut(kb)
+                self._fails(expect, kickback=kb)
+
+    def test_population_grid_is_validated(self):
+        kb = _clone(KICKBACK)
+        kb["points"].pop()
+        self._fails("points has 44", kickback=kb)
+        kb = _clone(KICKBACK)
+        kb["points"][0]["corner_id"] = kb["points"][1]["corner_id"]
+        self._fails("duplicate", kickback=kb)
+        kb = _clone(KICKBACK)
+        kb["points"][0]["corner_id"] = "tt_-40c_1.44v"  # plausible, off-grid supply
+        self._fails("unknown corner_id 'tt_-40c_1.44v'", kickback=kb)
+        kb = _clone(KICKBACK)
+        kb["points"][0]["temp_c"] = -39.0  # corner_id still says tt_-40c_1.08v
+        self._fails("disagrees with its physical metadata", kickback=kb)
+
+    def test_failed_or_nonfinite_points_fail(self):
+        kb = _clone(KICKBACK)
+        kb["points"][7]["status"] = "ngspice-abort"
+        self._fails("status is", kickback=kb)
+        kb = _clone(KICKBACK)
+        kb["points"][7]["measurements"]["kick_sigdep_nv"] = float("inf")
+        self._fails("not finite", kickback=kb)
+
+    def test_summary_must_match_per_point_values(self):
+        kb = _clone(KICKBACK)
+        kb["summary"]["kick_sigdep_nv"]["max"] = 15402.3
+        self._fails("disagree with the per-point values", kickback=kb)
+        kb = _clone(KICKBACK)
+        kb["summary"]["kick_sigdep_nv"]["at_min"] = "ss_-40c_1.20v"
+        self._fails("disagree with the per-point values", kickback=kb)
+
+    def test_consistently_changed_source_values_fail(self):
+        # A consistently lower minimum (summary follows the points) is a
+        # different population: the README claim must fail against it.
+        kb = _clone(KICKBACK)
+        i = next(i for i, p in enumerate(kb["points"]) if p["corner_id"] == "ff_125c_1.32v")
+        kb["points"][i]["measurements"]["kick_sigdep_nv"] = 1200.0
+        kb["summary"]["kick_sigdep_nv"].update(min=1200.0, at_min="ff_125c_1.32v")
+        self._fails("kickback(residue): min µV: README says 1.70", kickback=kb)
+
+    def test_missing_or_malformed_source_fails_closed(self):
+        for kind, raw in (("empty", ""), ("not json", "{oops"), ("array", "[]"), ("object", "{}")):
+            with self.subTest(kind):
+                self._fails(f"source {KB_ID}", raw_kickback=raw)
+        kb = _clone(KICKBACK)
+        del kb["summary"]["kick_sigdep_nv"]
+        self._fails("missing field summary.kick_sigdep_nv", kickback=kb)
+        sources = chk.load_sources({KB_ID: Path("/nonexistent/kickback.json")})
+        self.assertIn("cannot read", str(sources[KB_ID]))
 
 
 if __name__ == "__main__":

@@ -37,6 +37,14 @@ source, named per claim through the `SOURCES` registry:
     Characterization only: no common-mode bound or verdict is checked here, and
     a newer campaign is never selected automatically (pinned deliberately).
 
+  * `kickback-residue-36773c7` -- the historical harness kickback record
+    `sim/comparator-kickback/records/20260916-022249-36773c7.json` (issue #232):
+    the signal-dependent-residue population the README Kickback row's historical
+    prose is pinned to -- residue min/max (stored nV, compared in µV), their
+    corner identities and the residue-sentence coverage count. Deliberately NOT
+    the newer aggregate row 4b (a different, klt direct-measurement population);
+    the pin is the reviewed historical record, never auto-selected.
+
 Each source is identity-checked before any figure is compared (record/campaign
 id, bench name, N, point count, and -- issue #217 -- the complete 5-process x
 3-temperature x 3-supply physical PVT grid each `N/45` claim describes, with
@@ -128,6 +136,8 @@ OFFSET_PATH = (REPO_ROOT / "sim" / "comparator-offset-transient-mc" / "records"
                / "20260917-060858-ea40b57.json")
 CMBAND_PATH = (REPO_ROOT / "sim" / "comparator-offset-cm-band" / "campaigns"
                / "20261009-5185f52" / "comparison.json")
+KICKBACK_PATH = (REPO_ROOT / "sim" / "comparator-kickback" / "records"
+                 / "20260916-022249-36773c7.json")
 
 #: Ratified whole-latch offset limits (3 sigma, mV): Target <= 15, Stretch <= 8.
 OFFSET_TARGET_MV, OFFSET_STRETCH_MV = 15.0, 8.0
@@ -399,12 +409,70 @@ def load_cmband_comparison(path: Path) -> dict:
     return stats
 
 
+def load_kickback_record(path: Path) -> dict:
+    """Historical harness kickback record (issue #232): the pinned
+    signal-dependent-residue population behind the README Kickback row's
+    historical prose -- 45 points, per-point `kick_sigdep_nv` stored in nV.
+    The extrema and their corner identities are derived from the point
+    measurements (converted nV -> uV explicitly) and cross-checked against
+    the copied summary, never trusted from it. This is NOT the aggregate
+    report's row 4b, a different (klt direct-measurement) population."""
+    d = _read_json(path)
+    _expect(isinstance(d, dict), "top level is not an object")
+    _expect(_need(d, "record_id") == "20260916-022249-36773c7",
+            f"record_id is {d.get('record_id')!r}, expected '20260916-022249-36773c7'")
+    _expect(_need(d, "testbench", "name") == "comparator-kickback",
+            f"testbench is {d['testbench']['name']!r}, expected 'comparator-kickback'")
+    _expect(_need(d, "context", "record_id") == d["record_id"],
+            "context.record_id disagrees with the record_id")
+    _expect(_need(d, "context", "dut_id") == "comparator-dr0001"
+            and _need(d, "context", "dut_provenance") == "schematic",
+            f"DUT is {d['context'].get('dut_id')!r}/"
+            f"{d['context'].get('dut_provenance')!r}, expected the DR-0001 "
+            "schematic comparator-dr0001")
+    pts = _need(d, "points")
+    _expect(isinstance(pts, list) and len(pts) == N_POINTS,
+            f"points has {len(pts) if isinstance(pts, list) else '?'} entries, expected {N_POINTS}")
+    ids, nv = [], []
+    for i, p in enumerate(pts):
+        _expect(_need(p, "status") == "ok", f"point {i} status is {p['status']!r}")
+        ids.append(_need(p, "corner_id"))
+        nv.append(_finite(p, "measurements", "kick_sigdep_nv"))
+    # Issue #217: the complete mismatch-free physical grid (5 process x 3
+    # temperature x 3 supply) before any claim statistic is computed; the
+    # record's per-point corner/temp_c/vdd metadata must agree with the id.
+    _validate_pvt_population(ids, NOISE_PROCESSES, "corner_id")
+    for i, p in enumerate(pts):
+        corner, temp, vdd = _need(p, "corner"), _num(p, "temp_c"), _num(p, "vdd")
+        _expect(corner in NOISE_PROCESSES and temp in PVT_TEMPS_C
+                and vdd in PVT_SUPPLIES_V and _pvt_id(corner, temp, vdd) == ids[i],
+                f"point {i} corner_id {ids[i]!r} disagrees with its physical metadata "
+                f"(corner={corner!r}, temp_c={temp}, vdd={vdd})")
+    # The README quotes µV; the record stores nV. Convert explicitly, then
+    # derive the extrema and their corners from the per-point measurements.
+    uv = [v / 1000.0 for v in nv]
+    stats = {
+        "valid": len(pts), "points": len(pts),
+        "min_uv": min(uv), "max_uv": max(uv),
+        "min_point": ids[nv.index(min(nv))], "max_point": ids[nv.index(max(nv))],
+        "record_id": d["record_id"],
+    }
+    summ = _need(d, "summary", "kick_sigdep_nv")
+    _expect(abs(_finite(summ, "min") - min(nv)) < 1e-9
+            and abs(_finite(summ, "max") - max(nv)) < 1e-9
+            and _need(summ, "at_min") == stats["min_point"]
+            and _need(summ, "at_max") == stats["max_point"],
+            "summary.kick_sigdep_nv min/max/at_* disagree with the per-point values")
+    return stats
+
+
 #: id -> (default path, loader). The reviewed population list; adding a source
 #: or changing which population a claim reads is a deliberate edit here.
 SOURCES = {
     "noise-full-issue81": (NOISE_PATH, load_noise_full),
     "offset-whole-latch-ea40b57": (OFFSET_PATH, load_offset_record),
     "offset-cm-band-5185f52": (CMBAND_PATH, load_cmband_comparison),
+    "kickback-residue-36773c7": (KICKBACK_PATH, load_kickback_record),
 }
 
 _NOISE = "| Input-referred noise"
@@ -501,6 +569,27 @@ def _cm_claims():
 
 
 SOURCE_CLAIMS += _cm_claims()
+
+
+# Issue #232: the historical kickback residue prose. Each pattern is anchored
+# on the residue sentence (`Residue ...` / `committed bench key`) so the row's
+# other figures -- charge counts, peak excursions, the decision-correct
+# coverage -- can neither satisfy nor collide with these claims.
+_KICKRES = "kickback-residue-36773c7"
+SOURCE_CLAIMS += [
+    ("kickback(residue): min µV", _KICKRES, _KICK, 3,
+     r"Residue ([\d.]+) µV", "min_uv", "num"),
+    ("kickback(residue): min point", _KICKRES, _KICK, 3,
+     r"Residue [\d.]+ µV \(`([^`]+)`\)", "min_point", "str"),
+    ("kickback(residue): max µV", _KICKRES, _KICK, 3,
+     r"Residue [\d.]+ µV \(`[^`]+`\) … \*\*([\d.]+) µV\*\*", "max_uv", "num"),
+    ("kickback(residue): max point", _KICKRES, _KICK, 3,
+     r"Residue [\d.]+ µV \(`[^`]+`\) … \*\*[\d.]+ µV\*\* \(`([^`]+)`\)", "max_point", "str"),
+    ("kickback(residue): valid points", _KICKRES, _KICK, 3,
+     r"committed bench key at (\d+)/\d+ points", "valid", "int"),
+    ("kickback(residue): grid points", _KICKRES, _KICK, 3,
+     r"committed bench key at \d+/(\d+) points", "points", "int"),
+]
 
 
 _COUNT_RE = re.compile(r"\b\d+/45\b|\b\d+ of 45\b")
@@ -670,6 +759,8 @@ def main(argv=None) -> int:
                     help="issue #79 common-mode comparison.json (source offset-cm-band-5185f52)")
     ap.add_argument("--offset-record", type=Path, default=OFFSET_PATH,
                     help="whole-latch offset record JSON (source offset-whole-latch-ea40b57)")
+    ap.add_argument("--kickback-record", type=Path, default=KICKBACK_PATH,
+                    help="historical kickback record JSON (source kickback-residue-36773c7)")
     args = ap.parse_args(argv)
     try:
         text = args.readme.read_text(encoding="utf-8")
@@ -679,7 +770,8 @@ def main(argv=None) -> int:
         return 1
     sources = load_sources({"noise-full-issue81": args.noise_full,
                             "offset-whole-latch-ea40b57": args.offset_record,
-                            "offset-cm-band-5185f52": args.cmband})
+                            "offset-cm-band-5185f52": args.cmband,
+                            "kickback-residue-36773c7": args.kickback_record})
     failures, checked, unchecked, src_checked = check(text, report, sources=sources)
     for f in failures:
         print(f"FAIL: {f}", file=sys.stderr)
