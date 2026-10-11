@@ -120,7 +120,7 @@ def cmd_smoke(args) -> int:
 def cmd_compare(args) -> int:
     series = _series(args)
     result = rep.compare_series(series)
-    (series / "comparison.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    (series / "comparison.json").write_text(rep.dumps_report(result), encoding="utf-8")
     (series / "comparison.md").write_text(rep.render_markdown(result), encoding="utf-8")
     print(f"wrote {series / 'comparison.md'}")
     return 0
