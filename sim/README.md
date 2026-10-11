@@ -486,6 +486,13 @@ machine-checked contract (issue #132). The `append-only-evidence` job runs
 external storage) is deliberately out of scope here; this only measures and
 caps growth, and never edits, moves or externalizes existing evidence.
 
+**Before review.** Run `python3 scripts/check_evidence_size.py --tree HEAD` on
+the final commit; the PR states that SHA, exit status (0 ok, 1 violation, 2
+error) and size; re-run after any HEAD change. Failures follow Exceptions
+below; this grants none. No Python: say local validation is unavailable and
+cite the passing `append-only-evidence` CI for that commit (skipped is not
+success).
+
 **Accounting.** Bytes are Git blob sizes from `git ls-tree -rl <tree>` of the
 named commit/tree -- not working-tree or pack sizes. The checker reports
 repository-wide and `sim/` totals plus per **evidence unit**: the entry
@@ -494,8 +501,8 @@ repository-wide and `sim/` totals plus per **evidence unit**: the entry
 non-numeric size fails closed (exit 2), so never use a blob filter. The checker
 also refuses a partial clone up front (`extensions.partialClone` or a
 `remote.<name>.promisor` remote: exit 2, naming the cause) and runs git with
-`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error rather than one network
-round trip per blob (~97k; that is how CI run 38029844566 hung). A shallow
+`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error, not a lazy fetch
+(CI run 38029844566 hung that way). A shallow
 clone is accepted: it holds every blob of the commits it has.
 
 **Baseline and grandfathering.** The budget file records the baseline commit
@@ -538,8 +545,7 @@ clones, harmless for them). The `append-only-evidence` job measures blob
 sizes, so it must be a complete clone: its checkout has `fetch-depth: 0` and
 **no** `sparse-checkout:` input, and the next step applies its patterns with
 `git sparse-checkout set --no-cone --stdin` (failing with exit 2 if the clone
-is partial). The full fetch is small (~60 MiB packed; the transient full
-working tree costs seconds). Cones (each must hold the job's complete
+is partial). Cones (each must hold the job's complete
 transitive inputs):
 
 | Job | Inputs beyond its own scripts |
@@ -563,13 +569,9 @@ pinned build is first on `PATH`; otherwise they are skipped locally and proven
 by the real CI jobs.
 
 The harness job's lint population is guarded by
-`scripts/check_lint_population.py` (issue #216): with F-only rules ruff only
-warns about a missing root, and a glob expands to whatever the cone checked
-out, so the preflight derives the intended set from git's tracked inventory
-(`ls-tree` of `HEAD`), fails naming every omitted path before ruff runs, and
-keeps the ruff step's argument list (`LINT_ROOTS`) in one maintained copy.
-The sparse-cone tests add dropping-a-pattern and undefined-name negative
-controls (the pinned ruff is installed for them in the guard job too).
+`scripts/check_lint_population.py` (issue #216): it derives the intended set
+from git's tracked inventory and fails naming every omitted path before ruff
+runs. The sparse-cone tests add negative controls.
 
 Reproduce locally:
 
