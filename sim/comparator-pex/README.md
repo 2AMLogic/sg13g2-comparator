@@ -50,6 +50,13 @@ text below it is kept as the record of the earlier attempt. The same
     -14.1 %, `apmax` -1.3 %; `bc1` -79.6 % (a tiny-magnitude current row).
   - Rows with no change beyond 0.1 %: supply, end-state, bias current
     (`i_stat` -0.08 %), common-mode levels.
+- Renderer semantics (issue #181): `make_delta_table.py` keeps klt's raw status and
+  `delta_pct` as measurement availability and adds a separate, explicitly mapped
+  interpretation: logic rows (`d*_first`/`d*_end`) as states against the bench's own
+  0.1/0.9 polarity checks (no percentage), `td_a`/`td_c` as absolute values against
+  DR-0002 Row 3 (1.5 ns at 50 mV, 2.0 ns at 0.1 mV) on PVT-grid corners; every
+  other key is ungraded. Tests: `tests/test_delta_table.py`. The 20261009 table
+  above is historical and unchanged.
 - Not run: the 45-point PVT grids and the offset / noise Monte Carlo rows.
   `klt sim --backend batch` was re-probed and refused:
   `batch_no_capacity` ("no capacity in any of the 30 pools after 3
