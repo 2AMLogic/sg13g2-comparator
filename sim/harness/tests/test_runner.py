@@ -491,6 +491,67 @@ class ExclusiveLogTest(RunPointWarningsTest):
         self.assertIn("m_vos_mv", (log_dir / results[0].log).read_text())
 
 
+class TimeoutDiagnosticsTest(RunPointWarningsTest):
+    """Issue #197: partial ngspice output survives a local timeout."""
+
+    def _timeout(self, stdout, stderr, **kw):
+        exc = subprocess.TimeoutExpired(["ngspice"], 7, output=stdout, stderr=stderr)
+        with mock.patch("harness.runner.compose_deck", return_value="* stub\n"), \
+             mock.patch("harness.runner.subprocess.run", side_effect=exc):
+            return run_point(self.tb, self.pdk, self.dut, self.point, self.workdir,
+                             timeout_s=7, **kw)
+
+    def _log(self, r):
+        return (self.workdir / r.log).read_text()
+
+    def test_bytes_output_retained_with_replacement(self):
+        r = self._timeout(b"iter 1\n\xff\xfe bad", b"warn: gmin\n")
+        self.assertEqual(r.status, "error")
+        log = self._log(r)
+        self.assertIn("TIMEOUT after 7s", log)
+        self.assertIn("===== partial stdout =====\niter 1\n\ufffd\ufffd bad\n", log)
+        self.assertIn("===== partial stderr =====\nwarn: gmin\n", log)
+
+    def test_text_output_retained(self):
+        r = self._timeout("tran step 12\n", "singular matrix\n")
+        self.assertEqual(r.status, "error")
+        log = self._log(r)
+        self.assertIn("TIMEOUT after 7s", log)
+        self.assertIn("tran step 12", log)
+        self.assertIn("singular matrix", log)
+
+    def test_absent_output_keeps_marker(self):
+        r = self._timeout(None, None)
+        self.assertEqual(r.status, "error")
+        self.assertIn("timed out after 7s", r.message)
+        log = self._log(r)
+        self.assertIn("TIMEOUT after 7s", log)
+        self.assertEqual(log.count("(none captured)"), 2)
+
+    def test_complete_looking_partial_output_is_still_error(self):
+        r = self._timeout("m_vos_mv = 1.0\n", "")
+        self.assertEqual(r.status, "error")
+        self.assertEqual(r.measurements, {})
+        self.assertIn("m_vos_mv = 1.0", self._log(r))
+
+    def test_exclusive_collision_and_other_logs_protected(self):
+        log_dir = self.workdir / "corners" / "rid"
+        log_dir.mkdir(parents=True)
+        mine = log_dir / f"{self.point.corner_id}.log"
+        other = log_dir / "other.log"
+        mine.write_text("committed\n")
+        other.write_text("other evidence\n")
+        with self.assertRaises(FileExistsError):
+            self._timeout("x", "y", log_dir=log_dir, exclusive_logs=True)
+        self.assertEqual(mine.read_text(), "committed\n")
+        self.assertEqual(other.read_text(), "other evidence\n")
+        mine.unlink()
+        r = self._timeout("partial\n", None, log_dir=log_dir, exclusive_logs=True)
+        self.assertEqual(r.status, "error")
+        self.assertIn("partial", mine.read_text())
+        self.assertEqual(other.read_text(), "other evidence\n")
+
+
 class GitProvenanceTest(ReservationTestBase):
     """Issue #142: verified, single-capture Git provenance."""
 
