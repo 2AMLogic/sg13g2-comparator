@@ -82,8 +82,10 @@ def _check_env(allow_drift: bool) -> int:
         print(f"OSDI bytes : UNREADABLE ({exc})", file=sys.stderr)
         return 1
     build = ident["build_provenance"]
+    comp = build.get("compiler")
+    tag = comp.get("tag") if isinstance(comp, dict) else comp
     print(f"OSDI bytes : inventory sha256 {ident['inventory_sha256'][:16]} (identity only); "
-          f"build provenance {build['status']}: {build.get('reason') or build['compiler']}")
+          f"build provenance {build['status']}: {build.get('reason') or f'openvaf {tag}'}")
 
     try:
         banner = runner_mod.ngspice_version()
