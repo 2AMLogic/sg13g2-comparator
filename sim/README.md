@@ -294,7 +294,7 @@ under it).
 | IHP-Open-PDK release | `0.3.0` | **exact** — the release IS the device models |
 | ngspice | ≥ 46 (major), OSDI-capable | floor |
 | Python | ≥ 3.9 | floor |
-| xschem | recorded, not checked | nothing here invokes xschem until `design/` has a schematic |
+| xschem | `3.4.7` | CI job `netlist-regeneration` only (`design/README.md`); never by the runner |
 | OpenVAF-Reloaded (OSDI compiler) | `v24.0.1mob`, checksum-pinned | checked by `sim/tools/build-osdi.sh` at build time, not by the corner runner |
 
 PDK variant: **ihp-sg13g2**, set in [`sim/pdk.json`](pdk.json).
@@ -533,21 +533,21 @@ Overage output names the path, measured bytes, ceiling and this route.
 only its explicit, audited inputs (non-cone patterns, never a `filter:`).
 Caveat: `actions/checkout` silently adds `--filter=blob:none` whenever its
 `sparse-checkout:` input is set, and an empty `filter:` cannot turn that off.
-The three jobs that only read files inside their cone use that input and are
-therefore blob-less partial clones, which is harmless for them. The
-`append-only-evidence` job measures blob sizes, so it must be a complete clone:
-its checkout has `fetch-depth: 0` and **no** `sparse-checkout:` input, and the
-next step applies its patterns with `git sparse-checkout set --no-cone --stdin`
-(failing with exit 2 if the clone is partial). The full fetch is small (the
-repository packs to roughly 60 MiB); only the transient full working tree
-costs a few seconds. Cones (each must contain the job's complete transitive
-inputs):
+Jobs reading only inside their cone use that input (blob-less partial
+clones, harmless for them). The `append-only-evidence` job measures blob
+sizes, so it must be a complete clone: its checkout has `fetch-depth: 0` and
+**no** `sparse-checkout:` input, and the next step applies its patterns with
+`git sparse-checkout set --no-cone --stdin` (failing with exit 2 if the clone
+is partial). The full fetch is small (~60 MiB packed; the transient full
+working tree costs seconds). Cones (each must hold the job's complete
+transitive inputs):
 
 | Job | Inputs beyond its own scripts |
 |---|---|
 | signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
 | harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
+| netlist-regeneration | `design/`, `sim/harness/`, `sim/pdk.json` |
 | append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` |
 
 A new input a job starts reading must be added to its patterns in the same

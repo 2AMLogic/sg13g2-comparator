@@ -21,6 +21,12 @@
 # post-layout `klt pex` adapter inputs in `sim/comparator-pex/` are fresh
 # against their sources (issue #123) -- also stdlib only, no PDK.
 #
+# The one PDK-dependent leg that IS run here (issue #224) is the real
+# schematic-to-netlist freshness check (`design/netlist.py --check`, job
+# `netlist-regeneration`): it provisions a pinned xschem and the PDK release
+# pinned in `sim/pdk.json` (no OSDI/ngspice needed; netlisting reads only
+# schematics, symbols and the PDK's xschem libraries). See design/README.md.
+#
 # Pinning policy: third-party actions and `klt` are pinned by full commit SHA
 # (action tags are kept as trailing comments) so verdicts are reproducible.
 # Bumps are deliberate changes, made by hand in a reviewed PR.
@@ -175,6 +181,62 @@ jobs:
 
       - name: Regenerate and verify the committed layout
         run: KLT_NATIVE=1 layout/run_flow.sh --check
+
+  # Schematic-to-netlist freshness (issue #224): design/comparator.spice is
+  # the hashed T1 item 1 anchor (manifests/README.md) and is DERIVED from the
+  # xschem schematics, which nothing else hashes. This job runs the real
+  # generator in check mode with a real, pinned xschem (built from source by
+  # scripts/provision_netlist_env.sh, which holds the xschem pin) and the
+  # PDK release/sha256 declared in sim/pdk.json, resolved through the same
+  # discovery contract the harness uses (PDK_ROOT, sim/harness/pdk.py).
+  # Nothing here skips: a missing xschem, symbol, PDK input or a stale
+  # netlist fails the job. The mocked tests in design/tests/ still run in
+  # harness-unit-tests; they check generator logic, not this schematic.
+  netlist-regeneration:
+    name: netlist regeneration (schematics regenerate the committed netlist, real xschem + pinned PDK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Issue #132/#224: explicit sparse cone = this job's complete inputs
+          # (generator, schematics, symbols and committed netlist in design/;
+          # harness modules netlist.py imports; the PDK pin; the provisioner).
+          # Proven by scripts/tests/test_sparse_checkout.py.
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /design/
+            /sim/harness/
+            /sim/pdk.json
+            /scripts/provision_netlist_env.sh
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.13'
+
+      # Tool provisioning (not a repo input; skipped by the sparse-cone test).
+      - name: Provision xschem build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential tcl tcl-dev tk tk-dev libx11-dev libxpm-dev \
+            libcairo2-dev bison flex gawk
+
+      - name: Provision pinned xschem
+        run: scripts/provision_netlist_env.sh xschem "$RUNNER_TEMP/xschem"
+
+      - name: Provision pinned SG13G2 PDK (sim/pdk.json)
+        run: scripts/provision_netlist_env.sh pdk "$RUNNER_TEMP/pdk"
+
+      - name: Regenerate netlist from schematics and compare (design/netlist.py --check)
+        env:
+          PDK_ROOT: ${{ runner.temp }}/pdk
+          PDK: ihp-sg13g2
+        run: |
+          export PATH="$RUNNER_TEMP/xschem/bin:$PATH"
+          test "$(command -v xschem)" = "$RUNNER_TEMP/xschem/bin/xschem"
+          xschem --version 2>&1 | grep -m1 '^XSCHEM V'
+          python3 design/netlist.py --check
+          test -z "$(git status --porcelain)"
 
   # Harness unit tests (issue #75): the same command as `sim/selftest.sh`
   # step 0. Pure stdlib -- no PDK, no ngspice, no installs -- so it belongs
