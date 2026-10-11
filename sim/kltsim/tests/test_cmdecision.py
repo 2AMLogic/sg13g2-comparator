@@ -109,6 +109,68 @@ class AnalysisTests(unittest.TestCase):
         self.assertFalse(rep["bit_identical"])
         self.assertEqual(len(rep["mismatches"]), 1)
 
+    def _drop(self, env, name, only=None):
+        for i, c in enumerate(env["corners"]):
+            if only is None or i == only:
+                c["measurements"] = [m for m in c["measurements"] if m["name"] != name]
+
+    def test_reproduction_missing_measurement_one_point(self):
+        a, b = _env(), _env()
+        self._drop(a, "td_od1_ns", only=7)
+        rep = cd.reproduction(a, b)
+        self.assertFalse(rep["bit_identical"])
+        self.assertEqual(len(rep["mismatches"]), 1)
+        self.assertEqual(rep["mismatches"][0]["measurement"], "td_od1_ns")
+        self.assertEqual(rep["mismatches"][0]["point"], cd.key_label(cd.expected_keys()[7]))
+
+    def test_reproduction_missing_measurement_all_points(self):
+        a, b = _env(), _env()
+        self._drop(a, "td_od1_ns")
+        rep = cd.reproduction(a, b)
+        self.assertFalse(rep["bit_identical"])
+        self.assertEqual(len(rep["mismatches"]), 45)
+        self.assertTrue(all(m["measurement"] == "td_od1_ns" for m in rep["mismatches"]))
+
+    def test_reproduction_extra_nominal_probe_still_identical(self):
+        a, b = _env(), _env()
+        self._drop(b, "vcm_meas")
+        rep = cd.reproduction(a, b)
+        self.assertTrue(rep["bit_identical"])
+        self.assertEqual(rep["values_compared"], 45 * 9 + 45 * 0 + 45 * len(cd.GATES))
+
+    def test_reproduction_missing_corner_and_malformed_lists(self):
+        a, b = _env(), _env()
+        a["corners"].pop()
+        self.assertFalse(cd.reproduction(a, b)["bit_identical"])
+        a = _env()
+        a["corners"][3]["measurements"].append(dict(a["corners"][3]["measurements"][0]))
+        self.assertFalse(cd.reproduction(a, b)["bit_identical"])
+        a = _env()
+        a["corners"][3]["measurements"] = "bad"
+        self.assertFalse(cd.reproduction(a, b)["bit_identical"])
+
+    def test_vcm_probe_rejections(self):
+        keys = cd.expected_keys()
+        bad = [float("nan"), float("inf"), float("-inf"), True, False, None, "0.6", [0.6], {}]
+        for v in bad:
+            with self.subTest(v=v):
+                env = _env({keys[2]: {"vcm": v}})
+                s = cd.summarize(cd.load_points(env, 0.6))
+                self.assertEqual(s["points_valid"], 44)
+                self.assertEqual(len(s["rejected"]), 1)
+                self.assertIn("vcm_meas", s["rejected"][0]["reason"])
+        env = _env({keys[2]: {"drop": "vcm_meas"}})
+        s = cd.summarize(cd.load_points(env, 0.6))
+        self.assertEqual(s["points_valid"], 44)
+        self.assertIn("vcm_meas", s["rejected"][0]["reason"])
+
+    def test_vcm_probe_controls(self):
+        keys = cd.expected_keys()
+        env = _env({keys[0]: {"vcm": 0.6 + 5e-7}, keys[1]: {"vcm": 0.7}})
+        s = cd.summarize(cd.load_points(env, 0.6))
+        self.assertEqual(s["points_valid"], 44)
+        self.assertIn("does not match", s["rejected"][0]["reason"])
+
 
 if __name__ == "__main__":
     unittest.main()
