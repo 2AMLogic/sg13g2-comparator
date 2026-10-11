@@ -254,11 +254,13 @@ class SparseCones(unittest.TestCase):
         self._run_job("harness-unit-tests")
 
     def test_readme_claims_guard_runs_in_the_signoff_cone(self):
-        """Issue #193: the guard reads two extra evidence sources; the signoff
-        job's cone must hold exactly those, and dropping them must fail."""
+        """Issue #193: the guard reads extra evidence sources (issues #193,
+        #228, #232); the signoff job's cone must hold exactly those, and
+        dropping them must fail."""
         sources = ["/sim/klt-corner-verification/campaigns/20261009-issue81/noise_full.json",
                    "/sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json",
-                   "/sim/comparator-offset-cm-band/campaigns/20261009-5185f52/comparison.json"]
+                   "/sim/comparator-offset-cm-band/campaigns/20261009-5185f52/comparison.json",
+                   "/sim/comparator-kickback/records/20260916-022249-36773c7.json"]
         co = self.jobs["signoff-manifest-parity"]["checkout"]
         for src in sources:
             self.assertIn(src, co["patterns"])
@@ -278,6 +280,7 @@ class SparseCones(unittest.TestCase):
             self.assertIn("source noise-full-issue81", r.stdout)
             self.assertIn("source offset-whole-latch-ea40b57", r.stdout)
             self.assertIn("source offset-cm-band-5185f52", r.stdout)
+            self.assertIn("source kickback-residue-36773c7", r.stdout)
 
     def test_netlist_job_inputs_are_in_its_cone(self):
         """Issue #224: the cone holds the generator, schematics, symbols, the
