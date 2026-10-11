@@ -98,6 +98,16 @@ class IdentityTest(unittest.TestCase):
             self.assertEqual(self._run(root, "--identity", "new"), 2)
             self.assertEqual((root / "new" / "noise_full.json").read_text(), "kept\n")
 
+    def test_identity_refuses_existing_markdown_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
+            (root / "new").mkdir()
+            (root / "new" / "noise_full.md").write_text("kept\n")
+            self.assertEqual(self._run(root, "--identity", "new"), 2)
+            self.assertEqual((root / "new" / "noise_full.md").read_text(), "kept\n")
+            self.assertFalse((root / "new" / "noise_full.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

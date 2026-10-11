@@ -565,7 +565,7 @@ def cmd_noise_full(args) -> int:
         result["source_campaign"] = out_dir.name
         result["campaign"] = args.identity
         out_dir = _campaign_dir(args.identity)
-        if (out_dir / "noise_full.json").exists():
+        if any((out_dir / name).exists() for name in ("noise_full.json", "noise_full.md")):
             print(f"noise-full: {out_dir} already holds a report; choose a new identity",
                   file=sys.stderr)
             return 2
