@@ -200,8 +200,9 @@ def summarize(tb: Testbench, results: list[PointResult]) -> dict[str, Measuremen
                     f"`{r.point.corner_id}` rejected"
                 )
             elif name in r.invalid:
+                kind = "ambiguous" if r.invalid[name].startswith("repeated ") else "non-finite"
                 summary.failures.append(
-                    f"non-finite measurement {r.invalid[name]} at `{r.point.corner_id}` rejected"
+                    f"{kind} measurement {r.invalid[name]} at `{r.point.corner_id}` rejected"
                 )
         if values:
             summary.minimum = min(values.values())

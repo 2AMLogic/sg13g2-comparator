@@ -230,24 +230,32 @@ def parse_measurements_checked(text: str) -> tuple[dict[str, float], dict[str, s
     """Return ``(finite measurements, {name: raw text} for non-finite ones)``.
 
     ``float("-1e999")`` is ``-inf``; the regex accepts it, so finiteness is
-    checked here rather than trusted.
+    checked here rather than trusted. A name printed more than once is
+    ambiguous (even if the values agree): it is reported in the invalid map
+    with its raw repeated values and is never in the finite map.
     """
-    found: dict[str, float] = {}
-    invalid: dict[str, str] = {}
+    raws: dict[str, list[str]] = {}
     for line in text.splitlines():
         match = _MEAS_RE.match(line)
         if match:
-            name, raw = match.group(1), match.group(2)
-            try:
-                value = float(raw)
-            except ValueError:  # pragma: no cover - regex already constrains this
-                continue
-            if math.isfinite(value):
-                found[name] = value
-                invalid.pop(name, None)
-            else:
-                invalid[name] = raw
-                found.pop(name, None)
+            raws.setdefault(match.group(1), []).append(match.group(2))
+    found: dict[str, float] = {}
+    invalid: dict[str, str] = {}
+    for name, values in raws.items():
+        if len(values) > 1:
+            # Ambiguous: never pick first/last/worst, and a later valid
+            # occurrence must not clear an earlier one (issue #177).
+            invalid[name] = f"repeated {len(values)}x: " + ", ".join(values)
+            continue
+        raw = values[0]
+        try:
+            value = float(raw)
+        except ValueError:  # pragma: no cover - regex already constrains this
+            continue
+        if math.isfinite(value):
+            found[name] = value
+        else:
+            invalid[name] = raw
     return found, invalid
 
 
@@ -348,7 +356,7 @@ def run_point(
             deck=deck_path.name,
             log=log_path.name,
             message=(
-                ("non-finite measurement(s): " + ", ".join(f"{n}={r}" for n, r in invalid.items()))
+                ("non-finite or ambiguous measurement(s): " + ", ".join(f"{n}={r}" for n, r in invalid.items()))
                 if invalid
                 else first_error or errors or f"ngspice exit {returncode}, no measurements parsed"
             ),

@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from harness.corners import CORNERS, PvtPoint  # noqa: E402
 from harness import report as report_mod  # noqa: E402
 from harness.report import _json_num, _strict_point, summarize  # noqa: E402
-from harness.runner import PointResult, run_grid, run_point  # noqa: E402
+from harness.runner import PointResult, parse_measurements_checked, run_grid, run_point  # noqa: E402
 
 
 def _fake_completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess:
@@ -121,6 +121,52 @@ class NonFiniteMeasurementTest(RunPointWarningsTest):
         self.assertEqual(result.measurements, {"vos_mv": 0.15})
         self.assertTrue(result.warnings)
         self.assertEqual(result.invalid, {})
+
+
+class RepeatedMeasurementTest(RunPointWarningsTest):
+    """Issue #177: repeated requested names are ambiguous and rejected."""
+
+    def test_duplicates_fail_in_any_order(self):
+        cases = [
+            ("1", "99"), ("99", "1"), ("1", "1"),
+            ("1", "1e999"), ("1e999", "1"), ("-1e999", "1"), ("1", "-1e999"),
+        ]
+        for first, second in cases:
+            result = self._run(f"m_vos_mv = {first}\nm_vos_mv = {second}\n")
+            self.assertEqual(result.status, "failed", (first, second))
+            self.assertNotIn("vos_mv", result.measurements)
+            self.assertEqual(result.missing, ["vos_mv"])
+            diag = result.invalid["vos_mv"]
+            self.assertIn(f"{first}, {second}", diag)
+            self.assertIn("vos_mv", result.message)
+            self.assertIn("vos_mv", result.as_dict()["invalid_measurements"])
+
+    def test_three_occurrences_keep_all_raw_values(self):
+        result = self._run("m_vos_mv = 1\nm_vos_mv = 1e999\nm_vos_mv = 2\n")
+        self.assertEqual(result.status, "failed")
+        self.assertIn("1, 1e999, 2", result.invalid["vos_mv"])
+
+    def test_unexpected_names_do_not_invalidate_requested(self):
+        result = self._run("m_other = 1\nm_other = 2\nm_vos_mv = 0.5\n")
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.measurements["vos_mv"], 0.5)
+        self.assertEqual(result.invalid, {})
+
+    def test_unique_finite_unchanged(self):
+        self.assertEqual(
+            parse_measurements_checked("m_a = 1.5e-01\nm_b = -2\n"),
+            ({"a": 0.15, "b": -2.0}, {}),
+        )
+
+    def test_rejected_point_excluded_from_summary_and_fails_grid(self):
+        good = self._run("m_vos_mv = 1\n")
+        bad = self._run("m_vos_mv = 1\nm_vos_mv = 1\n")
+        bad.point = PvtPoint(corner=CORNERS["tt"], temp_c=27.0, vdd=1.2, index=1)
+        tb = types.SimpleNamespace(measure={"vos_mv": "v(out)"}, checks={"vos_mv": {"max": 5.0}})
+        summary = summarize(tb, [good, bad])["vos_mv"]
+        self.assertEqual(list(summary.values), [good.point.corner_id])
+        self.assertTrue(any("ambiguous" in f for f in summary.failures))
+        self.assertEqual(report_mod.usable_points([good, bad], tb.measure), [good])
 
 
 def _summ_tb(check):
