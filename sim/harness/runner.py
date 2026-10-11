@@ -226,6 +226,11 @@ class PointResult:
         return record
 
 
+# Prefix of the invalid-map entry for a name printed more than once; report.py
+# keys its "ambiguous" label on this shared constant.
+AMBIGUOUS_PREFIX = "repeated "
+
+
 def parse_measurements_checked(text: str) -> tuple[dict[str, float], dict[str, str]]:
     """Return ``(finite measurements, {name: raw text} for non-finite ones)``.
 
@@ -245,7 +250,7 @@ def parse_measurements_checked(text: str) -> tuple[dict[str, float], dict[str, s
         if len(values) > 1:
             # Ambiguous: never pick first/last/worst, and a later valid
             # occurrence must not clear an earlier one (issue #177).
-            invalid[name] = f"repeated {len(values)}x: " + ", ".join(values)
+            invalid[name] = f"{AMBIGUOUS_PREFIX}{len(values)}x: " + ", ".join(values)
             continue
         raw = values[0]
         try:

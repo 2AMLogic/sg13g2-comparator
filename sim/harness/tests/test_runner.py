@@ -128,23 +128,17 @@ class RepeatedMeasurementTest(RunPointWarningsTest):
 
     def test_duplicates_fail_in_any_order(self):
         cases = [
-            ("1", "99"), ("99", "1"), ("1", "1"),
-            ("1", "1e999"), ("1e999", "1"), ("-1e999", "1"), ("1", "-1e999"),
+            ("1", "99"), ("99", "1"), ("1", "1"), ("1", "1e999"), ("1e999", "1"),
+            ("-1e999", "1"), ("1", "-1e999"), ("1", "1e999", "2"),
         ]
-        for first, second in cases:
-            result = self._run(f"m_vos_mv = {first}\nm_vos_mv = {second}\n")
-            self.assertEqual(result.status, "failed", (first, second))
+        for vals in cases:
+            result = self._run("".join(f"m_vos_mv = {v}\n" for v in vals))
+            self.assertEqual(result.status, "failed", vals)
             self.assertNotIn("vos_mv", result.measurements)
             self.assertEqual(result.missing, ["vos_mv"])
-            diag = result.invalid["vos_mv"]
-            self.assertIn(f"{first}, {second}", diag)
+            self.assertIn(", ".join(vals), result.invalid["vos_mv"])
             self.assertIn("vos_mv", result.message)
             self.assertIn("vos_mv", result.as_dict()["invalid_measurements"])
-
-    def test_three_occurrences_keep_all_raw_values(self):
-        result = self._run("m_vos_mv = 1\nm_vos_mv = 1e999\nm_vos_mv = 2\n")
-        self.assertEqual(result.status, "failed")
-        self.assertIn("1, 1e999, 2", result.invalid["vos_mv"])
 
     def test_unexpected_names_do_not_invalidate_requested(self):
         result = self._run("m_other = 1\nm_other = 2\nm_vos_mv = 0.5\n")

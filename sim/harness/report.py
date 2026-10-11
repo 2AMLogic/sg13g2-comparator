@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .runner import PointResult
+from .runner import AMBIGUOUS_PREFIX, PointResult
 from .testbench import Testbench
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -200,7 +200,7 @@ def summarize(tb: Testbench, results: list[PointResult]) -> dict[str, Measuremen
                     f"`{r.point.corner_id}` rejected"
                 )
             elif name in r.invalid:
-                kind = "ambiguous" if r.invalid[name].startswith("repeated ") else "non-finite"
+                kind = "ambiguous" if r.invalid[name].startswith(AMBIGUOUS_PREFIX) else "non-finite"
                 summary.failures.append(
                     f"{kind} measurement {r.invalid[name]} at `{r.point.corner_id}` rejected"
                 )
