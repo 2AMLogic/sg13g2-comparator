@@ -7,6 +7,9 @@
     python3 sim/run_offset_cm_band.py repeat  --series ID --condition C --process SECTION
     python3 sim/run_offset_cm_band.py smoke   --condition C --osdi-dir DIR [--klt KLT]
     python3 sim/run_offset_cm_band.py compare --series ID
+    python3 sim/run_offset_cm_band.py supplement-build --series ID [--condition C ...]
+    python3 sim/run_offset_cm_band.py supplement-run  --series ID [--condition C] [--klt KLT]
+    python3 sim/run_offset_cm_band.py supplement-report --series ID [--parent ID]
 
 Conditions: vcm-m050 (dut_vcm - 50 mV), vcm-nom (dut_vcm), vcm-p050
 (dut_vcm + 50 mV). Each condition is one campaign under
@@ -18,6 +21,15 @@ condition; ``repeat`` resubmits the first grid point of one process at full
 N as a same-seed repeatability check; both land in ID/controls/. ``smoke``
 runs ONE corner, N = 1, locally (a debug probe) in a scratch dir and writes
 nothing under sim/. ``compare`` writes ID/comparison.json + comparison.md.
+
+The ``supplement-*`` verbs (issue #89) build, run and report a separately
+labelled max-step supplementary campaign for the two grid points whose
+vcm-m050 populations the 20261009-5185f52 campaign rejected: one tighter
+documented max step, both points at all three conditions, the parent's seed
+contract kept (see sim/kltsim/cmband.py). ``supplement-run`` refuses to
+resubmit a part whose envelope exists; ``supplement-report`` writes
+ID/supplement-report.json + .md and never merges anything into the parent
+campaign.
 
 See sim/kltsim/cmband.py and sim/comparator-offset-cm-band/README.md.
 Run from the repository root.
@@ -184,6 +196,69 @@ def cmd_compare(args) -> int:
     return 0
 
 
+def cmd_supplement_build(args) -> int:
+    try:
+        for name in args.condition or [c.name for c in cmband.CONDITIONS]:
+            cond = cmband.condition(name)
+            paths, created = cmband.write_supplement_inputs(cond, _series(args) / cond.name)
+            for p in paths:
+                verb = "wrote" if p in created else "unchanged"
+                try:
+                    shown = p.relative_to(build_mod.REPO_ROOT)
+                except ValueError:  # a series dir outside the repo (tests)
+                    shown = p
+                print(f"{verb} {shown}")
+    except build_mod.BuildError as exc:
+        print(f"supplement-build: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_supplement_run(args) -> int:
+    rc = 0
+    for name in args.condition or [c.name for c in cmband.CONDITIONS]:
+        cond = cmband.condition(name)
+        out_dir = _series(args) / cond.name
+        for section in cmband.supplement_sections():
+            tag = f"{cmband.BENCH_NAME}.{section}"
+            request = out_dir / f"{tag}.request.json"
+            if not request.is_file():
+                print(f"no request at {request}; run `supplement-build` first",
+                      file=sys.stderr)
+                return 1
+            if (out_dir / f"{tag}.envelope.json").exists() and not args.force:
+                print(f"{cond.name}/{tag}: envelope present -- supplementary evidence "
+                      "is append-only; use a new --series", file=sys.stderr)
+                return 1
+            rc = max(rc, _submit_with_retry(request, out_dir, tag, args,
+                                             _extra(cond, "max-step-supplement")))
+    return rc
+
+
+def cmd_supplement_report(args) -> int:
+    series = _series(args)
+    result = cmband.compare_supplement(series, parent_campaign=args.parent)
+    (series / "supplement-report.json").write_text(
+        json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    (series / "supplement-report.md").write_text(
+        cmband.render_supplement_markdown(result), encoding="utf-8")
+    c = result["conclusion"]
+    print(f"targets complete: {sum(1 for t in c['targets_complete'] if t['valid'])}"
+          f"/{c['targets_expected']}; pairs identical {c['pairs_identical']}"
+          f"/{c['pairs_compared']}, max |delta| "
+          f"{c['max_abs_delta_mv'] if c['max_abs_delta_mv'] is not None else 'n/a'} mV")
+    for p in result["populations"]:
+        st = p["stats"]
+        print(f"  {p['condition']} {p['point']}: {st['n']}/"
+              f"{result['basis']['n_per_point']} valid"
+              + (f", REJECTED ({st['rejected']})" if st.get("rejected") else ""))
+    if result["missing_envelopes"]:
+        for m in result["missing_envelopes"]:
+            print(f"missing: {m}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     default_klt = shutil.which("klt") or "klt"
     names = [c.name for c in cmband.CONDITIONS]
@@ -241,6 +316,22 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--series", required=True)
     g.add_argument("--reference-campaign", default=cmband.REFERENCE_CAMPAIGN)
     g.set_defaults(func=cmd_compare)
+
+    sb = sub.add_parser("supplement-build")
+    sb.add_argument("--series", required=True)
+    sb.add_argument("--condition", action="append", choices=names)
+    sb.set_defaults(func=cmd_supplement_build)
+
+    sr = sub.add_parser("supplement-run")
+    sr.add_argument("--series", required=True)
+    sr.add_argument("--condition", action="append", choices=names)
+    submit_opts(sr)
+    sr.set_defaults(func=cmd_supplement_run)
+
+    sg = sub.add_parser("supplement-report")
+    sg.add_argument("--series", required=True)
+    sg.add_argument("--parent", default=cmband.SUPPLEMENT_PARENT)
+    sg.set_defaults(func=cmd_supplement_report)
 
     args = ap.parse_args(argv)
     return args.func(args)
