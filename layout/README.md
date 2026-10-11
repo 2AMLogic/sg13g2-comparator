@@ -13,6 +13,8 @@ one-command flow that regenerates and checks it (issue #58, T1 item 2).
 | `comparator/check_stream.py` | Structural smoke test of a stream: top cell, ports, no host paths. |
 | `common_sg13g2.py` | SG13G2 layer table, rule values and drawing primitives (boxes, contacts, vias). |
 | `run_flow.sh` | One command that regenerates the stream and runs every check below. |
+| `pdk_drc.sh`, `comparator/pdk_drc.py` | **Supplemental** check against IHP's own DRC deck (issue #180); see "Supplemental PDK-deck DRC". Not part of `run_flow.sh` or CI. |
+| `comparator/pdk_drc_report.json` | **Committed supplemental evidence (issue #180).** Status `violations`: 62 markers in pSD.b / pSD.i. Not cited by the manifest. |
 
 Downstream work reads the stream at `layout/comparator/comparator.gds`, top
 cell `comparator`. That covers DRC #59, LVS #60, post-layout #61 and
@@ -189,6 +191,87 @@ The generator alone needs only the `klayout` Python module:
 CI runs `layout/run_flow.sh --check` on every PR. That is the
 `layout-reproducibility` job in `.github/workflows/ci.yml`.
 
+## Supplemental PDK-deck DRC (issue #180)
+
+Three tiers, kept apart on purpose:
+
+| Tier | What | Verdict of record |
+|---|---|---|
+| Curated DRC | klt's `sg13g2` deck, stage 6 of `run_flow.sh`, committed `drc_report.json`, cited by the manifest | `clean`, 0 violations. **Unchanged.** |
+| Supplemental verification | IHP's own KLayout deck (IHP-Open-PDK v0.3.0, the release `sim/pdk.json` pins), run by `pdk_drc.sh`, committed `pdk_drc_report.json` | `violations`: pSD.b x10, pSD.i x52. **Not cited by the manifest**; the curated verdict and its citation are left as they were until a reviewed evidence update. |
+| Remaining gaps | foundry signoff, density/fill, seal ring, antenna, latch-up beyond the deck's own rules | not checked (below) |
+
+```bash
+layout/pdk_drc.sh            # run; write layout/comparator/pdk_drc_report.json
+layout/pdk_drc.sh --check    # require the committed report to reproduce (writes nothing)
+layout/pdk_drc.sh --strict   # additionally exit 1 when the status is `violations`
+```
+
+**Prerequisites** (each missing one gives `status: unavailable` on stdout,
+exit `3`, and leaves the committed report alone; unavailable is never clean):
+
+- `uvx` (fetches the `klayout==0.30.12` Python module into uv's cache);
+- the IHP-Open-PDK v0.3.0 checkout at `--pdk`, `$IHP_PDK_DIR`,
+  `$PDK_ROOT/ihp-sg13g2` or `~/share/pdk/ihp-sg13g2`. Its
+  `.fetched-version` must read `0.3.0` and the sha256 over its
+  `libs.tech/klayout/tech/drc` tree (excluding docs, images, `testing/`) must
+  equal the pin in `pdk_drc.py`; otherwise `deck_identity_mismatch`;
+- a **KLayout executable >= 0.29.11** (`$KLAYOUT_BIN`, `--klayout`, or
+  `klayout` on `PATH`). The deck is Ruby, so the pip `klayout` wheel (module
+  only) is not enough. A host with only Ubuntu's 0.28.16 gets
+  `klayout_too_old`; running the deck on it fails midway on an unsupported
+  method, so it is refused up front. One way to get a binary without a
+  host-wide install: `dpkg -x` the upstream `.deb` into a scratch directory and
+  export its `usr/lib/klayout` in `LD_LIBRARY_PATH`.
+
+**What is run.** The PDK's own `run_drc.py` with `--topcell=comparator
+--run_mode=deep --no_density --mp=1`: the main rule set plus the PDK's
+"maximal" extra set (which the PDK itself says is not fully verified). 862
+rule categories are emitted. Scope is this standalone cell only.
+
+**Report** (`pdk_drc_report.json`, deterministic, no timestamps or host
+paths): the GDS path and sha256 plus the layers actually drawn; the deck
+release, `.fetched-version`, tree sha256 and entry point; the KLayout version;
+the invocation; every violated rule with its description and marker
+coordinates; a `targeted` table giving, for each rule the section above listed
+as unchecked (Gat.c, Cnt.e/Cnt.f, the pSD, NWell and latch-up rules), whether
+the deck executed it and how many markers it produced; `skipped`;
+`not_covered`; and the negative controls.
+
+**Checked vs skipped.** "Executed" means the deck emitted a result category
+for the rule. A rule whose layers are not drawn here (pads, MiM, HBT, seal
+ring, top metals, ...) executes vacuously, so executed is not the same as
+exercised; compare against `drawn_layers`. Skipped: density (needs chip-level
+fill, so a result on a standalone cell would be meaningless), antenna, and the
+PDK pre-check set. Gat.c, Cnt.e, Cnt.f, NW.*, LU.* and the other pSD rules
+ran on drawn Activ/GatPoly/Cont/pSD/NWell and gave 0 markers.
+
+**Findings, kept visible.** pSD.b (min pSD space 0.31 um, 10 markers) and
+pSD.i (min pSD enclosure of PFET gate 0.30 um, 52 markers). The markers are in
+the report for a follow-up repair of the generator; this issue does not change
+`comparator.gds`, so the findings stand.
+
+**Negative controls.** Two temp copies of the stream, each with one deliberate
+defect drawn clear of the cell (a 0.10 um Metal1 sliver; a GatPoly stripe with
+a 0.05 um endcap over a scratch Activ) must each trip the named rule (M1.a,
+Gat.c), which the committed stream does not trip. The committed GDS is hashed
+before and after and never written. A control that is not detected fails the
+run.
+
+`layout/tests/test_pdk_drc.py` (CI, stdlib only) guards the committed report
+against the committed GDS hash and the pinned deck identity, and tests the
+unavailable paths. The deck run itself is local-only, because CI has neither
+the PDK nor a KLayout executable.
+
+**Follow-ups.** Repairing the findings: issue #184. Tool gap (no klt runner for
+a vendor Ruby deck, no `unavailable` convention):
+[2AMLogic/klayout-tools#3076](https://github.com/2AMLogic/klayout-tools/issues/3076).
+
+**Remaining physical-signoff gaps.** Not checked by anything here: foundry
+signoff (this is IHP's open deck), density/fill, seal ring, antenna, and
+latch-up beyond LU.* in the deck (no guard rings are drawn). Curated DRC
+margins in `common_sg13g2.py` remain unverified by anything but this run.
+
 ## What is drawn
 
 Every row is centred on x = 0. From bottom to top:
@@ -276,7 +359,8 @@ ratified row.
   - NWell enclosure and spacing;
   - latch-up tap distance.
 
-  None of these has been checked by the PDK's own deck, and there is no
+  Those were not checked by the curated deck; the supplemental PDK-deck run
+  below does exercise them (and finds pSD.b / pSD.i violations). There is no
   density fill or seal ring.
 - **Connectivity.** Stage 4 is the committed LVS evidence (#60); see its
   limits above (power and body verdicts `unchecked`).
