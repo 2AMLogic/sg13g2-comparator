@@ -49,7 +49,6 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
-import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -519,7 +518,7 @@ def _f(x, nd=3):
 
 def render_markdown(result: dict) -> str:
     r = result["reproduction"]
-    out = [f"# Kickback residue across the input common-mode band (issue #165)", "",
+    out = ["# Kickback residue across the input common-mode band (issue #165)", "",
            "Characterization for the candidate DR-0004 CM row; not ratification. "
            f"Residue graded against the unchanged Row 4 Target <= {result['residue_target_uv']:g} uV, "
            f"Stretch <= {result['residue_stretch_uv']:g} uV. Q_kick and peak excursion are "

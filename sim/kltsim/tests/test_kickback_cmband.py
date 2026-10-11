@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from kltsim import build, cli as kcli, kickback_cmband as kb
+from kltsim import cli as kcli, kickback_cmband as kb
 
 SIM = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(SIM))
