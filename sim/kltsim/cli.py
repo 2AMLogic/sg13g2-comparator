@@ -563,7 +563,7 @@ def cmd_noise_full(args) -> int:
     result = noise_full_mod.analyse(out_dir)
     result["campaign"] = out_dir.name
     text = noise_full_mod.render_markdown(result)
-    targets = {report_dir / "noise_full.json": json.dumps(result, indent=2) + "\n",
+    targets = {report_dir / "noise_full.json": json.dumps(result, separators=(",", ":")) + "\n",
                report_dir / "noise_full.md": text}
     clash = [str(p) for p in targets if p.exists()]
     if clash:
