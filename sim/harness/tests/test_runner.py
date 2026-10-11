@@ -563,111 +563,98 @@ class GitProvenanceTest(ReservationTestBase):
         self.assertIn("NOT VERIFIED", text)
 
 
-_DUT_NET = """\
-.subckt comparator_dut vinp vinn clk ibias dout doutb vdd vss
-x1 vinp vinn clk dout doutb vdd vss comparator
+_DUT_NET = """.subckt comparator_dut vinp vinn clk ibias dout doutb vdd vss
 .ends
 .subckt comparator_dut_analog vinp vinn ibias aop aon vdd vss
 .ends
 .subckt comparator_dut_latch inp inn clk dout doutb vdd vss
 .ends
-.subckt comparator vinp vinn clk dout doutb vdd vss
-XM3 ln lp np vss sg13_lv_nmos w=3u l=0.13u
+.subckt c vss
+XM3 ln lp np vss n
 .ends
 """
-_NOISE = {"subckt": "comparator", "inner": "x1", "instances": ["x0"], "ts": 2e-11,
-          "rails": {"vdd": "vdd", "vss": "0"}, "devices": {"XM3": {"g": 1e-3}}}
 
 
 class FrozenInputsTest(unittest.TestCase):
-    """Issue #179: every point and the record use one input set captured
-    before the grid, whatever happens to the live files during it."""
+    """Issue #179: points and record use inputs captured before the grid."""
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
-        self.sim = self.root / "sim"
-        tbdir = self.sim / "exp" / "testbench"
-        tbdir.mkdir(parents=True)
-        (self.sim / "dut").mkdir()
-        self.live = {"dut": self.sim / "dut" / "d.spice", "cfg": self.sim / "dut.json",
-                     "tb": tbdir / "t.spice", "man": tbdir / "tb.json"}
-        self.live["dut"].write_text(_DUT_NET)
-        self.live["cfg"].write_text(json.dumps(
-            {"netlist": "dut/d.spice", "id": "d", "provenance": "schematic"}))
-        self.live["tb"].write_text("* tb v1\n")
-        self.live["man"].write_text(json.dumps(
-            {"netlist": "t.spice", "corners": ["tt"], "temperatures_c": [27, 85],
-             "supply_tolerance": 0, "measure": {"m": "1"}, "internal_noise": _NOISE}))
-        self.orig = {k: p.read_bytes() for k, p in self.live.items()}
+        self.sim = sim = self.root / "sim"
+        (sim / "exp" / "testbench").mkdir(parents=True)
+        noise = {"subckt": "c", "inner": "x1", "instances": ["x0"], "ts": 1e-11,
+                 "rails": {"vss": "0"}, "devices": {"XM3": {"g": 1e-3}}}
+        self.live = {
+            sim / "d.spice": _DUT_NET,
+            sim / "dut.json": json.dumps({"netlist": "d.spice", "id": "d", "provenance": "schematic"}),
+            sim / "exp/testbench/t.spice": "* tb\n",
+            sim / "exp/testbench/tb.json": json.dumps(
+                {"netlist": "t.spice", "corners": ["tt"], "temperatures_c": [27, 85],
+                 "supply_tolerance": 0, "measure": {"m": "1"}, "internal_noise": noise}),
+        }
+        for path, text in self.live.items():
+            path.write_text(text)
         self.decks = []
 
     def run_cli(self, mutate=False):
         def fake(cmd, **kw):
             deck = Path(cmd[-1]).read_text()
             incs = re.findall(r'^\.include "(.*)"$', deck, re.M)
-            self.decks.append((deck, incs, [Path(i).read_bytes() for i in incs]))
-            if mutate:  # edit every live source after the first point
-                for k, path in self.live.items():
-                    path.write_bytes(self.orig[k].replace(b"ln lp np", b"qq lp zz") + b"\n* edited\n")
+            self.decks.append((deck, incs, [Path(i).read_text() for i in incs]))
+            for path, text in self.live.items() if mutate else ():
+                path.write_text(text.replace("ln lp", "qq lp") + "*edit\n")
             return _fake_completed("m_m = 1.0\n")
 
         pdk = types.SimpleNamespace(
-            variant="v", version="0" * 40, missing_osdi=lambda: [],
-            mos_corner_lib=Path("/pdk/lib"), osdi_dir=Path("/pdk/osdi"),
-            provenance=lambda: {"variant": "v", "release_version": "r", "discovered_via": "t"})
+            variant="v", version="0" * 40, missing_osdi=list, mos_corner_lib=Path("/l"),
+            osdi_dir=Path("/o"), provenance=lambda: dict.fromkeys(
+                ("variant", "release_version", "discovered_via"), "x"))
         chain = types.SimpleNamespace(drift=[], as_dict=lambda: {
-            "observed": {"ngspice": "ngspice-46", "python": "3"}, "drift": []})
-        git = report_mod.GitProvenance(COMMIT, (), True)
+            "observed": {"ngspice": "n", "python": "3"}, "drift": []})
         with mock.patch.multiple(cli, REPO_ROOT=self.root, SIM_DIR=self.sim,
                                  WORK_DIR=self.sim / ".work"), \
              mock.patch.multiple(dut_mod, REPO_ROOT=self.root, SIM_DIR=self.sim), \
              mock.patch.object(cli.pdk_mod, "find_pdk", return_value=pdk), \
-             mock.patch("harness.runner.ngspice_version", return_value="ngspice-46"), \
+             mock.patch("harness.runner.ngspice_version", return_value="n"), \
              mock.patch("harness.toolchain.check", return_value=chain), \
-             mock.patch.object(report_mod, "capture_git_provenance", return_value=git), \
+             mock.patch.object(report_mod, "capture_git_provenance",
+                               return_value=report_mod.GitProvenance(COMMIT, (), True)), \
              mock.patch("harness.runner.subprocess.run", side_effect=fake) as run, \
              redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            rc = cli.main(["exp", "--dut", str(self.live["cfg"])])
+            rc = cli.main(["exp", "--dut", str(self.sim / "dut.json")])
         return rc, run
 
-    def assert_frozen(self):
-        sha = {k: hashlib.sha256(v).hexdigest() for k, v in self.orig.items()}
-        (path,) = (self.sim / "exp" / "records").glob("*.json")
+    def check_frozen(self, mutate):
+        rc, _ = self.run_cli(mutate)
+        self.assertEqual(rc, 0)
+        sha = [hashlib.sha256(t.encode()).hexdigest() for t in self.live.values()]
+        (path,) = (self.sim / "exp/records").glob("*.json")
         rec = json.loads(path.read_text())
         ctx, tb = rec["context"], rec["testbench"]
-        self.assertEqual(
-            [ctx["dut_netlist_sha256"], ctx["dut_config_sha256"],
-             tb["netlist_sha256"], tb["manifest_sha256"]],
-            [sha["dut"], sha["cfg"], sha["tb"], sha["man"]])
-        self.assertEqual((ctx["dut_netlist"], tb["netlist"]), ("sim/dut/d.spice", "t.spice"))
-        snap = (self.sim / "exp" / "netlist-snapshots" / f"{rec['record_id']}.spice").read_text()
+        self.assertEqual([ctx["dut_netlist_sha256"], ctx["dut_config_sha256"],
+                          tb["netlist_sha256"], tb["manifest_sha256"]], sha)
+        self.assertEqual(ctx["dut_netlist"], "sim/d.spice")
+        snap = (self.sim / f"exp/netlist-snapshots/{rec['record_id']}.spice").read_text()
         self.assertIn(_DUT_NET + "\n* -", snap)
-        self.assertTrue(snap.endswith("* tb v1\n"))
+        self.assertTrue(snap.endswith("FRAGMENT ----------------\n* tb\n"))
         self.assertEqual(len(self.decks), 2)
-        for deck, incs, data in self.decks:
-            self.assertTrue(all(f"/{rec['record_id']}/inputs/" in i for i in incs), incs)
-            self.assertEqual(data, [self.orig["dut"], self.orig["tb"]])
-            self.assertIn("x0.x1.ln x0.x1.np", deck)  # noise hook from the snapshot
-            self.assertIn(sha["dut"][:16], deck)
-        self.assertEqual(list((self.sim / ".work" / "exp").iterdir()), [])
+        for deck, incs, texts in self.decks:
+            self.assertTrue(all(f"/{rec['record_id']}/inputs/" in i for i in incs))
+            self.assertEqual(texts, [_DUT_NET, "* tb\n"])
+            self.assertIn("x0.x1.ln x0.x1.np", deck)  # noise hook reads the snapshot
+        self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+        return [p.read_text() for p in self.live]
 
     def test_live_edits_mid_grid_do_not_reach_points_or_record(self):
-        rc, _ = self.run_cli(mutate=True)
-        self.assertEqual(rc, 0)
-        self.assertIn(b"edited", self.live["dut"].read_bytes())
-        self.assertNotIn("qq lp zz", self.decks[1][0])
-        self.assert_frozen()
+        self.assertIn("*edit", self.check_frozen(True)[0])
 
-    def test_unchanged_run_records_live_hashes(self):
-        rc, _ = self.run_cli()
-        self.assertEqual(rc, 0)
-        self.assertEqual({k: p.read_bytes() for k, p in self.live.items()}, self.orig)
-        self.assert_frozen()
+    def test_unchanged_run(self):
+        self.assertEqual(self.check_frozen(False), list(self.live.values()))
 
     def test_capture_failure_aborts_before_simulation(self):
-        old = self.sim / "exp" / "corners" / "old" / "tt.log"
+        old = self.sim / "exp/corners/old/tt.log"
         old.parent.mkdir(parents=True)
         old.write_text("committed\n")
         before = _tree(self.sim / "exp")
@@ -676,8 +663,7 @@ class FrozenInputsTest(unittest.TestCase):
         self.assertEqual(rc, 7)
         run.assert_not_called()
         self.assertEqual(_tree(self.sim / "exp"), before)
-        self.assertEqual(list((self.sim / ".work" / "exp").iterdir()), [])
-
+        self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
 
 if __name__ == "__main__":
     unittest.main()

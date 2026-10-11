@@ -111,9 +111,7 @@ def _check_env(allow_drift: bool) -> int:
 
 
 def _freeze_inputs(tb, dut, workdir: Path) -> list:
-    """Issue #179: write the bytes load() captured into this run's private
-    dir and return tb/dut bound to those copies, so every point includes
-    (and internal-noise reads) one frozen input set, never the live files."""
+    """Issue #179: bind tb/dut to private copies of the bytes load() read."""
     frozen = []
     for obj, sub in ((tb, "tb"), (dut, "dut")):
         path = workdir / "inputs" / sub / obj.netlist.name

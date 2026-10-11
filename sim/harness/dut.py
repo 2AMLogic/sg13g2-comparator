@@ -87,8 +87,7 @@ class Dut:
     description: str
     params: dict[str, float] = field(default_factory=dict)
     notes: tuple[str, ...] = ()
-    # Issue #179: the netlist/config bytes read ONCE by load(); hashes, the
-    # private run copy and validation all derive from them, never a re-read.
+    # Issue #179: captured once by load(); never re-read from the live file.
     netlist_bytes: bytes = field(default=b"", repr=False)
     netlist_sha256: str = ""
     config_sha256: str = ""
