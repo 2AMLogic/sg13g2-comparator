@@ -278,9 +278,12 @@ untouched (`--check` and `--no-controls` included):
   violations keep the existing exit semantics (`--strict` exits 1).
 
 `test_pdk_drc.py` exercises these refusals against a fake `run_drc.py` (no
-PDK or KLayout needed) and, when a local checkout matching the pinned tree is
-present, re-derives `REQUIRED_CATEGORIES` from its source (a static check; it
-does not run the deck, and it is skipped in CI). The checks have not yet been
+PDK or KLayout needed). `layout/tests/pinned_deck_contract.py` re-derives
+`REQUIRED_CATEGORIES` from the source of a local checkout matching the pinned
+tree (a static check; it does not run the deck). CI has no PDK, so it is kept
+out of the CI discovery pattern (`test_*.py`) and runs by hand:
+`python3 -I layout/tests/pinned_deck_contract.py`. A missing or non-pinned
+deck fails that run (exit 1) rather than skipping. The checks have not yet been
 exercised by a real deck run: the host that added them has only KLayout
 0.28.16 (`klayout_too_old`). The committed `pdk_drc_report.json` predates them
 and is not rewritten; its 862 executed categories and all-executed `targeted`
