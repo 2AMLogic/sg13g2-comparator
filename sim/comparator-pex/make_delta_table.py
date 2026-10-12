@@ -22,6 +22,18 @@ the row and corner. Zero is a finite measurement (target coincident with the
 trigger at the sampling resolution): it is accepted and graded against the
 upper bound only; no lower spec bound exists in DR-0002 and none is invented.
 Out-of-grid measurements stay ungraded. Raw fields and statuses are preserved.
+
+Decision validity (issue #240). A decision time is only meaningful if the node
+it times actually made the expected decision. TIMING_STATES maps each graded
+delay to the first/end state measurements of the same bench and channel (from
+the staged regeneration request cards: td_a times v(dan) so needs da_first low
+and da_end high; td_c likewise with dc_*). Rows are joined through the canonical
+physical point, so row order and voltage spelling do not matter; kickback.*
+states are a different bench and never satisfy the join. A wrong, indeterminate
+or missing (absent row or null value) required state leaves that point's delay
+"decision state not valid": the numeric verdict (within/EXCEEDS) and raw values
+stay visible, but the point does not count toward "met at every PVT grid point".
+EXCEEDS still reports NOT MET whatever the validity. No bound is invented.
 """
 import itertools
 import json
@@ -39,6 +51,9 @@ LOGIC = {**{("regeneration", m): "low" for m in ("da_first", "db_first", "dc_fir
 # DR-0002 Row 3 absolute bounds (seconds); apply at every point of the PVT grid.
 DELAY = {("regeneration", "td_a"): (1.5e-9, "DR-0002 Row 3 Target: <= 1.5 ns at 50 mV overdrive"),
          ("regeneration", "td_c"): (2.0e-9, "DR-0002 Row 3 sub-row: <= 2.0 ns at 0.1 mV overdrive")}
+# Required decision states per graded delay: same bench, same channel (issue #240).
+TIMING_STATES = {("regeneration", "td_a"): (("regeneration", "da_first"), ("regeneration", "da_end")),
+                 ("regeneration", "td_c"): (("regeneration", "dc_first"), ("regeneration", "dc_end"))}
 GRID = ({"tt", "ff", "ss", "fs", "sf"}, {Decimal("1.08"), Decimal("1.2"), Decimal("1.32")}, {-40, 27, 125})
 GRID_POINTS = frozenset(itertools.product(*GRID))
 CORNER = re.compile(r"(\w+)/([0-9.]+)V/(-?\d+)C")
@@ -84,6 +99,44 @@ def load(path):
     return json.loads(Path(path).read_text(), parse_constant=bad)
 
 
+def decision_validity(rows, phys, got):
+    """Per graded delay: which in-grid points have every required state correct (issue #240).
+
+    Annotates each graded delay row's interpretation with `decision_validity` and returns
+    a per-key summary. Does not change the numeric verdict.
+    """
+    out = {}
+    for k, g in got.items():
+        checked = set().union(*g.values())
+        valid, invalid, counts = set(), [], {"wrong": 0, "indeterminate": 0, "missing": 0}
+        for cid in sorted(checked, key=str):
+            reasons = []
+            for sk in TIMING_STATES[k]:
+                j = phys.get((sk, cid))
+                want = LOGIC[sk]
+                have = None if j is None else rows[j]["interpretation"]["extracted_state"]
+                if have == want:
+                    continue
+                cat = "missing" if have in (None, "missing") else "indeterminate" if have == "indeterminate" else "wrong"
+                counts[cat] += 1
+                reasons.append(f"{'.'.join(sk)} {cat}" + (" (no row)" if j is None else f" (expected {want})"))
+            label = "/".join(str(x) for x in cid)
+            if reasons:
+                invalid.append({"corner": label, "reasons": reasons})
+            else:
+                valid.add(cid)
+            for i in phys_rows(phys, k, cid):
+                rows[i]["interpretation"]["decision_validity"] = (
+                    "valid: " + ", ".join(".".join(x) for x in TIMING_STATES[k]) + " correct" if not reasons
+                    else "decision state not valid: " + "; ".join(reasons))
+        out[".".join(k)] = {"checked_points": checked, "valid_points": valid, "invalid": invalid, "counts": counts}
+    return out
+
+
+def phys_rows(phys, k, cid):
+    return [phys[k, cid]] if (k, cid) in phys else []
+
+
 def render(env, source):
     if not isinstance(env, dict) or not isinstance(env.get("delta"), list) or not env["delta"]:
         raise ValueError("envelope has no delta[] rows")
@@ -121,13 +174,20 @@ def render(env, source):
         if "limit_s" in rows[-1]["interpretation"]:
             got.setdefault(k, {}).setdefault(rows[-1]["interpretation"]["verdict"], set()).add(canonical(r["corner_id"]))
     corners = sorted({r["corner_id"] for r in rows})
+    validity = decision_validity(rows, phys, got)
     for k, g in got.items():  # the bound applies at every one of the 45 grid points
         ex, ok = g.get("EXCEEDS", ()), g.get("within", ())
+        vd = validity[".".join(k)]
+        nvalid = len(vd["valid_points"])
+        bad = vd["counts"]
+        vtxt = (f"decision states valid at {nvalid}/{len(vd['checked_points'])} graded point(s); "
+                f"wrong {bad['wrong']}, indeterminate {bad['indeterminate']}, missing {bad['missing']}")
         summary[".".join(k)] = (
-            f"NOT MET: extracted exceeds at {len(ex)} corner(s)" if ex else
-            "met at every PVT grid point" if set(ok) == GRID_POINTS and len(g) == 1 else
+            f"NOT MET: extracted exceeds at {len(ex)} corner(s); {vtxt}" if ex else
+            f"met at every PVT grid point (all 45 within, all required decision states correct)"
+            if set(ok) == GRID_POINTS and len(g) == 1 and nvalid == len(GRID_POINTS) else
             f"not established: {len(ok)}/45 grid points within, "
-            f"{len(g.get('missing: no verdict', ()))} missing") + f" ({DELAY[k][1]})"
+            f"{len(g.get('missing: no verdict', ()))} missing; {vtxt}") + f" ({DELAY[k][1]})"
     out = {
         "source_envelope": str(source),
         "klt_version": (env.get("provenance") or {}).get("klt_version"),
@@ -140,6 +200,9 @@ def render(env, source):
         "statistical_basis": f"none: deterministic transient measurements at {len({canonical(c) for c in corners})} corner(s)"
                              "; no Monte Carlo, no seeds; no sigma or offset/noise compliance is implied",
         "delay_compliance_extracted": summary,
+        "delay_decision_validity": {k: {"required_states": [".".join(x) for x in TIMING_STATES[tuple(k.split(".", 1))]],
+                                        "counts": v["counts"], "invalid": v["invalid"]}
+                                    for k, v in validity.items()},
         "rows": rows,
     }
     return out, markdown(out)
@@ -159,6 +222,8 @@ def markdown(out):
             d, v = "n/a: logic state", f"{i['schematic_state']} -> {i['extracted_state']}: {i['verdict']}"
         else:
             v = i["verdict"] + (f" vs {i['limit_s'] * 1e9:g} ns" if "limit_s" in i else "")
+            if "decision_validity" in i:
+                v += f" [{i['decision_validity']}]"
         lines.append(f"| {r['spec_row']} | {r['corner_id']} | {fmt(r['schematic_value'])} | "
                      f"{fmt(r['extracted_value'])} | {d} | {r['status']} | {v} |")
     return "\n".join(lines) + "\n"
