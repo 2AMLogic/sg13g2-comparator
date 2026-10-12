@@ -4,6 +4,18 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-12
 
+- **PR #259**: yield: re-derive the index in the engine-free consistency check
+- **PR #258**: ci: run KLayout implant geometry regression in layout-reproducibility (#257)
+- **PR #256**: cmband: empty reproduction is INCOMPLETE; count rejected draws per record
+- **PR #254**: PDK DRC: reject incomplete deck runs before reporting clean (#253)
+- **PR #251**: Validate CM-offset draw identities, probes, pairing and reproduction completeness (#250)
+- **PR #246**: README claims guard: verify noise compliance verdicts (#242)
+- **Issue #257** (closed): Run implant geometry regression tests in the KLayout-equipped CI job
+- **Issue #255** (closed): Recompute yield index statistics during engine-free consistency checks
+- **Issue #253** (closed): PDK DRC: reject incomplete deck runs before reporting clean
+- **Issue #252** (closed): cmband.reproduction(): empty comparison yields vacuous REPRODUCED verdict
+- **Issue #250** (closed): Validate common-mode offset draw identities, probes and reproduction completeness
+- **Issue #242** (closed): Verify public noise compliance verdict statements
 - **PR #241**: PEX timing compliance: require matching valid decision states
 - **Issue #240** (closed): PEX timing compliance: require matching valid decision states
 
