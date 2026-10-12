@@ -571,6 +571,87 @@ class Reproduction(unittest.TestCase):
         self.assertIn("not recorded", cmband._repro_verdict({}))
 
 
+class ReproductionEmptyAndCounts(unittest.TestCase):
+    """Issue #252: zero-draw comparisons are INCOMPLETE; rejected draws are
+    counted per sample record."""
+
+    PT = ("tt", 1.2, 27.0)
+
+    @staticmethod
+    def _s(index, seed=1, vos=1.0):
+        return {"sample_index": index, "seed": seed, "vos_mv": vos, "problem": None}
+
+    def _assert_empty(self, rep):
+        self.assertEqual(rep["verdict"], cmband.REPRO_INCOMPLETE)
+        self.assertFalse(rep["complete"])
+        self.assertEqual(rep["expected_draws"], 0)
+        self.assertTrue(rep["empty_comparison"])
+        self.assertIn("no draws to compare", rep["empty_reason"])
+
+    def test_empty_mappings_incomplete(self):
+        self._assert_empty(cmband.reproduction({}, {}))
+
+    def test_shared_empty_point_incomplete(self):
+        for n in (None, 0):
+            rep = cmband.reproduction({self.PT: []}, {self.PT: []}, expected_n=n)
+            self._assert_empty(rep)
+            self.assertEqual(rep["points_compared"], 1)
+
+    def test_nonempty_still_reproduced(self):
+        pts = {self.PT: [self._s(i) for i in range(3)]}
+        rep = cmband.reproduction(pts, pts, expected_n=3)
+        self.assertEqual(rep["verdict"], cmband.REPRODUCED)
+        self.assertFalse(rep["empty_comparison"])
+
+    def test_repeated_invalid_indices_counted_per_record(self):
+        a = {self.PT: [self._s(None), self._s(None), self._s(None)]}
+        b = {self.PT: [self._s(None)]}
+        rep = cmband.reproduction(a, b, expected_n=0)
+        self.assertEqual(rep["rejected_draws"], 4)
+        self.assertEqual(rep["missing_draws"], 0)
+        self.assertEqual(rep["verdict"], cmband.REPRO_INCOMPLETE)
+
+    def test_duplicate_valid_indices_all_copies_counted(self):
+        for copies in (2, 3):
+            base = [self._s(0)] * copies + [self._s(1)]
+            for order in (base, base[::-1]):
+                rep = cmband.reproduction({self.PT: order}, {self.PT: [self._s(0), self._s(1)]},
+                                          expected_n=2)
+                self.assertEqual(rep["rejected_draws"], copies)
+                self.assertEqual(rep["missing_draws"], 0)  # not double-counted
+                self.assertEqual(rep["verdict"], cmband.REPRO_INCOMPLETE)
+
+    def test_both_sides_counted_and_list_bounded(self):
+        n = cmband.REPRO_LIST_MAX + 7
+        a = {self.PT: [self._s(None) for _ in range(n)]}
+        b = {self.PT: [self._s(None) for _ in range(n)]}
+        rep = cmband.reproduction(a, b, expected_n=0)
+        self.assertEqual(rep["rejected_draws"], 2 * n)
+        self.assertEqual(len(rep["unaccounted"]), cmband.REPRO_LIST_MAX)
+        self.assertTrue(rep["unaccounted_truncated"])
+
+    def test_identity_map_compat(self):
+        out, bad = cmband._identity_map([self._s(None), self._s(None), self._s(0)])
+        self.assertEqual(sorted(out), [0])
+        self.assertEqual(list(bad), ["None"])
+
+    def test_empty_repeat_control_renders_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            env = _env("mos_tt_mismatch", {(1.2, 27): _population(n=2)})
+            env["corners"] = [c for c in env["corners"]]
+            for c in env["corners"]:
+                c.pop("monte_carlo", None)
+            (d / "repeat.vcm-nom.a.envelope.json").write_text(json.dumps(env))
+            ctl = cmband._controls(d, {"vcm-nom": {}})
+            self.assertEqual(len(ctl["repeat"]), 1)
+            rep = ctl["repeat"][0]
+            self._assert_empty(rep)
+            line = cmband._repro_verdict(rep)
+            self.assertTrue(line.startswith("INCOMPLETE"))
+            self.assertIn("no draws to compare", line)
+
+
 class Report(unittest.TestCase):
     def test_compare_series_end_to_end(self):
         """Three synthetic conditions, one grid point each, through the full
