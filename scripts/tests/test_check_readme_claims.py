@@ -678,5 +678,203 @@ class KickbackResidue(unittest.TestCase):
         self.assertIn("cannot read", str(sources[KB_ID]))
 
 
+# ---------------------------------------------------------------------------
+# Issue #242: compliance verdict statements (noise row).
+# ---------------------------------------------------------------------------
+HEAD_NOT = "**NOT MET on the compliance path (Target and Stretch).**"
+HEAD_MET = "**MET on the compliance path (Target and Stretch).**"
+TGT_NOT = "Target (≤ 1.0 mV) **NOT MET**"
+STR_NOT = "Stretch (≤ 0.6 mV) **NOT MET**"
+STR_MET = "Stretch (≤ 0.6 mV) **MET**"
+TGT_MET = "Target (≤ 1.0 mV) **MET**"
+
+
+def _noise_at(mean):
+    """Internally consistent temporary noise source: every point at `mean`."""
+    noise = _clone(NOISE)
+    for p in noise["points"]:
+        p["both"]["sigma"] = mean
+    b = noise["configs"]["both"]
+    b["grid_mean"] = b["min"] = b["max"] = mean
+    return noise
+
+
+def _readme_at(mean, *swaps):
+    """README with only the mapped numeric figures for `mean` updated (plus
+    any explicit verdict swaps)."""
+    t = _mutate_readme("grid-wide mean 1.305 mV rms** (min 0.910 … max 1.773 mV)",
+                       f"grid-wide mean {mean:.3f} mV rms** (min {mean:.3f} … max {mean:.3f} mV)")
+    for old, new in swaps:
+        assert old in t, old
+        t = t.replace(old, new)
+    return t
+
+
+class ComplianceVerdicts(unittest.TestCase):
+    def test_committed_readme_passes_and_reports_verdict_claims(self):
+        code, out, err = _run(README, REPORT)
+        self.assertEqual(code, 0, err)
+        n = len(chk.VERDICT_CLAIMS)
+        self.assertEqual(n, 3)
+        self.assertIn(f"checked {n}/{n} compliance-verdict README claims", out)
+
+    def test_verdict_only_mutations_fail_naming_claim_and_source(self):
+        for label, old, new in (
+                ("headline", HEAD_NOT, HEAD_MET),
+                ("target", TGT_NOT, TGT_MET),
+                ("stretch", STR_NOT, STR_MET)):
+            with self.subTest(label):
+                mutated = _mutate_readme(old, new)
+                # numeric text is identical: only the verdict word changed
+                self.assertEqual(mutated.replace(new, old), README)
+                code, _, err = _run(mutated, REPORT)
+                self.assertEqual(code, 1)
+                self.assertIn("noise verdict", err)
+                self.assertIn("numerical violation: README says MET", err)
+                self.assertIn(f"source {NOISE_ID}", err)
+                self.assertEqual(err.count("noise verdict"), 1)  # only the mutated claim
+
+    def test_deleted_and_duplicated_verdict_text_fails(self):
+        cases = {
+            "deleted headline": _mutate_readme(HEAD_NOT, ""),
+            "reworded headline": _mutate_readme("on the compliance path (Target and Stretch)",
+                                                "on the compliance path"),
+            "deleted target": _mutate_readme(TGT_NOT, "Target (≤ 1.0 mV)"),
+            "deleted stretch": _mutate_readme(STR_NOT, "Stretch (≤ 0.6 mV)"),
+            "duplicate conflicting headline": _mutate_readme(
+                HEAD_NOT, HEAD_NOT + " " + HEAD_MET),
+            "duplicate conflicting target": _mutate_readme(
+                TGT_NOT, TGT_NOT + ", " + TGT_MET),
+            "ambiguous verdict word": _mutate_readme(STR_NOT, "Stretch (≤ 0.6 mV) **MAYBE**"),
+        }
+        for label, text in cases.items():
+            with self.subTest(label):
+                code, _, err = _run(text, REPORT)
+                self.assertEqual(code, 1)
+                self.assertIn("absent mapping", err)
+                self.assertIn(f"source {NOISE_ID}", err)
+
+    def test_historical_pass_and_lower_bound_prose_do_not_satisfy_current_claims(self):
+        # Remove the current-evidence verdict clause; the historical `Verdict: PASS`
+        # record and the CM characterization wording remain but cannot stand in.
+        text = _mutate_readme(TGT_NOT + ", " + STR_NOT, "")
+        self.assertIn("`Verdict: PASS`", text)
+        code, _, err = _run(text, REPORT)
+        self.assertEqual(code, 1)
+        self.assertIn("absent mapping", err)
+
+    def test_invalid_or_incomplete_evidence_never_yields_a_verdict(self):
+        def lacking_sigma():
+            n = _clone(NOISE)
+            n["points"][0]["both"]["sigma"] = None
+            n["configs"]["both"]["points_valid"] = 44
+            return n
+
+        def nonfinite():
+            n = _clone(NOISE)
+            n["points"][0]["both"]["sigma"] = float("nan")
+            return n
+
+        def rejected():
+            n = _clone(NOISE)
+            n["configs"]["both"]["complete"] = False
+            return n
+
+        def short_grid():
+            n = _clone(NOISE)
+            del n["points"][-1]
+            return n
+
+        def inconsistent():
+            n = _clone(NOISE)
+            n["configs"]["both"]["grid_mean"] = 0.5
+            return n
+
+        def missing_sigma_key():
+            n = _clone(NOISE)
+            del n["points"][3]["both"]["sigma"]
+            return n
+
+        for label, make in (("missing sigma", lacking_sigma), ("nonfinite", nonfinite),
+                            ("rejected/incomplete", rejected), ("short grid", short_grid),
+                            ("inconsistent summary", inconsistent),
+                            ("absent sigma field", missing_sigma_key)):
+            with self.subTest(label):
+                # a README claiming MET must not pass, nor must the committed NOT MET
+                for text in (README, _mutate_readme(HEAD_NOT, HEAD_MET)):
+                    code, out, err = _run(text, REPORT, noise=make())
+                    self.assertEqual(code, 1)
+                    self.assertIn("incomplete evidence", err)
+                    self.assertIn(f"source {NOISE_ID}", err)
+                    self.assertNotIn("numerical violation", err)
+                    self.assertIn("checked 0/3 compliance-verdict", out)
+
+    def test_incomplete_but_self_consistent_grid_is_not_a_verdict(self):
+        # 44 valid sigmas, summary consistent with them: numeric loader accepts
+        # it, the verdict derivation must not.
+        n = _clone(NOISE)
+        n["points"][0]["both"]["sigma"] = None
+        sig = [p["both"]["sigma"] for p in n["points"] if p["both"]["sigma"] is not None]
+        b = n["configs"]["both"]
+        b["points_valid"] = len(sig)
+        b["grid_mean"], b["min"], b["max"] = sum(sig) / len(sig), min(sig), max(sig)
+        code, _, err = _run(README, REPORT, noise=n)
+        self.assertEqual(code, 1)
+        self.assertIn("incomplete evidence: ", err)
+
+    def test_tiers_are_evaluated_independently(self):
+        mean = 0.8  # Target MET, Stretch NOT MET
+        noise = _noise_at(mean)
+        good = _readme_at(mean, (HEAD_NOT, "**NOT MET on the compliance path (Target and Stretch).**"),
+                          (TGT_NOT, TGT_MET))
+        # headline claims both tiers fail, but Target is met: the headline is false
+        code, _, err = _run(good, REPORT, noise=noise)
+        self.assertEqual(code, 1)
+        self.assertIn("headline", err)
+        self.assertNotIn("current-evidence Target", err)
+        self.assertNotIn("current-evidence Stretch", err)
+        # Stretch wrongly MET with Target right: only Stretch flagged
+        bad = _readme_at(mean, (TGT_NOT, TGT_MET), (STR_NOT, STR_MET))
+        code, _, err = _run(bad, REPORT, noise=noise)
+        self.assertEqual(code, 1)
+        self.assertIn("current-evidence Stretch", err)
+        self.assertNotIn("current-evidence Target", err)
+        # Target wrongly NOT MET with Stretch right: only Target flagged
+        bad = _readme_at(mean)
+        code, _, err = _run(bad, REPORT, noise=noise)
+        self.assertIn("current-evidence Target", err)
+        self.assertNotIn("current-evidence Stretch", err)
+
+    def test_boundaries_are_inclusive_and_just_above_fails(self):
+        # mean, Target text, Stretch text. When the tiers differ the joint
+        # headline "(Target and Stretch)" is true of neither wording, so it
+        # alone must be flagged while the per-tier clauses pass.
+        cases = (
+            (0.6, TGT_MET, STR_MET, True),             # exact Stretch limit: both met
+            (1.0, TGT_MET, STR_NOT, False),            # exact Target limit: Target only
+            (0.6 + 1e-6, TGT_MET, STR_NOT, False),     # just above Stretch
+            (1.0 + 1e-6, TGT_NOT, STR_NOT, True),      # just above Target: neither
+        )
+        for mean, tgt, stretch, consistent in cases:
+            with self.subTest(mean=mean):
+                noise = _noise_at(mean)
+                head = HEAD_MET if tgt == TGT_MET and stretch == STR_MET else HEAD_NOT
+                swaps = [(HEAD_NOT, head), (TGT_NOT, tgt), (STR_NOT, stretch)]
+                code, _, err = _run(_readme_at(mean, *swaps), REPORT, noise=noise)
+                if consistent:
+                    self.assertEqual(code, 0, err)
+                else:
+                    self.assertEqual(code, 1)
+                    self.assertIn("headline", err)
+                    self.assertIn("mixed", err)
+                    self.assertNotIn("current-evidence", err)
+                # the opposite Target verdict for the same evidence is rejected
+                other = TGT_NOT if tgt == TGT_MET else TGT_MET
+                code, _, err = _run(_readme_at(mean, (TGT_NOT, other)), REPORT, noise=noise)
+                self.assertEqual(code, 1)
+                if other == TGT_MET:
+                    self.assertIn("current-evidence Target", err)
+
+
 if __name__ == "__main__":
     unittest.main()
