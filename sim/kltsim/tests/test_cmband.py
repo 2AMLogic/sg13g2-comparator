@@ -246,6 +246,331 @@ class MeasurementUniqueness(unittest.TestCase):
                       cmband.point_stats(pts[("tt", 1.2, 27.0)])["rejected"])
 
 
+KEY = ("tt", 1.2, 27.0)
+
+
+def _measurement(env, corner, name):
+    return next(m for m in env["corners"][corner]["measurements"] if m["name"] == name)
+
+
+def _pts(env, vcm_v=0.6):
+    return cmband.load_points([env], vcm_v=vcm_v)[KEY]
+
+
+class NumericEvidence(unittest.TestCase):
+    """Issue #250: malformed vos_mv / vcm_meas values are named untrusted
+    draws -- never a crash, a NaN statistic or a trusted sigma."""
+
+    BAD_VALUES = (float("nan"), float("inf"), float("-inf"), True, False, "abc", "", [1.0], {})
+
+    def _assert_untrusted(self, env, needle=None):
+        pts = _pts(env)
+        stats = cmband.point_stats(pts)
+        self.assertIsNone(stats["three_sigma_mv"])
+        self.assertIsNone(stats["sigma_corr_mv"])
+        self.assertIn("untrusted", stats["rejected"])
+        if needle:
+            self.assertIn(needle, stats["rejected"])
+        # strict JSON never fails on the per-point statistics
+        grade.dumps_strict(stats)
+        for s in pts:
+            self.assertTrue(s["vos_mv"] is None or math.isfinite(s["vos_mv"]))
+        return pts, stats
+
+    def test_bad_offset_values_untrusted(self):
+        for bad in self.BAD_VALUES:
+            with self.subTest(bad=bad):
+                env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+                _measurement(env, 7, "vos_mv")["value"] = bad
+                pts, _ = self._assert_untrusted(env, "mc7")
+                self.assertIsNone(pts[7]["vos_mv"])
+
+    def test_bad_probe_values_untrusted(self):
+        for bad in self.BAD_VALUES:
+            with self.subTest(bad=bad):
+                env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+                _measurement(env, 7, "vcm_meas")["value"] = bad
+                self._assert_untrusted(env, "vcm_meas")
+
+    def test_nan_probe_does_not_bypass_tolerance(self):
+        env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+        _measurement(env, 3, "vcm_meas")["value"] = float("nan")
+        self._assert_untrusted(env, "not finite")
+
+    def test_bad_lowcount_untrusted(self):
+        env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+        _measurement(env, 2, "lowcount")["value"] = float("nan")
+        self._assert_untrusted(env, "lowcount")
+
+    def test_wrong_dimension_or_missing_unit_untrusted(self):
+        for name, unit in (("vos_mv", "s"), ("vos_mv", None), ("vos_mv", "furlongs"),
+                           ("vcm_meas", "A"), ("vcm_meas", None), ("vcm_meas", 1)):
+            with self.subTest(name=name, unit=unit):
+                env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+                _measurement(env, 9, name)["unit"] = unit
+                self._assert_untrusted(env, name)
+
+    def test_compatible_units_normalize(self):
+        base = cmband.point_stats(_pts(_env("mos_tt_mismatch", {(1.2, 27): _population()})))
+        env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+        for i, corner in enumerate(env["corners"]):
+            vos = _measurement(env, i, "vos_mv")
+            if i % 2:
+                vos["value"], vos["unit"] = vos["value"] / 1e3, "V"
+            else:
+                vos["value"], vos["unit"] = vos["value"] * 1e3, "uV"
+            vcm = _measurement(env, i, "vcm_meas")
+            vcm["value"], vcm["unit"] = 600.0, "mV"
+        pts = _pts(env)
+        self.assertTrue(all(s["problem"] is None for s in pts))
+        for s, v in zip(pts, _population()):
+            self.assertAlmostEqual(s["vos_mv"], v, places=9)
+        stats = cmband.point_stats(pts)
+        self.assertIsNone(stats["rejected"])
+        self.assertAlmostEqual(stats["three_sigma_mv"], base["three_sigma_mv"], places=9)
+
+    def test_controls_negative_ignores_nonfinite(self):
+        env = _env("mos_tt", {(1.2, 27): [1.5] * 4})
+        _measurement(env, 0, "vos_mv")["value"] = float("nan")
+        vals = [s["vos_mv"] for s in cmband.load_points([env])[KEY] if s["vos_mv"] is not None]
+        self.assertEqual(vals, [1.5] * 3)
+
+
+class DrawIdentity(unittest.TestCase):
+    """Issue #250: a population is one set of unique, valid draw identities."""
+
+    def _dup_env(self):
+        # sample 41 replaced by a second copy of sample 17: still 60 records
+        env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+        env["corners"][41] = json.loads(json.dumps(env["corners"][17]))
+        return env
+
+    def test_duplicate_index_rejects_sixty_record_population(self):
+        env = self._dup_env()
+        pts = _pts(env)
+        self.assertEqual(len(pts), 60)
+        stats = cmband.point_stats(pts)
+        self.assertIn("duplicate sample index(es) 17 (x2)", stats["rejected"])
+        self.assertIsNone(stats["three_sigma_mv"])
+        self.assertIsNone(stats["three_sigma_partial_mv"])
+
+    def test_duplicate_index_rejection_invariant_under_order(self):
+        reference = None
+        for order in range(4):
+            env = self._dup_env()
+            corners = env["corners"]
+            if order == 1:
+                corners.reverse()
+            elif order == 2:
+                corners[:] = corners[30:] + corners[:30]
+            # order 3: split across two envelopes, second one first
+            envs = [env] if order < 3 else [
+                dict(env, corners=corners[30:]), dict(env, corners=corners[:30])]
+            with self.subTest(order=order):
+                stats = cmband.point_stats(cmband.load_points(envs, vcm_v=0.6)[KEY])
+                if reference is None:
+                    reference = stats
+                self.assertEqual(stats, reference)
+
+    def test_duplicate_index_with_distinct_seed_still_rejected(self):
+        env = self._dup_env()
+        env["corners"][41]["monte_carlo"]["seed"] = 999999
+        stats = cmband.point_stats(_pts(env))
+        self.assertIn("duplicate sample index", stats["rejected"])
+
+    def test_repeated_seed_rejected(self):
+        env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+        env["corners"][5]["monte_carlo"]["seed"] = env["corners"][6]["monte_carlo"]["seed"]
+        stats = cmband.point_stats(_pts(env))
+        self.assertIn("seed(s) reported by more than one draw", stats["rejected"])
+
+    def test_invalid_index_untrusted(self):
+        for bad in (None, -1, True, 3.0, "3"):
+            with self.subTest(bad=bad):
+                env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+                env["corners"][3]["monte_carlo"]["sample_index"] = bad
+                stats = cmband.point_stats(_pts(env))  # sorting never raises
+                self.assertIn("sample_index", stats["rejected"])
+                self.assertIsNone(stats["three_sigma_mv"])
+
+    def test_invalid_or_absent_seed_untrusted(self):
+        for bad in (None, True, -5, "7", 1.0):
+            with self.subTest(bad=bad):
+                env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+                if bad is None:
+                    del env["corners"][3]["monte_carlo"]["seed"]
+                else:
+                    env["corners"][3]["monte_carlo"]["seed"] = bad
+                stats = cmband.point_stats(_pts(env))
+                self.assertIn("monte_carlo.seed", stats["rejected"])
+
+    def test_indices_outside_basis_rejected(self):
+        env = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+        env["corners"][59]["monte_carlo"]["sample_index"] = 75
+        stats = cmband.point_stats(_pts(env))
+        self.assertIn("sample indices are not 0..59", stats["rejected"])
+        self.assertIsNone(stats["three_sigma_mv"])
+
+    def test_short_population_message_unchanged(self):
+        stats = cmband.point_stats(_pts(_env("mos_tt_mismatch", {(1.2, 27): _population(n=59)})))
+        self.assertEqual(stats["rejected"], "N = 59, ratified basis is N = 60")
+        self.assertEqual(stats["n_partial"], 59)
+
+
+class Pairing(unittest.TestCase):
+    """Issue #250: only complete trusted populations with matching identities
+    and valid, equal seeds are paired; every refusal says why."""
+
+    def _pair(self, mutate_cm=None, mutate_nom=None):
+        nom = _env("mos_tt_mismatch", {(1.2, 27): _population()})
+        cm = _env("mos_tt_mismatch", {(1.2, 27): [v + 0.5 for v in _population()]})
+        if mutate_cm:
+            mutate_cm(cm)
+        if mutate_nom:
+            mutate_nom(nom)
+        return cmband.paired(_pts(cm), _pts(nom))
+
+    def _assert_unpaired(self, pair, needle):
+        self.assertIsNone(pair["ratio_3sigma"])
+        self.assertIsNone(pair["delta_mean_mv"])
+        self.assertIn(needle, pair["pair_rejected"])
+
+    def test_valid_pair_has_no_rejection(self):
+        pair = self._pair()
+        self.assertTrue(pair["seeds_paired"])
+        self.assertIsNone(pair["pair_rejected"])
+        self.assertEqual(pair["n_pairs"], 60)
+
+    def test_absent_seeds_never_pair(self):
+        def drop(env):
+            for c in env["corners"]:
+                c["monte_carlo"].pop("seed")
+        pair = self._pair(drop, drop)
+        self.assertFalse(pair["seeds_paired"])
+        self._assert_unpaired(pair, "monte_carlo.seed")
+
+    def test_absent_seeds_never_pair_at_identity_level(self):
+        a = [{"sample_index": k, "seed": None, "vos_mv": 1.0 + k, "clipped": False,
+              "problem": None, "corner_id": f"c/mc{k}", "runtime_s": None} for k in range(3)]
+        self.assertFalse(cmband.paired(a, [dict(s) for s in a])["seeds_paired"])
+
+    def test_duplicate_index_never_paired(self):
+        def dup(env):
+            env["corners"][41] = json.loads(json.dumps(env["corners"][17]))
+        for side in ("cm", "nom"):
+            with self.subTest(side=side):
+                pair = self._pair(dup if side == "cm" else None, dup if side == "nom" else None)
+                self.assertFalse(pair["seeds_paired"])
+                self._assert_unpaired(pair, "duplicate sample index")
+
+    def test_seed_mismatch_reason(self):
+        def reseed(env):
+            env["corners"][4]["monte_carlo"]["seed"] = 777777
+        pair = self._pair(reseed)
+        self.assertFalse(pair["seeds_paired"])
+        self._assert_unpaired(pair, "sample 4 is not the same mismatch draw")
+
+    def test_untrusted_draw_blocks_pair(self):
+        def nan(env):
+            _measurement(env, 8, "vos_mv")["value"] = float("nan")
+        self._assert_unpaired(self._pair(None, nan), "nominal population rejected")
+
+
+class Reproduction(unittest.TestCase):
+    """Issue #250: reproduction accounts for every expected draw on both
+    sides; the verdict is separate from the surviving-draw comparison."""
+
+    def _sides(self):
+        a = cmband.load_points([_env("mos_tt_mismatch", {(1.2, 27): _population()})])
+        b = cmband.load_points([_env("mos_tt_mismatch", {(1.2, 27): _population()})])
+        return a, b
+
+    def test_complete_reproduction(self):
+        rep = cmband.reproduction(*self._sides(), labels=("nom", "ref"))
+        self.assertEqual(rep["verdict"], cmband.REPRODUCED)
+        self.assertTrue(rep["complete"])
+        self.assertEqual(rep["expected_draws"], 60)
+        self.assertEqual(rep["unaccounted"], [])
+        json.loads(grade.dumps_strict(rep))
+
+    def _assert_incomplete(self, rep, side, index, kind):
+        self.assertEqual(rep["verdict"], cmband.REPRO_INCOMPLETE)
+        self.assertFalse(rep["complete"])
+        hits = [u for u in rep["unaccounted"]
+                if u["side"] == side and u["sample_index"] == index and u["kind"] == kind]
+        self.assertTrue(hits, rep["unaccounted"])
+        # the surviving draws still compare, informationally
+        self.assertEqual(rep["identical"], rep["samples_compared"])
+        self.assertEqual(rep["samples_compared"], 59)
+
+    def test_dropped_draw_either_side(self):
+        for side in (0, 1):
+            with self.subTest(side=side):
+                sides = list(self._sides())
+                sides[side][KEY] = [s for s in sides[side][KEY] if s["sample_index"] != 13]
+                rep = cmband.reproduction(*sides, labels=("nom", "ref"))
+                self._assert_incomplete(rep, ("nom", "ref")[side], 13, "missing")
+                self.assertEqual(rep["missing_draws"], 1)
+
+    def test_nulled_offset_either_side(self):
+        for side in (0, 1):
+            with self.subTest(side=side):
+                sides = list(self._sides())
+                sides[side][KEY][13]["vos_mv"] = None
+                rep = cmband.reproduction(*sides, labels=("nom", "ref"))
+                self._assert_incomplete(rep, ("nom", "ref")[side], 13, "rejected")
+
+    def test_untrusted_draw_either_side(self):
+        for side in (0, 1):
+            with self.subTest(side=side):
+                envs = [_env("mos_tt_mismatch", {(1.2, 27): _population()}) for _ in range(2)]
+                envs[side]["corners"][13]["status"] = "error"
+                a, b = (cmband.load_points([e]) for e in envs)
+                rep = cmband.reproduction(a, b, labels=("nom", "ref"))
+                self._assert_incomplete(rep, ("nom", "ref")[side], 13, "rejected")
+                self.assertEqual(rep["rejected_draws"], 1)
+
+    def test_both_sides_missing_same_draw(self):
+        a, b = self._sides()
+        for side in (a, b):
+            side[KEY] = [s for s in side[KEY] if s["sample_index"] != 59]
+        rep = cmband.reproduction(a, b)
+        self.assertEqual(rep["verdict"], cmband.REPRO_INCOMPLETE)
+        self.assertEqual(rep["missing_draws"], 2)
+
+    def test_duplicate_index_reported_not_compared(self):
+        a, b = self._sides()
+        a[KEY][41] = dict(a[KEY][17])
+        rep = cmband.reproduction(a, b)
+        self.assertEqual(rep["verdict"], cmband.REPRO_INCOMPLETE)
+        reasons = [u["reason"] for u in rep["unaccounted"]]
+        self.assertTrue(any("reported 2 times" in r for r in reasons), reasons)
+
+    def test_unmatched_point(self):
+        a, b = self._sides()
+        b[("ff", 1.2, 27.0)] = list(b[KEY])
+        rep = cmband.reproduction(a, b, labels=("nom", "ref"))
+        self.assertEqual(rep["verdict"], cmband.REPRO_INCOMPLETE)
+        self.assertEqual(rep["points_unmatched"], 1)
+        self.assertEqual(rep["unaccounted"][0]["side"], "nom")
+
+    def test_value_difference_is_not_reproduced(self):
+        a, b = self._sides()
+        b[KEY][3]["vos_mv"] += 3.0
+        rep = cmband.reproduction(a, b)
+        self.assertTrue(rep["complete"])
+        self.assertEqual(rep["verdict"], cmband.NOT_REPRODUCED)
+        self.assertEqual(rep["identical"], 59)
+
+    def test_markdown_states_verdict(self):
+        a, b = self._sides()
+        a[KEY] = a[KEY][:-1]
+        rep = cmband.reproduction(a, b, labels=("vcm-nom", "reference"))
+        self.assertIn("INCOMPLETE", cmband._repro_verdict(rep))
+        self.assertIn("sample 59", cmband._repro_verdict(rep))
+        self.assertIn("not recorded", cmband._repro_verdict({}))
+
+
 class Report(unittest.TestCase):
     def test_compare_series_end_to_end(self):
         """Three synthetic conditions, one grid point each, through the full
