@@ -8,6 +8,7 @@ Judge-approved PRs stuck under a `loom:operator` merge-risk hold — implementat
 - **#199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
 - **#200**: noise-full: label grid-mean uncertainty, add correlated bound and shared-draw disclosure (#192)
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
+- **#243**: Preserve derived campaign report pairs before regeneration (#237)
 
 ## Operator Priority
 
@@ -21,13 +22,15 @@ Human-approved issues ready for implementation (`loom:issue`).
 
 - **#89**: sim: complete the two vcm-m050 CM-band offset points that abort (timestep too small) with a uniform tighter max step
 - **#159**: Memory / hysteresis characterization bench: does the previous decision bias the next?
+- **#235**: Validate clock-supply probes and reject ambiguous sample identities
+- **#245**: Validate actual Monte Carlo populations before compliance grading
+- **#247**: Derive evidence-size estimate denominators from selected reference campaigns
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-- **#235**: Validate clock-supply probes and reject ambiguous sample identities
-- **#237**: Preserve derived campaign report pairs before regeneration
+_None._
 
 ## PRs Awaiting Review
 
@@ -57,11 +60,13 @@ Issues carrying `loom:curated`.
 - **#191**: PEX diagnostic: separate extracted device geometry from routing RC delay *(curated)*
 - **#235**: Validate clock-supply probes and reject ambiguous sample identities *(curated)*
 - **#237**: Preserve derived campaign report pairs before regeneration *(curated)*
-- **#242**: Verify public noise compliance verdict statements *(curated)*
+- **#245**: Validate actual Monte Carlo populations before compliance grading *(curated)*
+- **#247**: Derive evidence-size estimate denominators from selected reference campaigns *(curated)*
+- **#260**: Auditor process proposal: run final evidence-size preflight before requesting review *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-- **#242**: Verify public noise compliance verdict statements *(architect)*
+_None._
 
 ## Epics
 
@@ -71,13 +76,13 @@ Issues carrying `loom:curated`.
 
 | Tier | Count |
 |------|-------|
-| Operator merge-risk holds | 3 |
+| Operator merge-risk holds | 4 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 2 |
-| In Progress (`loom:building`) | 2 |
+| Ready (`loom:issue`) | 5 |
+| In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 5 |
-| Curated | 9 |
-| Architect / Hermit proposals | 1 |
+| Curated | 11 |
+| Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
