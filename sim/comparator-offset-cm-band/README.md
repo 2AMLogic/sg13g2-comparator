@@ -49,6 +49,20 @@ Details: `sim/kltsim/cmband.py`. Pairing: klt derives each draw's seed from
 point is the same mismatch under all three conditions (verified per point in
 the comparison, not assumed).
 
+Draw evidence is validated before reduction (issue #250). `vos_mv` and the
+`vcm_meas` probe must be finite numbers in a compatible unit (normalized to
+mV / V); otherwise the draw is a named untrusted draw. Each draw's
+`sample_index` and `seed` must be nonnegative integers. A point whose indices
+repeat, or are not 0..59, or whose seeds repeat is rejected, and no copy of a
+repeated draw is selected. Pairing needs two complete trusted populations
+with the same indices and the same valid seeds; otherwise `pair_rejected`
+records why. Reproduction checks report a complete-reproduction `verdict`
+that accounts for every expected draw on both sides. This is separate from
+the informational surviving-draw counts. The committed `comparison.*` predate
+this check and are not rewritten. Regenerating them from the committed
+envelopes leaves every recorded statistic and pairing result unchanged and
+gives `REPRODUCED` for both reproduction checks.
+
 ## Evidence
 
 `campaigns/20261009-5185f52/` (append-only): `vcm-*/` hold body, requests,

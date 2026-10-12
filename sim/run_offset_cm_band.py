@@ -41,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import cmband  # noqa: E402
+from kltsim import grade as grade_mod  # noqa: E402
 from kltsim.benches import OFFSET_MC, SUPPLIES_V, TEMPERATURES_C  # noqa: E402
 
 
@@ -199,7 +200,9 @@ def cmd_compare(args) -> int:
     series = _series(args)
     result = cmband.compare_series(series, reference_campaign=args.reference_campaign,
                                    harness_record=cmband.HARNESS_RECORD)
-    (series / "comparison.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    # Strict JSON (issue #250): a non-finite float is null, never a NaN token.
+    (series / "comparison.json").write_text(
+        grade_mod.dumps_strict(result, indent=2) + "\n", encoding="utf-8")
     (series / "comparison.md").write_text(cmband.render_markdown(result), encoding="utf-8")
     for name, c in result["conditions"].items():
         t = c["three_sigma_mv"]
