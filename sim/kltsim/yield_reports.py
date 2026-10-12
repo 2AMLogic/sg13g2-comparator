@@ -42,6 +42,7 @@ from pathlib import Path
 from . import build as build_mod
 from . import declared_n
 from . import grade
+from . import populations as pop_mod
 from . import benches as BENCH_MODS
 from .benches import BENCHES
 
@@ -182,15 +183,13 @@ def collect_populations(bench: grade.BenchEvidence, measurement: str, unit: str 
         corners = grouped.get(key)
         if not corners:
             raise YieldInputError(f"{bench.name}: no Monte-Carlo population for {label}")
-        base_ids = {c["corner_id"].rsplit("/mc", 1)[0] for _, c in corners}
-        if len(base_ids) != 1:
-            raise YieldInputError(f"{bench.name}: {label} maps to several base corners {sorted(base_ids)}")
-        pop = Population(label, base_ids.pop(), measurement, unit, expected_n)
+        try:
+            base_id, _ = pop_mod.validate_point([c for _, c in corners], expected_n)
+        except pop_mod.PopulationError as exc:
+            raise YieldInputError(_population_message(bench.name, label, exc, expected_n)) from None
+        pop = Population(label, base_id, measurement, unit, expected_n)
         corners = sorted(corners, key=lambda tc: _sample_index(tc[1], bench.name))
         indices = [_sample_index(c, bench.name) for _, c in corners]
-        if len(set(indices)) != len(indices):
-            raise YieldInputError(f"{bench.name}: {label} reports a sample index more than once "
-                                  "(duplicate population)")
         draws: dict[tuple, int] = {}
         if indep_names:
             for _, c in corners:
@@ -214,13 +213,22 @@ def collect_populations(bench: grade.BenchEvidence, measurement: str, unit: str 
     return pops
 
 
+def _population_message(bench_name: str, label: str, exc: pop_mod.PopulationError,
+                        expected_n: int) -> str:
+    if exc.kind == "index":
+        return f"{bench_name}: {exc.message}"
+    if exc.kind == "count":  # historical wording, kept for report/test compatibility
+        n = exc.message.split()[1]
+        return (f"{bench_name}: {label} has {n} draws, the ratified basis is "
+                f"N = {expected_n}")
+    return f"{bench_name}: {label} {exc.message}"
+
+
 def _sample_index(corner: dict, bench_name: str) -> int:
-    mc = corner.get("monte_carlo")
-    idx = mc.get("sample_index") if isinstance(mc, dict) else None
-    if not isinstance(idx, int) or isinstance(idx, bool) or idx < 0:
-        raise YieldInputError(f"{bench_name}: corner {corner.get('corner_id')!r} has no valid "
-                              f"monte_carlo.sample_index ({idx!r})")
-    return idx
+    try:
+        return pop_mod.sample_index(corner)
+    except pop_mod.PopulationError as exc:
+        raise YieldInputError(f"{bench_name}: {exc.message}") from None
 
 
 def _classify_sample(pop: Population, corner: dict, idx: int, bench_name: str, gates: list[str],

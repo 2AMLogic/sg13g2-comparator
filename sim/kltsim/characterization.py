@@ -583,8 +583,16 @@ def render_markdown(report: dict) -> str:
 # --------------------------------------------------------------------------- #
 
 
+#: Report directories are append-only, so a grader change (its sha256 is an
+#: indexed source) mints a NEW report directory rather than rewriting one.
+#: campaign id -> current report directory name; the superseded directory
+#: (``<campaign>-schematic``) stays as history.
+REPORT_DIR_NAMES = {"20261009-d73a9ac": "20261009-d73a9ac-schematic-r2"}
+
+
 def default_out_dir(campaign_id: str, root: Path | None = None) -> Path:
-    return (root or build_mod.REPO_ROOT) / "sim" / "characterization" / f"{campaign_id}-schematic"
+    name = REPORT_DIR_NAMES.get(campaign_id, f"{campaign_id}-schematic")
+    return (root or build_mod.REPO_ROOT) / "sim" / "characterization" / name
 
 
 def build_artifacts(campaign_dir: Path, out_dir: Path, root: Path | None = None,

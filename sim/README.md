@@ -241,9 +241,22 @@ locally launched grid.
 simulation-free step (issue #64):
 
 ```bash
-./sim/characterize.sh report          # regenerate sim/characterization/20261009-d73a9ac-schematic/
+./sim/characterize.sh report          # regenerate sim/characterization/20261009-d73a9ac-schematic-r2/
 ./sim/characterize.sh report check    # re-hash every indexed source; fail if anything is stale
 ```
+
+A grader change re-mints the report directory (the grader's sha256 is an indexed
+source); `sim/kltsim/characterization.py` `REPORT_DIR_NAMES` names the current
+one (`-r2` after issue #245) and the superseded directory stays as history.
+
+**Sample-population integrity (issue #245).** Before the offset and
+transient-noise reducers use a klt per-corner summary, `sim/kltsim/populations.py`
+(shared with `yield_reports.collect_populations`) requires each PVT point's
+sample records to carry unique nonnegative integer `sample_index` values across
+all envelopes, one base corner id, exactly the declared N records, and a summary
+whose `n + errored` equals those records. A point failing this supplies no
+compliance value (INCOMPLETE, point-specific reason); a numerical miss at
+another trusted point still reports FAIL.
 
 Report directories are append-only evidence. `report` into an existing
 directory succeeds only when every existing artifact is byte-identical to the
