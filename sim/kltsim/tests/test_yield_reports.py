@@ -12,6 +12,7 @@ import copy
 import json
 import math
 import statistics
+import shutil
 import sys
 import tempfile
 import unittest
@@ -442,6 +443,164 @@ class CitedLargerCampaign(unittest.TestCase):
         self.assertEqual(item["citation"]["yield_campaign"]["sample_size"], "sufficient")
         others = {i["id"]: i["status"] for i in frozen["items"] if i["id"] != 6}
         self.assertIn("unmet", others.values())  # other T1 failures remain visible
+
+
+class IndexMutationMixin:
+    """Issue #255: the engine-free `check` re-derives the index (yield and
+    interval numbers, ratified statistics, population identity/completeness,
+    declared block, summary, settings) and re-renders the Markdown instead of
+    trusting the saved claims. Each test copies the committed campaign to a
+    temp directory and mutates exactly one index.md/index.json field; sample
+    and report bytes stay untouched so the existing hash checks still pass and
+    only the re-derivation can catch the mutation. Row-1 mutations live here;
+    concrete TestCase subclasses point ``cid`` at a campaign (a mixin, so
+    unittest never collects this class by itself — CI forbids skips, and the
+    offset-only campaign must not inherit noise-row tests)."""
+
+    cid = yr.DEFAULT_CAMPAIGN_ID
+
+    def check(self) -> list[str]:
+        return yr.check(self.cid)
+
+    def mutated_problems(self, mutate=None, mutate_md=None) -> list[str]:
+        real_dir = yr.REPO_ROOT / yr.OUT_ROOT / self.cid
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            shutil.copytree(real_dir, root / self.cid)
+            if mutate:
+                index = json.loads((root / self.cid / "index.json").read_text(encoding="utf-8"))
+                mutate(index)
+                (root / self.cid / "index.json").write_text(yr.dumps(index), encoding="utf-8")
+            if mutate_md:
+                mutate_md(root / self.cid / "index.md")
+            saved_out_root, yr.OUT_ROOT = yr.OUT_ROOT, str(root)
+            try:
+                problems = self.check()
+            finally:
+                yr.OUT_ROOT = saved_out_root
+        if not problems:
+            raise AssertionError("the mutation was not reported")
+        return problems
+
+    def assert_diff_names(self, fragment: str, problems: list[str]):
+        self.assertTrue(any(fragment in p for p in problems), (fragment, problems))
+
+    def test_yield_empirical_estimate(self):
+        def m(index):
+            p = index["rows"][0]["populations"][3]
+            p["yield"]["empirical_estimate"] -= 0.05
+        self.assert_diff_names("populations[3].yield.empirical_estimate",
+                               self.mutated_problems(m))
+
+    def test_confidence_interval(self):
+        def m(index):
+            p = index["rows"][0]["populations"][7]
+            p["yield"]["ci_low"] -= 0.05
+        self.assert_diff_names("populations[7].yield.ci_low", self.mutated_problems(m))
+
+    def test_ratified_value_mv_cannot_be_concealed_by_the_flag(self):
+        # the stored boolean stays true; the recomputed number still disagrees
+        def m(index):
+            p = index["rows"][0]["populations"][11]
+            p["ratified_statistic"]["value_mv"] *= 0.5
+            p["ratified_statistic"]["agrees_with_grader"] = True
+        problems = self.mutated_problems(m)
+        self.assert_diff_names("populations[11].ratified_statistic.value_mv", problems)
+
+    def test_population_source_corner(self):
+        def m(index):
+            index["rows"][0]["populations"][5]["source_corner"] = "mos_tt/1.200V/27C"
+        self.assert_diff_names("populations[5].source_corner", self.mutated_problems(m))
+
+    def test_population_sample_seeds(self):
+        def m(index):
+            index["rows"][0]["populations"][9]["sample_seeds"][0] += 1
+        self.assert_diff_names("populations[9].sample_seeds[0]", self.mutated_problems(m))
+
+    def test_population_usable_count(self):
+        def m(index):
+            index["rows"][0]["populations"][13]["usable"] -= 1
+        self.assert_diff_names("populations[13].usable", self.mutated_problems(m))
+
+    def test_population_excluded_list(self):
+        def m(index):
+            index["rows"][0]["populations"][13]["excluded"] = [
+                {"sample_index": 0, "category": "errored", "reason": "tampered"}]
+        self.assert_diff_names("populations[13].excluded", self.mutated_problems(m))
+
+    def test_ratified_summary(self):
+        def m(index):
+            index["ratified_summary"]["row1_worst_3sigma_mv"] *= 0.9
+        self.assert_diff_names("ratified_summary.row1_worst_3sigma_mv",
+                               self.mutated_problems(m))
+
+    def test_report_settings(self):
+        def m(index):
+            index["rows"][0]["settings"]["measurement_count"] += 1
+        self.assert_diff_names("rows[0].settings.measurement_count",
+                               self.mutated_problems(m))
+
+    def test_markdown_text(self):
+        def md(path):
+            path.write_text(path.read_text(encoding="utf-8") + "<!-- tampered -->\n",
+                            encoding="utf-8")
+        self.assert_diff_names("index.md does not match render_index_md",
+                               self.mutated_problems(mutate_md=md))
+
+
+class HistoricalIndexMutations(IndexMutationMixin, unittest.TestCase):
+    """The N = 60 rows 1+2 campaign (no declared block): the inherited row-1
+    mutations plus the noise-row ones only this shape has."""
+
+    cid = yr.DEFAULT_CAMPAIGN_ID
+
+    def test_noise_rung_interval(self):
+        def m(index):
+            index["rows"][1]["populations"][5]["rungs"]["hit_plus"]["yield"]["ci_high"] -= 0.05
+        self.assert_diff_names("rungs.hit_plus.yield.ci_high", self.mutated_problems(m))
+
+    def test_noise_ratified_sigma(self):
+        def m(index):
+            rs = index["rows"][1]["populations"][5]["ratified_statistic"]
+            rs["sigma_mv"] *= 0.9
+            rs["agrees_with_grader"] = True
+        self.assert_diff_names("populations[5].ratified_statistic.sigma_mv",
+                               self.mutated_problems(m))
+
+    def test_noise_grid_mean_summary(self):
+        def m(index):
+            index["ratified_summary"]["row2_grid_mean_sigma_mv"] *= 0.9
+        self.assert_diff_names("ratified_summary.row2_grid_mean_sigma_mv",
+                               self.mutated_problems(m))
+
+
+class CitedN200IndexMutations(IndexMutationMixin, unittest.TestCase):
+    """The cited N = 200 offset-only campaign: the inherited row-1 mutations
+    plus declared-block mutations unique to a declared campaign."""
+
+    cid = "20261010-n200"
+    source = "sim/klt-corner-verification/campaigns/20261010-n200"
+
+    def check(self) -> list[str]:
+        return yr.check(self.cid, self.source, require_cited=True, offset_n=200)
+
+    def test_declared_max_required_n(self):
+        def m(index):
+            index["declared"]["max_required_n_reported_by_engine"] = 42
+        self.assert_diff_names("declared.max_required_n_reported_by_engine",
+                               self.mutated_problems(m))
+
+    def test_declared_hidden_target_failure(self):
+        def m(index):
+            index["declared"]["points_with_observed_target_failures"] = ["tt_27c_1.20v"]
+        self.assert_diff_names("declared.points_with_observed_target_failures",
+                               self.mutated_problems(m))
+
+    def test_declared_offset_n(self):
+        def m(index):
+            index["declared"]["offset_n"] = 199
+        problems = self.mutated_problems(m)
+        self.assert_diff_names("does not match the campaign's declared", problems)
 
 
 if __name__ == "__main__":
