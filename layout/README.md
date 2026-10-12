@@ -310,7 +310,9 @@ unchanged (`lvs_*` files byte-identical). Extracted parasitics may differ:
 previous GDS (`67e44380...`) and are not rewritten; re-extraction belongs to
 the PEX campaign (#61/#191). `layout/tests/klayout_test_implant_geometry.py` checks the committed GDS and
 that the old geometry is detected. It needs the klayout module, so it is kept
-out of the stdlib-only CI discovery (`test_*.py`) and runs on demand:
+out of the stdlib-only CI discovery (`test_*.py`); it runs in the
+KLayout-equipped `layout-reproducibility` CI job (issue #257), where an empty
+population, a skip or a failure fails the job, and on demand locally:
 `uvx --from klayout==0.30.12 python -I -m unittest discover -s layout/tests -p 'klayout_test_*.py'`.
 
 **Negative controls.** Two temp copies of the stream, each with one deliberate
