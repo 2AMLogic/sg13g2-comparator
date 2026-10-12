@@ -2,6 +2,28 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-12
+
+- **PR #241**: PEX timing compliance: require matching valid decision states
+- **Issue #240** (closed): PEX timing compliance: require matching valid decision states
+
+### 2026-10-11
+
+- **PR #239**: noise_full: validate provenance per tn_full_* config before arithmetic (#236)
+- **PR #234**: check_readme_claims: pin README kickback residue claims to the historical harness record
+- **PR #233**: docs: require evidence size check on final HEAD before review (#223)
+- **PR #231**: README evidence: verify common-mode offset characterization counts and ranges
+- **PR #230**: CI: verify source schematics regenerate the committed comparator netlist
+- **PR #229**: Supplemental DRC: count report items and reject malformed marker evidence
+- **PR #227**: fix: validate the complete physical PVT grid in README evidence loaders
+- **Issue #236** (closed): Bind full-noise analysis to verified configuration and submission provenance
+- **Issue #232** (closed): README evidence: pin kickback residue claims to their historical measurement population
+- **Issue #223** (closed): Builder preflight: check tracked sim size before requesting review
+- **Issue #228** (closed): README evidence: verify common-mode offset characterization counts and ranges
+- **Issue #224** (closed): CI: verify source schematics regenerate the committed comparator netlist
+- **Issue #220** (closed): Supplemental DRC: count report items and reject malformed marker evidence
+- **Issue #217** (closed): README evidence loaders: validate the complete physical PVT identity set
+
 ### 2026-10-11
 
 - **PR #225**: Reject incomplete reproduction and non-finite CM probes in decision-band validation
