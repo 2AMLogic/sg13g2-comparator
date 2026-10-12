@@ -4,6 +4,10 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-12
 
+- **PR #271**: Validate bias mirror/headroom screening probes before aggregation
+- **Issue #267** (closed): Validate bias mirror headroom screening probes before aggregation
+- **Issue #260** (closed): Auditor process proposal: run final evidence-size preflight before requesting review
+
 - **PR #259**: yield: re-derive the index in the engine-free consistency check
 - **PR #258**: ci: run KLayout implant geometry regression in layout-reproducibility (#257)
 - **PR #256**: cmband: empty reproduction is INCOMPLETE; count rejected draws per record
