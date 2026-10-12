@@ -208,6 +208,7 @@ class DecisionValidity(unittest.TestCase):
         self.assertTrue(s.startswith("not established: 45/45 grid points within"), s)
         self.assertNotIn("met at every", s)
         self.assertIn("wrong 90", s)
+        self.assertIn("invalid at 45 point(s)", s)
         v = by(out)["regeneration.pvt.td_a", "tt/1.08V/-40C"]["interpretation"]
         self.assertEqual(v["verdict"], "within")  # numeric comparison stays visible
         self.assertTrue(v["decision_validity"].startswith("decision state not valid"))
@@ -246,7 +247,7 @@ class DecisionValidity(unittest.TestCase):
 
     def test_order_and_spelling_do_not_matter(self):
         pts = grid_pts()
-        rows = [row(f"regeneration.pvt.td_a", f"{p}/{v}{'0' * (i % 3)}V/{t}C", 7e-10, 1e-9)
+        rows = [row("regeneration.pvt.td_a", f"{p}/{v}{'0' * (i % 3)}V/{t}C", 7e-10, 1e-9)
                 for i, (p, v, t) in enumerate(pts)]
         st = states("a", [(p, v + "0" * ((i + 1) % 3), t) for i, (p, v, t) in enumerate(pts)])
         st = [r for r in st if r["spec_row"].endswith("end")] + [r for r in st if r["spec_row"].endswith("first")]

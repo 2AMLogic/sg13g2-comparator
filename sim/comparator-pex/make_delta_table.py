@@ -180,11 +180,12 @@ def render(env, source):
         vd = validity[".".join(k)]
         nvalid = len(vd["valid_points"])
         bad = vd["counts"]
-        vtxt = (f"decision states valid at {nvalid}/{len(vd['checked_points'])} graded point(s); "
-                f"wrong {bad['wrong']}, indeterminate {bad['indeterminate']}, missing {bad['missing']}")
+        vtxt = (f"decision states valid at {nvalid}/{len(vd['checked_points'])} graded point(s), "
+                f"invalid at {len(vd['invalid'])} point(s) (state rows: wrong {bad['wrong']}, "
+                f"indeterminate {bad['indeterminate']}, missing {bad['missing']})")
         summary[".".join(k)] = (
             f"NOT MET: extracted exceeds at {len(ex)} corner(s); {vtxt}" if ex else
-            f"met at every PVT grid point (all 45 within, all required decision states correct)"
+            "met at every PVT grid point (all 45 within, all required decision states correct)"
             if set(ok) == GRID_POINTS and len(g) == 1 and nvalid == len(GRID_POINTS) else
             f"not established: {len(ok)}/45 grid points within, "
             f"{len(g.get('missing: no verdict', ()))} missing; {vtxt}") + f" ({DELAY[k][1]})"

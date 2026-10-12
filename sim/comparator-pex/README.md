@@ -62,7 +62,7 @@ text below it is kept as the record of the earlier attempt. The same
   `td_a` needs `regeneration.da_first` low and `da_end` high (`v(dan)` at 18/55 ns),
   `td_c` needs `dc_first`/`dc_end` (`v(dcn)`); `kickback.*` states are a different
   bench and never count. A wrong, indeterminate or missing (absent row or null) state
-  gives "not established", with counts in the summary and per-corner reasons in
+  gives "not established", with invalid-point and state-row counts in the summary and per-corner reasons in
   `delay_decision_validity`; each delay row also carries `decision_validity`. The
   numeric within/EXCEEDS verdict and raw values are unchanged, and EXCEEDS still
   reports NOT MET. A delay measured after a flipped decision therefore cannot be
