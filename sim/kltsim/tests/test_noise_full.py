@@ -361,3 +361,306 @@ class RejectedConfigurationNeverCompleteTest(unittest.TestCase):
         md = nf.render_markdown(result)
         self.assertIn("REJECTED by provenance validation", md)
         self.assertIn("body is missing", md)
+
+
+# --------------------------------------------------------------------------- #
+# issue #263: timestep smoke evidence is validated before convergence arithmetic
+# --------------------------------------------------------------------------- #
+
+SMOKE_N = 20  # deliberately not the historical 160: the request declares N
+_ROWS = json.loads((build_mod.EXPERIMENT_DIR / "rows.json").read_text(encoding="utf-8"))
+_EV = next(r for r in _ROWS["rows"] if r["id"] == "2")["evidence"]
+
+
+def _smoke_measurements(plus: float, minus: float, zero: float, k: int) -> list[dict]:
+    def m(name, value, unit="V/V"):
+        return {"name": name, "value": value, "unit": unit, "status": "pass", "margin": None}
+    return [m("vdd_meas", 1.2, "V"), m("temp_meas", 27.0, "C"),
+            m("vn0_a", 0.001 * (k + 1), "V"), m("vn0_b", 0.002 * (k + 1), "V"),
+            m("vn1_a", 0.003 * (k + 1), "V"), m("d_zero", 1.0), m("d_plus", 1.0),
+            m("d_minus", 0.0), m("res_zero", 0.5), m("res_plus", 0.5), m("res_minus", 0.5),
+            m("hit_zero", zero, "1"), m("hit_plus", plus, "1"), m("hit_minus", minus, "1")]
+
+
+def _smoke_corner(k: int, plus: float, minus: float, zero: float) -> dict:
+    return {"corner_id": f"mos_tt/1.200V/27C/mc{k}", "process": "mos_tt",
+            "supply_v": {"vsup": 1.2}, "temperature_c": 27.0, "status": "pass",
+            "measurements": _smoke_measurements(plus, minus, zero, k), "diagnostics": [],
+            "monte_carlo": {"sample_index": k, "seed": 1000 + k, "process_seed": 2000 + k,
+                            "mismatch_seed": 3000 + k}}
+
+
+def _write_smoke(root: Path, hits: dict[str, tuple[int, int, int]], n: int = SMOKE_N) -> Path:
+    """smoke/ with a body and, per rung, request + invocation + envelope built from the
+    real bench builders. ``hits[step]`` = (#high at +od, #high at -od, #high at 0)."""
+    bench = ALL_BENCHES["tn_full_both"]
+    smoke = root / "smoke"
+    smoke.mkdir()
+    _, _, files = build_mod.plan_bench_inputs(bench, smoke, target="batch")
+    for path, data in files:
+        if path.name == "tn_full_both.body.spice":
+            path.write_bytes(data)
+    body_sha = _sha((smoke / "tn_full_both.body.spice").read_bytes())
+    base = json.loads(dict((p.name, d) for p, d in files)["tn_full_both.mos_tt.request.json"])
+    for step, (hp, hm, hz) in hits.items():
+        tag = f"timestep-{step}"
+        req = json.loads(json.dumps(base))
+        req["netlist"] = "tn_full_both.body.spice"
+        req["corners"] = {"process": ["mos_tt"], "supply_v": {"vsup": [1.2]},
+                          "temperature_c": [27.0]}
+        req["analysis"]["args"] = f"{step} 5.1n 0 {step}"
+        req["monte_carlo"]["n"] = n
+        (smoke / f"{tag}.request.json").write_text(json.dumps(req, indent=2), encoding="utf-8")
+        corners = [_smoke_corner(k, float(k < hp), float(k < hm), float(k < hz))
+                   for k in range(n)]
+        env = {"provenance": {"input": {"content_hash": f"sha256:{body_sha}"},
+                              "deck": {"content_hash": "sha256:" + "d" * 64}},
+               "environment": {"netlist_source": "schematic"}, "corner_count": n,
+               "corners": corners}
+        raw = json.dumps(env).encode("utf-8")
+        (smoke / f"{tag}.envelope.json").write_bytes(raw)
+        inv = {"tag": tag, "exit_code": 0, "envelope_sha256": _sha(raw),
+               "request_sha256": _sha((smoke / f"{tag}.request.json").read_bytes())}
+        (smoke / f"{tag}.invocation.json").write_text(json.dumps(inv), encoding="utf-8")
+    return smoke
+
+
+class TimestepSmokeValidationTest(unittest.TestCase):
+    HITS = {"20p": (15, 5, 10), "10p": (17, 4, 9), "5p": (14, 5, 10)}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dut = grade_mod.load_dut_reference()
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def smoke(self, hits=None):
+        return _write_smoke(self.root, hits or self.HITS)
+
+    def run_ts(self, smoke):
+        return nf.timestep_convergence(smoke, _EV, self.dut)
+
+    def rewrite(self, smoke, step, *, request=None, envelope=None, invocation=None):
+        """Edit a rung's file(s) and keep the invocation hashes consistent."""
+        tag = f"timestep-{step}"
+        rp, ep, ip = (smoke / f"{tag}.{x}.json" for x in ("request", "envelope", "invocation"))
+        for path, fn in ((rp, request), (ep, envelope)):
+            if fn:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                fn(data)
+                path.write_text(json.dumps(data), encoding="utf-8")
+        if invocation:
+            inv = json.loads(ip.read_text(encoding="utf-8"))
+            invocation(inv)
+            ip.write_text(json.dumps(inv), encoding="utf-8")
+        else:
+            inv = json.loads(ip.read_text(encoding="utf-8"))
+            inv["request_sha256"] = _sha(rp.read_bytes())
+            inv["envelope_sha256"] = _sha(ep.read_bytes())
+            ip.write_text(json.dumps(inv), encoding="utf-8")
+
+    def assertRejectedRung(self, ts, step, text):
+        rung = ts["steps"][step]
+        self.assertEqual(rung["status"], "rejected", rung)
+        self.assertTrue(any(text in p for p in rung["problems"]), rung["problems"])
+        for key in ("sigma", "sigma_se", "z_vs_20p", "p_plus", "p_minus", "p_zero"):
+            self.assertNotIn(key, rung)
+        self.assertIn(step, ts["withheld"] if step != "20p" else ts["rejected_rungs"])
+
+    def test_valid_chain_gives_expected_sigma_se_and_comparison(self):
+        ts = self.run_ts(self.smoke())
+        self.assertEqual(ts["validated_rungs"], ["20p", "10p", "5p"])
+        self.assertEqual(ts["withheld"], {})
+        sig, se = nf.sigma_se(0.75, 0.25, SMOKE_N, float(_EV["od_x_mv"]))
+        self.assertAlmostEqual(ts["steps"]["20p"]["sigma"], sig)
+        self.assertAlmostEqual(ts["steps"]["20p"]["sigma_se"], se)
+        self.assertEqual(ts["steps"]["20p"]["n"], SMOKE_N)  # declared N, not 160
+        s10, se10 = nf.sigma_se(0.85, 0.2, SMOKE_N, float(_EV["od_x_mv"]))
+        self.assertAlmostEqual(ts["steps"]["10p"]["z_vs_20p"], (s10 - sig) / math.hypot(se, se10))
+        self.assertEqual(ts["comparisons"], ["10p", "5p"])
+
+    def test_issue_reproduction_errored_duplicates_rejected(self):
+        smoke = self.smoke()
+
+        def broken(env):
+            env["corners"] = [dict(_smoke_corner(0, 0.7, 0.3, 0.5), status="error")
+                              for _ in range(10)]
+        self.rewrite(smoke, "20p", envelope=broken)
+        (smoke / "timestep-20p.request.json").unlink()
+        (smoke / "timestep-20p.invocation.json").unlink()
+        ts = self.run_ts(smoke)
+        rung = ts["steps"]["20p"]
+        self.assertEqual(rung["status"], "rejected")
+        self.assertEqual(rung["statuses"], {"error": 10})
+        self.assertNotIn("sigma", rung)
+        self.assertEqual(ts["comparisons"], [])
+        self.assertTrue(any("baseline rung 20p is rejected" in w for w in ts["withheld"].values()))
+
+    def test_errored_sample(self):
+        smoke = self.smoke()
+        self.rewrite(smoke, "10p", envelope=lambda e: e["corners"][3].update(status="error"))
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "untrusted")
+
+    def test_duplicate_measurement_name(self):
+        smoke = self.smoke()
+        self.rewrite(smoke, "10p", envelope=lambda e: e["corners"][2]["measurements"].append(
+            dict(e["corners"][2]["measurements"][-1])))
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "duplicate measurement")
+
+    def test_wrong_probe(self):
+        smoke = self.smoke()
+
+        def vdd(env):
+            env["corners"][1]["measurements"][0]["value"] = 1.08
+        self.rewrite(smoke, "10p", envelope=vdd)
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "supply probe")
+
+    def test_wrong_corner(self):
+        smoke = self.smoke()
+
+        def corner(env):
+            for c in env["corners"]:
+                c["temperature_c"] = 125.0
+        self.rewrite(smoke, "10p", envelope=corner)
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "nominal")
+
+    def test_nonfinite_and_nonbinary_hits(self):
+        for bad in (0.5, float("nan"), None):
+            with self.subTest(bad=bad):
+                self.setUp()
+                smoke = self.smoke()
+
+                def hit(env, bad=bad):
+                    for m in env["corners"][4]["measurements"]:
+                        if m["name"] == "hit_plus":
+                            m["value"] = bad
+                self.rewrite(smoke, "10p", envelope=hit)
+                self.assertRejectedRung(self.run_ts(smoke), "10p", "untrusted")
+
+    def test_ambiguous_and_repeated_sample_identity(self):
+        smoke = self.smoke()
+        self.rewrite(smoke, "10p", envelope=lambda e: e["corners"][5]["monte_carlo"].update(
+            sample_index=4))
+        ts = self.run_ts(smoke)
+        self.assertRejectedRung(ts, "10p", "repeated sample_index")
+        self.setUp()
+        smoke = self.smoke()
+        self.rewrite(smoke, "5p", envelope=lambda e: e["corners"][5]["monte_carlo"].update(
+            seed=1004, process_seed=2004, mismatch_seed=3004))
+        self.assertRejectedRung(self.run_ts(smoke), "5p", "repeat another sample's seeds")
+
+    def test_repeated_raw_noise_draw(self):
+        smoke = self.smoke()
+
+        def same(env):
+            env["corners"][6]["measurements"][2:5] = [dict(m) for m in
+                                                      env["corners"][5]["measurements"][2:5]]
+        self.rewrite(smoke, "10p", envelope=same)
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "raw noise draw")
+
+    def test_empty_population_and_count_mismatch(self):
+        smoke = self.smoke()
+        self.rewrite(smoke, "10p", envelope=lambda e: e.update(corners=[]))
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "empty population")
+        self.setUp()
+        smoke = self.smoke()
+        self.rewrite(smoke, "10p", envelope=lambda e: e["corners"].pop())
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "request declares N")
+
+    def test_provenance_mismatch(self):
+        smoke = self.smoke()
+        (smoke / "timestep-10p.envelope.json").write_text(
+            (smoke / "timestep-10p.envelope.json").read_text() + " ", encoding="utf-8")
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "envelope_sha256 mismatch")
+
+    def test_missing_invocation_and_wrong_tag(self):
+        smoke = self.smoke()
+        (smoke / "timestep-10p.invocation.json").unlink()
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "invocation timestep-10p.invocation.json is missing")
+        self.setUp()
+        smoke = self.smoke()
+        self.rewrite(smoke, "5p", invocation=lambda i: i.update(tag="timestep-10p"))
+        self.assertRejectedRung(self.run_ts(smoke), "5p", "invocation names tag")
+
+    def test_input_hash_and_body_mismatch(self):
+        smoke = self.smoke()
+        self.rewrite(smoke, "10p", envelope=lambda e: e["provenance"]["input"].update(
+            content_hash="sha256:" + "0" * 64))
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "content_hash")
+        self.setUp()
+        smoke = self.smoke()
+        (smoke / "tn_full_both.body.spice").unlink()
+        ts = self.run_ts(smoke)
+        self.assertEqual(ts["validated_rungs"], [])
+        self.assertTrue(any("smoke body is missing" in p for p in ts["steps"]["20p"]["problems"]))
+
+    def test_wrong_request_step_and_corner(self):
+        smoke = self.smoke()
+        self.rewrite(smoke, "10p", request=lambda r: r["analysis"].update(args="20p 5.1n 0 20p"))
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "step and max step")
+        self.setUp()
+        smoke = self.smoke()
+        self.rewrite(smoke, "10p", request=lambda r: r["corners"].update(temperature_c=[125.0]))
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "request corners")
+
+    def test_unintended_cross_rung_change_withholds_comparison(self):
+        smoke = self.smoke()
+        # Valid on its own (hash chain consistent) but a different draw population / options.
+        self.rewrite(smoke, "10p", request=lambda r: r["options"].update(timeout_s=1))
+        ts = self.run_ts(smoke)
+        self.assertEqual(ts["steps"]["10p"]["status"], "validated")
+        self.assertNotIn("z_vs_20p", ts["steps"]["10p"])
+        self.assertIn("request (other than solver step/max step)", ts["withheld"]["10p"])
+        self.assertEqual(ts["comparisons"], ["5p"])
+        self.setUp()
+        smoke = self.smoke()
+        self.rewrite(smoke, "5p", envelope=lambda e: e["corners"][0]["monte_carlo"].update(
+            seed=99999))
+        ts = self.run_ts(smoke)
+        self.assertIn("sample identities", ts["withheld"]["5p"])
+        self.assertNotIn("z_vs_20p", ts["steps"]["5p"])
+
+    def test_different_declared_n_across_rungs_withheld(self):
+        smoke = self.smoke()
+        bad = _write_smoke(Path(tempfile.mkdtemp(dir=self.root)), {"10p": (8, 2, 5)}, n=10)
+        for ext in ("request", "envelope", "invocation"):
+            (smoke / f"timestep-10p.{ext}.json").write_bytes((bad / f"timestep-10p.{ext}.json").read_bytes())
+        ts = self.run_ts(smoke)
+        self.assertEqual(ts["steps"]["10p"]["n"], 10)
+        self.assertIn("N", ts["withheld"]["10p"])
+
+    def test_missing_rung_and_absent_smoke_are_explicit(self):
+        smoke = self.smoke({"20p": (15, 5, 10), "10p": (17, 4, 9)})
+        ts = self.run_ts(smoke)
+        self.assertEqual(ts["missing_rungs"], ["5p"])
+        self.assertEqual(ts["steps"]["5p"]["status"], "missing")
+        self.assertIn("5p", ts["withheld"])
+        empty = self.run_ts(self.root / "nonexistent")
+        self.assertFalse(empty["available"])
+        self.assertEqual(empty["steps"], {})
+        self.assertIn("not assessed", empty["unavailable"])
+        md = nf.render_markdown({"od_x_mv": 1.0, "expected_n": 80, "target_max_mv": 1.0,
+                                 "stretch_max_mv": 0.6, "configs": {}, "points": [],
+                                 "timestep": empty, "as_measured": {"incomplete": True, "why": "x"}})
+        self.assertIn("UNAVAILABLE", md)
+
+    def test_saturated_rung_keeps_validation_but_no_sigma(self):
+        smoke = self.smoke({"20p": (15, 5, 10), "10p": (SMOKE_N, 0, 10), "5p": (14, 5, 10)})
+        ts = self.run_ts(smoke)
+        self.assertEqual(ts["steps"]["10p"]["status"], "validated")
+        self.assertNotIn("sigma", ts["steps"]["10p"])
+        self.assertIn("sigma unavailable", ts["withheld"]["10p"])
+
+    def test_render_shows_rejection_and_withheld(self):
+        smoke = self.smoke()
+        self.rewrite(smoke, "10p", envelope=lambda e: e["corners"][3].update(status="error"))
+        ts = self.run_ts(smoke)
+        md = nf.render_markdown({"od_x_mv": 1.0, "expected_n": 80, "target_max_mv": 1.0,
+                                 "stretch_max_mv": 0.6, "configs": {}, "points": [],
+                                 "timestep": ts, "as_measured": {"incomplete": True, "why": "x"}})
+        self.assertIn("`10p` REJECTED", md)
+        self.assertIn("comparison 10p vs 20p WITHHELD", md)
+        self.assertIn("| 20p | validated |", md)
