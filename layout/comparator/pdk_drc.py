@@ -15,7 +15,9 @@ Exit status:
 * ``0``  the run completed and the report was written/verified. The report's
          ``status`` may still be ``violations``: findings are evidence, not a
          tool failure. ``--strict`` makes ``violations`` exit ``1``.
-* ``1``  tool error, a failed negative control, or (``--check``) a stale
+* ``1``  tool error, a malformed or incomplete deck run (exit status that is
+         not the deck's verdict, empty or partial rule inventory; nothing is
+         written), a failed negative control, or (``--check``) a stale
          committed report.
 * ``3``  ``unavailable``: a prerequisite is missing (PDK deck, deck identity,
          KLayout binary >= 0.29.11). An unavailable result is never clean, is
@@ -70,6 +72,85 @@ TARGETED = (
     "NW.a", "NW.b", "NW.b1", "NW.d", "NW.e", "NW.f1",
     "LU.a", "LU.b", "LU.c",
 )
+
+#: Emission contract of the pinned deck for the invocation in ``run_deck``
+#: (issue #253). A KLayout ``output('<name>', ...)`` call creates its report
+#: category whether or not it yields markers, so these are the categories the
+#: merged lyrdb must declare whenever both rule sets ran to completion. Derived
+#: statically from the deck tree pinned by ``DECK_TREE_SHA256``: every
+#: ``output`` call with a literal rule name whose enclosing blocks are only
+#: switches this invocation turns on -- the table gates (main => FEOL, BEOL,
+#: PIN, FORBIDDEN), ``unless PRECHECK_DRC``, ``RECOMMENDED`` /
+#: ``$recommendedRules`` (run_drc.py passes ``no_recommended=false``),
+#: ``CONNECTIVITY_RULES``, ``$fillerRules`` / ``$latchUpRules`` (default true)
+#: and the maximal deck's immediately invoked ``-> do ... end.()`` lambdas.
+#: Not required: names built in loops or helper ``def``s (M2..M5, V2..V4,
+#: fillers, offgrid, angle, forbidden, pin, Seal.b/Pad.fR/Slt.e1 and the like:
+#: emitted, but their names are computed), Seal.l (only when an EdgeSeal
+#: boundary exists) and MIM.gR (only above a MIM area), plus everything behind
+#: switches this invocation leaves off (density, antenna, precheck).
+#: ``layout/tests/test_pdk_drc.py`` re-derives both sets from a local pinned
+#: checkout when one is present.
+REQUIRED_CATEGORIES = {
+    "main": tuple("""
+        M1.a M1.b M1.e M1.f M1.g M1.i V1.a V1.b V1.c TV1.a TV1.b TV1.c TV1.d
+        TM1.a TM1.b TM1Fil.c TM1Fil.a1 TV2.a TV2.b TV2.c TV2.d TM2.a TM2.b
+        TM2.bR TM2Fil.c TM2Fil.a1 Pas.a Pas.b Pas.c Seal.n Seal.k Seal.m MIM.c
+        MIM.d Padc.a Padc.b Padc.c padc.f Pad.m Pad.i Padb.a Padb.b Padb.c
+        padb.f Padb.d LBE.a LBE.b LBE.b1 LBE.c LBE.d LBE.h pSD.c1 Cnt.a Cnt.b
+        Cnt.c Cnt.c.digibnd Cnt.c.SRAM Cnt.d Cnt.e Cnt.g1 Cnt.g2 CntB.b1
+        CntB.h1 NW.b NW.b1 NW.f1 NW.f1.digibnd PWB.e PWB.e1 PWB.f PWB.f1 NBL.b
+        NBL.c NBL.d NBL.e NBL.f Act.a Act.b AFil.c1 AFil.c AFil.d AFil.e
+        AFil.j TGO.f Gat.a Gat.b Gat.d Gat.a1 Gat.a2 Gat.g GFil.d GFil.e
+        GFil.i npn13G2.bR npn13G2L.cR npn13G2V.cR Sdiod.b Sdiod.c Sdiod.d
+        Sdiod.e LU.b
+    """.split()),
+    "sg13g2_maximal": tuple("""
+        NW.a NW.c NW.c1 NW.d NW.d1 NW.e NW.e1 NW.f PWB.a PWB.b PWB.c NBL.a
+        NBLB.a NBLB.b NBLB.c NBLB.d Act.c Act.d Act.e AFil.a AFil.a1 AFil.b
+        AFil.i TGO.a TGO.b TGO.c TGO.d TGO.e Gat.a3 Gat.a4 Gat.b1 Gat.c Gat.e
+        Gat.f GFil.a GFil.b GFil.c GFil.f GFil.j pSD.a pSD.b pSD.c pSD.d
+        pSD.d1 pSD.e pSD.f pSD.g pSD.i pSD.i1 pSD.j pSD.j1 pSD.k pSD.l pSD.m
+        pSD.n nSDB.a nSDB.b nSDB.c nSDB.e EXTB.a EXTB.b EXTB.c Sal.a Sal.b
+        Sal.c Sal.d Sal.e Cnt.b1 Cnt.f Cnt.g Cnt.h Cnt.j CntB.a CntB.a1 CntB.b
+        CntB.b2 CntB.c CntB.d CntB.e CntB.f CntB.g CntB.g1 CntB.g2 CntB.h
+        CntB.j M1.c M1.c1 M1.d M2.c M2.c1 M2.d M3.c M3.c1 M3.d M4.c M4.c1 M4.d
+        M5.c M5.c1 M5.d M1Fil.a1 M1Fil.b M1Fil.d M2Fil.a1 M2Fil.b M2Fil.d
+        M3Fil.a1 M3Fil.b M3Fil.d M4Fil.a1 M4Fil.b M4Fil.d M5Fil.a1 M5Fil.b
+        M5Fil.d V1.b1 V1.c1 V2.b1 V2.c1 V3.b1 V3.c1 V4.b1 V4.c1 TM1Fil.a
+        TM1Fil.b TM1Fil.d TM2Fil.a TM2Fil.b TM2Fil.d npnG2.b npnG2.c
+        npnG2.d.N_Activ npnG2.d.NWell npnG2.d.PWell_block npnG2.d.nBuLay
+        npnG2.d.nSD_block npnG2.d1 npnG2.d2 npnG2.e npn13G2.a npn13G2L.a
+        npn13G2L.b npn13G2V.a npn13G2V.b Rsil.a Rsil.b Rsil.c Rsil.d Rsil.e
+        Rsil.f Rppd.a Rppd.b Rppd.c Rppd.d Rppd.e Rhi.a Rhi.b Rhi.c Rhi.d
+        Rhi.e Rhi.f nmosi.b nmosi.c nmosi.d nmosi.f nmosi.g Sdiod.a Pad.aR
+        Pad.a1 Pad.bR Pad.d Pad.dR Pad.d1R Pad.gR Pad.jR Pad.kR Padc.d
+        Seal.a_Activ Seal.a_pSD Seal.a_Metal1 Seal.a_Metal2 Seal.a_Metal3
+        Seal.a_Metal4 Seal.a_Metal5 Seal.a_TopMetal1 Seal.a_TopMetal2 Seal.c
+        Seal.c1.Via1 Seal.c1.Via2 Seal.c1.Via3 Seal.c1.Via4 Seal.c2 Seal.c3
+        Seal.d.Cont Seal.d.Via1 Seal.d.Via2 Seal.d.Via3 Seal.d.Via4
+        Seal.d.TopVia1 Seal.d.TopVia2 Seal.e Seal.f.Activ Seal.f.pSD
+        Seal.f.Metal1 Seal.f.Metal2 Seal.f.Metal3 Seal.f.Metal4 Seal.f.Metal5
+        Seal.f.TopMetal1 Seal.f.TopMetal2 MIM.a MIM.b MIM.e MIM.f MIM.g MIM.h
+        LU.a LU.c LU.c1 LU.d LU.d1 Slt.a.M1 Slt.b.M1 Slt.c.M1 Slt.e.M1
+        Slt.f.M1 Slt.h1 Slt.a.M2 Slt.b.M2 Slt.c.M2 Slt.e.M2 Slt.f.M2 Slt.h2.M2
+        Slt.a.M3 Slt.b.M3 Slt.c.M3 Slt.e.M3 Slt.f.M3 Slt.h2.M3 Slt.a.M4
+        Slt.b.M4 Slt.c.M4 Slt.e.M4 Slt.f.M4 Slt.h2.M4 Slt.a.M5 Slt.b.M5
+        Slt.c.M5 Slt.e.M5 Slt.f.M5 Slt.g.M5 Slt.h2.M5 Slt.a.TM1 Slt.b.TM1
+        Slt.c.TM1 Slt.e.TM1 Slt.f.TM1 Slt.g.TM1 Slt.h3 Slt.a.TM2 Slt.b.TM2
+        Slt.c.TM2 Slt.e.TM2 Slt.f.TM2 Slt.h4 NW.c1.dig NW.d1.dig NW.e1.dig
+        LBE.b2 LBE.e.dfPad LBE.e.Passiv LBE.f
+    """.split()),
+}
+
+#: run_drc.py's own verdict lines (check_drc_results) and the exit status it
+#: pairs with each: 0 = completed without violations, 1 = completed with
+#: violations. Exit 1 is also every error path of run_drc.py, so a 1 counts as
+#: "violations" only together with markers and the deck's own verdict line.
+DECK_VERDICT = {
+    0: "KLayout DRC Check Passed: No DRC violations detected",
+    1: "KLayout DRC Check Failed: Violations were detected",
+}
 
 def drawn_layers(gds: pathlib.Path) -> list[str]:
     """Layer/datatype pairs that carry shapes in the stream itself."""
@@ -218,21 +299,70 @@ def run_deck(pdk: pathlib.Path, binary: str, gds: pathlib.Path, workdir: pathlib
         f"--density_thr={THREADS}",
     ]
     proc = subprocess.run(cmd, env=env, capture_output=True, text=True, cwd=workdir)
-    dbs = sorted(run_dir.glob("*_full.lyrdb")) if run_dir.is_dir() else []
-    logs = sorted(run_dir.glob("*.log")) if run_dir.is_dir() else []
-    done = [p for p in logs if p.name != run_dir.name + ".log"
-            and "completed in" in p.read_text(errors="replace")]
-    if len(dbs) != 1 or len(done) < 2:
-        raise RuntimeError(
-            "PDK deck did not complete (expected one merged lyrdb and the main + "
-            f"maximal logs finished; got {len(dbs)} lyrdb, {len(done)} finished logs)\n"
-            + (proc.stdout + proc.stderr)[-2000:]
+    output = (proc.stdout or "") + (proc.stderr or "")
+    # run_drc.py names its outputs <layout stem>_<topcell>_<table>.{log,lyrdb}
+    # and merges the per-table databases into <stem>_<topcell>_full.lyrdb.
+    stem = f"{pathlib.Path(gds).resolve().stem}_{TOP}"
+    db = run_dir / f"{stem}_full.lyrdb"
+    unfinished = []
+    for rule_set in REQUIRED_CATEGORIES:
+        log = run_dir / f"{stem}_{rule_set}.log"
+        if not log.is_file() or "completed in" not in log.read_text(errors="replace"):
+            unfinished.append(rule_set)
+    if proc.returncode not in DECK_VERDICT or not db.is_file() or unfinished:
+        raise IncompleteRun(
+            f"PDK deck did not complete (exit status {proc.returncode}; merged "
+            f"lyrdb {'present' if db.is_file() else 'missing'}; unfinished rule "
+            f"sets: {', '.join(unfinished) or 'none'})\n" + output[-2000:]
         )
-    return parse_lyrdb(dbs[0])
+    executed, violations = parse_lyrdb(db)
+    check_inventory(executed)
+    check_exit_status(proc.returncode, violations, output)
+    return executed, violations
 
 
 class MalformedReport(ValueError):
     """The deck's lyrdb cannot be interpreted; it must never certify clean."""
+
+
+class IncompleteRun(RuntimeError):
+    """The deck run did not demonstrably complete with the pinned deck's rule
+    inventory (issue #253); its output must never certify clean."""
+
+
+def check_inventory(executed) -> None:
+    """Refuse an empty rule inventory or one missing any category the pinned
+    deck always emits for this invocation (``REQUIRED_CATEGORIES``)."""
+    if not executed:
+        raise IncompleteRun("empty rule inventory: the deck declared no rule categories")
+    problems = []
+    for rule_set, rules in REQUIRED_CATEGORIES.items():
+        missing = [r for r in rules if r not in executed]
+        if missing:
+            problems.append(
+                f"{len(missing)} of {len(rules)} required {rule_set} categories "
+                f"missing ({', '.join(missing[:5])}{', ...' if len(missing) > 5 else ''})"
+            )
+    if problems:
+        raise IncompleteRun("incomplete rule inventory: " + "; ".join(problems))
+
+
+def check_exit_status(returncode: int, violations, output: str) -> None:
+    """Refuse an exit status that is not run_drc.py's verdict for the parsed
+    database: 0 with no markers, 1 with markers, each with the deck's own
+    verdict line. Exit 1 without markers is one of its error paths."""
+    n = sum(len(v) for v in violations.values())
+    expected = 1 if n else 0
+    if returncode != expected:
+        raise IncompleteRun(
+            f"deck exit status {returncode} does not match its lyrdb ({n} marker(s) "
+            f"=> {expected})\n" + output[-2000:]
+        )
+    if DECK_VERDICT[returncode] not in output:
+        raise IncompleteRun(
+            f"deck exit status {returncode} without its verdict line "
+            f"{DECK_VERDICT[returncode]!r}\n" + output[-2000:]
+        )
 
 
 def parse_lyrdb(path: pathlib.Path):
@@ -258,6 +388,8 @@ def parse_lyrdb(path: pathlib.Path):
         if name in executed:
             raise MalformedReport(f"{path}: duplicate category declaration {name!r}")
         executed[name] = " ".join((cat.findtext("description") or "").split())
+    if not executed:
+        raise MalformedReport(f"{path}: empty <categories>: the deck emitted no rule inventory")
     violations: dict[str, list[list[str]]] = {}
     for i, item in enumerate(items):
         rule = (item.findtext("category") or "").strip().strip("'").strip()
@@ -310,6 +442,7 @@ CONTROLS = ("M1.a", "Gat.c")
 # Report
 # --------------------------------------------------------------------------- #
 def build_report(gds, executed, violations, ver_s, fv, tree, controls):
+    check_inventory(executed)  # never a report, clean or not, from a partial run
     n_viol = sum(len(v) for v in violations.values())
     targeted = []
     for rule in TARGETED:
@@ -380,6 +513,13 @@ def build_report(gds, executed, violations, ver_s, fv, tree, controls):
     }
 
 
+def refuse(e: Exception) -> int:
+    """The single failure path for deck output that cannot be evidence."""
+    what = "malformed deck report" if isinstance(e, MalformedReport) else "incomplete deck run"
+    print(f"FAIL: {what}, nothing written: {e}", file=sys.stderr)
+    return 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("gds", nargs="?", default=str(DEFAULT_GDS))
@@ -406,9 +546,8 @@ def main() -> int:
         td = pathlib.Path(td)
         try:
             executed, violations = run_deck(pdk, binary, gds, td / "committed")
-        except MalformedReport as e:
-            print(f"FAIL: malformed deck report, nothing written: {e}", file=sys.stderr)
-            return 1
+        except (MalformedReport, IncompleteRun) as e:
+            return refuse(e)
         controls = []
         if not a.no_controls:
             for kind in CONTROLS:
@@ -416,9 +555,8 @@ def main() -> int:
                 broken_copy(gds, tmp, kind)
                 try:
                     ex2, v2 = run_deck(pdk, binary, tmp, td / f"ctl_{kind.replace('.', '_')}")
-                except MalformedReport as e:
-                    print(f"FAIL: malformed deck report, nothing written: {e}", file=sys.stderr)
-                    return 1
+                except (MalformedReport, IncompleteRun) as e:
+                    return refuse(e)
                 ok = kind in ex2 and kind in v2 and kind not in violations
                 controls.append({
                     "mutation": {"M1.a": "Metal1 sliver 0.10 um wide", "Gat.c": "GatPoly endcap 0.05 um over a scratch Activ"}[kind],
@@ -431,7 +569,10 @@ def main() -> int:
         print("FAIL: the GDS changed during the run", file=sys.stderr)
         return 1
     bad = [x for x in controls if x["result"] != "fails_as_expected"]
-    report = build_report(gds, executed, violations, ver_s, fv, tree, controls)
+    try:
+        report = build_report(gds, executed, violations, ver_s, fv, tree, controls)
+    except IncompleteRun as e:
+        return refuse(e)
     text = json.dumps(report, indent=2, sort_keys=False) + "\n"
 
     print(f"PDK deck {PDK_RELEASE_TAG} on KLayout {ver_s}: {report['status']}, "
