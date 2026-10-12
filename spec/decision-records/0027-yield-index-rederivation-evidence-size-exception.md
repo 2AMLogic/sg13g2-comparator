@@ -3,7 +3,7 @@
 - **Status**: proposed. **This record covers the evidence budget only.** It
   ratifies no bound and relaxes no Target or Stretch number. It authorizes one
   raise of the `sim/` total ceiling in `sim/evidence-size-budget.json` (issue
-  #132's contract), exactly the measured overage of 12702 B. It takes effect
+  #132's contract), exactly the measured overage of 12773 B. It takes effect
   only with the reviewed merge of the PR that lands it, as for DR-0005 to
   DR-0026. The drafting agent does not merge it, and drafting it is not agents
   relaxing the ratified spec.
@@ -17,7 +17,7 @@
 - **Numbering**: DR-0024 remains double-booked by open, unmerged PRs (#249,
   #243), as DR-0026 already records; whichever merges first keeps it and the
   other is renumbered on rebase with its cumulative `sim` entry re-measured.
-  This record's own 12702 B does not change unless this PR's `sim/` diff
+  This record's own 12773 B does not change unless this PR's `sim/` diff
   changes.
 
 ## Context
@@ -45,25 +45,26 @@ existing evidence file is modified and no report is regenerated:
 | `sim/kltsim/yield_reports.py` | index re-derivation in `check()`, JSON-path diff helper, recorded-provenance reader | +4476 |
 | `sim/kltsim/tests/test_yield_reports.py` | temp-copy index mutation tests (both campaigns) | +7148 |
 | `sim/klt-yield/README.md` | Reproduce section: what engine-free `check` re-derives vs what only `--rerun` verifies | +992 |
+| `sim/README.md` | harness cone table: the n200 preflight smoke envelope as a job input | +71 |
 | `sim/evidence-size-budget.json` | extended cumulative entry | +86 |
 
-The total is the measured overage, 12616 + 88 = 12702 B. This record lives
+The total is the measured overage, 12616 + 71 + 86 = 12773 B. This record lives
 under `spec/` and adds nothing to `sim/`.
 
 ## Decision
 
-Raise the `sim/` total ceiling by exactly **12702 B**. The single `sim` entry
-carries the cumulative 28215932 + 12702 = **28228634 B** and cites this
+Raise the `sim/` total ceiling by exactly **12773 B**. The single `sim` entry
+carries the cumulative 28215932 + 12773 = **28228705 B** and cites this
 record. The baseline, the 10 % allowance and all existing evidence are
 unchanged. No ratified spec bound is relaxed or changed.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 28228634}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 28228705}
 ```
 
-(Cumulative: 28215932 B from DR-0005 to DR-0026 and 12702 B authorized here.)
+(Cumulative: 28215932 B from DR-0005 to DR-0026 and 12773 B authorized here.)
 
 ## Consequences
 
