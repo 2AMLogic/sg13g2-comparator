@@ -61,6 +61,13 @@ record, the historical `.noise`/TRNOISE
 figures, the earlier power record, and the Monte-Carlo seeds. Mapping more is a
 spec/curation question, not something this guard decides.
 
+A third table (`VERDICT_CLAIMS`, issue #242) checks compliance WORDS, not figures:
+the noise row's headline and its current-evidence Target / Stretch verdicts are
+re-derived from the registered `noise-full-issue81` population (unrounded
+grid-wide mean vs the inclusive 1.0 / 0.6 mV bounds, full valid 45-point grid
+required) and must match; failures are labelled `numerical violation`,
+`incomplete evidence` or `absent mapping`.
+
 Zero dependencies beyond the Python 3 standard library; needs no PDK,
 ngspice or klt.
 
@@ -592,6 +599,101 @@ SOURCE_CLAIMS += [
 ]
 
 
+# --------------------------------------------------------------------------
+# Compliance verdict claims (issue #242). A verdict word (MET / NOT MET) is
+# DERIVED from the registered evidence population and the ratified bound, then
+# compared with the README. Scope of this first change: the noise row's current
+# headline and the Target / Stretch clauses of its "Current evidence" sentence,
+# all backed by `noise-full-issue81`. Compliance statistic (DR-0002 Row 2): the
+# grid-wide mean of the 45-point whole-latch `both` sigma, in mV rms (unrounded),
+# compared inclusively with Target 1.0 mV / Stretch 0.6 mV. Historical run
+# verdicts (`Verdict: PASS`) and the lower-bound prose are never read here.
+# --------------------------------------------------------------------------
+NOISE_TARGET_MV, NOISE_STRETCH_MV = 1.0, 0.6
+_VERDICT_RE = r"(NOT MET|MET)"
+# (name, source id, row prefix, column, loose locator, strict regex w/ one group,
+#  tiers the statement covers). The locator must occur EXACTLY once in the cell;
+# the strict regex must then match: missing, duplicated or reworded text fails.
+VERDICT_CLAIMS = [
+    ("noise verdict: compliance-path headline (Target and Stretch)",
+     "noise-full-issue81", _NOISE, 3,
+     r"on the compliance path \(Target and Stretch\)",
+     r"\*\*" + _VERDICT_RE + r" on the compliance path \(Target and Stretch\)\.\*\*",
+     ("target", "stretch")),
+    ("noise verdict: current-evidence Target (<= 1.0 mV)",
+     "noise-full-issue81", _NOISE, 3,
+     r"Target \(≤ [\d.]+ mV\)",
+     _CUR + r"Target \(≤ 1\.0 mV\) \*\*" + _VERDICT_RE + r"\*\*, Stretch \(≤ 0\.6 mV\)",
+     ("target",)),
+    ("noise verdict: current-evidence Stretch (<= 0.6 mV)",
+     "noise-full-issue81", _NOISE, 3,
+     r"Stretch \(≤ [\d.]+ mV\)",
+     _CUR + r"Target \(≤ 1\.0 mV\) \*\*(?:NOT MET|MET)\*\*, Stretch \(≤ 0\.6 mV\) \*\*"
+     + _VERDICT_RE + r"\*\*",
+     ("stretch",)),
+]
+
+
+def noise_tier_outcomes(src: dict) -> dict:
+    """Target/Stretch outcomes (True = MET) from a loaded noise source, each
+    tier evaluated independently. Raises SourceError unless the evidence is the
+    complete, valid, finite 45-point population."""
+    _expect(src.get("valid") == N_POINTS and src.get("expected") == N_POINTS,
+            f"{src.get('valid')!r} valid of {src.get('expected')!r} "
+            f"grid points, a compliance verdict needs the full {N_POINTS}-point grid")
+    mean = src.get("mean")
+    _expect(isinstance(mean, float) and math.isfinite(mean) and mean > 0,
+            f"grid-wide mean {mean!r} is not a finite positive sigma")
+    return {"target": mean <= NOISE_TARGET_MV, "stretch": mean <= NOISE_STRETCH_MV}
+
+
+def check_verdicts(rows, sources, verdict_claims=VERDICT_CLAIMS):
+    """Check VERDICT_CLAIMS. Returns (failures, checked). Failure causes stay
+    distinct: `absent mapping` (text missing/ambiguous/reworded), `incomplete
+    evidence` (source unavailable/invalid) and `numerical violation` (the
+    README verdict disagrees with the evidence-derived one)."""
+    failures, checked = [], 0
+    for name, sid, prefix, col, locator, pattern, tiers in verdict_claims:
+        idx = next((i for i, ln in enumerate(rows) if ln.startswith(prefix)), None)
+        if idx is None:
+            failures.append(f"{name} [source {sid}]: absent mapping: README table row "
+                            f"{prefix!r} not found")
+            continue
+        cells = [c.strip() for c in rows[idx].strip().strip("|").split(" | ")]
+        cell = cells[col] if len(cells) > col else ""
+        n = len(re.findall(locator, cell))
+        if n != 1:
+            failures.append(f"{name} [source {sid}]: absent mapping: verdict text "
+                            f"{locator!r} occurs {n} times in the README, expected exactly 1")
+            continue
+        m = re.search(pattern, cell, re.S)
+        if not m:
+            failures.append(f"{name} [source {sid}]: absent mapping: pattern {pattern!r} "
+                            "no longer matches the README")
+            continue
+        src = sources.get(sid)
+        if src is None or isinstance(src, SourceError):
+            failures.append(f"{name} [source {sid}]: incomplete evidence: source unavailable, "
+                            f"verdict {m.group(1)!r} cannot be verified")
+            continue
+        try:
+            outcomes = noise_tier_outcomes(src)
+        except SourceError as exc:
+            failures.append(f"{name} [source {sid}]: incomplete evidence: {exc}; "
+                            f"verdict {m.group(1)!r} cannot be verified")
+            continue
+        derived = "MET" if all(outcomes[t] for t in tiers) else "NOT MET"
+        if len({outcomes[t] for t in tiers}) > 1:  # a joint statement the tiers do not share
+            derived = "mixed (Target and Stretch differ)"
+        checked += 1
+        if m.group(1) != derived:
+            failures.append(
+                f"{name} [source {sid}]: numerical violation: README says {m.group(1)}, "
+                f"grid-wide mean {src['mean']:.6g} mV gives {derived} "
+                f"(Target <= {NOISE_TARGET_MV} mV, Stretch <= {NOISE_STRETCH_MV} mV)")
+    return failures, checked
+
+
 _COUNT_RE = re.compile(r"\b\d+/45\b|\b\d+ of 45\b")
 _FIG_RE = re.compile(r"\d+(?:\.\d+)?\s?(?:fC|µV|mV|ns|ps|µW)\b")
 
@@ -689,7 +791,7 @@ def check_sources(rows, sources, source_claims=SOURCE_CLAIMS):
 
 
 def check(readme_text: str, report: dict, claims=CLAIMS, sources=None,
-          source_claims=SOURCE_CLAIMS):
+          source_claims=SOURCE_CLAIMS, verdict_claims=VERDICT_CLAIMS):
     """Return (failures, checked, unchecked, source_checked).
 
     `sources` is load_sources() output; None skips the source-registry claims.
@@ -732,6 +834,7 @@ def check(readme_text: str, report: dict, claims=CLAIMS, sources=None,
     if sources is not None:
         sf, source_checked, scov = check_sources(rows, sources, source_claims)
         failures += sf
+        failures += check_verdicts(rows, sources, verdict_claims)[0]
         for (i, col), spans in scov.items():
             if col == MEASURED_COLUMN:
                 covered.setdefault((i, 0), set()).update(spans)
@@ -780,6 +883,9 @@ def main(argv=None) -> int:
     print(f"checked {checked}/{len(CLAIMS)} allowlisted README claims against {args.report.name}")
     ids = ", ".join(sorted(SOURCES))
     print(f"checked {src_checked}/{len(SOURCE_CLAIMS)} source-registry README claims against {ids}")
+    vchecked = check_verdicts(table_rows(text), sources)[1]
+    print(f"checked {vchecked}/{len(VERDICT_CLAIMS)} compliance-verdict README claims "
+          "(noise-full-issue81)")
     for row, c in counts:
         print(f"UNCHECKED count in row {row!r}: {c}")
     print(f"UNCHECKED unit-bearing figures not in the allowlist: {figs}")
