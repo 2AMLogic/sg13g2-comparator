@@ -490,23 +490,33 @@ def _pearson(xs: list[float], ys: list[float]) -> float | None:
 def _identity_map(samples: list[dict]) -> tuple[dict[int, dict], dict[str, str]]:
     """``sample_index -> sample`` over the draws whose identity is
     established (a valid, unrepeated index), plus ``{repr(index): reason}``
-    for every draw left out. A repeated index drops every copy: no copy is
-    ever selected, so the result cannot depend on envelope/sample order."""
+    for every draw left out (one entry per distinct repr; see
+    ``_identity_records`` for one entry per record)."""
+    out, records = _identity_records(samples)
+    return out, dict(records)
+
+
+def _identity_records(samples: list[dict]) -> tuple[dict[int, dict], list[tuple[str, str]]]:
+    """Like ``_identity_map`` but the second element lists ``(repr(index),
+    reason)`` once per rejected sample record, so repeated invalid indices
+    and every copy of a duplicate valid index are all counted (issue #252).
+    A repeated index drops every copy: no copy is ever selected, so the
+    result cannot depend on envelope/sample order."""
     counts: dict[int, int] = {}
     for s in samples:
         if valid_identity(s.get("sample_index")):
             counts[s["sample_index"]] = counts.get(s["sample_index"], 0) + 1
     out: dict[int, dict] = {}
-    bad: dict[str, str] = {}
+    bad: list[tuple[str, str]] = []
     for s in samples:
         idx = s.get("sample_index")
         if not valid_identity(idx):
-            bad[repr(idx)] = f"invalid sample_index {idx!r}"
+            bad.append((repr(idx), f"invalid sample_index {idx!r}"))
         elif counts[idx] > 1:
-            bad[repr(idx)] = f"sample index {idx} reported {counts[idx]} times"
+            bad.append((repr(idx), f"sample index {idx} reported {counts[idx]} times"))
         else:
             out[idx] = s
-    return out, bad
+    return out, sorted(bad)
 
 
 def paired(cm: list[dict], nom: list[dict]) -> dict:
@@ -594,6 +604,10 @@ def reproduction(a: dict[tuple, list[dict]], b: dict[tuple, list[dict]], *,
     repeated on a side is ``rejected`` -- both are listed by identity and
     prevent a complete reproduction (issue #250).
 
+    A comparison with zero expected draws (no shared point, or shared points
+    with ``expected_n`` None/0 and no reported draws) is INCOMPLETE, never
+    vacuously REPRODUCED (issue #252).
+
     ``verdict`` is REPRODUCED only when the comparison is complete (every
     expected draw trusted on both sides and compared) and every compared
     draw has the same seed and a bit-identical offset; INCOMPLETE when any
@@ -622,12 +636,12 @@ def reproduction(a: dict[tuple, list[dict]], b: dict[tuple, list[dict]], *,
         point = _label(key) if key is not None else None
         maps, bads = [], []
         for side, pts in sides:
-            m, bad = _identity_map(pts[key])
-            for idx_repr, reason in sorted(bad.items()):
-                n_rejected += 1
+            m, records = _identity_records(pts[key])
+            for idx_repr, reason in records:
+                n_rejected += 1  # one per rejected record, not per distinct repr
                 note(point, side, idx_repr, "rejected", reason)
             maps.append(m)
-            bads.append(bad)
+            bads.append({r for r, _ in records})
         amap, bmap = maps
         expected = set(amap) | set(bmap)
         if expected_n is not None:
@@ -657,7 +671,9 @@ def reproduction(a: dict[tuple, list[dict]], b: dict[tuple, list[dict]], *,
             max_diff = max(max_diff, diff)
             if diff == 0.0:
                 identical += 1
-    complete = not unmatched and n_missing == 0 and n_rejected == 0 and compared == expected_total
+    empty = expected_total == 0
+    complete = (not empty and not unmatched and n_missing == 0 and n_rejected == 0
+                and compared == expected_total)
     if not complete:
         verdict = REPRO_INCOMPLETE
     elif identical == compared and seed_mismatch == 0:
@@ -670,6 +686,9 @@ def reproduction(a: dict[tuple, list[dict]], b: dict[tuple, list[dict]], *,
             "sides": list(labels), "expected_draws": expected_total,
             "missing_draws": n_missing, "rejected_draws": n_rejected,
             "complete": complete, "verdict": verdict,
+            "empty_comparison": empty,
+            "empty_reason": ("no draws to compare: zero expected draws, so no reproduction "
+                             "can be certified" if empty else None),
             "unaccounted": unaccounted[:REPRO_LIST_MAX],
             "unaccounted_truncated": len(unaccounted) > REPRO_LIST_MAX,
             "surviving_draws_note": ("samples_compared / identical / seed_mismatches / "
@@ -894,6 +913,8 @@ def _repro_verdict(rep: dict) -> str:
         return "complete-reproduction verdict not recorded"
     text = (f"{verdict} ({rep.get('expected_draws')} expected draws, "
             f"{rep.get('missing_draws')} missing, {rep.get('rejected_draws')} rejected")
+    if rep.get("empty_comparison"):
+        text += f"; {rep.get('empty_reason') or 'no draws to compare'}"
     if rep.get("unaccounted"):
         first = rep["unaccounted"][0]
         text += (f"; first: {first['side']} {first['point']} sample "
