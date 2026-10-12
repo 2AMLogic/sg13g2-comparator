@@ -42,6 +42,9 @@ from .corners import (
     DEFAULT_NOMINAL_SUPPLY_V,
     DEFAULT_SUPPLY_TOLERANCE,
     DEFAULT_TEMPERATURES_C,
+    supply_points,
+    validate_supply_params,
+    validate_temperatures,
 )
 
 MANIFEST_NAME = "tb.json"
@@ -275,6 +278,18 @@ def load(directory: str | Path) -> Testbench:
 
     _validate_monte_carlo_seed(evidence, manifest.get("analyses", ("op",)), manifest_path)
 
+    try:
+        nominal_supply_v, supply_tolerance = validate_supply_params(
+            manifest.get("nominal_supply_v", DEFAULT_NOMINAL_SUPPLY_V),
+            manifest.get("supply_tolerance", DEFAULT_SUPPLY_TOLERANCE),
+        )
+        temperatures_c = tuple(
+            validate_temperatures(manifest.get("temperatures_c", DEFAULT_TEMPERATURES_C))
+        )
+        supply_points(nominal_supply_v, supply_tolerance)
+    except ValueError as exc:
+        raise ValueError(f"{manifest_path}: {exc}") from None
+
     data = netlist.read_bytes()
     tb = Testbench(
         directory=directory,
@@ -282,11 +297,9 @@ def load(directory: str | Path) -> Testbench:
         netlist=netlist,
         description=manifest.get("description", ""),
         claim=manifest.get("claim", ""),
-        nominal_supply_v=float(manifest.get("nominal_supply_v", DEFAULT_NOMINAL_SUPPLY_V)),
-        supply_tolerance=float(manifest.get("supply_tolerance", DEFAULT_SUPPLY_TOLERANCE)),
-        temperatures_c=tuple(
-            float(t) for t in manifest.get("temperatures_c", DEFAULT_TEMPERATURES_C)
-        ),
+        nominal_supply_v=nominal_supply_v,
+        supply_tolerance=supply_tolerance,
+        temperatures_c=temperatures_c,
         corners=tuple(manifest.get("corners", (DEFAULT_CORNER_SET,))),
         analyses=tuple(manifest.get("analyses", ("op",))),
         measure=measure,
