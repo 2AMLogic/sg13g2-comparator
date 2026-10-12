@@ -105,11 +105,25 @@ A yield is **not** either ratified statistic:
 python3 sim/run_klt_yield.py generate --campaign-id 20261010-d73a9ac
 
 # Engine-free consistency check (what CI's unit tests run): inputs regenerate
-# byte-for-byte from the source, hashes match the index, the manifest pin matches.
+# byte-for-byte from the source, hashes match the index, the manifest pin matches,
+# and the index itself re-derives from the validated populations, the committed
+# reports and the grader — every yield/interval number, ratified statistic
+# (value and agreement flag, so a stored `true` cannot conceal a wrong number),
+# population identity and completeness (point, source corner, seeds, attempted/
+# usable/excluded), declared block, ratified summary, report settings, and the
+# rendered index.md; each mismatch is reported with its JSON path (issue #255).
 python3 sim/run_klt_yield.py check
 # ... and re-run the engine, requiring byte-identical reports:
 python3 sim/run_klt_yield.py check --rerun
 ```
+
+Tool provenance (`index.json`'s `tool` block: reported version, command, pin
+values) is read back as recorded history by `check`, not re-executed: the
+checker never pretends to have run the historical invocation, and a superseded
+campaign generated under an older pin still re-derives byte-for-byte. Verifying
+the pinned engine itself — version against today's `manifests/klt-pin.json`,
+known-answer preflight, byte-identical reports — is exclusively `--rerun`'s
+job, which needs the native engine (see above).
 
 The engine defaults to the pinned build,
 `uvx --from 'klayout-tools[yield] @ git+https://github.com/2AMLogic/klayout-tools@<manifests/klt-pin.json commit>' klt`.
