@@ -245,8 +245,9 @@ simulation-free step (issue #64):
 ./sim/characterize.sh report check    # re-hash every indexed source; fail if anything is stale
 ```
 
-A grader change re-mints the report directory (the grader's sha256 is an indexed
-source); `sim/kltsim/characterization.py` `REPORT_DIR_NAMES` names the current
+A grader change re-mints the report directory (the sha256 of every grader source,
+`sim/kltsim/grade.py` and `sim/kltsim/populations.py`, is an indexed source);
+`sim/kltsim/characterization.py` `REPORT_DIR_NAMES` names the current
 one (`-r2` after issue #245) and the superseded directory stays as history.
 
 **Sample-population integrity (issue #245).** Before the offset and

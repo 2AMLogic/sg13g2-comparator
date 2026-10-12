@@ -57,6 +57,26 @@ class _Base:
         _drop(env, _at_point(env)[7])
         self.assert_point_rejected(env, "sample records")
 
+    def test_count_rule_alone_rejects_a_consistent_short_population(self):
+        # Delete one sample AND edit the point's klt summary to match (n = N-1,
+        # errored = 0), so the summary-consistency check passes; only the
+        # exact-N count rule in validate_point can name the short population.
+        env = self.make()
+        victim = _at_point(env)[7]
+        base = victim["corner_id"].rsplit("/mc", 1)[0]
+        _drop(env, victim)
+        remaining = len(_at_point(env))
+        edited = 0
+        for m in env["measurements"]:
+            for e in m["monte_carlo"]["by_corner"]:
+                if e["corner_id"] == base:
+                    e["n"], e["errored"] = remaining, 0
+                    edited += 1
+        self.assertEqual(edited, len(env["measurements"]))
+        self.assertIsNone(pops.check_summary({"n": remaining, "errored": 0}, _at_point(env)))
+        self.assert_point_rejected(
+            env, f"invalid sample population: has {remaining} sample records")
+
     def test_one_sample_per_point_is_not_pass(self):
         env = self.make()
         env["corners"] = [c for c in env["corners"] if c["monte_carlo"]["sample_index"] == 0]
@@ -170,6 +190,15 @@ class SharedHelperTests(unittest.TestCase):
         for bad in ({"n": 5}, {"n": "5", "errored": 0}, {"n": True, "errored": 0},
                     {"n": 5.5, "errored": 0}, {"n": float("nan"), "errored": 0}):
             self.assertIn("malformed", pops.check_summary(bad, recs))
+
+    def test_count_error_carries_the_count(self):
+        cs = [{"corner_id": f"b/mc{k}", "monte_carlo": {"sample_index": k}} for k in range(3)]
+        with self.assertRaises(pops.PopulationError) as cm:
+            pops.validate_point(cs, 4)
+        self.assertEqual((cm.exception.kind, cm.exception.count), ("count", 3))
+        with self.assertRaises(pops.PopulationError) as cm:
+            pops.validate_point(cs + cs[:1], 4)
+        self.assertIsNone(cm.exception.count)
 
     def test_validate_point_is_order_invariant(self):
         cs = [{"corner_id": f"b/mc{k}", "monte_carlo": {"sample_index": k}} for k in range(3)]

@@ -218,8 +218,7 @@ def _population_message(bench_name: str, label: str, exc: pop_mod.PopulationErro
     if exc.kind == "index":
         return f"{bench_name}: {exc.message}"
     if exc.kind == "count":  # historical wording, kept for report/test compatibility
-        n = exc.message.split()[1]
-        return (f"{bench_name}: {label} has {n} draws, the ratified basis is "
+        return (f"{bench_name}: {label} has {exc.count} draws, the ratified basis is "
                 f"N = {expected_n}")
     return f"{bench_name}: {label} {exc.message}"
 

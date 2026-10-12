@@ -25,12 +25,14 @@ class PopulationError(ValueError):
     """A point's sample records are not the declared population.
 
     ``kind`` is one of ``index``, ``base``, ``duplicate``, ``count``,
-    ``summary``; ``message`` carries no bench/point prefix."""
+    ``summary``; ``message`` carries no bench/point prefix. ``count`` is the
+    number of sample records found for a ``count`` error, else None."""
 
-    def __init__(self, kind: str, message: str):
+    def __init__(self, kind: str, message: str, count: int | None = None):
         super().__init__(message)
         self.kind = kind
         self.message = message
+        self.count = count
 
 
 def sample_index(corner) -> int:
@@ -65,7 +67,7 @@ def validate_point(corners: list[dict], expected_n: int) -> tuple[str, list[int]
     if len(indices) != expected_n:
         raise PopulationError(
             "count", f"has {len(indices)} sample records, the ratified basis is "
-                     f"N = {expected_n}")
+                     f"N = {expected_n}", count=len(indices))
     return bases.pop(), indices
 
 

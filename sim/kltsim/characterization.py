@@ -91,6 +91,13 @@ ROW_CAVEATS = {
 }
 
 
+#: Every module that decides what the grader accepts or computes. Each is an
+#: indexed ``grader`` source, so changing any of them (including the shared
+#: sample-population acceptance policy in ``populations.py``) makes the report
+#: stale; ``verify_index`` also rejects an index that omits one of them.
+GRADER_SOURCES = ("sim/kltsim/grade.py", "sim/kltsim/populations.py")
+
+
 class CharacterizationError(RuntimeError):
     """Inputs are stale, tampered, inconsistent or unusable: no report is made."""
 
@@ -188,7 +195,8 @@ def build_index(grading: dict, rows_spec: dict, campaign_dir: Path,
     add("sim/dut.json", "dut-binding")
     add(grading["dut"]["netlist"], "dut-netlist")
     add(rows_spec["spec_source"], "ratified-spec")
-    add("sim/kltsim/grade.py", "grader")
+    for rel in GRADER_SOURCES:
+        add(rel, "grader")
     for rel in _retained_paths(grading):
         add(rel, "retained-record")
     sources.sort(key=lambda s: s["path"])
@@ -215,6 +223,11 @@ def verify_index(index: dict, root: Path | None = None) -> list[str]:
     problems = []
     if index.get("schema") != SCHEMA_INDEX:
         problems.append(f"index schema is {index.get('schema')!r}, expected {SCHEMA_INDEX}")
+    graders = {src.get("path") for src in index.get("sources") or []
+               if src.get("role") == "grader"}
+    for rel in GRADER_SOURCES:
+        if rel not in graders:
+            problems.append(f"{rel}: grader source is not indexed (stale index)")
     for src in index.get("sources") or []:
         path = root / src["path"]
         if not path.is_file():
