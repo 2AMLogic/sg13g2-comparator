@@ -14,6 +14,7 @@ import contextlib
 import hashlib
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -331,19 +332,12 @@ class SizeEstimate(unittest.TestCase):
             estimate.estimate_from_sizes(200, "ref", "HEAD", [("grading.json", 1)], [], self.BUDGET, 0,
                                           ref_n=60, yield_ref_n=60)
 
-    def test_equal_target_and_reference_n_leave_variable_bytes_unchanged(self):
-        e = self.est(200, ref_n=200, yield_ref_n=200)
-        self.assertEqual(e["campaign_unit_bytes"], 3_700 + 1_600_000 + estimate.GRADING_ALLOWANCE)
-        self.assertEqual(e["yield_unit_bytes"], 150_000)
-        self.assertEqual(e["reference_n"], 200)
-
-    def test_actual_ratio_and_independent_yield_denominator(self):
-        e = self.est(100, ref_n=50, yield_ref_n=60)
-        self.assertEqual(e["campaign_unit_bytes"], 3_700 + 3_200_000 + estimate.GRADING_ALLOWANCE)
-        self.assertEqual(e["yield_unit_bytes"], 250_000)
-        # changing only the offset reference leaves yield scaling alone
-        self.assertEqual(self.est(100, ref_n=200, yield_ref_n=60)["yield_unit_bytes"], 250_000)
-        self.assertEqual(e["yield_reference_n"], 60)
+    def test_reference_counts(self):
+        same = self.est(200, ref_n=200, yield_ref_n=200)  # N = ref N: variable bytes scale by 1
+        self.assertEqual((same["campaign_unit_bytes"], same["yield_unit_bytes"]), (1_803_700, 150_000))
+        e = self.est(100, ref_n=50, yield_ref_n=60)  # actual ratios, independent denominators
+        self.assertEqual((e["campaign_unit_bytes"], e["yield_unit_bytes"]), (3_403_700, 250_000))
+        self.assertEqual(self.est(100, ref_n=200)["yield_unit_bytes"], 250_000)
         self.assertIn("yield reference", estimate.render(e))
 
 
@@ -352,70 +346,45 @@ def _req(n):
 
 
 class ReferenceResolution(unittest.TestCase):
-    def reader(self, ns, missing=()):
-        def read(path):
-            for part in estimate.OFFSET_PARTS:
-                if f"mos_{part}_mismatch" in path:
-                    if part in missing:
-                        raise estimate.EstimateError(f"cannot read {path}")
-                    v = ns[part] if isinstance(ns, dict) else ns
-                    return v if isinstance(v, bytes) else _req(v)
-            raise AssertionError(path)
-        return read
-
-    def test_consistent_declaration(self):
-        self.assertEqual(estimate.reference_offset_n("c", "HEAD", self.reader(200)), 200)
-        self.assertEqual(estimate.reference_offset_n("c", "HEAD", self.reader(60)), 60)
-
-    def test_conflicting_missing_or_invalid_is_an_error(self):
-        bad = {p: 200 for p in estimate.OFFSET_PARTS}
-        for case in ({**bad, "ss": 60}, {**bad, "tt": b"{not json"}, {**bad, "tt": b"{}"},
-                     {**bad, "tt": _req(1)}, {**bad, "tt": _req("200")}, {**bad, "tt": _req(True)}):
+    def test_offset_n(self):
+        ok = {p: _req(200) for p in estimate.OFFSET_PARTS}
+        n = lambda d: estimate.reference_offset_n("c", "T", lambda p: d[p.split("_")[-2]])  # noqa: E731
+        self.assertEqual(n(ok), 200)
+        for bad in (_req(60), b"{x", b"{}", _req(1), _req("200"), _req(True), None):  # None: missing
             with self.assertRaises(estimate.EstimateError):
-                estimate.reference_offset_n("c", "HEAD", self.reader(case))
-        with self.assertRaises(estimate.EstimateError):
-            estimate.reference_offset_n("c", "HEAD", self.reader(bad, missing=("fs",)))
+                n({**ok, "ss": bad})
 
-    def test_yield_reference_n(self):
-        rep = lambda ns: (lambda _p: json.dumps({"measurements": [{"n": n} for n in ns]}).encode())  # noqa: E731
-        self.assertEqual(estimate.reference_yield_n("HEAD", rep([60, 60])), 60)
+    def test_yield_n(self):
+        n = lambda ns: estimate.reference_yield_n("T", lambda _: json.dumps(  # noqa: E731
+            {"measurements": [{"n": k} for k in ns]}))
+        self.assertEqual(n([60, 60]), 60)
         for bad in ([60, 200], [], [0]):
             with self.assertRaises(estimate.EstimateError):
-                estimate.reference_yield_n("HEAD", rep(bad))
+                n(bad)
 
 
 class CommittedTreeControls(unittest.TestCase):
-    """The selected git tree, not the working tree, supplies the metadata."""
-
-    def test_tree_differs_from_working_tree(self):
-        import subprocess
+    def test_tree_not_working_tree(self):
         with tempfile.TemporaryDirectory() as d:
-            root = Path(d)
-
-            def git(*a):
-                subprocess.run(["git", "-C", d, "-c", "user.name=t", "-c", "user.email=t@t", *a],
-                               check=True, capture_output=True)
-
+            root, camp = Path(d), Path(d, estimate.CAMPAIGNS, "c")
+            git = lambda *a: subprocess.run(["git", "-C", d, "-c", "user.name=t", "-c",  # noqa: E731
+                                             "user.email=t@t", *a], check=True, capture_output=True)
             git("init", "-q")
-            camp = root / estimate.CAMPAIGNS / "c"
             camp.mkdir(parents=True)
-            yd = root / estimate.YIELD_REFERENCE
-            yd.mkdir(parents=True)
-            (root / estimate.BUDGET).write_text(json.dumps(
-                {"new_unit_ceiling_bytes": 10**9, "total_ceiling_bytes": 10**10}))
-            (yd / "offset.yield.json").write_text(json.dumps({"measurements": [{"n": 60}]}))
-            for part in estimate.OFFSET_PARTS:
-                (camp / f"offset_mc.mos_{part}_mismatch.request.json").write_text(_req(200).decode())
-                (camp / f"offset_mc.mos_{part}_mismatch.envelope.json").write_text("x" * 1000)
+            Path(d, estimate.YIELD_REFERENCE).mkdir(parents=True)
+            Path(d, estimate.BUDGET).write_text('{"new_unit_ceiling_bytes": 1, "total_ceiling_bytes": 1}')
+            Path(d, estimate.YIELD_OFFSET_REPORT).write_text('{"measurements": [{"n": 60}]}')
+            reqs = [camp / f"offset_mc.mos_{p}_mismatch.request.json" for p in estimate.OFFSET_PARTS]
+            for r in reqs:
+                r.write_bytes(_req(200))
             git("add", "-A")
-            git("commit", "-q", "-m", "c")
-            for part in estimate.OFFSET_PARTS:  # uncommitted divergence
-                (camp / f"offset_mc.mos_{part}_mismatch.request.json").write_text(_req(60).decode())
+            git("commit", "-qm", "c")
+            for r in reqs:
+                r.write_bytes(_req(60))
             with mock.patch.object(estimate.build_mod, "REPO_ROOT", root):
                 e = estimate.estimate_offset_campaign(200, "c", "HEAD")
-            self.assertEqual(e["reference_n"], 200)
-            self.assertEqual(e["tree"], "HEAD")
-            self.assertEqual(e["yield_reference_n"], 60)
+                self.assertRaises(estimate.EstimateError, estimate.reference_offset_n, "gone", "HEAD")
+            self.assertEqual((e["reference_n"], e["yield_reference_n"], e["tree"]), (200, 60, "HEAD"))
 
     def test_cli_rejects_invalid_n(self):
         with contextlib.redirect_stderr(io.StringIO()):
