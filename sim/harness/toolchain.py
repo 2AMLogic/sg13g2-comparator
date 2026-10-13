@@ -77,6 +77,8 @@ def check(pdk_version: str, ngspice_banner: str, path: Path = TOOLCHAIN_JSON) ->
     }
     drift: list[str] = []
 
+    # The release marker names the intended model SOURCES, not the compiled
+    # .osdi bytes; those are identified by pdk.osdi_identity() (issue #196).
     pinned_pdk = pins.get("pdk_release")
     if pinned_pdk and pdk_version != pinned_pdk:
         drift.append(

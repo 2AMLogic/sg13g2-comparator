@@ -588,6 +588,29 @@ def render_record(
         f"- **Toolchain**: {context['toolchain']['observed']['ngspice']}, "
         f"Python {context['toolchain']['observed']['python']}",
     ]
+    osdi = context.get("osdi")
+    if osdi:
+        lines.append(
+            f"- **OSDI model bytes**: inventory sha256 `{osdi['inventory_sha256'][:16]}` "
+            f"({len(osdi['files'])} files, unchanged after the grid; byte identity, "
+            "not compiler or PDK authenticity); build provenance "
+            f"**{osdi['build_provenance']['status']}**")
+    sources = context.get("model_sources")
+    if sources:
+        scope = sources["scope"]
+        lines.append(
+            f"- **SPICE model sources**: inventory sha256 "
+            f"`{sources['inventory_sha256'][:16]}` ({len(sources['files'])} files under "
+            f"`{scope['tree']}/`, unchanged after the grid; deck roots "
+            f"{', '.join(f'`{r}`' for r in scope['roots']) or '(none)'}); scope: "
+            f"{scope['note']}")
+        if not scope["complete"]:
+            gaps = ([f"link `{p}` leaves the tree" for p in scope["outside_tree_links"]]
+                    + [f"directory `{p}` not inventoried" for p in scope["uninventoried_dirs"]]
+                    + [f"`{r['from']}` references `{r['ref']}` ({r['reason']})"
+                       for r in scope["uninventoried_references"]])
+            lines.append("  - **Inventory scope INCOMPLETE** — model loading may read "
+                         "bytes this hash does not cover: " + "; ".join(gaps))
     if context["toolchain"]["drift"]:
         lines.append("- **TOOLCHAIN DRIFT ACCEPTED** (`--allow-toolchain-drift`):")
         lines += [f"  - {d}" for d in context["toolchain"]["drift"]]

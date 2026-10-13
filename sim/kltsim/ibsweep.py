@@ -18,6 +18,7 @@ swept``, never as PASS.
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 
@@ -95,23 +96,114 @@ def _cell(entry: dict | None) -> dict:
     }
 
 
-def probe_summary(campaign_dir: Path) -> dict:
+def _expected_grid() -> list[tuple[str, float, float]]:
+    rows = json.loads((build_mod.EXPERIMENT_DIR / "rows.json").read_text(encoding="utf-8"))
+    return grade_mod.grid_keys(rows["grid"])
+
+
+def _probe_v(index: dict, name: str) -> float:
+    """``name`` as a finite, non-bool voltage in V, or ValueError (named reason)."""
+    m = index.get(name)
+    if m is None or m.get("value") is None:
+        raise ValueError(f"probe {name} missing")
+    try:
+        x = grade_mod.finite(m["value"], f"probe {name}")
+    except grade_mod.NonFiniteError as exc:
+        raise ValueError(f"invalid numeric evidence: {exc}") from None
+    unit = m.get("unit")
+    if not isinstance(unit, str):
+        raise ValueError(f"probe {name} has missing or malformed unit {unit!r} (expected V or a compatible voltage unit)")
+    try:
+        x = grade_mod.convert(x, unit, "V")
+    except grade_mod.UnitError:
+        raise ValueError(f"probe {name} unit {unit!r} is not a voltage unit") from None
+    if not math.isfinite(x):
+        raise ValueError(f"probe {name} is not finite after conversion to V")
+    return x
+
+
+def probe_summary(campaign_dir: Path, grid_points: list | None = None) -> dict:
     """Mirror/headroom indicators from the bias probes of one regeneration
     envelope: the diode-connected reference's Vgs and the tail drain voltage
-    early in evaluation, over the 45 points."""
+    early in evaluation, over the expected PVT grid (45 points).
+
+    Each expected physical (process, V, T) point is validated before its
+    probes are used (issue #267): the corner must be ok and unambiguous (no
+    repeated corner name, no second corner at the same physical point, no
+    repeated measurement name), both probes present, finite, non-bool and in
+    a voltage unit (normalised to V), and ``vref_v`` > 0 (a zero or negative
+    diode Vgs is nonphysical; never divided by). Rejected points are listed
+    with a reason and never contribute to extrema or counts; ``complete`` is
+    False unless every expected point is valid."""
     env_path = campaign_dir / "regeneration.envelope.json"
     if not env_path.is_file():
         return {}
     env = json.loads(env_path.read_text(encoding="utf-8"))
+    expected = grid_points if grid_points is not None else _expected_grid()
+    expected_set = {(k[0], round(k[1], 6), k[2]) for k in expected}
+    raw = env.get("corners") if isinstance(env, dict) else None
+    corners = [c for c in raw if isinstance(c, dict)] if isinstance(raw, list) else []
+    name_count: dict = {}
+    by_key: dict = {}
+    rejected: list[dict] = []
+    for c in corners:
+        if c.get("monte_carlo") is not None:
+            continue
+        name_count[c.get("corner_id")] = name_count.get(c.get("corner_id"), 0) + 1
+        key = grade_mod._corner_key(c)
+        if key is None:
+            rejected.append({"point": str(c.get("corner_id")), "why": "corner cannot be placed on a physical PVT point"})
+        elif key not in expected_set:
+            rejected.append({"point": str(c.get("corner_id")), "why": "outside the expected PVT grid"})
+        else:
+            by_key.setdefault(key, []).append(c)
     vref, tmid, ratio = [], [], []
-    for c in env.get("corners") or []:
-        v = {m["name"]: m.get("value") for m in c.get("measurements") or []}
-        if v.get("vref_v") is not None and v.get("tmid_eval_v") is not None:
-            vref.append((v["vref_v"], c["corner_id"]))
-            tmid.append((v["tmid_eval_v"], c["corner_id"]))
-            ratio.append((v["tmid_eval_v"] / v["vref_v"], c["corner_id"]))
+    for gk in expected:
+        key = (gk[0], round(gk[1], 6), gk[2])
+        label = grade_mod.key_label(gk)
+        cs = by_key.get(key, [])
+        if not cs:
+            rejected.append({"point": label, "why": "grid point not in the envelope"})
+            continue
+        if len(cs) > 1:
+            rejected.append({"point": label, "why": "ambiguous duplicate PVT result, no value selected: "
+                             + "; ".join(sorted(str(c.get("corner_id")) for c in cs))})
+            continue
+        c = cs[0]
+        cid = c.get("corner_id")
+        if not isinstance(cid, str) or name_count.get(cid, 0) > 1:
+            rejected.append({"point": label, "why": f"repeated or malformed corner name {cid!r}, no value selected"})
+            continue
+        why = grade_mod._corner_problems(c, "regeneration", [])
+        if why is None:
+            index, why = grade_mod.measurement_index(c)
+        if why is None:
+            try:
+                vr, tm = _probe_v(index, "vref_v"), _probe_v(index, "tmid_eval_v")
+                if vr <= 0:
+                    raise ValueError(f"vref_v {vr:g} V is zero or negative (nonphysical diode Vgs); no ratio formed")
+                if tm < 0:
+                    raise ValueError(f"tmid_eval_v {tm:g} V is negative (nonphysical drain voltage)")
+                r = tm / vr
+                if not math.isfinite(r):
+                    raise ValueError("tail/reference ratio is not finite")
+            except ValueError as exc:
+                why = str(exc)
+        if why is not None:
+            rejected.append({"point": label, "why": why})
+            continue
+        vref.append((vr, cid))
+        tmid.append((tm, cid))
+        ratio.append((r, cid))
+    cover = {
+        "points": len(vref),
+        "points_valid": len(vref),
+        "points_expected": len(expected),
+        "complete": len(vref) == len(expected) and not rejected,
+        "rejected": rejected,
+    }
     if not vref:
-        return {}
+        return cover
     lo = lambda xs: min(xs)  # noqa: E731
     hi = lambda xs: max(xs)  # noqa: E731
     return {
@@ -122,7 +214,7 @@ def probe_summary(campaign_dir: Path) -> dict:
         "tail_near_triode_points": sum(1 for x, _ in tmid if x < TAIL_TRIODE_V),
         "tail_ref_vds_mismatch_points": sum(
             1 for x, _ in ratio if not TAIL_TO_REF_RANGE[0] <= x <= TAIL_TO_REF_RANGE[1]),
-        "points": len(vref),
+        **cover,
     }
 
 
@@ -197,6 +289,13 @@ def flags(point: dict) -> list[str]:
     if not m:
         return ["no mirror/headroom probes"]
     out = []
+    expected = m.get("points_expected")
+    if expected is not None and not m.get("complete", True):
+        out.append(f"INCOMPLETE screening: {m.get('points_valid', 0)}/{expected} expected PVT points "
+                   f"have valid mirror probes ({len(m.get('rejected') or [])} rejected; see ibsweep.json); "
+                   "not a clean comparison")
+    if m.get("points_valid") == 0:
+        return out + ["no valid mirror/headroom probes"]
     if m["tail_near_triode_points"]:
         out.append(f"tail Vds < {TAIL_TRIODE_V} V early in evaluation at {m['tail_near_triode_points']}/{m['points']} "
                    "points (tail near triode: current below the mirror's 4x)")
@@ -257,7 +356,7 @@ def render_markdown(result: dict) -> str:
               "|---|---|---|---|"]
     for p in result["points"]:
         m = p.get("mirror") or {}
-        if not m:
+        if not m or m.get("points_valid") == 0:
             lines.append(f"| {_fmt(p['dut_ib_ua'])} | - | - | - |")
             continue
         lines.append(

@@ -71,7 +71,11 @@ and the manifest's pinned `content_hash` are both refreshed (and
 `t1-signoff-report.json` re-rendered). Regenerating the GDS or the netlist is
 therefore a four-file change: artifact, envelope, manifest, report. The
 `.sch` sources are not hashed directly, only the netlist derived from them;
-`python3 design/netlist.py --check` is what ties them.
+`python3 design/netlist.py --check` is what ties them, and CI enforces it: job
+`netlist-regeneration` regenerates the netlist from the `.sch`/`.sym` sources
+with a pinned real xschem and the `sim/pdk.json` PDK and fails if the committed
+netlist differs, so a schematic edit cannot leave this hashed netlist (and the
+item 1 evidence anchored to it) silently stale (see `design/README.md`).
 
 ## What is deliberately uncited, and why
 
@@ -154,7 +158,7 @@ both file-backed and pinned by `content_hash`.
 
 | Part | File | Pinned `content_hash` | Tool-defined value |
 |---|---|---|---|
-| `klt erc` | `layout/comparator/erc_report.json` | `sha256:67e44380bac6f5b2eb52ac80cfc0422856e06a8b12cd7526b36717531655ea41` | `provenance.input.content_hash`: the GDS (the same value item 3 pins) |
+| `klt erc` | `layout/comparator/erc_report.json` | `sha256:583e99c6ee32474e0209d3aeaeb406393050e2bce9de4674bf091ee6a9e9d80d` | `provenance.input.content_hash`: the GDS (the same value item 3 pins) |
 | `klt lvs` | `layout/comparator/lvs_report.json` | `sha256:6970e7e51951f876f68536d37d37adf16e5ff121862c9ee60a8be94ff6a3bf0b` | `provenance.input.content_hash`: the extracted netlist (item 4's value; the envelope was **not** re-minted, none of its inputs changed) |
 
 **Declared supply set, reconciled against the schematic.** The ERC request
@@ -215,7 +219,7 @@ body verification.
 Item 3 cites `layout/comparator/drc_report.json`, the `klt drc --deck sg13g2
 --top comparator` envelope for `layout/comparator/comparator.gds` (issue
 #59), pinned by `content_hash`
-`sha256:67e44380bac6f5b2eb52ac80cfc0422856e06a8b12cd7526b36717531655ea41`
+`sha256:583e99c6ee32474e0209d3aeaeb406393050e2bce9de4674bf091ee6a9e9d80d`
 (the GDS's own hash, recorded as `provenance.input.content_hash`). It reads
 `status: clean`, `violation_count: 0`, `rules_checked` 21, against deck
 `sha256:894326a4e37fb24fef2f7ffc6ae1da55a0e262b0f0bc1c09adc4862909278fda`

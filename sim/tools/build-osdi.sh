@@ -15,6 +15,7 @@
 #   export PDK=ihp-sg13g2
 #   sim/tools/build-osdi.sh                 # fetch compiler + compile models
 #   sim/tools/build-osdi.sh --check         # verify only: models present + loadable
+#                                           # (+ sha256s, receipt match or UNKNOWN)
 #
 # WHAT THIS DOES AND WHY
 #
@@ -77,8 +78,92 @@ LIBLLVM21_DEB_ASSET="libllvm21_21.1.8-${LIBLLVM21_DEB_CODENAME}_amd64.deb"
 # PDK's own openvaf-compile-va.sh / ngspice/install.py model list.
 MODELS=("psp103:psp103" "psp103_nqs:psp103" "r3_cmc:r3_cmc" "mosvar:mosvar")
 
+BUILD_FLAGS=(-D__NGSPICE__)
+REQUIRED_OSDI=(psp103.osdi psp103_nqs.osdi r3_cmc.osdi mosvar.osdi)
+RECEIPT_NAME=".build-osdi-receipt.json"  # == harness/pdk.py OSDI_RECEIPT
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SIM_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+sha256_of() {  # file, or - for stdin
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    echo "build-osdi.sh: neither sha256sum nor shasum available -- cannot verify download." >&2
+    exit 3
+  fi
+}
+
+# --------------------------------------------------------------------------
+# Issue #196: build receipt + provenance report. A receipt is written ONLY
+# after this script compiles every model, into ${OSDI_DIR} (machine-local,
+# never committed). It ties each output's sha256 to the compiler pin,
+# platform, flags and a sha256 over every file in each Verilog-A source dir.
+# A binary whose hash no receipt names is reported as UNKNOWN provenance --
+# never attributed to this compiler. Hashes identify bytes; they prove
+# neither compiler version nor PDK authenticity, nor loadability (--check).
+# --------------------------------------------------------------------------
+tree_sha256() {  # sha256 of "<sha256>  <relpath>" lines, every file under $1, sorted
+  local f
+  ( cd "$1" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do
+      echo "$(sha256_of "${f}")  ${f#./}"
+    done ) | sha256_of -
+}
+
+write_receipt() {
+  local receipt="${OSDI_DIR}/${RECEIPT_NAME}" tmp entry subdir seen=" " sep="" m marker=unknown
+  local fv="${PDK_ROOT}/${PDK}/.fetched-version"
+  [[ -f "${fv}" ]] && marker="$(tr -cd 'A-Za-z0-9._+-' < "${fv}")"
+  tmp="${receipt}.tmp.$$"
+  {
+    echo '{'
+    echo '  "schema": 1,'
+    echo '  "note": "machine-local attribution by sim/tools/build-osdi.sh; hashes identify bytes, not authenticity",'
+    echo "  \"compiler\": {\"repo\": \"${OPENVAF_REPO}\", \"tag\": \"${OPENVAF_TAG}\", \"asset\": \"${asset}\", \"asset_sha256\": \"${sha}\", \"libllvm_deb_sha256\": \"${OPENVAF_EXTRA_LD_LIBRARY_PATH:+${LIBLLVM21_DEB_SHA256}}\"},"
+    echo "  \"platform\": \"${uname_s}/${uname_m}\","
+    echo "  \"build_flags\": \"${BUILD_FLAGS[*]}\","
+    echo "  \"pdk_release_marker\": \"${marker:-unknown}\","
+    printf '  "sources": {'
+    for entry in "${MODELS[@]}"; do
+      subdir="${entry##*:}"
+      [[ "${seen}" == *" ${subdir} "* ]] && continue
+      seen+="${subdir} "
+      printf '%s\n    "%s/": "%s"' "${sep}" "${subdir}" "$(tree_sha256 "${VA_DIR}/${subdir}")"
+      sep=","
+    done
+    printf '\n  },\n  "outputs": {'
+    sep=""
+    for m in "${REQUIRED_OSDI[@]}"; do
+      printf '%s\n    "%s": "%s"' "${sep}" "${m}" "$(sha256_of "${OSDI_DIR}/${m}")"
+      sep=","
+    done
+    printf '\n  }\n}\n'
+  } > "${tmp}"
+  mv "${tmp}" "${receipt}"
+}
+
+report_provenance() {
+  local receipt="${OSDI_DIR}/${RECEIPT_NAME}" m h unknown=""
+  for m in "${REQUIRED_OSDI[@]}"; do
+    if [[ ! -r "${OSDI_DIR}/${m}" ]]; then
+      echo "build-osdi.sh: ${m} missing or unreadable -- no byte identity" >&2
+      return 1
+    fi
+    h="$(sha256_of "${OSDI_DIR}/${m}")"
+    echo "build-osdi.sh: sha256 ${h}  ${m}"
+    [[ -f "${receipt}" ]] && grep -qF "\"${m}\": \"${h}\"" "${receipt}" || unknown+=" ${m}"
+  done
+  if [[ -n "${unknown}" ]]; then
+    echo "build-osdi.sh: build provenance UNKNOWN for${unknown}: no receipt in ${OSDI_DIR} names these bytes (not built by this script here, or changed since). Origin is not attributed."
+  else
+    echo "build-osdi.sh: build provenance: ${RECEIPT_NAME} names every output hash (local attribution, not proof of authenticity)."
+  fi
+}
+
+# Sourced (tests): stop after the definitions above.
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
 
 CHECK_ONLY=0
 FORCE=0
@@ -106,17 +191,6 @@ if [[ ! -d "${VA_DIR}" ]]; then
   echo "build-osdi.sh: ${VA_DIR} not found -- is PDK_ROOT really an IHP-Open-PDK install?" >&2
   exit 3
 fi
-
-sha256_of() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
-  elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{print $1}'
-  else
-    echo "build-osdi.sh: neither sha256sum nor shasum available -- cannot verify download." >&2
-    exit 3
-  fi
-}
 
 # --------------------------------------------------------------------------
 # Linux/x86_64 only: fetch, checksum-verify, and unpack the real
@@ -186,8 +260,6 @@ EOF
 # actually loadable by the ngspice on PATH. Cheap enough to call from a
 # run_*.sh preflight (harness/pdk.py's REQUIRED_OSDI names the same four).
 # --------------------------------------------------------------------------
-REQUIRED_OSDI=(psp103.osdi psp103_nqs.osdi r3_cmc.osdi mosvar.osdi)
-
 check_models() {
   local missing=0 m
   for m in "${REQUIRED_OSDI[@]}"; do
@@ -248,12 +320,14 @@ check_models() {
 
 if [[ ${CHECK_ONLY} -eq 1 ]]; then
   check_models
+  report_provenance
   exit $?
 fi
 
 if [[ ${FORCE} -eq 0 ]] && check_models >/dev/null 2>&1; then
   echo "build-osdi.sh: models already built and loadable in ${OSDI_DIR} (use --force to rebuild)."
-  exit 0
+  report_provenance
+  exit $?
 fi
 
 # --------------------------------------------------------------------------
@@ -343,6 +417,7 @@ run_openvaf() {
 echo "build-osdi.sh: compiler: $(run_openvaf --version 2>&1 | head -1) (${OPENVAF_REPO} ${OPENVAF_TAG})"
 
 mkdir -p "${OSDI_DIR}"
+rm -f "${OSDI_DIR}/${RECEIPT_NAME}"  # a stale receipt must never outlive a rebuild
 for entry in "${MODELS[@]}"; do
   model="${entry%%:*}"
   subdir="${entry##*:}"
@@ -352,8 +427,10 @@ for entry in "${MODELS[@]}"; do
   # -D__NGSPICE__ and the model list mirror the PDK's own
   # libs.tech/verilog-a/openvaf-compile-va.sh, so what lands here is what
   # the PDK intends ngspice to load -- not a locally invented build.
-  ( cd "${VA_DIR}/${subdir}" && run_openvaf -D__NGSPICE__ -o "${OSDI_DIR}/${model}.osdi" "${model}.va" )
+  ( cd "${VA_DIR}/${subdir}" && run_openvaf "${BUILD_FLAGS[@]}" -o "${OSDI_DIR}/${model}.osdi" "${model}.va" )
 done
+write_receipt
 
 echo
 check_models
+report_provenance

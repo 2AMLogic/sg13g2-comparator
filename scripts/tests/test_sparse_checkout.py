@@ -23,6 +23,8 @@ the size check slipped past an earlier version of this test).
 The test uses committed state (HEAD): commit before running it.
 """
 
+import fnmatch
+import importlib.util
 import os
 import re
 import shutil
@@ -37,10 +39,19 @@ CI = ROOT / ".github" / "workflows" / "ci.yml"
 NESTED = "LOOM_SPARSE_TEST_NESTED"
 ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
 KLT_JOBS = {"signoff-manifest-parity", "layout-reproducibility"}
+NETLIST_JOB = "netlist-regeneration"
 SIZE_JOB = "append-only-evidence"
 SIZE_STEP = "Check tracked sim/ evidence size budget"
 NARROW = "git sparse-checkout set --no-cone --stdin <<'EOF'\n"
 UPLOAD_PACK = "git -c uploadpack.allowFilter=true upload-pack"
+
+# The lint-scope preflight (issue #216): its LINT_ROOTS is the maintained
+# copy of the ruff step's argument list that both ci.yml and the cone below
+# must agree with. Loaded, not redefined, so there is exactly one list.
+PREFLIGHT = ROOT / "scripts" / "check_lint_population.py"
+_spec = importlib.util.spec_from_file_location("check_lint_population", PREFLIGHT)
+preflight = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(preflight)
 
 
 def parse_jobs(text):
@@ -128,7 +139,7 @@ class SparseCones(unittest.TestCase):
         self.assertEqual(
             set(self.jobs),
             {"signoff-manifest-parity", "layout-reproducibility",
-             "harness-unit-tests", SIZE_JOB})
+             NETLIST_JOB, "harness-unit-tests", SIZE_JOB})
         for name, job in self.jobs.items():
             co = job["checkout"]
             self.assertTrue(job["patterns"], name)
@@ -192,7 +203,7 @@ class SparseCones(unittest.TestCase):
             env = self._env(dst)
             ran = 0
             for step, script in job["runs"]:
-                if "pip install" in script:
+                if "pip install" in script or "apt-get" in script or "provision_netlist_env" in script:
                     continue  # tool provisioning, not a repo input
                 if script.lstrip().startswith("ruff ") and shutil.which("ruff") is None:
                     continue  # CI-only linter (pinned in ci.yml); not a repo input
@@ -242,12 +253,190 @@ class SparseCones(unittest.TestCase):
     def test_harness_job_from_sparse_clone(self):
         self._run_job("harness-unit-tests")
 
+    def test_readme_claims_guard_runs_in_the_signoff_cone(self):
+        """Issue #193: the guard reads extra evidence sources (issues #193,
+        #228, #232); the signoff job's cone must hold exactly those, and
+        dropping them must fail."""
+        sources = ["/sim/klt-corner-verification/campaigns/20261009-issue81/noise_full.json",
+                   "/sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json",
+                   "/sim/comparator-offset-cm-band/campaigns/20261009-5185f52/comparison.json",
+                   "/sim/comparator-kickback/records/20260916-022249-36773c7.json"]
+        co = self.jobs["signoff-manifest-parity"]["checkout"]
+        for src in sources:
+            self.assertIn(src, co["patterns"])
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, co)
+            for src in sources:
+                self.assertTrue((dst / src.lstrip("/")).is_file(), src)
+            r = sh(["python3", "scripts/check_readme_claims.py"], dst, self._env(dst), check=False)
+            self.assertEqual(r.returncode, 0, r.stdout[-3000:])
+            self.assertIn("source-registry README claims", r.stdout)
+        # negative control: without the sources the guard fails closed, naming them
+        with tempfile.TemporaryDirectory() as tmp:
+            cut = dict(co, patterns=[p for p in co["patterns"] if p not in sources])
+            dst = self._clone(tmp, cut)
+            r = sh(["python3", "scripts/check_readme_claims.py"], dst, self._env(dst), check=False)
+            self.assertEqual(r.returncode, 1, r.stdout[-3000:])
+            self.assertIn("source noise-full-issue81", r.stdout)
+            self.assertIn("source offset-whole-latch-ea40b57", r.stdout)
+            self.assertIn("source offset-cm-band-5185f52", r.stdout)
+            self.assertIn("source kickback-residue-36773c7", r.stdout)
+
+    def test_netlist_job_inputs_are_in_its_cone(self):
+        """Issue #224: the cone holds the generator, schematics, symbols, the
+        committed netlist, imported harness modules, the PDK pin and the
+        provisioner. Runs the job's real check step only when a real xschem
+        and PDK are available (SKIPPED, never passed, otherwise; CI always
+        provisions both). A cone missing an input fails the real command."""
+        job = self.jobs[NETLIST_JOB]
+        check = next(s for n, s in job["runs"] if "netlist.py --check" in s)
+        xs = shutil.which("xschem")
+        pdk_root = os.environ.get("PDK_ROOT")
+        if not xs or not pdk_root:
+            self.skipTest("real xschem and PDK_ROOT not available (CI provisions both)")
+        # same step as ci.yml, with the ambient xschem standing in for the
+        # provisioned one (the provisioned-path assertion line is dropped)
+        script = "\n".join(l for l in check.splitlines() if "command -v" not in l)
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, job["checkout"])
+            tracked = sh(["git", "ls-tree", "-r", "--name-only", "HEAD", "design/"], ROOT).stdout.split()
+            for t in tracked:
+                if t.startswith("design/tests/"):
+                    continue
+                self.assertTrue((dst / t).is_file(), f"{t} missing from the netlist cone")
+            env = {**self._env(dst), "PATH": os.environ["PATH"], "PDK_ROOT": pdk_root,
+                   "PWD": str(dst), "RUNNER_TEMP": tmp}
+            r = sh(["bash", "-eu", "-c", script], dst, env, check=False)
+            self.assertEqual(r.returncode, 0, r.stdout[-3000:])
+            self.assertIn("is up to date", r.stdout)
+            # negative control: dropping a symbol from the cone must FAIL
+            (dst / "design" / "comparator_dut.sym").unlink()
+            r = sh(["bash", "-eu", "-c", script], dst, env, check=False)
+            self.assertNotEqual(r.returncode, 0, r.stdout[-3000:])
+
     def test_klt_jobs_from_sparse_clone(self):
         if not klt_matches_pin():
             self.skipTest("pinned klt not on PATH (CI runs these jobs with the same patterns)")
         for name in sorted(KLT_JOBS):
             with self.subTest(job=name):
                 self._run_job(name)
+
+    # --- issue #216: the harness job's lint population is complete ---------
+
+    @staticmethod
+    def _covered(patterns, path):
+        """True when a non-cone sparse pattern list checks `path` out.
+
+        Restricted to the grammar test_every_job_declares... enforces:
+        anchored, basename globs only (`*` never crosses `/`), directory
+        patterns cover their subtree.
+        """
+        rel = path.split("/")
+        for pat in patterns:
+            parts = pat.strip("/").split("/")
+            if len(parts) <= len(rel) and all(
+                    fnmatch.fnmatchcase(a, b) for a, b in zip(rel, parts)):
+                return True
+        return False
+
+    def _ruff_step(self):
+        return next(s for _, s in self.jobs["harness-unit-tests"]["runs"]
+                    if "ruff check" in s)
+
+    def _in_scope_tracked(self):
+        tracked = sh(["git", "ls-tree", "-r", "--name-only", "HEAD"], ROOT).stdout.splitlines()
+        return [p for p in tracked if preflight.in_scope(p)]
+
+    def test_harness_cone_covers_every_tracked_lint_input(self):
+        """Every tracked .py under the reviewed lint roots (issue #157's
+        scope, held by the preflight's LINT_ROOTS) must be inside the
+        harness job's sparse cone, and ci.yml's ruff command must name
+        exactly those roots -- otherwise the lint population silently
+        shrinks (issue #216)."""
+        job = self.jobs["harness-unit-tests"]
+        self.assertEqual(preflight.ci_ruff_arguments(), preflight.LINT_ROOTS)
+        self.assertIn("/.github/workflows/ci.yml", job["patterns"],
+                      "the preflight reads ci.yml; it must be in the cone")
+        inscope = self._in_scope_tracked()
+        # sentinels from every root the old cone omitted, so a broken
+        # in_scope cannot make this test pass vacuously
+        for sentinel in ("scripts/check_klt_pin.py", "sim/run_corners.py",
+                         "sim/comparator-transient-noise/probit.py",
+                         "sim/comparator-transient-noise-full/calibrate.py",
+                         "sim/device-mismatch-confirm/summarize_dvgs.py",
+                         "layout/comparator/check_stream.py"):
+            self.assertIn(sentinel, inscope)
+        uncovered = [p for p in inscope if not self._covered(job["patterns"], p)]
+        self.assertEqual(uncovered, [],
+                         "tracked lint inputs outside the harness cone")
+
+    def test_preflight_fails_when_cone_omits_a_lint_root(self):
+        """Dropping /scripts/ from the cone must fail the preflight with the
+        omitted paths named -- even though ruff itself exits zero on the
+        rump cone (F-only missing-root warnings). The preflight script is
+        copied in after the clone: it is the checker here, not a subject."""
+        job = self.jobs["harness-unit-tests"]
+        cut = dict(job["checkout"],
+                   patterns=[p for p in job["patterns"] if p != "/scripts/"])
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, cut)
+            (dst / "scripts").mkdir(exist_ok=True)
+            shutil.copy(PREFLIGHT, dst / "scripts" / "check_lint_population.py")
+            r = sh(["python3", "scripts/check_lint_population.py"], dst,
+                   self._env(dst), check=False)
+            self.assertEqual(r.returncode, 1, r.stdout[-3000:])
+            self.assertIn("scripts/check_klt_pin.py", r.stdout)
+            if shutil.which("ruff"):
+                r2 = sh(["bash", "-eu", "-c", self._ruff_step()], dst,
+                        self._env(dst), check=False)
+                self.assertEqual(r2.returncode, 0,
+                                 "ruff alone should stay green here; the "
+                                 "preflight is what fails:\n" + r2.stdout[-2000:])
+
+    def test_preflight_fails_when_run_entry_point_glob_underexpands(self):
+        """The pre-fix cone shape: one run entry point checked out, so the
+        ruff step's `sim/run_*.py` glob silently expands to a subset. The
+        preflight derives the intended set from git's tracked inventory and
+        must fail naming the omitted entry points, while ruff stays green."""
+        job = self.jobs["harness-unit-tests"]
+        patterns = [p if p != "/sim/run_*.py" else "/sim/run_offset_cm_band.py"
+                    for p in job["patterns"]]
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, dict(job["checkout"], patterns=patterns))
+            r = sh(["python3", "scripts/check_lint_population.py"], dst,
+                   self._env(dst), check=False)
+            self.assertEqual(r.returncode, 1, r.stdout[-3000:])
+            for omitted in ("sim/run_corners.py", "sim/run_klt_yield.py"):
+                self.assertIn(omitted, r.stdout)
+            if shutil.which("ruff"):
+                r2 = sh(["bash", "-eu", "-c", self._ruff_step()], dst,
+                        self._env(dst), check=False)
+                self.assertEqual(r2.returncode, 0,
+                                 "the under-expanded glob must not fail ruff; "
+                                 "only the preflight catches it:\n" + r2.stdout[-2000:])
+
+    def test_undefined_name_in_previously_omitted_root_fails_static_check(self):
+        """Negative control for the coverage itself: an undefined name in
+        sim/device-mismatch-confirm (absent from the pre-fix cone) reaches
+        ruff -- the population is complete, the preflight stays green and
+        the F821 fails the static check."""
+        if shutil.which("ruff") is None:
+            self.skipTest("ruff not on PATH (CI installs the pinned version "
+                          "for this control)")
+        job = self.jobs["harness-unit-tests"]
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, job["checkout"])
+            victim = dst / "sim" / "device-mismatch-confirm" / "summarize_dvgs.py"
+            victim.write_text(victim.read_text()
+                              + "\nNEGATIVE_CONTROL = undefined_name_for_control\n")
+            r = sh(["python3", "scripts/check_lint_population.py"], dst,
+                   self._env(dst), check=False)
+            self.assertEqual(r.returncode, 0, r.stdout[-3000:])
+            r2 = sh(["bash", "-eu", "-c", self._ruff_step()], dst,
+                    self._env(dst), check=False)
+            self.assertNotEqual(r2.returncode, 0, r2.stdout[-3000:])
+            self.assertIn("F821", r2.stdout)
+            self.assertIn("sim/device-mismatch-confirm/summarize_dvgs.py", r2.stdout)
 
 
 if __name__ == "__main__":

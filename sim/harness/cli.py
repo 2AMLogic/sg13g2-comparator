@@ -76,6 +76,25 @@ def _check_env(allow_drift: bool) -> int:
         )
         return 1
     print(f"OSDI models: all {len(pdk_mod.REQUIRED_OSDI)} present in {pdk.osdi_dir}")
+    try:
+        ident = pdk_mod.osdi_identity(pdk.osdi_dir)
+    except pdk_mod.OsdiIdentityError as exc:
+        print(f"OSDI bytes : UNREADABLE ({exc})", file=sys.stderr)
+        return 1
+    build = ident["build_provenance"]
+    comp = build.get("compiler")
+    tag = comp.get("tag") if isinstance(comp, dict) else comp
+    print(f"OSDI bytes : inventory sha256 {ident['inventory_sha256'][:16]} (identity only); "
+          f"build provenance {build['status']}: {build.get('reason') or f'openvaf {tag}'}")
+    try:
+        sources = _model_sources(pdk)
+    except pdk_mod.ModelSourceIdentityError as exc:
+        print(f"SPICE srcs : UNREADABLE ({exc})", file=sys.stderr)
+        return 1
+    scope = sources["scope"]
+    print(f"SPICE srcs : inventory sha256 {sources['inventory_sha256'][:16]} over "
+          f"{len(sources['files'])} files in {scope['tree']} (identity only; "
+          + ("scope complete)" if scope["complete"] else "scope INCOMPLETE, see record)"))
 
     try:
         banner = runner_mod.ngspice_version()
@@ -108,6 +127,11 @@ def _check_env(allow_drift: bool) -> int:
     experiments = tb_mod.discover(SIM_DIR)
     print(f"experiments: {len(experiments)} -> {', '.join(p.name for p in experiments)}")
     return 0 if ok else 2
+
+
+def _model_sources(pdk) -> dict:
+    """Issue #203: identity of the SPICE model tree every deck's ``.lib`` reads."""
+    return pdk_mod.model_source_identity(pdk.models_dir, roots=(pdk.mos_corner_lib,))
 
 
 def _freeze_inputs(tb, dut, workdir: Path) -> list:
@@ -213,6 +237,19 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 3
+    # Issue #196: identify the model bytes the grid will load, before it runs.
+    try:
+        osdi_before = pdk_mod.osdi_identity(pdk.osdi_dir)
+    except pdk_mod.OsdiIdentityError as exc:
+        print(f"OSDI IDENTITY NOT CAPTURED -- refusing to simulate: {exc}", file=sys.stderr)
+        return 8
+    # Issue #203: and the runtime SPICE model-source bytes the decks' .lib reads.
+    try:
+        sources_before = _model_sources(pdk)
+    except pdk_mod.ModelSourceIdentityError as exc:
+        print(f"SPICE MODEL-SOURCE IDENTITY NOT CAPTURED -- refusing to simulate: {exc}",
+              file=sys.stderr)
+        return 8
 
     corner_names = args.corners if args.corners else list(tb.corners)
     corner_list = corners_mod.resolve_corners(corner_names)
@@ -348,6 +385,30 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  {completed}/{len(results)} points completed -- "
           f"{'PASS' if passed else 'FAIL'}")
 
+    try:
+        osdi_after = pdk_mod.osdi_identity(pdk.osdi_dir)
+        changed = "" if osdi_after == osdi_before else "OSDI identity changed"
+    except pdk_mod.OsdiIdentityError as exc:
+        changed = f"OSDI model unreadable after the grid: {exc}"
+    if changed:
+        reservation.release_scratch()
+        print(f"OSDI MODELS NOT STABLE DURING THE RUN -- refusing to certify: {changed}"
+              f" (inventory before {osdi_before['inventory_sha256'][:16]}); no record "
+              f"written, logs kept in sim/{tb.experiment}/corners/{rid}/", file=sys.stderr)
+        return 9
+    try:
+        changed = ("" if _model_sources(pdk) == sources_before
+                   else "SPICE model-source inventory changed")
+    except pdk_mod.ModelSourceIdentityError as exc:
+        changed = f"SPICE model source unreadable after the grid: {exc}"
+    if changed:
+        reservation.release_scratch()
+        print(f"SPICE MODEL SOURCES NOT STABLE DURING THE RUN -- refusing to certify: "
+              f"{changed} (inventory before {sources_before['inventory_sha256'][:16]}); no "
+              f"record written, logs kept in sim/{tb.experiment}/corners/{rid}/",
+              file=sys.stderr)
+        return 9
+
     if sabotaged:
         # Under sabotage a FAIL is the desired outcome: it proves the per-axis
         # process-sensitivity checks would have caught a runner stuck on typical.
@@ -363,6 +424,8 @@ def main(argv: list[str] | None = None) -> int:
             "dirty": bool(dirty_at_start),
             "dirty_paths": dirty_at_start[:20],
             "pdk": pdk.provenance(),
+            "osdi": {**osdi_before, "rehashed_after_grid": "unchanged"},
+            "model_sources": {**sources_before, "rehashed_after_grid": "unchanged"},
             "toolchain": chain.as_dict(),
             **dut.provenance_record(),
         }

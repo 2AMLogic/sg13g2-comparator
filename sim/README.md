@@ -77,6 +77,20 @@ point). It is **characterization**: DR-0002 ratifies the offset row at
 `dut_vcm` only and no whole-latch common-mode range, so nothing there is a
 compliance verdict.
 
+**Decision time across a common-mode band (issue #164).**
+[`comparator-decision-cm-band/`](comparator-decision-cm-band/README.md) reruns the
+issue #62 `regeneration` bench at `dut_vcm` - 50 mV, `dut_vcm` (reproduction
+gate) and `dut_vcm` + 50 mV as three 45-point `klt sim` campaigns on the batch
+fleet, graded against the unchanged DR-0002 Row 3 bounds. Evidence for the
+DR-0004 candidate CM-range row; no row is ratified or edited by it.
+
+**Clock-edge, strobe-width and supply-disturbance sensitivity (issue #173).**
+[`comparator-clock-supply-sensitivity/`](comparator-clock-supply-sensitivity/README.md)
+characterizes the whole latch against 500 ps / 2 ns clock edges, 5 / 15 ns
+strobes and +/-50 mV supply steps (45-point regeneration grid, 20-point paired
+offset grid, N = 16 draws) on the batch fleet. Characterization only; no row is
+changed.
+
 Plus one supporting confirmation, not a spec-row bench:
 
 ```
@@ -280,7 +294,7 @@ under it).
 | IHP-Open-PDK release | `0.3.0` | **exact** — the release IS the device models |
 | ngspice | ≥ 46 (major), OSDI-capable | floor |
 | Python | ≥ 3.9 | floor |
-| xschem | recorded, not checked | nothing here invokes xschem until `design/` has a schematic |
+| xschem | `3.4.7` | CI job `netlist-regeneration` only (`design/README.md`); never by the runner |
 | OpenVAF-Reloaded (OSDI compiler) | `v24.0.1mob`, checksum-pinned | checked by `sim/tools/build-osdi.sh` at build time, not by the corner runner |
 
 PDK variant: **ihp-sg13g2**, set in [`sim/pdk.json`](pdk.json).
@@ -376,6 +390,10 @@ it:
   working Git checkout therefore require no-write mode;
 - the **PDK** variant and release version, and the **toolchain** observed,
   plus any accepted drift;
+- the **OSDI model-byte identity** (sha256 inventory, re-checked after the
+  grid; exit 8/9 if unreadable or changed) and whether a local build receipt
+  matches it — identity only, not authenticity (`harness/README.md`
+  "OSDI identity, loadability and authenticity");
 - the **corner matrix** actually run and how many points completed;
 - for a Monte-Carlo record, the **seed, draw count and σ derivation**
   (`CLAUDE.md` requires all three);
@@ -468,6 +486,13 @@ machine-checked contract (issue #132). The `append-only-evidence` job runs
 external storage) is deliberately out of scope here; this only measures and
 caps growth, and never edits, moves or externalizes existing evidence.
 
+**Before review.** Run `python3 scripts/check_evidence_size.py --tree HEAD` on
+the final commit; the PR states that SHA, exit status (0 ok, 1 violation, 2
+error) and size; re-run after any HEAD change. Failures follow Exceptions
+below; this grants none. No Python: say local validation is unavailable and
+cite the passing `append-only-evidence` CI for that commit (skipped is not
+success).
+
 **Accounting.** Bytes are Git blob sizes from `git ls-tree -rl <tree>` of the
 named commit/tree -- not working-tree or pack sizes. The checker reports
 repository-wide and `sim/` totals plus per **evidence unit**: the entry
@@ -476,8 +501,8 @@ repository-wide and `sim/` totals plus per **evidence unit**: the entry
 non-numeric size fails closed (exit 2), so never use a blob filter. The checker
 also refuses a partial clone up front (`extensions.partialClone` or a
 `remote.<name>.promisor` remote: exit 2, naming the cause) and runs git with
-`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error rather than one network
-round trip per blob (~97k; that is how CI run 38029844566 hung). A shallow
+`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error, not a lazy fetch
+(CI run 38029844566 hung that way). A shallow
 clone is accepted: it holds every blob of the commits it has.
 
 **Baseline and grandfathering.** The budget file records the baseline commit
@@ -515,21 +540,20 @@ Overage output names the path, measured bytes, ceiling and this route.
 only its explicit, audited inputs (non-cone patterns, never a `filter:`).
 Caveat: `actions/checkout` silently adds `--filter=blob:none` whenever its
 `sparse-checkout:` input is set, and an empty `filter:` cannot turn that off.
-The three jobs that only read files inside their cone use that input and are
-therefore blob-less partial clones, which is harmless for them. The
-`append-only-evidence` job measures blob sizes, so it must be a complete clone:
-its checkout has `fetch-depth: 0` and **no** `sparse-checkout:` input, and the
-next step applies its patterns with `git sparse-checkout set --no-cone --stdin`
-(failing with exit 2 if the clone is partial). The full fetch is small (the
-repository packs to roughly 60 MiB); only the transient full working tree
-costs a few seconds. Cones (each must contain the job's complete transitive
-inputs):
+Jobs reading only inside their cone use that input (blob-less partial
+clones, harmless for them). The `append-only-evidence` job measures blob
+sizes, so it must be a complete clone: its checkout has `fetch-depth: 0` and
+**no** `sparse-checkout:` input, and the next step applies its patterns with
+`git sparse-checkout set --no-cone --stdin` (failing with exit 2 if the clone
+is partial). Cones (each must hold the job's complete
+transitive inputs):
 
 | Job | Inputs beyond its own scripts |
 |---|---|
 | signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
-| harness-unit-tests | `sim/{harness,kltsim,comparator-pex}/`, the `comparator-{regeneration,kickback}/testbench/` source benches, `sim/dut.json`, `sim/dut/`, `sim/klt-corner-verification/{benches/,rows.json}`, the top-level `*.json`/`*.jsonl`/`*.spice` of campaigns `20261009-d73a9ac` and `20261010-n200` (the N = 200 offset campaign the cited item 6 report is derived from), `campaigns/20261009-issue78/fixture/`, the `smoke/offset_mc-mismatch-vs-negctrl.envelope.json` control, `sim/klt-yield/`, `manifests/{klt-pin.json,t1-signoff-report.json}` (the frozen report the item 6 test compares with the citation), `design/`, `layout/{tests/,common_sg13g2.py,comparator/erc_tool.py,comparator/erc_report.json,comparator/pex_report.json}` |
+| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
+| netlist-regeneration | `design/`, `sim/harness/`, `sim/pdk.json` |
 | append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` |
 
 A new input a job starts reading must be added to its patterns in the same
@@ -543,6 +567,11 @@ size checker gets a complete clone, and that the size step exits 2 quickly in
 a `blob:none` clone. The two jobs that need the pinned `klt` run there only when the
 pinned build is first on `PATH`; otherwise they are skipped locally and proven
 by the real CI jobs.
+
+The harness job's lint population is guarded by
+`scripts/check_lint_population.py` (issue #216): it derives the intended set
+from git's tracked inventory and fails naming every omitted path before ruff
+runs. The sparse-cone tests add negative controls.
 
 Reproduce locally:
 

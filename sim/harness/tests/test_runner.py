@@ -491,6 +491,67 @@ class ExclusiveLogTest(RunPointWarningsTest):
         self.assertIn("m_vos_mv", (log_dir / results[0].log).read_text())
 
 
+class TimeoutDiagnosticsTest(RunPointWarningsTest):
+    """Issue #197: partial ngspice output survives a local timeout."""
+
+    def _timeout(self, stdout, stderr, **kw):
+        exc = subprocess.TimeoutExpired(["ngspice"], 7, output=stdout, stderr=stderr)
+        with mock.patch("harness.runner.compose_deck", return_value="* stub\n"), \
+             mock.patch("harness.runner.subprocess.run", side_effect=exc):
+            return run_point(self.tb, self.pdk, self.dut, self.point, self.workdir,
+                             timeout_s=7, **kw)
+
+    def _log(self, r):
+        return (self.workdir / r.log).read_text()
+
+    def test_bytes_output_retained_with_replacement(self):
+        r = self._timeout(b"iter 1\n\xff\xfe bad", b"warn: gmin\n")
+        self.assertEqual(r.status, "error")
+        log = self._log(r)
+        self.assertIn("TIMEOUT after 7s", log)
+        self.assertIn("===== partial stdout =====\niter 1\n\ufffd\ufffd bad\n", log)
+        self.assertIn("===== partial stderr =====\nwarn: gmin\n", log)
+
+    def test_text_output_retained(self):
+        r = self._timeout("tran step 12\n", "singular matrix\n")
+        self.assertEqual(r.status, "error")
+        log = self._log(r)
+        self.assertIn("TIMEOUT after 7s", log)
+        self.assertIn("tran step 12", log)
+        self.assertIn("singular matrix", log)
+
+    def test_absent_output_keeps_marker(self):
+        r = self._timeout(None, None)
+        self.assertEqual(r.status, "error")
+        self.assertIn("timed out after 7s", r.message)
+        log = self._log(r)
+        self.assertIn("TIMEOUT after 7s", log)
+        self.assertEqual(log.count("(none captured)"), 2)
+
+    def test_complete_looking_partial_output_is_still_error(self):
+        r = self._timeout("m_vos_mv = 1.0\n", "")
+        self.assertEqual(r.status, "error")
+        self.assertEqual(r.measurements, {})
+        self.assertIn("m_vos_mv = 1.0", self._log(r))
+
+    def test_exclusive_collision_and_other_logs_protected(self):
+        log_dir = self.workdir / "corners" / "rid"
+        log_dir.mkdir(parents=True)
+        mine = log_dir / f"{self.point.corner_id}.log"
+        other = log_dir / "other.log"
+        mine.write_text("committed\n")
+        other.write_text("other evidence\n")
+        with self.assertRaises(FileExistsError):
+            self._timeout("x", "y", log_dir=log_dir, exclusive_logs=True)
+        self.assertEqual(mine.read_text(), "committed\n")
+        self.assertEqual(other.read_text(), "other evidence\n")
+        mine.unlink()
+        r = self._timeout("partial\n", None, log_dir=log_dir, exclusive_logs=True)
+        self.assertEqual(r.status, "error")
+        self.assertIn("partial", mine.read_text())
+        self.assertEqual(other.read_text(), "other evidence\n")
+
+
 class GitProvenanceTest(ReservationTestBase):
     """Issue #142: verified, single-capture Git provenance."""
 
@@ -598,18 +659,32 @@ class FrozenInputsTest(unittest.TestCase):
             path.write_text(text)
         self.decks = []
 
-    def run_cli(self, mutate=False):
+    def run_cli(self, mutate=False, osdi_edit=None, models_edit=None):
+        osdi = self.root / "osdi"
+        osdi.mkdir(exist_ok=True)
+        for name in cli.pdk_mod.REQUIRED_OSDI:
+            with open(osdi / name, "wb") as fh:
+                fh.write(name.encode())
+        models = self.root / "pdk/libs.tech/ngspice/models"
+        models.mkdir(parents=True, exist_ok=True)
+        (models / "cornerMOSlv.lib").write_text(".LIB mos_tt\n.include m.lib\n.ENDL\n")
+        (models / "m.lib").write_text(".param vfb=1.0\n")
+
         def fake(cmd, **kw):
             deck = Path(cmd[-1]).read_text()
             incs = re.findall(r'^\.include "(.*)"$', deck, re.M)
             self.decks.append((deck, incs, [Path(i).read_text() for i in incs]))
             for path, text in self.live.items() if mutate else ():
                 path.write_text(text.replace("ln lp", "qq lp") + "*edit\n")
+            if osdi_edit:
+                osdi_edit(osdi / "r3_cmc.osdi")
+            if models_edit:
+                models_edit(models / "m.lib")
             return _fake_completed("m_m = 1.0\n")
 
         pdk = types.SimpleNamespace(
-            variant="v", version="0" * 40, missing_osdi=list, mos_corner_lib=Path("/l"),
-            osdi_dir=Path("/o"), provenance=lambda: dict.fromkeys(
+            variant="v", version="0" * 40, missing_osdi=list, models_dir=models,
+            mos_corner_lib=models / "cornerMOSlv.lib", osdi_dir=osdi, provenance=lambda: dict.fromkeys(
                 ("variant", "release_version", "discovered_via"), "x"))
         chain = types.SimpleNamespace(drift=[], as_dict=lambda: {
             "observed": {"ngspice": "n", "python": "3"}, "drift": []})
@@ -636,6 +711,21 @@ class FrozenInputsTest(unittest.TestCase):
         self.assertEqual([ctx["dut_netlist_sha256"], ctx["dut_config_sha256"],
                           tb["netlist_sha256"], tb["manifest_sha256"]], sha)
         self.assertEqual(ctx["dut_netlist"], "sim/d.spice")
+        self.assertEqual(ctx["osdi"], {**cli.pdk_mod.osdi_identity(self.root / "osdi"),
+                                       "rehashed_after_grid": "unchanged"})
+        self.assertNotIn(str(self.root / "osdi"), json.dumps(ctx["osdi"]))
+        self.assertIn("unchanged after the grid", path.with_suffix(".md").read_text())
+        models = self.root / "pdk/libs.tech/ngspice/models"
+        self.assertEqual(ctx["model_sources"], {
+            **cli.pdk_mod.model_source_identity(models, roots=(models / "cornerMOSlv.lib",)),
+            "rehashed_after_grid": "unchanged"})
+        self.assertEqual(sorted(ctx["model_sources"]["files"]), ["cornerMOSlv.lib", "m.lib"])
+        self.assertNotIn(str(self.root), json.dumps(ctx["model_sources"]))
+        md = path.with_suffix(".md").read_text()
+        self.assertIn(f"SPICE model sources**: inventory sha256 "
+                      f"`{ctx['model_sources']['inventory_sha256'][:16]}`", md)
+        self.assertIn("not PDK authenticity", md)
+        self.assertNotIn("INCOMPLETE", md)
         snap = (self.sim / f"exp/netlist-snapshots/{rec['record_id']}.spice").read_text()
         self.assertIn(_DUT_NET + "\n* -", snap)
         self.assertTrue(snap.endswith("FRAGMENT ----------------\n* tb\n"))
@@ -664,6 +754,66 @@ class FrozenInputsTest(unittest.TestCase):
         run.assert_not_called()
         self.assertEqual(_tree(self.sim / "exp"), before)
         self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+
+    def test_osdi_changed_or_unreadable_mid_grid_is_not_certified(self):
+        """Issue #196: no record, logs kept, explicit non-zero exit."""
+        for edit in (lambda p: p.write_bytes(b"rebuilt"), lambda p: p.unlink(missing_ok=True)):
+            with self.subTest(edit=edit):
+                shutil.rmtree(self.sim / "exp/corners", ignore_errors=True)
+                rc, _ = self.run_cli(osdi_edit=edit)
+                self.assertEqual(rc, 9)
+                self.assertFalse((self.sim / "exp/records").exists())
+                (logs,) = (self.sim / "exp/corners").iterdir()
+                self.assertEqual(len(list(logs.glob("*.log"))), 2)
+                self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+
+    def test_spice_model_sources_changed_or_unreadable_mid_grid_not_certified(self):
+        """Issue #203: same release + same OSDI, edited coefficients -> no record."""
+        for edit in (lambda p: p.write_text(".param vfb=1.01\n"),
+                     lambda p: p.unlink(missing_ok=True),
+                     lambda p: (p.parent / "new.lib").write_text("* added\n")):
+            with self.subTest(edit=edit):
+                shutil.rmtree(self.sim / "exp/corners", ignore_errors=True)
+                shutil.rmtree(self.root / "pdk", ignore_errors=True)
+                rc, _ = self.run_cli(models_edit=edit)
+                self.assertEqual(rc, 9)
+                self.assertFalse((self.sim / "exp/records").exists())
+                (logs,) = (self.sim / "exp/corners").iterdir()
+                self.assertEqual(len(list(logs.glob("*.log"))), 2)
+                self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+
+    def test_unreadable_spice_sources_before_grid_refuses_to_simulate(self):
+        with mock.patch.object(cli.pdk_mod, "model_source_identity",
+                               side_effect=cli.pdk_mod.ModelSourceIdentityError("m.lib: denied")):
+            rc, run = self.run_cli()
+        self.assertEqual(rc, 8)
+        run.assert_not_called()
+        self.assertFalse((self.sim / "exp/corners").exists())
+
+    def test_incomplete_scope_is_disclosed_in_record(self):
+        ext = self.root / "ext.lib"
+        ext.write_text("* ext\n")
+
+        models = self.root / "pdk/libs.tech/ngspice/models"
+        models.mkdir(parents=True)
+        (models / "x.lib").symlink_to(ext)
+        rc, _ = self.run_cli()
+        self.assertEqual(rc, 0)
+        (path,) = (self.sim / "exp/records").glob("*.json")
+        scope = json.loads(path.read_text())["context"]["model_sources"]["scope"]
+        self.assertFalse(scope["complete"])
+        self.assertEqual(scope["outside_tree_links"], ["x.lib"])
+        self.assertIn("Inventory scope INCOMPLETE** — model loading may read bytes this "
+                      "hash does not cover: link `x.lib` leaves the tree",
+                      path.with_suffix(".md").read_text())
+
+    def test_unreadable_osdi_before_grid_refuses_to_simulate(self):
+        with mock.patch.object(cli.pdk_mod, "osdi_identity",
+                               side_effect=cli.pdk_mod.OsdiIdentityError("x: denied")):
+            rc, run = self.run_cli()
+        self.assertEqual(rc, 8)
+        run.assert_not_called()
+        self.assertFalse((self.sim / "exp/corners").exists())
 
 if __name__ == "__main__":
     unittest.main()
