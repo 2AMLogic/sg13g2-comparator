@@ -384,7 +384,7 @@ class Drawing:
             ax0, ax1 = x, x + isl.width
             b.box(c.L_ACTIV, ax0, y0, ax1, y0 + isl.w)
             if row.flavour == "pmos":
-                b.box(c.L_PSD, ax0 - c.PSD_C, y0 - c.PSD_C, ax1 + c.PSD_C, y0 + isl.w + c.PSD_C)
+                b.box(c.L_PSD, ax0 - c.PSD_G, y0 - c.PSD_G, ax1 + c.PSD_G, y0 + isl.w + c.PSD_G)
             # gates
             gc_y = y0 - c.GATE_CONT_DY
             head = max(isl.l, c.POLY_HEAD_UM)
