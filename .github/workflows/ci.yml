@@ -21,6 +21,12 @@
 # post-layout `klt pex` adapter inputs in `sim/comparator-pex/` are fresh
 # against their sources (issue #123) -- also stdlib only, no PDK.
 #
+# The one PDK-dependent leg that IS run here (issue #224) is the real
+# schematic-to-netlist freshness check (`design/netlist.py --check`, job
+# `netlist-regeneration`): it provisions a pinned xschem and the PDK release
+# pinned in `sim/pdk.json` (no OSDI/ngspice needed; netlisting reads only
+# schematics, symbols and the PDK's xschem libraries). See design/README.md.
+#
 # Pinning policy: third-party actions and `klt` are pinned by full commit SHA
 # (action tags are kept as trailing comments) so verdicts are reproducible.
 # Bumps are deliberate changes, made by hand in a reviewed PR.
@@ -89,6 +95,8 @@ jobs:
             /sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md
             /sim/klt-corner-verification/campaigns/20261009-issue81/noise_full.json
             /sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json
+            /sim/comparator-offset-cm-band/campaigns/20261009-5185f52/comparison.json
+            /sim/comparator-kickback/records/20260916-022249-36773c7.json
             /spec/decision-records/0002-target-spec-ratification.md
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -126,8 +134,9 @@ jobs:
       # Issue #174: README target-spec-table figures vs the committed report
       # (stdlib only). Unmapped claims are listed as UNCHECKED, never passed.
       # Issue #193: noise/offset claims read their own sources (the issue #81
-      # noise_full.json and the whole-latch offset record JSON); both are in
-      # this job's sparse cone above.
+      # noise_full.json, the whole-latch offset record JSON, the issue #228
+      # common-mode comparison.json and the issue #232 historical kickback
+      # record); all are in this job's sparse cone above.
       - name: README spec-table figures match the committed report
         run: python3 scripts/check_readme_claims.py
 
@@ -176,6 +185,75 @@ jobs:
       - name: Regenerate and verify the committed layout
         run: KLT_NATIVE=1 layout/run_flow.sh --check
 
+      # Issue #257: the pSD.i/pSD.b geometry regression needs the klayout
+      # module installed above, so it is outside the stdlib-only `test_*.py`
+      # discovery of harness-unit-tests. Run it here explicitly. A missing
+      # module, a failing test, an empty population or any skipped test
+      # fails the step; a skip is never success.
+      - name: Run KLayout implant geometry regression tests
+        run: |
+          set -o pipefail
+          test -f layout/tests/klayout_test_implant_geometry.py
+          python3 -I -m unittest discover -v -s layout/tests -p 'klayout_test_*.py' 2>&1 | tee "${RUNNER_TEMP:-/tmp}/klayout_tests.log"
+          grep -Eq '^Ran [1-9][0-9]* tests? ' "${RUNNER_TEMP:-/tmp}/klayout_tests.log"
+          ! grep -Eq 'skipped|NO TESTS RAN' "${RUNNER_TEMP:-/tmp}/klayout_tests.log"
+
+  # Schematic-to-netlist freshness (issue #224): design/comparator.spice is
+  # the hashed T1 item 1 anchor (manifests/README.md) and is DERIVED from the
+  # xschem schematics, which nothing else hashes. This job runs the real
+  # generator in check mode with a real, pinned xschem (built from source by
+  # scripts/provision_netlist_env.sh, which holds the xschem pin) and the
+  # PDK release/sha256 declared in sim/pdk.json, resolved through the same
+  # discovery contract the harness uses (PDK_ROOT, sim/harness/pdk.py).
+  # Nothing here skips: a missing xschem, symbol, PDK input or a stale
+  # netlist fails the job. The mocked tests in design/tests/ still run in
+  # harness-unit-tests; they check generator logic, not this schematic.
+  netlist-regeneration:
+    name: netlist regeneration (schematics regenerate the committed netlist, real xschem + pinned PDK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # Issue #132/#224: explicit sparse cone = this job's complete inputs
+          # (generator, schematics, symbols and committed netlist in design/;
+          # harness modules netlist.py imports; the PDK pin; the provisioner).
+          # Proven by scripts/tests/test_sparse_checkout.py.
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /design/
+            /sim/harness/
+            /sim/pdk.json
+            /scripts/provision_netlist_env.sh
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.13'
+
+      # Tool provisioning (not a repo input; skipped by the sparse-cone test).
+      - name: Provision xschem build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential tcl tcl-dev tk tk-dev libx11-dev libxpm-dev \
+            libcairo2-dev bison flex gawk
+
+      - name: Provision pinned xschem
+        run: scripts/provision_netlist_env.sh xschem "$RUNNER_TEMP/xschem"
+
+      - name: Provision pinned SG13G2 PDK (sim/pdk.json)
+        run: scripts/provision_netlist_env.sh pdk "$RUNNER_TEMP/pdk"
+
+      - name: Regenerate netlist from schematics and compare (design/netlist.py --check)
+        env:
+          PDK_ROOT: ${{ runner.temp }}/pdk
+          PDK: ihp-sg13g2
+        run: |
+          export PATH="$RUNNER_TEMP/xschem/bin:$PATH"
+          test "$(command -v xschem)" = "$RUNNER_TEMP/xschem/bin/xschem"
+          xschem --version 2>&1 | grep -m1 '^XSCHEM V'
+          python3 design/netlist.py --check
+          test -z "$(git status --porcelain)"
+
   # Harness unit tests (issue #75): the same command as `sim/selftest.sh`
   # step 0. Pure stdlib -- no PDK, no ngspice, no installs -- so it belongs
   # to the same tool-light scope as the legs above. The PDK-dependent
@@ -194,13 +272,17 @@ jobs:
           # and never measures sizes. The size job avoids this input.
           sparse-checkout-cone-mode: false
           sparse-checkout: |
+            /.github/workflows/ci.yml
             /sim/harness/
-            /sim/run_offset_cm_band.py
+            /sim/run_*.py
             /sim/tools/build-osdi.sh
             /sim/kltsim/
             /sim/comparator-pex/
             /sim/comparator-regeneration/testbench/
             /sim/comparator-kickback/testbench/
+            /sim/comparator-transient-noise/*.py
+            /sim/comparator-transient-noise-full/*.py
+            /sim/device-mismatch-confirm/*.py
             /sim/dut.json
             /sim/dut/
             /sim/klt-corner-verification/benches/
@@ -213,6 +295,7 @@ jobs:
             /sim/klt-corner-verification/campaigns/20261010-n200/*.jsonl
             /sim/klt-corner-verification/campaigns/20261010-n200/*.spice
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json
+            /sim/klt-corner-verification/campaigns/20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json
             /sim/klt-yield/
             /sim/characterization/
             /sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md
@@ -221,11 +304,11 @@ jobs:
             /manifests/t1-signoff-report.json
             /manifests/klt-pin.json
             /design/
+            /scripts/
             /layout/tests/
             /layout/common_sg13g2.py
-            /layout/comparator/erc_tool.py
+            /layout/comparator/*.py
             /layout/comparator/erc_report.json
-            /layout/comparator/pdk_drc.py
             /layout/comparator/pdk_drc_report.json
             /layout/comparator/comparator.gds
             /layout/comparator/pex_report.json
@@ -233,6 +316,19 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.13'
+
+      # Issue #216: fail closed when the sparse cone omits a lint input. With
+      # F-only rules ruff merely warns about a missing root and exits zero,
+      # and the `sim/run_*.py` glob expands to whatever was checked out, so
+      # the static check below could look green while skipping promised files
+      # (run 38159735276). The preflight derives the intended set from git's
+      # tracked inventory (ls-tree of HEAD, independent of the sparse working
+      # tree), names every omitted path and fails before ruff runs. It also
+      # pins ci.yml's ruff arguments to its own LINT_ROOTS copy (why ci.yml
+      # is in this job's cone); the noise/mismatch roots check out source
+      # only (`*.py`) so the large simulation evidence stays out.
+      - name: Lint population preflight (every tracked lint input checked out)
+        run: python3 scripts/check_lint_population.py
 
       # Issue #157: pinned pyflakes-class static check (F rules only: undefined
       # names, unused imports/locals, redefinitions). CI-only tool; the exact
@@ -322,6 +418,8 @@ jobs:
           /sim/characterization/20261009-d73a9ac-schematic/report.json
           /sim/klt-corner-verification/campaigns/20261009-issue81/noise_full.json
           /sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json
+          /sim/comparator-offset-cm-band/campaigns/20261009-5185f52/comparison.json
+          /sim/comparator-kickback/records/20260916-022249-36773c7.json
           /sim/evidence-exceptions.json
           /sim/evidence-size-budget.json
           /spec/decision-records/
@@ -383,6 +481,14 @@ jobs:
         env:
           TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: python3 scripts/check_evidence_size.py --tree "$TARGET_SHA"
+
+      # Issue #216: the sparse-cone proof's ruff-dependent negative controls
+      # (glob under-expansion stays green; undefined name in a previously
+      # omitted root fails) run the same pinned ruff the harness job lints
+      # with. Without it those controls skip instead of proving -- exactly
+      # the silent-under-coverage pattern this issue exists to close.
+      - name: Install ruff (pinned, for the sparse-cone negative controls)
+        run: python3 -m pip install ruff==0.17.0
 
       # Runs every scripts/tests/test_*.py: the evidence guard tests above,
       # the klt pin drift guard tests (issue #135), the size budget tests and the
