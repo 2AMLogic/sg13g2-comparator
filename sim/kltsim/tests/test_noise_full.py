@@ -170,9 +170,6 @@ class GridUncertaintyTest(unittest.TestCase):
 
 import gzip
 import hashlib
-import json
-import tempfile
-from pathlib import Path
 
 from kltsim import build as build_mod
 from kltsim import grade as grade_mod
