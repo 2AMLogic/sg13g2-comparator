@@ -9,6 +9,7 @@ Judge-approved PRs stuck under a `loom:operator` merge-risk hold — implementat
 - **#200**: noise-full: label grid-mean uncertainty, add correlated bound and shared-draw disclosure (#192)
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
 - **#243**: Preserve derived campaign report pairs before regeneration (#237)
+- **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 
 ## Operator Priority
 
@@ -25,6 +26,8 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#235**: Validate clock-supply probes and reject ambiguous sample identities
 - **#245**: Validate actual Monte Carlo populations before compliance grading
 - **#247**: Derive evidence-size estimate denominators from selected reference campaigns
+- **#264**: Reject invalid local PVT grid inputs before simulation
+- **#266**: Validate CM decision timing dimensions and physical domains
 
 ## In Progress
 
@@ -47,6 +50,7 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#200**: noise-full: label grid-mean uncertainty, add correlated bound and shared-draw disclosure (#192)
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
 - **#243**: Preserve derived campaign report pairs before regeneration (#237)
+- **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 
 ## Proposed
 
@@ -62,11 +66,13 @@ Issues carrying `loom:curated`.
 - **#237**: Preserve derived campaign report pairs before regeneration *(curated)*
 - **#245**: Validate actual Monte Carlo populations before compliance grading *(curated)*
 - **#247**: Derive evidence-size estimate denominators from selected reference campaigns *(curated)*
-- **#260**: Auditor process proposal: run final evidence-size preflight before requesting review *(curated)*
+- **#263**: Validate timestep smoke evidence before computing noise convergence *(curated)*
+- **#264**: Reject invalid local PVT grid inputs before simulation *(curated)*
+- **#266**: Validate CM decision timing dimensions and physical domains *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-_None._
+- **#269**: Reject mixed-geometry sizing finalists in candidate Target summaries *(architect)*
 
 ## Epics
 
@@ -76,13 +82,13 @@ _None._
 
 | Tier | Count |
 |------|-------|
-| Operator merge-risk holds | 4 |
+| Operator merge-risk holds | 5 |
 | Operator priority | 0 |
-| Ready (`loom:issue`) | 5 |
+| Ready (`loom:issue`) | 7 |
 | In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 5 |
-| Curated | 11 |
-| Architect / Hermit proposals | 0 |
+| Approved PRs awaiting merge | 6 |
+| Curated | 13 |
+| Architect / Hermit proposals | 1 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->

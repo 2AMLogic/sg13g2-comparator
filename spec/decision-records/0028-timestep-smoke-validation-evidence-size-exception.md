@@ -3,7 +3,8 @@
 - **Status**: proposed. **This record covers the evidence budget only.** It
   ratifies no bound and relaxes no Target or Stretch number. It authorizes one
   raise of the `sim/` total ceiling in `sim/evidence-size-budget.json` (issue
-  #132's contract), exactly the measured overage of 33058 B. It takes effect
+  #132's contract), exactly the measured overage of 36056 B (33058 B as
+  drafted plus the 2026-10-13 review fix). It takes effect
   only with the reviewed merge of the PR that lands it, as for DR-0005 to
   DR-0027. The drafting agent does not merge it.
 - **Date**: 2026-10-12
@@ -16,6 +17,9 @@
 - **Numbering**: DR-0024 remains double-booked by open PRs, as DR-0026 and
   DR-0027 record. If another open PR lands a record with a `sim` entry first,
   this one is renumbered on rebase and its cumulative entry re-measured.
+  On the 2026-10-13 rebase DR-0029 and DR-0030 had landed on `main` while
+  DR-0028 stayed free, so the number stands and the cumulative entry was
+  re-measured to include their 10486 B + 6685 B.
 
 ## Context
 
@@ -40,23 +44,29 @@ throwaway run):
 | `sim/comparator-transient-noise-full/README.md` | what the timestep validator checks |
 | `sim/evidence-size-budget.json` | extended cumulative entry |
 
-The total is the measured overage, 33058 B. This record lives under `spec/` and
-adds nothing to `sim/`.
+The total is the measured overage: 33058 B as drafted, plus the 2998 B the
+2026-10-13 review fix added (requiring a well-formed model-deck content hash
+before rungs are compared, with its regression tests), 36056 B in all. This
+record lives under `spec/` and adds nothing to `sim/`.
 
 ## Decision
 
-Raise the `sim/` total ceiling by exactly **33058 B**. The single `sim` entry
-carries the cumulative 28228705 + 33058 = **28261763 B** and cites this record. The
-baseline, the 10 % allowance and all existing evidence are unchanged. No
-ratified spec bound is relaxed or changed.
+Raise the `sim/` total ceiling by exactly **36056 B** (33058 B as drafted plus
+the 2998 B review fix). The single `sim` entry carries the cumulative
+28245876 + 36056 = **28281932 B** (28228705 B from DR-0005 to DR-0027, plus
+DR-0029's 10486 B and DR-0030's 6685 B which landed on `main` before this PR,
+plus the 36056 B authorized here) and cites this record. The baseline, the
+10 % allowance and all existing evidence are unchanged. No ratified spec
+bound is relaxed or changed.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 28261763}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 28281932}
 ```
 
-(Cumulative: 28228705 B from DR-0005 to DR-0027 and 33058 B authorized here.)
+(Cumulative: 28245876 B from DR-0005 to DR-0027, DR-0029 and DR-0030 and
+36056 B authorized here.)
 
 ## Consequences
 
