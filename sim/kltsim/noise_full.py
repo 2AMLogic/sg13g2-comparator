@@ -46,6 +46,7 @@ from __future__ import annotations
 import gzip
 import json
 import math
+import re
 from pathlib import Path
 from statistics import NormalDist
 
@@ -551,6 +552,11 @@ SMOKE_NOMINAL_KEY = ("tt", 1.2, 27.0)
 SMOKE_BASE_ID = "mos_tt/1.200V/27C"
 SMOKE_BASELINE = "20p"
 SMOKE_TIMESTEPS = ("20p", "10p", "5p")
+#: ``provenance.deck.content_hash`` must be a sha256 digest in the same
+#: ``sha256:<64 lowercase hex>`` form the envelope writer emits; a missing or
+#: malformed deck hash cannot prove model-deck provenance, so rungs carrying
+#: one are rejected before any cross-rung comparison (issue #263 review).
+SMOKE_DECK_HASH_RE = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def _is_int(value) -> bool:
@@ -766,6 +772,13 @@ def _smoke_rung(smoke_dir: Path, step: str, bench, ev: dict, dut: grade_mod.DutR
         if body_text is not None:
             problems.extend(f"{tag}: {p}" for p in grade_mod.check_dut(
                 grade_mod.BenchEvidence(SMOKE_BENCH, [(tag, env)], body_text, {tag: sha}), dut))
+        deck = (env.get("provenance") or {}).get("deck")
+        deck_hash = deck.get("content_hash") if isinstance(deck, dict) else None
+        if not (isinstance(deck_hash, str) and SMOKE_DECK_HASH_RE.fullmatch(deck_hash)):
+            problems.append(f"{tag}: model deck content_hash is missing or malformed "
+                            f"({deck_hash!r}; expected sha256:<64 lowercase hex>): "
+                            "model-deck provenance cannot be established, so this rung "
+                            "is not comparable")
     if problems or env is None or "p" not in facts:
         return item, None
     p = facts["p"]
@@ -805,11 +818,12 @@ def timestep_convergence(smoke_dir: Path, ev: dict, dut: grade_mod.DutReference,
     request/invocation/envelope chain, smoke request contract (nominal
     corner, the ``tn_full_both`` body, solver step / max step the only free
     request field, N as declared by the request), body configuration and DUT,
-    explicit sample identities, trusted un-errored samples, finite binary hits
-    and distinct raw-noise draws. An invalid rung keeps its diagnostics and
-    contributes no sigma, SE or comparison. A rung is compared with the
-    baseline only when both are valid AND nothing but the solver step / max
-    step differs between their requests, populations and inputs.
+    a well-formed model-deck content hash, explicit sample identities,
+    trusted un-errored samples, finite binary hits and distinct raw-noise
+    draws. An invalid rung keeps its diagnostics and contributes no sigma,
+    SE or comparison. A rung is compared with the baseline only when both
+    are valid AND nothing but the solver step / max step differs between
+    their requests, populations and inputs.
     ``z_vs_20p`` = (sigma - sigma_20p)/sqrt(se^2 + se_20p^2).
     """
     out: dict = {"steps": {}, "available": False, "baseline": steps[0] if steps else None,

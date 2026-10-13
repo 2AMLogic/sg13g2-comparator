@@ -597,6 +597,42 @@ class TimestepSmokeValidationTest(unittest.TestCase):
         self.assertEqual(ts["validated_rungs"], [])
         self.assertTrue(any("smoke body is missing" in p for p in ts["steps"]["20p"]["problems"]))
 
+    def test_deck_hash_missing_malformed_and_differing(self):
+        # provenance.deck deleted: no model-deck provenance, rung rejected
+        smoke = self.smoke()
+        self.rewrite(smoke, "10p", envelope=lambda e: e["provenance"].pop("deck"))
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "model deck content_hash is missing")
+        self.setUp()
+        smoke = self.smoke()
+        # deck object present but carries no hash
+        self.rewrite(smoke, "10p", envelope=lambda e: e["provenance"].update(deck={}))
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "model deck content_hash is missing")
+        self.setUp()
+        smoke = self.smoke()
+        # malformed hash: present but not a sha256:<64 hex> digest
+        self.rewrite(smoke, "10p", envelope=lambda e: e["provenance"]["deck"].update(
+            content_hash="deck-final.spice"))
+        self.assertRejectedRung(self.run_ts(smoke), "10p", "model deck content_hash is missing")
+        self.setUp()
+        smoke = self.smoke()
+        # equal malformed hashes on EVERY rung must not enable comparison
+        for step in ("20p", "10p", "5p"):
+            self.rewrite(smoke, step, envelope=lambda e: e["provenance"]["deck"].update(
+                content_hash="not-a-digest"))
+        ts = self.run_ts(smoke)
+        self.assertEqual(ts["validated_rungs"], [])
+        self.assertEqual(ts["comparisons"], [])
+        self.setUp()
+        smoke = self.smoke()
+        # well-formed but differing deck hash: rung validates, comparison withheld
+        self.rewrite(smoke, "10p", envelope=lambda e: e["provenance"]["deck"].update(
+            content_hash="sha256:" + "e" * 64))
+        ts = self.run_ts(smoke)
+        self.assertEqual(ts["steps"]["10p"]["status"], "validated")
+        self.assertIn("model deck content hash", ts["withheld"]["10p"])
+        self.assertNotIn("z_vs_20p", ts["steps"]["10p"])
+        self.assertEqual(ts["comparisons"], ["5p"])
+
     def test_wrong_request_step_and_corner(self):
         smoke = self.smoke()
         self.rewrite(smoke, "10p", request=lambda r: r["analysis"].update(args="20p 5.1n 0 20p"))
