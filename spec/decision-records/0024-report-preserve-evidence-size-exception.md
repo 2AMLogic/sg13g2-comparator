@@ -10,8 +10,8 @@
 - **Decided by**: Builder agent, PR for issue #237 (pending Judge review).
   The operator reviews the raise as a governance item at merge.
 - **Related**:
-  [`0023-pex-decision-validity-evidence-size-exception.md`](0023-pex-decision-validity-evidence-size-exception.md)
-  (previous `sim/` total raise; still stands)
+  [`0030-sizesweep-geometry-gate-evidence-size-exception.md`](0030-sizesweep-geometry-gate-evidence-size-exception.md)
+  (previous `sim/` total raise on main; still stands)
 - **Supersedes**: none. **Superseded by**: none
 
 ## Context
@@ -25,19 +25,25 @@ evidence file is modified and no report is regenerated. The total is the
 measured overage of the PR (new/changed files under `sim/`, including the
 budget file's own reason text).
 
+While this PR was in review, main advanced from DR-0023 to DR-0030
+(+65089 B, issues #250/#252/#255/#267/#269), so the branch was rebased onto
+it. The raise authorized here is unchanged at 17962 B over the DR-0030
+state; only the cumulative basis moved.
+
 ## Decision
 
 Raise the `sim/` total ceiling by exactly **17962 B**. The single `sim` entry
-carries the cumulative 28180787 + 17962 = **28198749 B** and cites this record. No
+carries the cumulative 28245876 + 17962 = **28263838 B** and cites this record. No
 ratified spec bound is relaxed or changed.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 28198749}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 28263838}
 ```
 
-(Cumulative: 28180787 B from DR-0005 to DR-0023 and 17962 B authorized here.)
+(Cumulative: 28245876 B from DR-0005 to DR-0030 as on main and 17962 B
+authorized here.)
 
 ## Consequences
 
