@@ -326,84 +326,266 @@ def write_inputs(kind: str, c: Condition, out_dir: Path, *, osdi_dir: str = buil
 # --------------------------------------------------------------------------- #
 # analysis
 # --------------------------------------------------------------------------- #
-
-TOL_V = 1e-6
-
-
-def _values(corner: dict) -> dict:
-    return grade_mod.measurement_index(corner)[0] or {}
-
-
-def _val(values: dict, name: str):
-    m = values.get(name)
-    return None if m is None else m.get("value")
-
+#
+# Every number that reaches a summary has been through ``_probe``: finite, in
+# the dimension asked for, converted to one canonical unit. A point whose
+# identity (process/supply/temperature, sample index, seed) or probes cannot be
+# trusted carries a ``problem`` and is excluded from every range, difference,
+# count and pooled sigma. An identity claimed by more than one corner is
+# ambiguous even when the copies agree: every copy is rejected and none is
+# selected, so the result cannot depend on the order of the corners.
 
 def load_envelope(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def regen_points(env: dict) -> dict[tuple, dict]:
+TOL_V = 1e-6
+TOL_T = 1e-3
+
+#: canonical unit per consumed measurement ("V/V" and "levels" must match
+#: exactly: they are not in grade's conversion table)
+REGEN_UNITS = {
+    "vdd_meas": "V", "vdda_meas": "V", "temp_meas": "C",
+    "td_od50_ns": "ns", "td_od1_ns": "ns", "td_od01_ns": "ns", "tau_ps": "ps",
+    "dout_od50_first": "V/V", "dout_od50_end": "V/V", "dout_od1_first": "V/V",
+    "dout_od1_end": "V/V", "dout_od01_first": "V/V", "dout_od01_end": "V/V",
+}
+OFFSET_UNITS = {"vdd_meas": "V", "temp_meas": "C", "lowcount": "levels", "vos_mv": "mV"}
+_TEMP_UNITS = ("C", "degC")  # grade's table reads a bare "C" as coulomb: pin it
+
+EXPECTED_REGEN_KEYS = frozenset(
+    (p, round(float(v), 6), float(t)) for p in PROCESSES for v in SUPPLIES_V for t in TEMPERATURES_C)
+EXPECTED_OFFSET_KEYS = frozenset(
+    (p, round(float(v), 6), float(t)) for p in PROCESSES
+    for v in OFFSET_SUPPLIES_V for t in OFFSET_TEMPERATURES_C)
+
+
+class Evidence(dict):
+    """Parsed points (key -> point) plus the corners that could not be placed
+    on any key (``rejected``: sorted, order-independent reasons)."""
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.rejected: list[str] = []
+
+
+class _Bad(Exception):
+    pass
+
+
+def _probe(values: dict, name: str, units: dict):
+    """Validated value of probe ``name`` in its canonical unit, or None when
+    the measurement is absent / not evaluated. A reported value that is
+    non-finite, non-numeric, or in the wrong unit raises ``_Bad``."""
+    m = values.get(name)
+    if m is None or m.get("value") is None:
+        return None
+    canon = units[name]
+    try:
+        if isinstance(m["value"], str):
+            raise _Bad(f"{name} value {m['value']!r} is a string, not a number")
+        v = grade_mod.finite(m["value"], name)
+        unit = m.get("unit")
+        if not isinstance(unit, str):
+            raise _Bad(f"{name} has missing or malformed unit {unit!r}")
+        if canon == "C":
+            if unit.strip() not in _TEMP_UNITS:
+                raise _Bad(f"{name} unit {unit!r} is not a temperature unit")
+            return v
+        return grade_mod.finite(grade_mod.convert(v, unit, canon), name)
+    except (grade_mod.NonFiniteError, grade_mod.UnitError) as exc:
+        raise _Bad(str(exc)) from None
+
+
+def _read(values: dict, units: dict):
+    """All consumed probes: (dict name -> value|None, first problem|None)."""
+    out, problem = {}, None
+    for name in sorted(units):
+        try:
+            out[name] = _probe(values, name, units)
+        except _Bad as exc:
+            out[name] = None
+            problem = problem or str(exc)
+    return out, problem
+
+
+def _corner_label(corner, i: int) -> str:
+    cid = corner.get("corner_id") if isinstance(corner, dict) else None
+    return f"{cid!r}" if isinstance(cid, str) else f"corner #{i}"
+
+
+def _placed(env: dict, require_mc: bool):
+    """Yield ``(key, corner, label)`` for placeable corners; collect the rest.
+    Returns (list, rejected-reasons)."""
+    corners = env.get("corners") if isinstance(env, dict) else None
+    placed, rejected = [], []
+    if corners is None:
+        corners = []
+    if not isinstance(corners, list):
+        return [], ["malformed corner list"]
+    for i, corner in enumerate(corners):
+        label = _corner_label(corner, i)
+        if not isinstance(corner, dict):
+            rejected.append(f"{label}: malformed corner (not an object)")
+            continue
+        key = grade_mod._corner_key(corner)
+        if key is None or key[0] is None:
+            rejected.append(f"{label}: unplaceable (missing process, supply or non-finite "
+                            "supply/temperature)")
+            continue
+        placed.append((key, corner, label))
+    return placed, rejected
+
+
+def _supply_problem(corner: dict, values: dict, probes) -> str | None:
+    sup = corner.get("supply_v") or {}
+    for probe, src in probes:
+        v = values.get(probe)
+        try:
+            s = grade_mod.finite(sup.get(src), f"corner {src}")
+        except grade_mod.NonFiniteError:
+            return f"corner supply {src}={sup.get(src)!r} is not a finite number"
+        if v is None or abs(v - s) > TOL_V:
+            return f"{probe}={v} is not the corner's {src}={s}"
+    return None
+
+
+def _temp_problem(corner: dict, values: dict) -> str | None:
+    t = values.get("temp_meas")
+    if t is None or abs(t - float(corner["temperature_c"])) > TOL_T:
+        return f"temp_meas={t} is not the corner's {corner['temperature_c']} C"
+    return None
+
+
+def _empty_regen(problem: str) -> dict:
+    return {"td50_ns": None, "td1_ns": None, "td01_ns": None, "tau_ps": None,
+            "ok50": None, "ok1": None, "ok01": None, "first50": None, "end50": None,
+            "first1": None, "end1": None, "problem": problem}
+
+
+def regen_points(env: dict) -> Evidence:
     """Per grid point: decision times, tau and gate verdicts (None where the
     measurement did not evaluate), plus a ``problem`` string when the corner
-    is untrusted (errored, or its supply/temperature probe disagrees)."""
-    out = {}
-    for corner in env.get("corners") or []:
-        key = grade_mod._corner_key(corner)
-        values = _values(corner)
+    is untrusted (errored, malformed probe/unit, supply/temperature probe
+    disagrees, off the ratified grid, or its identity is claimed twice)."""
+    placed, rejected = _placed(env, False)
+    by_key: dict[tuple, list] = {}
+    for key, corner, label in placed:
+        by_key.setdefault(key, []).append((corner, label))
+    out = Evidence()
+    for key, group in by_key.items():
+        if len(group) > 1:
+            out[key] = _empty_regen(
+                f"duplicate corner identity x{len(group)}: ambiguous, no copy selected")
+            continue
+        corner = group[0][0]
         problem = None
         if corner.get("status") == "error":
             problem = "corner errored"
-        sup = corner.get("supply_v") or {}
-        for probe, src in (("vdd_meas", "vsup"), ("vdda_meas", "vsupa")):
-            v = _val(values, probe)
-            if v is None or src not in sup or abs(v - sup[src]) > TOL_V:
-                problem = problem or f"{probe}={v} is not the corner's {src}={sup.get(src)}"
-        t = _val(values, "temp_meas")
-        if t is None or abs(t - corner["temperature_c"]) > 1e-3:
-            problem = problem or f"temp_meas={t} is not the corner's {corner['temperature_c']} C"
+        idx, bad = grade_mod.measurement_index(corner)
+        if bad:
+            problem = problem or bad
+        v, bad = _read(idx or {}, REGEN_UNITS)
+        problem = problem or bad
+        problem = problem or _supply_problem(
+            corner, v, (("vdd_meas", "vsup"), ("vdda_meas", "vsupa")))
+        problem = problem or _temp_problem(corner, v)
+        if key not in EXPECTED_REGEN_KEYS:
+            problem = problem or "point is not on the ratified 45-point grid"
 
-        def ok(tag_):
-            first, end = _val(values, f"dout_{tag_}_first"), _val(values, f"dout_{tag_}_end")
+        def ok(tag_, v=v):
+            first, end = v[f"dout_{tag_}_first"], v[f"dout_{tag_}_end"]
             if first is None or end is None:
                 return None
             return bool(first < 0.1 and end > 0.9)
 
         out[key] = {
-            "td50_ns": _val(values, "td_od50_ns"), "td1_ns": _val(values, "td_od1_ns"),
-            "td01_ns": _val(values, "td_od01_ns"), "tau_ps": _val(values, "tau_ps"),
+            "td50_ns": v["td_od50_ns"], "td1_ns": v["td_od1_ns"],
+            "td01_ns": v["td_od01_ns"], "tau_ps": v["tau_ps"],
             "ok50": ok("od50"), "ok1": ok("od1"), "ok01": ok("od01"),
-            "first50": _val(values, "dout_od50_first"), "end50": _val(values, "dout_od50_end"),
-            "first1": _val(values, "dout_od1_first"), "end1": _val(values, "dout_od1_end"),
+            "first50": v["dout_od50_first"], "end50": v["dout_od50_end"],
+            "first1": v["dout_od1_first"], "end1": v["dout_od1_end"],
             "problem": problem,
         }
+    out.rejected = sorted(rejected)
     return out
 
 
-def offset_samples(env: dict) -> dict[tuple, dict[int, dict]]:
-    """Per grid point: sample_index -> {vos_mv, seed, clipped, problem}."""
-    out: dict[tuple, dict[int, dict]] = {}
-    for corner in env.get("corners") or []:
+def _seed(mc: dict):
+    s = mc.get("seed")
+    return s if isinstance(s, int) and not isinstance(s, bool) else None
+
+
+def _empty_sample(problem: str) -> dict:
+    return {"vos_mv": None, "seed": None, "lowcount": None, "clipped": False, "problem": problem}
+
+
+def offset_samples(env: dict, n: int = OFFSET_N) -> Evidence:
+    """Per grid point: sample_index -> {vos_mv, seed, clipped, problem}.
+
+    ``seed`` is None when the draw reports none (such a draw is never paired).
+    A (point, sample_index) identity claimed by more than one corner is
+    rejected for every copy. Corners with no usable ``monte_carlo`` identity
+    are listed in ``.rejected``."""
+    placed, rejected = _placed(env, True)
+    by_id: dict[tuple, list] = {}
+    for key, corner, label in placed:
         mc = corner.get("monte_carlo")
-        if mc is None:
+        if not isinstance(mc, dict):
+            rejected.append(f"{label}: no monte_carlo block")
             continue
-        key = grade_mod._corner_key(corner)
-        values = _values(corner)
-        lc, vos = _val(values, "lowcount"), _val(values, "vos_mv")
+        si = mc.get("sample_index")
+        if isinstance(si, bool) or not isinstance(si, int) or si < 0:
+            rejected.append(f"{label}: sample_index {si!r} is not a non-negative integer")
+            continue
+        by_id.setdefault((key, si), []).append((corner, mc))
+    out = Evidence()
+    for (key, si), group in by_id.items():
+        slot = out.setdefault(key, {})
+        if len(group) > 1:
+            slot[si] = _empty_sample(
+                f"duplicate sample identity x{len(group)}: ambiguous, no copy selected")
+            continue
+        corner, mc = group[0]
         problem = None
+        idx, bad = grade_mod.measurement_index(corner)
+        v, pbad = _read(idx or {}, OFFSET_UNITS)
+        lc, vos = v["lowcount"], v["vos_mv"]
         if corner.get("status") == "error":
             problem = "sample errored"
+        elif bad or pbad:
+            problem = bad or pbad
         elif lc is None or vos is None:
             problem = "lowcount/vos_mv not reported"
-        v = _val(values, "vdd_meas")
-        if problem is None and (v is None or abs(v - corner["supply_v"]["vsup"]) > TOL_V):
-            problem = f"vdd_meas={v} is not the corner supply"
+        else:
+            problem = _supply_problem(corner, v, (("vdd_meas", "vsup"),)) \
+                or _temp_problem(corner, v)
+        if problem is None and key not in EXPECTED_OFFSET_KEYS:
+            problem = "point is not on the offset grid"
+        if problem is None and si >= n:
+            problem = f"sample_index {si} is outside 0..{n - 1}"
         clipped = lc is not None and not (0.5 <= lc <= 32.5)
-        out.setdefault(key, {})[mc["sample_index"]] = {
-            "vos_mv": vos, "seed": mc.get("seed"), "lowcount": lc,
-            "clipped": bool(clipped), "problem": problem,
-        }
+        slot[si] = {"vos_mv": vos, "seed": _seed(mc), "lowcount": lc,
+                    "clipped": bool(clipped), "problem": problem}
+    out.rejected = sorted(rejected)
     return out
+
+
+def offset_coverage(samples: dict, n: int = OFFSET_N) -> dict:
+    """Expected vs present vs usable draws on the 20 x N offset grid."""
+    expected = len(EXPECTED_OFFSET_KEYS) * n
+    present = usable = 0
+    for key, pt in samples.items():
+        for si, s in pt.items():
+            if key in EXPECTED_OFFSET_KEYS and 0 <= si < n:
+                present += 1
+                usable += not s["problem"]
+    rejected_ids = sum(1 for pt in samples.values() for s in pt.values() if s["problem"])
+    rejected = rejected_ids + len(getattr(samples, "rejected", []))
+    return {"expected": expected, "present": present, "usable": usable, "rejected": rejected,
+            "missing": expected - present, "complete": usable == expected,
+            "label": "complete" if usable == expected else f"PARTIAL ({usable}/{expected} usable)",
+            "rejected_corners": list(getattr(samples, "rejected", []))}
 
 
 def _mean(xs):
@@ -420,18 +602,26 @@ def _sd(xs):
 
 def offset_pair(cond: dict[tuple, dict[int, dict]], base: dict[tuple, dict[int, dict]]) -> dict:
     """Paired statistics of one condition against ``base`` over all shared
-    (point, sample) pairs. A pair is used only if both draws share a seed and
-    both are trusted and un-clipped."""
-    deltas, per_point, seed_mismatch, dropped = [], {}, 0, 0
+    (point, sample) pairs. A pair is used only if both draws report a seed and
+    share it, and both are trusted and un-clipped. Absent seeds
+    (``seed_absent``) are counted apart from differing seeds
+    (``seed_mismatch``)."""
+    deltas, per_point, seed_mismatch, seed_absent, dropped = [], {}, 0, 0, 0
     cv, bv = [], []
     for key in sorted(set(cond) & set(base), key=str):
         d = []
         for k in sorted(set(cond[key]) & set(base[key])):
             a, b = cond[key][k], base[key][k]
+            if a["problem"] or b["problem"]:
+                dropped += 1
+                continue
+            if a["seed"] is None or b["seed"] is None:
+                seed_absent += 1
+                continue
             if a["seed"] != b["seed"]:
                 seed_mismatch += 1
                 continue
-            if a["problem"] or b["problem"] or a["clipped"] or b["clipped"]:
+            if a["clipped"] or b["clipped"]:
                 dropped += 1
                 continue
             d.append(a["vos_mv"] - b["vos_mv"])
@@ -444,6 +634,7 @@ def offset_pair(cond: dict[tuple, dict[int, dict]], base: dict[tuple, dict[int, 
     sd = _sd(deltas)
     return {
         "n_pairs": n, "dropped": dropped, "seed_mismatch": seed_mismatch,
+        "seed_absent": seed_absent,
         "mean_shift_mv": _mean(deltas), "sd_delta_mv": sd,
         "sem_mv": (sd / math.sqrt(n)) if sd is not None else None,
         "changed": sum(1 for x in deltas if abs(x) > STEP_MV / 2),
@@ -467,9 +658,26 @@ def _pooled_sigma(pairs: list[tuple]) -> float | None:
     return math.sqrt(max(ss / dof - STEP_MV ** 2 / 12.0, 0.0))
 
 
+def regen_coverage(points: dict) -> dict:
+    """Expected (45) vs present vs usable regeneration points."""
+    expected = len(EXPECTED_REGEN_KEYS)
+    on_grid = [k for k in points if k in EXPECTED_REGEN_KEYS]
+    usable = sum(1 for k in on_grid if not points[k]["problem"])
+    rej = sorted(getattr(points, "rejected", []))
+    return {"expected": expected, "present": len(on_grid), "usable": usable,
+            "rejected": sum(1 for p in points.values() if p["problem"]) + len(rej),
+            "missing": sorted(grade_mod.key_label(k) for k in EXPECTED_REGEN_KEYS
+                              if k not in points),
+            "complete": usable == expected,
+            "label": "complete" if usable == expected else f"PARTIAL ({usable}/{expected} usable)",
+            "rejected_corners": rej}
+
+
 def regen_summary(points: dict[tuple, dict], base: dict[tuple, dict] | None) -> dict:
+    live = {k: p for k, p in points.items() if not p["problem"]}
+
     def rng(name):
-        vals = [(k, p[name]) for k, p in points.items() if p[name] is not None and not p["problem"]]
+        vals = [(k, p[name]) for k, p in live.items() if p[name] is not None]
         if not vals:
             return None
         lo, hi = min(vals, key=lambda kv: kv[1]), max(vals, key=lambda kv: kv[1])
@@ -478,23 +686,23 @@ def regen_summary(points: dict[tuple, dict], base: dict[tuple, dict] | None) -> 
 
     out = {
         "points": len(points),
+        "coverage": regen_coverage(points),
         "untrusted": sorted(grade_mod.key_label(k) for k, p in points.items() if p["problem"]),
         "td50_ns": rng("td50_ns"), "td1_ns": rng("td1_ns"), "td01_ns": rng("td01_ns"),
         "tau_ps": rng("tau_ps"),
-        "correct50": sum(1 for p in points.values() if p["ok50"] and not p["problem"]),
-        "correct1": sum(1 for p in points.values() if p["ok1"] and not p["problem"]),
-        "correct01": sum(1 for p in points.values() if p["ok01"] and not p["problem"]),
-        "td50_within_1p5ns": sum(1 for p in points.values()
-                                 if p["td50_ns"] is not None and p["td50_ns"] <= 1.5
-                                 and not p["problem"]),
-        "failed_1mv_points": sorted(grade_mod.key_label(k) for k, p in points.items()
-                                    if not p["ok1"] and not p["problem"]),
+        "correct50": sum(1 for p in live.values() if p["ok50"]),
+        "correct1": sum(1 for p in live.values() if p["ok1"]),
+        "correct01": sum(1 for p in live.values() if p["ok01"]),
+        "td50_within_1p5ns": sum(1 for p in live.values()
+                                 if p["td50_ns"] is not None and p["td50_ns"] <= 1.5),
+        "failed_1mv_points": sorted(grade_mod.key_label(k) for k, p in live.items()
+                                    if not p["ok1"]),
     }
     if base is not None:
         d50, d1 = [], []
-        for k, p in points.items():
+        for k, p in live.items():
             b = base.get(k)
-            if not b or p["problem"] or b["problem"]:
+            if not b or b["problem"]:
                 continue
             if p["td50_ns"] is not None and b["td50_ns"] is not None:
                 d50.append((k, p["td50_ns"] - b["td50_ns"]))
