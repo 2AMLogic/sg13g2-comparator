@@ -141,7 +141,12 @@ def _freeze_inputs(tb, dut, workdir: Path) -> list:
         path = workdir / "inputs" / sub / obj.netlist.name
         path.parent.mkdir(parents=True)
         path.write_bytes(obj.netlist_bytes)
-        frozen.append(dataclasses.replace(obj, netlist=path))
+        changes = {"netlist": path}
+        if getattr(obj, "reverse_ladder", None):
+            rev = workdir / "inputs" / sub / obj.reverse_ladder_netlist.name
+            rev.write_bytes(obj.reverse_ladder_bytes)
+            changes["reverse_ladder_netlist"] = rev
+        frozen.append(dataclasses.replace(obj, **changes))
     return frozen
 
 
