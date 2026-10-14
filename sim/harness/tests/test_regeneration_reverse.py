@@ -390,7 +390,6 @@ class ProvenanceAndValidation(unittest.TestCase):
         self.assertNotIn("reverse_ladder_netlist", tb.provenance())
 
     def test_fragment_with_forbidden_directive_is_rejected(self):
-        import json
         import shutil
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
