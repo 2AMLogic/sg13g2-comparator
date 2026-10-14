@@ -1,9 +1,14 @@
 """Stdlib-only tests for the issue #81 noise-split arithmetic."""
 
+import json
 import math
+import tempfile
 import unittest
+from pathlib import Path
 from statistics import NormalDist
+from unittest import mock
 
+from kltsim import cli
 from kltsim import noise_full as nf
 
 
@@ -61,6 +66,47 @@ class SaturationAndControlTest(unittest.TestCase):
         self.assertEqual(nf.two_proportion_z(0.5, 0.5, 80), 0.0)
         self.assertGreater(nf.two_proportion_z(0.9, 0.7, 80), 2.0)
         self.assertLess(nf.two_proportion_z(0.7, 0.9, 80), -2.0)
+
+
+class IdentityTest(unittest.TestCase):
+    """`noise-full --identity` writes a NEW campaign directory, never over the source."""
+
+    def _run(self, root, *extra):
+        result = {"configs": {}}
+        with mock.patch.object(cli, "CAMPAIGNS_DIR", root), \
+                mock.patch.object(cli.noise_full_mod, "analyse", lambda d: dict(result)), \
+                mock.patch.object(cli.noise_full_mod, "render_markdown", lambda r: "md\n"):
+            return cli.main(["noise-full", "--campaign", "src", *extra])
+
+    def test_identity_leaves_source_untouched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
+            (root / "src" / "noise_full.json").write_text("old\n")
+            self.assertEqual(self._run(root, "--identity", "new"), 0)
+            self.assertEqual((root / "src" / "noise_full.json").read_text(), "old\n")
+            out = json.loads((root / "new" / "noise_full.json").read_text())
+            self.assertEqual((out["campaign"], out["source_campaign"]), ("new", "src"))
+            self.assertTrue((root / "new" / "noise_full.md").exists())
+
+    def test_identity_refuses_existing_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
+            (root / "new").mkdir()
+            (root / "new" / "noise_full.json").write_text("kept\n")
+            self.assertEqual(self._run(root, "--identity", "new"), 2)
+            self.assertEqual((root / "new" / "noise_full.json").read_text(), "kept\n")
+
+    def test_identity_refuses_existing_markdown_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src").mkdir()
+            (root / "new").mkdir()
+            (root / "new" / "noise_full.md").write_text("kept\n")
+            self.assertEqual(self._run(root, "--identity", "new"), 2)
+            self.assertEqual((root / "new" / "noise_full.md").read_text(), "kept\n")
+            self.assertFalse((root / "new" / "noise_full.json").exists())
 
 
 if __name__ == "__main__":
@@ -124,9 +170,6 @@ class GridUncertaintyTest(unittest.TestCase):
 
 import gzip
 import hashlib
-import json
-import tempfile
-from pathlib import Path
 
 from kltsim import build as build_mod
 from kltsim import grade as grade_mod

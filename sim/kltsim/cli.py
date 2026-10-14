@@ -559,9 +559,20 @@ def cmd_noise_full(args) -> int:
     split for a campaign. Output is append-only: a report directory that already
     holds ``noise_full.*`` is never overwritten (publish under a new namespace)."""
     out_dir = _campaign_dir(args.campaign)
-    report_dir = Path(args.report_dir) if args.report_dir else out_dir
     result = noise_full_mod.analyse(out_dir)
     result["campaign"] = out_dir.name
+    if args.identity:
+        # Append-only evidence: a revised analysis lands under a NEW identity
+        # (directory), never over the committed campaign's reports.
+        result["source_campaign"] = out_dir.name
+        result["campaign"] = args.identity
+        out_dir = _campaign_dir(args.identity)
+        if any((out_dir / name).exists() for name in ("noise_full.json", "noise_full.md")):
+            print(f"noise-full: {out_dir} already holds a report; choose a new identity",
+                  file=sys.stderr)
+            return 2
+        out_dir.mkdir(parents=True, exist_ok=True)
+    report_dir = Path(args.report_dir) if args.report_dir else out_dir
     text = noise_full_mod.render_markdown(result)
     targets = {report_dir / "noise_full.json": json.dumps(result, separators=(",", ":")) + "\n",
                report_dir / "noise_full.md": text}
@@ -696,6 +707,8 @@ def main(argv: list[str] | None = None) -> int:
 
     nf = sub.add_parser("noise-full", help="issue #81: analyse the tn_full_* configurations of a campaign")
     nf.add_argument("--campaign", required=True)
+    nf.add_argument("--identity", help="write the report under this NEW campaign directory name "
+                    "instead of the source campaign (append-only evidence)")
     nf.add_argument("--report-dir", help="write noise_full.{json,md} here (new directory; "
                     "existing files are never overwritten); default: the campaign directory")
     nf.set_defaults(func=cmd_noise_full)
