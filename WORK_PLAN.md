@@ -11,9 +11,15 @@ Judge-approved PRs stuck under a `loom:operator` merge-risk hold — implementat
 - **#243**: Preserve derived campaign report pairs before regeneration (#237)
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 
-## Operator Priority
+## Very Important
 
-Issues the operator starred (`loom:operator-priority`); land these first.
+`loom:very-important` (one counts per workspace); every stage takes these first.
+
+_None._
+
+## Important
+
+`loom:important`; taken before unlabelled work.
 
 _None._
 
@@ -69,10 +75,11 @@ Issues carrying `loom:curated`.
 - **#263**: Validate timestep smoke evidence before computing noise convergence *(curated)*
 - **#264**: Reject invalid local PVT grid inputs before simulation *(curated)*
 - **#266**: Validate CM decision timing dimensions and physical domains *(curated)*
+- **#274**: Mirror gf180's supplemental reverse-polarity ladder fragment (bench-structure parity, gf180-comparator#158/#166) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-- **#269**: Reject mixed-geometry sizing finalists in candidate Target summaries *(architect)*
+_None._
 
 ## Epics
 
@@ -80,15 +87,16 @@ Issues carrying `loom:curated`.
 
 ## Backlog Balance
 
-| Tier | Count |
+| Bucket | Count |
 |------|-------|
 | Operator merge-risk holds | 5 |
-| Operator priority | 0 |
+| Very important | 0 |
+| Important | 0 |
 | Ready (`loom:issue`) | 7 |
 | In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 6 |
-| Curated | 13 |
-| Architect / Hermit proposals | 1 |
+| Curated | 14 |
+| Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
