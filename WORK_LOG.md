@@ -2,6 +2,10 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-15
+
+- **Issue #237** (closed): Preserve derived campaign report pairs before regeneration
+
 ### 2026-10-12
 
 - **PR #273**: Reject mixed-geometry sizing finalists in candidate Target summaries
