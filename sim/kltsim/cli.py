@@ -39,6 +39,7 @@ from . import build as build_mod
 from . import declared_n as declared_n_mod
 from . import estimate as estimate_mod
 from . import fixture as fixture_mod
+from . import artifacts as artifacts_mod
 from . import grade as grade_mod
 from . import ibsweep as ibsweep_mod
 from . import sizesweep as sizesweep_mod
@@ -527,6 +528,23 @@ def _last_attempt_refused_at_cap(out_dir: Path) -> bool:
     return "exceeds BATCH_MAX_CONCURRENT_INSTANCES" in (last.get("stderr_tail") or "")
 
 
+_NAMESPACE_HINT = ("Reports are append-only evidence. Publish changed analysis under a NEW "
+                   "directory with --report-dir (it cites the original campaign); "
+                   "inputs are always read from --campaign/--series.")
+
+
+def _cite(path: Path) -> str:
+    try:
+        return str(Path(path).resolve().relative_to(build_mod.REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def _cite_note(markdown: str, kind: str, source: Path) -> str:
+    return (markdown.rstrip("\n") + f"\n\nSource {kind} (original evidence, unmodified): "
+            f"`{_cite(source)}`\n")
+
+
 def cmd_grade(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     offset_n = getattr(args, "offset_n", None)
@@ -537,10 +555,20 @@ def cmd_grade(args) -> int:
             print(f"grade: {exc}", file=sys.stderr)
             return 2
     result = declared_n_mod.grade_campaign(out_dir, offset_n)
-    (out_dir / "grading.json").write_text(grade_mod.dumps_strict(result, indent=2) + "\n", encoding="utf-8")
-    (out_dir / "grading.md").write_text(grade_mod.render_markdown(result), encoding="utf-8")
-    print(grade_mod.render_summary(result))
-    return 0
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else out_dir
+    md = grade_mod.render_markdown(result)
+    if report_dir != out_dir:
+        result["source_campaign_dir"] = _cite(out_dir)
+        md = _cite_note(md, "campaign", out_dir)
+    rc = artifacts_mod.publish(
+        "grade",
+        [(report_dir / "grading.json", (grade_mod.dumps_strict(result, indent=2) + "\n").encode("utf-8")),
+         (report_dir / "grading.md", md.encode("utf-8"))],
+        check_only=getattr(args, "check", False), namespace_hint=_NAMESPACE_HINT,
+        require_dir=report_dir)
+    if rc == 0 and not getattr(args, "check", False):
+        print(grade_mod.render_summary(result))
+    return rc
 
 
 def cmd_estimate(args) -> int:
@@ -557,7 +585,8 @@ def cmd_estimate(args) -> int:
 def cmd_noise_full(args) -> int:
     """Issue #81/#236: provenance-validated per-config probit sigmas + quadrature
     split for a campaign. Output is append-only: a report directory that already
-    holds ``noise_full.*`` is never overwritten (publish under a new namespace)."""
+    holds ``noise_full.*`` with different bytes is never overwritten (publish under a new namespace); an identical
+    rerun is a no-op and a matching partial pair is completed."""
     out_dir = _campaign_dir(args.campaign)
     report_dir = Path(args.report_dir) if args.report_dir else out_dir
     result = noise_full_mod.analyse(out_dir)
@@ -565,17 +594,13 @@ def cmd_noise_full(args) -> int:
     text = noise_full_mod.render_markdown(result)
     targets = {report_dir / "noise_full.json": json.dumps(result, separators=(",", ":")) + "\n",
                report_dir / "noise_full.md": text}
-    clash = [str(p) for p in targets if p.exists()]
-    if clash:
-        print("noise-full: refusing to overwrite append-only evidence: " + ", ".join(clash)
-              + "; pass --report-dir <new directory>", file=sys.stderr)
-        return 1
-    report_dir.mkdir(parents=True, exist_ok=True)
-    for path, data in targets.items():
-        with open(path, "x", encoding="utf-8") as handle:
-            handle.write(data)
-    print(text)
-    return 0
+    rc = artifacts_mod.publish(
+        "noise-full", [(p, d.encode("utf-8")) for p, d in targets.items()],
+        check_only=getattr(args, "check", False), namespace_hint=_NAMESPACE_HINT,
+        require_dir=report_dir)
+    if rc == 0 and not getattr(args, "check", False):
+        print(text)
+    return rc
 
 
 def cmd_ibsweep(args) -> int:
@@ -685,6 +710,11 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--offset-n", type=int, metavar="N",
                    help="declared offset_mc draws per PVT point of a non-historical campaign "
                         "(issue #167); the saved requests must carry exactly this N")
+    g.add_argument("--report-dir", help="write grading.{json,md} here instead of the campaign "
+                   "directory (new directory; cites the campaign; existing different files "
+                   "are never overwritten)")
+    g.add_argument("--check", action="store_true",
+                   help="read-only: exit 1 if the reports are missing, stale or unsafe")
     g.set_defaults(func=cmd_grade)
 
     e = sub.add_parser("estimate", help="issue #167: estimate a larger offset campaign's committed "
@@ -697,7 +727,9 @@ def main(argv: list[str] | None = None) -> int:
     nf = sub.add_parser("noise-full", help="issue #81: analyse the tn_full_* configurations of a campaign")
     nf.add_argument("--campaign", required=True)
     nf.add_argument("--report-dir", help="write noise_full.{json,md} here (new directory; "
-                    "existing files are never overwritten); default: the campaign directory")
+                    "existing different files are never overwritten); default: the campaign directory")
+    nf.add_argument("--check", action="store_true",
+                    help="read-only: exit 1 if the reports are missing, stale or unsafe")
     nf.set_defaults(func=cmd_noise_full)
 
     args = ap.parse_args(argv)

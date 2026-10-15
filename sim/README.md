@@ -270,6 +270,36 @@ inconsistent inputs are refused and write nothing. The manifest pins the hash of
 `PYTHONPATH=sim python3 -m unittest kltsim.tests.test_characterization`
 (also run by the `kltsim` discover step in "What CI runs").
 
+## Derived report pairs (grading, noise-full, clock comparison)
+
+`grade` (`grading.{json,md}`), `noise-full` (`noise_full.{json,md}`) and
+`run_clock_supply_sensitivity.py compare` (`comparison.{json,md}`) write
+append-only evidence through the one planned-byte writer
+`sim/kltsim/artifacts.py` (also used by `build` and `characterize.sh report`).
+Both members are composed in memory first, then:
+
+- an existing member with different bytes (or a symlink / non-regular file)
+  refuses the whole pair with exit 1 before anything is written, including a
+  conflict only in the second member;
+- an identical rerun is a no-op that keeps bytes and timestamps;
+- a partial pair whose existing member matches is completed by exclusive
+  creation of the absent file; a concurrent writer is never clobbered (no
+  whole-set rollback is promised after such a race).
+
+`--check` on each command is the read-only twin: exit 0 only when every member
+exists and equals a fresh regeneration; missing, stale or unsafe members exit 1.
+It creates no file or directory.
+
+A changed grader, renderer or analysis is not permission to edit a historical
+report. Publish it in a NEW namespace, leaving the original campaign inputs and
+reports untouched, e.g.
+`... grade --campaign ID --report-dir sim/<new-dir>` (likewise `compare --series
+ID --report-dir DIR`, `noise-full --campaign ID --report-dir DIR`). Inputs are
+always read from `--campaign`/`--series`; the new `grading`/`comparison` JSON
+and Markdown cite the original directory (`source_campaign_dir` /
+`source_series_dir`), and `noise_full.json` carries `campaign`. There is no
+force switch.
+
 ## Reproducing one record
 
 Every record ends with the exact command that regenerates it. It is always:
