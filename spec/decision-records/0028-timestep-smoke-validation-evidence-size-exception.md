@@ -3,8 +3,9 @@
 - **Status**: proposed. **This record covers the evidence budget only.** It
   ratifies no bound and relaxes no Target or Stretch number. It authorizes one
   raise of the `sim/` total ceiling in `sim/evidence-size-budget.json` (issue
-  #132's contract), exactly the measured overage of 36056 B (33058 B as
-  drafted plus the 2026-10-13 review fix). It takes effect
+  #132's contract), exactly the measured overage of 36062 B (33058 B as
+  drafted plus the 2026-10-13 review fix and the 6 B the merge with `main` added
+  to the budget file itself). It takes effect
   only with the reviewed merge of the PR that lands it, as for DR-0005 to
   DR-0027. The drafting agent does not merge it.
 - **Date**: 2026-10-12
@@ -46,27 +47,30 @@ throwaway run):
 
 The total is the measured overage: 33058 B as drafted, plus the 2998 B the
 2026-10-13 review fix added (requiring a well-formed model-deck content hash
-before rungs are compared, with its regression tests), 36056 B in all. This
+before rungs are compared, with its regression tests), plus the 6 B by which the
+cumulative `sim` entry of `sim/evidence-size-budget.json` (itself under `sim/`)
+grew when the 2026-10-15 merge with `main` combined DR-0024 and this record,
+36062 B in all. This
 record lives under `spec/` and adds nothing to `sim/`.
 
 ## Decision
 
-Raise the `sim/` total ceiling by exactly **36056 B** (33058 B as drafted plus
-the 2998 B review fix). The single `sim` entry carries the cumulative
-28263838 + 36056 = **28299894 B** (28246667 B from DR-0005 to DR-0027
+Raise the `sim/` total ceiling by exactly **36062 B** (33058 B as drafted plus
+the 2998 B review fix and the 6 B merge growth of the budget file). The single `sim` entry carries the cumulative
+28263838 + 36062 = **28299900 B** (28246667 B from DR-0005 to DR-0027
 including DR-0024's 17962 B, plus DR-0029's 10486 B and DR-0030's 6685 B which
-landed on `main` before this PR, plus the 36056 B authorized here) and cites this record. The baseline, the
+landed on `main` before this PR, plus the 36062 B authorized here) and cites this record. The baseline, the
 10 % allowance and all existing evidence are unchanged. No ratified spec
 bound is relaxed or changed.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 28299894}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 28299900}
 ```
 
 (Cumulative: 28263838 B from DR-0005 to DR-0027, DR-0029 and DR-0030 and
-36056 B authorized here.)
+36062 B authorized here.)
 
 ## Consequences
 
