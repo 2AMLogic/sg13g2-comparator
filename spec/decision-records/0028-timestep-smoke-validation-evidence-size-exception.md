@@ -53,19 +53,19 @@ record lives under `spec/` and adds nothing to `sim/`.
 
 Raise the `sim/` total ceiling by exactly **36056 B** (33058 B as drafted plus
 the 2998 B review fix). The single `sim` entry carries the cumulative
-28245876 + 36056 = **28281932 B** (28228705 B from DR-0005 to DR-0027, plus
-DR-0029's 10486 B and DR-0030's 6685 B which landed on `main` before this PR,
-plus the 36056 B authorized here) and cites this record. The baseline, the
+28263838 + 36056 = **28299894 B** (28246667 B from DR-0005 to DR-0027
+including DR-0024's 17962 B, plus DR-0029's 10486 B and DR-0030's 6685 B which
+landed on `main` before this PR, plus the 36056 B authorized here) and cites this record. The baseline, the
 10 % allowance and all existing evidence are unchanged. No ratified spec
 bound is relaxed or changed.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 28281932}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 28299894}
 ```
 
-(Cumulative: 28245876 B from DR-0005 to DR-0027, DR-0029 and DR-0030 and
+(Cumulative: 28263838 B from DR-0005 to DR-0027, DR-0029 and DR-0030 and
 36056 B authorized here.)
 
 ## Consequences

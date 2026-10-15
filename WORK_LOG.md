@@ -4,6 +4,8 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-12
 
+- **PR #273**: Reject mixed-geometry sizing finalists in candidate Target summaries
+- **Issue #269** (closed): Reject mixed-geometry sizing finalists in candidate Target summaries
 - **PR #271**: Validate bias mirror/headroom screening probes before aggregation
 - **Issue #267** (closed): Validate bias mirror headroom screening probes before aggregation
 - **Issue #260** (closed): Auditor process proposal: run final evidence-size preflight before requesting review
