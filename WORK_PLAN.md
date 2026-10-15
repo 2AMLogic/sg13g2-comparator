@@ -40,6 +40,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 
 Issues currently being built (`loom:building`).
 
+- **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise)
 - **#278**: Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
 
 ## PRs Awaiting Review
@@ -54,7 +55,6 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
 - **#199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
-- **#200**: noise-full: label grid-mean uncertainty, add correlated bound and shared-draw disclosure (#192)
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 - **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
@@ -66,6 +66,7 @@ Issues carrying `loom:curated`.
 
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
 - **#89**: sim: complete the two vcm-m050 CM-band offset points that abort (timestep too small) with a uniform tighter max step *(curated)*
+- **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise) *(curated)*
 - **#159**: Memory / hysteresis characterization bench: does the previous decision bias the next? *(curated)*
 - **#160**: Draft decision record: input common-mode range row for the ratified spec *(curated)*
 - **#165**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (evidence for DR-0004 CM-range row) *(curated)*
@@ -95,10 +96,10 @@ _None._
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 7 |
-| In Progress (`loom:building`) | 1 |
+| In Progress (`loom:building`) | 2 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 6 |
-| Curated | 14 |
+| Curated | 15 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
