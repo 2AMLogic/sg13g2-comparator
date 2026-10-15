@@ -3,13 +3,15 @@
 <!-- guide:plan-body:start -->
 ## Operator Attention: Merge-Risk-Hold Pileup
 
-Judge-approved PRs stuck under a `loom:operator` merge-risk hold — implementation work is done, only a human merge decision is missing.
+Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
 
+- **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
 - **#199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
 - **#200**: noise-full: label grid-mean uncertainty, add correlated bound and shared-draw disclosure (#192)
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
 - **#243**: Preserve derived campaign report pairs before regeneration (#237)
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
+- **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
 
 ## Very Important
 
@@ -57,6 +59,7 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
 - **#243**: Preserve derived campaign report pairs before regeneration (#237)
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
+- **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
 
 ## Proposed
 
@@ -89,13 +92,13 @@ _None._
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 5 |
+| Operator merge-risk holds | 7 |
 | Very important | 0 |
 | Important | 0 |
 | Ready (`loom:issue`) | 7 |
 | In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 6 |
+| Approved PRs awaiting merge | 7 |
 | Curated | 14 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
