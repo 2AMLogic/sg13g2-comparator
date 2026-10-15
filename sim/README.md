@@ -513,8 +513,7 @@ Committed evidence dominates repository size, so growth is bounded by a
 machine-checked contract (issue #132). The `append-only-evidence` job runs
 `scripts/check_evidence_size.py --tree <target sha>` (stdlib only) against
 `sim/evidence-size-budget.json`. Bulk-storage policy (compression versus
-external storage) is deliberately out of scope here; this only measures and
-caps growth, and never edits, moves or externalizes existing evidence.
+external storage) is out of scope; this only measures and caps growth.
 
 **Before review.** Run `python3 scripts/check_evidence_size.py --tree HEAD` on
 the final commit; the PR states that SHA, exit status (0 ok, 1 violation, 2
@@ -525,17 +524,16 @@ success).
 
 **Accounting.** Bytes are Git blob sizes from `git ls-tree -rl <tree>` of the
 named commit/tree -- not working-tree or pack sizes. The checker reports
-repository-wide and `sim/` totals plus per **evidence unit**: the entry
+repo and `sim/` totals plus per **evidence unit**: the entry
 `sim/<bench>/<records|corners|netlist-snapshots|campaigns|reports>/<name>`
-(a campaign or run directory, or one record/report file). A missing or
-non-numeric size fails closed (exit 2), so never use a blob filter. The checker
-also refuses a partial clone up front (`extensions.partialClone` or a
-`remote.<name>.promisor` remote: exit 2, naming the cause) and runs git with
-`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error, not a lazy fetch
-(CI run 38029844566 hung that way). A shallow
-clone is accepted: it holds every blob of the commits it has.
+(a campaign/run directory or one record/report file). A missing or
+non-numeric size fails closed (exit 2): no blob filters. The checker
+refuses a partial clone up front (`extensions.partialClone` or a
+`remote.<name>.promisor` remote: exit 2) and runs git with
+`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error, not a lazy fetch (CI run
+38029844566 hung that way). A shallow clone is accepted.
 
-**Baseline and grandfathering.** The budget file records the baseline commit
+**Baseline and grandfathering.** The budget records the baseline commit
 (`2c6002775...`: 97,217 blobs / 509,447,840 B repo, 96,352 blobs /
 489,675,829 B under `sim/`) and the bytes of every existing unit. An existing
 unit may not exceed its recorded bytes (grandfathered at exactly that size).
@@ -545,33 +543,35 @@ MiB: ceil(10% x 489,675,829 B / 1,048,576) = 47 MiB = 49,283,072 B.
 * total ceiling = baseline `sim/` bytes + allowance = 538,958,901 B (the
   budget file and any other `sim/` file count toward it);
 * a unit not in the baseline (a new campaign) is capped at the same 49,283,072 B.
-The checker validates the derivation (percentage, operands, ceilings); changing
-the percentage or resetting the baseline is a reviewed change to
-`scripts/check_evidence_size.py` plus a decision record, not a quiet edit of
-the JSON. Regenerate numbers for a new baseline with
+The checker validates the derivation; changing the percentage or resetting the
+baseline is a reviewed change to `scripts/check_evidence_size.py` plus a
+decision record, not a quiet edit of the JSON. Regenerate numbers for a new baseline with
 `python3 scripts/check_evidence_size.py --tree <commit> --emit-budget <commit>`.
 
-**Exceptions.** There is no bypass flag or environment override. An entry in
-the budget's `exceptions` list names one exact path (`sim` for the total, or one
-evidence unit; no wildcards), the exact `additional_bytes`, a `reason`, and a
-tracked `spec/decision-records/*.md` containing a fenced `json` block with the
-same path and bytes:
+**Exceptions.** No bypass flag or environment override exists. An entry names
+one exact path (`sim` for the total, or one evidence unit; no wildcards), the
+exact `additional_bytes`, a `reason`, and a tracked `spec/decision-records/`
+`*.md` with a fenced `json` block carrying the same path and bytes:
 
 ```json
 {"kind": "evidence-size", "path": "sim/<bench>/campaigns/<id>", "additional_bytes": 12345678}
 ```
 
 The bytes raise only that path's ceiling (baseline or new-unit) by exactly that
-amount. Missing or mismatching records, extra/missing keys, wildcards,
-non-positive or non-integer bytes, and duplicates fail validation.
-Overage output names the path, measured bytes, ceiling and this route.
+amount. Bad or missing records, keys, wildcards, non-positive or non-integer bytes
+and duplicates fail validation. Overage output names this route.
+
+Entries may live one per file in
+`sim/evidence-size-exceptions/<issue>-<slug>.json` (issue #278), so open PRs
+never edit a shared line; the checker sums them with the budget's `exceptions`. `sim` may repeat (own record each);
+a unit path once. Name the record
+`spec/decision-records/evidence-size/<issue>-<slug>.md` (see `spec/README.md`).
 
 **Sparse CI checkouts.** Every job in `.github/workflows/ci.yml` checks out
 only its explicit, audited inputs (non-cone patterns, never a `filter:`).
 Caveat: `actions/checkout` silently adds `--filter=blob:none` whenever its
-`sparse-checkout:` input is set, and an empty `filter:` cannot turn that off.
-Jobs reading only inside their cone use that input (blob-less partial
-clones, harmless for them). The `append-only-evidence` job measures blob
+`sparse-checkout:` input is set (an empty `filter:` cannot undo it); jobs reading
+only inside their cone use it, harmlessly. The `append-only-evidence` job measures blob
 sizes, so it must be a complete clone: its checkout has `fetch-depth: 0` and
 **no** `sparse-checkout:` input, and the next step applies its patterns with
 `git sparse-checkout set --no-cone --stdin` (failing with exit 2 if the clone
@@ -584,7 +584,7 @@ transitive inputs):
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
 | harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
 | netlist-regeneration | `design/`, `sim/harness/`, `sim/pdk.json` |
-| append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` |
+| append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `sim/evidence-size-exceptions/`, `spec/decision-records/` |
 
 A new input a job starts reading must be added to its patterns in the same
 change. `scripts/tests/test_sparse_checkout.py` proves the cones: it builds a
@@ -594,9 +594,8 @@ for a `sparse-checkout:` input, complete clone otherwise) and runs the job's
 exact `run:` commands, including the narrowing step (tests skipping because an
 input is outside the cone fail). It also asserts that every job running the
 size checker gets a complete clone, and that the size step exits 2 quickly in
-a `blob:none` clone. The two jobs that need the pinned `klt` run there only when the
-pinned build is first on `PATH`; otherwise they are skipped locally and proven
-by the real CI jobs.
+a `blob:none` clone. The two jobs needing the pinned `klt` run there only when it is first on
+`PATH`; otherwise they are skipped locally and proven by real CI.
 
 The harness job's lint population is guarded by
 `scripts/check_lint_population.py` (issue #216): it derives the intended set
