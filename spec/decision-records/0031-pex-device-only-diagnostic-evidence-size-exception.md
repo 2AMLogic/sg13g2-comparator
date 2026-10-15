@@ -6,7 +6,7 @@
   (issue #132's contract), exactly the measured overage of 331406 B. It takes
   effect with the reviewed merge of the PR that lands it, as for DR-0005 to
   DR-0030. The drafting agent does not merge it.
-- **Date**: 2026-10-11 (cumulative entry re-measured on merge, 2026-10-13)
+- **Date**: 2026-10-11 (cumulative entry re-measured on merge, 2026-10-13; re-measured again 2026-10-15 after DR-0024 landed)
 - **Decided by**: Builder agent, PR for issue #191. The operator reviews the
   raise as a governance item at merge.
 - **Related**:
@@ -19,7 +19,9 @@
   Per the DR-0030 convention the record is renumbered on merge to the next
   free number, 0031, and its cumulative `sim` entry is re-measured: `main`
   advanced by DR-0013 (4369 B) through DR-0030 (6685 B), 12619355 B in total.
-  This record's own raise is unchanged at 331406 B.
+  This record's own raise is unchanged at 331406 B. A second re-measure
+  followed once DR-0024 (issue #237, 17962 B) merged to `main` ahead of this
+  record: the cumulative base is now 28263838 B.
 
 ## Context
 
@@ -35,17 +37,18 @@ retained, failures included. Nothing existing is modified.
 
 Raise the `sim/` total ceiling by exactly **331406 B**. The checker rejects
 duplicate exception paths, so the single `sim` entry carries the cumulative
-28245876 (main after DR-0030) + 331406 = **28577282 B** and cites this record.
-The 28245876 B covers DR-0005 to DR-0030 on merged `main` and carries over
+28263838 (main after DR-0030 and DR-0024) + 331406 = **28595244 B** and cites
+this record. The 28263838 B covers DR-0005 to DR-0030 on merged `main`
+(including DR-0024's 17962 B) and carries over
 unchanged; the only new allowance here is the 331406 B increment.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 28577282}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 28595244}
 ```
 
-(Cumulative: 28245876 B from DR-0005 to DR-0030 on merged `main` and 331406 B
+(Cumulative: 28263838 B from DR-0005 to DR-0030 on merged `main` and 331406 B
 authorized here.)
 
 ## Consequences
