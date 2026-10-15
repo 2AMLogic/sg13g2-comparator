@@ -8,7 +8,7 @@
   measured overage of 1794306 B. It takes effect with the reviewed merge of
   the PR that lands it, as for DR-0005 to DR-0030. The drafting agent does
   not merge it.
-- **Date**: 2026-10-11 (cumulative entry re-measured on merge, 2026-10-13)
+- **Date**: 2026-10-11 (cumulative entry re-measured on merge, 2026-10-15)
 - **Decided by**: Builder agent, PR for issue #165. The operator reviews the
   raise as a governance item at merge.
 - **Related**:
@@ -20,7 +20,8 @@
   `0018-pex-delta-table-evidence-size-exception-2.md`). Per the DR-0030
   convention the record is renumbered on merge to the next free number,
   0031, and its cumulative `sim` entry is re-measured: `main` advanced by
-  DR-0018 (6122 B) through DR-0030 (6685 B), 227466 B in total. This
+  DR-0018 (6122 B) through DR-0030 (6685 B), including DR-0024 (17962 B,
+  issue #237), 245428 B in total. This
   record's own raise is unchanged at 1794306 B.
 
 ## Context
@@ -37,17 +38,17 @@ ceiling; only the `sim/` total is raised.
 ## Decision
 
 Raise the `sim/` total ceiling by exactly **1794306 B**. The single `sim` entry
-carries the cumulative 28245876 + 1794306 = **30040182 B** and cites this record.
-The 28245876 B covers DR-0005 to DR-0030 on merged `main` and carries over
+carries the cumulative 28263838 + 1794306 = **30058144 B** and cites this record.
+The 28263838 B covers DR-0005 to DR-0030 (including DR-0024) on merged `main` and carries over
 unchanged; the only new allowance here is the 1794306 B increment.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 30040182}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 30058144}
 ```
 
-(Cumulative: 28245876 B from DR-0005 to DR-0030 on merged `main` and 1794306 B
+(Cumulative: 28263838 B from DR-0005 to DR-0030 on merged `main` and 1794306 B
 authorized here.)
 
 ## Consequences
