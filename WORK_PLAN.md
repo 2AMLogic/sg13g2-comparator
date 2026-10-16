@@ -40,7 +40,6 @@ Human-approved issues ready for implementation (`loom:issue`).
 
 Issues currently being built (`loom:building`).
 
-- **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise)
 - **#278**: Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
 
 ## PRs Awaiting Review
@@ -96,7 +95,7 @@ _None._
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 7 |
-| In Progress (`loom:building`) | 2 |
+| In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 6 |
 | Curated | 15 |
