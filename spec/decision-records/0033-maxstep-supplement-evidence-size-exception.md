@@ -3,7 +3,7 @@
 - **Status**: proposed. **This record covers the evidence budget only.** It
   ratifies no bound and relaxes no Target or Stretch number. It authorizes one
   raise of the `sim/` total ceiling in `sim/evidence-size-budget.json` (issue
-  #132's contract), exactly the measured overage of 495286 B. It takes effect
+  #132's contract), exactly the measured overage of 495288 B. It takes effect
   with the reviewed merge of the PR that lands it, as for DR-0005 to DR-0030.
   The drafting agent does not merge it.
 - **Date**: 2026-10-11
@@ -31,24 +31,24 @@ in this PR — no pre-existing evidence file is modified. The workflow's code,
 tests and docs under `sim/` add a further 49464 B. After DR-0030 `sim/` was
 exactly at its ceiling, so any addition needs this exception (the workflow
 necessarily ships code under `sim/`, so net-zero growth is not available).
-Updating the budget exception entry itself adds 92 B to
+Updating the budget exception entry itself adds 94 B to
 `sim/evidence-size-budget.json` (a `sim/` file that counts toward the total),
-bringing the measured overage to 445730 + 49464 + 92 = **495286 B**. This
+bringing the measured overage to 445730 + 49464 + 94 = **495288 B**. This
 record lives under `spec/` and adds nothing to `sim/`.
 
 ## Decision
 
-Raise the `sim/` total ceiling by exactly **495286 B**. The single `sim` entry
-carries the cumulative 28263838 + 495286 = **28759124 B** and cites this
+Raise the `sim/` total ceiling by exactly **495288 B**. The single `sim` entry
+carries the cumulative 28263838 + 495288 = **28759126 B** and cites this
 record. No ratified spec bound is relaxed or changed.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 28759124}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 28759126}
 ```
 
-(Cumulative: 28263838 B from DR-0005 to DR-0030 and 495286 B authorized here.)
+(Cumulative: 28263838 B from DR-0005 to DR-0030 and 495288 B authorized here.)
 
 ## Consequences
 
