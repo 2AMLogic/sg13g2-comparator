@@ -71,7 +71,11 @@ and the manifest's pinned `content_hash` are both refreshed (and
 `t1-signoff-report.json` re-rendered). Regenerating the GDS or the netlist is
 therefore a four-file change: artifact, envelope, manifest, report. The
 `.sch` sources are not hashed directly, only the netlist derived from them;
-`python3 design/netlist.py --check` is what ties them.
+`python3 design/netlist.py --check` is what ties them, and CI enforces it: job
+`netlist-regeneration` regenerates the netlist from the `.sch`/`.sym` sources
+with a pinned real xschem and the `sim/pdk.json` PDK and fails if the committed
+netlist differs, so a schematic edit cannot leave this hashed netlist (and the
+item 1 evidence anchored to it) silently stale (see `design/README.md`).
 
 ## What is deliberately uncited, and why
 

@@ -41,6 +41,7 @@ import math
 import sys
 from pathlib import Path
 
+from . import artifacts as artifacts_mod
 from . import build as build_mod
 from . import grade as grade_mod
 
@@ -639,35 +640,23 @@ def generate(campaign_dir: Path, out_dir: Path, root: Path | None = None) -> dic
     only by creating the absent files (exclusive creation); existing files
     are never rewritten. Supersede a report with a NEW output directory.
     """
-    artifacts = build_artifacts(campaign_dir, out_dir, root)
+    built = build_artifacts(campaign_dir, out_dir, root)
     out_dir = Path(out_dir)
-    conflicts = []
-    if out_dir.is_symlink() or (out_dir.exists() and not out_dir.is_dir()):
-        conflicts.append(f"{out_dir}: exists and is not a directory")
-    else:
-        for name, data in artifacts.items():
-            path = out_dir / name
-            if path.is_symlink() or (path.exists() and not path.is_file()):
-                conflicts.append(f"{path}: exists and is not a regular file")
-            elif path.exists() and path.read_bytes() != data:
-                conflicts.append(f"{path}: existing content differs from the regenerated content")
-    if conflicts:
+    try:
+        artifacts_mod.commit(
+            [(out_dir / name, data) for name, data in built.items()],
+            differs="existing content differs from the regenerated content",
+            race="created concurrently with different content; left unchanged",
+            require_dir=out_dir)
+    except artifacts_mod.ArtifactConflict as exc:
+        if exc.concurrent:
+            raise CharacterizationError(exc.conflicts[0]) from None
         raise CharacterizationError(
             "refusing to generate: characterization reports are append-only evidence and "
-            "nothing was written. Conflicting artifact(s):\n  " + "\n  ".join(conflicts)
+            "nothing was written. Conflicting artifact(s):\n  " + "\n  ".join(exc.conflicts)
             + "\nGenerate into a NEW report directory (and repoint the manifest item 8 "
-            "citation) instead of replacing these files.")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for name, data in artifacts.items():
-        try:
-            with open(out_dir / name, "xb") as fh:
-                fh.write(data)
-        except FileExistsError:
-            if (out_dir / name).read_bytes() != data:
-                raise CharacterizationError(
-                    f"{out_dir / name}: created concurrently with different content; "
-                    "left unchanged") from None
-    return artifacts
+            "citation) instead of replacing these files.") from None
+    return built
 
 
 def check(campaign_dir: Path, out_dir: Path, root: Path | None = None,

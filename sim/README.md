@@ -270,6 +270,36 @@ inconsistent inputs are refused and write nothing. The manifest pins the hash of
 `PYTHONPATH=sim python3 -m unittest kltsim.tests.test_characterization`
 (also run by the `kltsim` discover step in "What CI runs").
 
+## Derived report pairs (grading, noise-full, clock comparison)
+
+`grade` (`grading.{json,md}`), `noise-full` (`noise_full.{json,md}`) and
+`run_clock_supply_sensitivity.py compare` (`comparison.{json,md}`) write
+append-only evidence through the one planned-byte writer
+`sim/kltsim/artifacts.py` (also used by `build` and `characterize.sh report`).
+Both members are composed in memory first, then:
+
+- an existing member with different bytes (or a symlink / non-regular file)
+  refuses the whole pair with exit 1 before anything is written, including a
+  conflict only in the second member;
+- an identical rerun is a no-op that keeps bytes and timestamps;
+- a partial pair whose existing member matches is completed by exclusive
+  creation of the absent file; a concurrent writer is never clobbered (no
+  whole-set rollback is promised after such a race).
+
+`--check` on each command is the read-only twin: exit 0 only when every member
+exists and equals a fresh regeneration; missing, stale or unsafe members exit 1.
+It creates no file or directory.
+
+A changed grader, renderer or analysis is not permission to edit a historical
+report. Publish it in a NEW namespace, leaving the original campaign inputs and
+reports untouched, e.g.
+`... grade --campaign ID --report-dir sim/<new-dir>` (likewise `compare --series
+ID --report-dir DIR`, `noise-full --campaign ID --report-dir DIR`). Inputs are
+always read from `--campaign`/`--series`; the new `grading`/`comparison` JSON
+and Markdown cite the original directory (`source_campaign_dir` /
+`source_series_dir`), and `noise_full.json` carries `campaign`. There is no
+force switch.
+
 ## Reproducing one record
 
 Every record ends with the exact command that regenerates it. It is always:
@@ -294,7 +324,7 @@ under it).
 | IHP-Open-PDK release | `0.3.0` | **exact** — the release IS the device models |
 | ngspice | ≥ 46 (major), OSDI-capable | floor |
 | Python | ≥ 3.9 | floor |
-| xschem | recorded, not checked | nothing here invokes xschem until `design/` has a schematic |
+| xschem | `3.4.7` | CI job `netlist-regeneration` only (`design/README.md`); never by the runner |
 | OpenVAF-Reloaded (OSDI compiler) | `v24.0.1mob`, checksum-pinned | checked by `sim/tools/build-osdi.sh` at build time, not by the corner runner |
 
 PDK variant: **ihp-sg13g2**, set in [`sim/pdk.json`](pdk.json).
@@ -486,6 +516,13 @@ machine-checked contract (issue #132). The `append-only-evidence` job runs
 external storage) is deliberately out of scope here; this only measures and
 caps growth, and never edits, moves or externalizes existing evidence.
 
+**Before review.** Run `python3 scripts/check_evidence_size.py --tree HEAD` on
+the final commit; the PR states that SHA, exit status (0 ok, 1 violation, 2
+error) and size; re-run after any HEAD change. Failures follow Exceptions
+below; this grants none. No Python: say local validation is unavailable and
+cite the passing `append-only-evidence` CI for that commit (skipped is not
+success).
+
 **Accounting.** Bytes are Git blob sizes from `git ls-tree -rl <tree>` of the
 named commit/tree -- not working-tree or pack sizes. The checker reports
 repository-wide and `sim/` totals plus per **evidence unit**: the entry
@@ -494,8 +531,8 @@ repository-wide and `sim/` totals plus per **evidence unit**: the entry
 non-numeric size fails closed (exit 2), so never use a blob filter. The checker
 also refuses a partial clone up front (`extensions.partialClone` or a
 `remote.<name>.promisor` remote: exit 2, naming the cause) and runs git with
-`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error rather than one network
-round trip per blob (~97k; that is how CI run 38029844566 hung). A shallow
+`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error, not a lazy fetch
+(CI run 38029844566 hung that way). A shallow
 clone is accepted: it holds every blob of the commits it has.
 
 **Baseline and grandfathering.** The budget file records the baseline commit
@@ -533,21 +570,20 @@ Overage output names the path, measured bytes, ceiling and this route.
 only its explicit, audited inputs (non-cone patterns, never a `filter:`).
 Caveat: `actions/checkout` silently adds `--filter=blob:none` whenever its
 `sparse-checkout:` input is set, and an empty `filter:` cannot turn that off.
-The three jobs that only read files inside their cone use that input and are
-therefore blob-less partial clones, which is harmless for them. The
-`append-only-evidence` job measures blob sizes, so it must be a complete clone:
-its checkout has `fetch-depth: 0` and **no** `sparse-checkout:` input, and the
-next step applies its patterns with `git sparse-checkout set --no-cone --stdin`
-(failing with exit 2 if the clone is partial). The full fetch is small (the
-repository packs to roughly 60 MiB); only the transient full working tree
-costs a few seconds. Cones (each must contain the job's complete transitive
-inputs):
+Jobs reading only inside their cone use that input (blob-less partial
+clones, harmless for them). The `append-only-evidence` job measures blob
+sizes, so it must be a complete clone: its checkout has `fetch-depth: 0` and
+**no** `sparse-checkout:` input, and the next step applies its patterns with
+`git sparse-checkout set --no-cone --stdin` (failing with exit 2 if the clone
+is partial). Cones (each must hold the job's complete
+transitive inputs):
 
 | Job | Inputs beyond its own scripts |
 |---|---|
 | signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
-| harness-unit-tests | `ci.yml` patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_offset_cm_band.py,dut.json,tools/build-osdi.sh}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`; `sim/comparator-offset-cm-band/campaigns/20261009-5185f52/{vcm-m050,vcm-nom,vcm-p050}/{*.spice,*.request.json}`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py,comparator/{erc_tool.py,erc_report.json,pdk_drc.py,pdk_drc_report.json,comparator.gds,pex_report.json}}` |
+| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `sim/comparator-offset-cm-band/campaigns/20261009-5185f52/{vcm-m050,vcm-nom,vcm-p050}/{*.spice,*.request.json}`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
+| netlist-regeneration | `design/`, `sim/harness/`, `sim/pdk.json` |
 | append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` |
 
 A new input a job starts reading must be added to its patterns in the same
@@ -561,6 +597,11 @@ size checker gets a complete clone, and that the size step exits 2 quickly in
 a `blob:none` clone. The two jobs that need the pinned `klt` run there only when the
 pinned build is first on `PATH`; otherwise they are skipped locally and proven
 by the real CI jobs.
+
+The harness job's lint population is guarded by
+`scripts/check_lint_population.py` (issue #216): it derives the intended set
+from git's tracked inventory and fails naming every omitted path before ruff
+runs. The sparse-cone tests add negative controls.
 
 Reproduce locally:
 

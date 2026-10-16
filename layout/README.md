@@ -232,11 +232,62 @@ rule categories are emitted. Scope is this standalone cell only.
 **Report** (`pdk_drc_report.json`, deterministic, no timestamps or host
 paths): the GDS path and sha256 plus the layers actually drawn; the deck
 release, `.fetched-version`, tree sha256 and entry point; the KLayout version;
-the invocation; every violated rule with its description and marker
-coordinates; a `targeted` table giving, for each rule the section above listed
+the invocation; every violated rule with its description and its markers
+(one marker per lyrdb `<item>`, a list of all that item's values; counts are
+items, never flattened values); a `targeted` table giving, for each rule the section above listed
 as unchecked (Gat.c, Cnt.e/Cnt.f, the pSD, NWell and latch-up rules), whether
 the deck executed it and how many markers it produced; `skipped`;
 `not_covered`; and the negative controls.
+
+**Malformed deck output fails closed.** A lyrdb with a missing
+`<categories>`/`<items>` container, a blank or duplicate category, an item
+whose category is blank or undeclared, or an item with no usable values is
+rejected (exit 1, `FAIL: malformed deck report`) and the committed report is
+not written; it can never reduce to `clean`. An empty `<categories>`
+container is malformed too.
+
+**Incomplete deck runs fail closed (issue #253).** Every deck run (the
+committed stream and each negative control) must show that it completed with
+the pinned deck's rule inventory before any report is built, otherwise exit 1,
+`FAIL: incomplete deck run, nothing written`, and the existing report is left
+untouched (`--check` and `--no-controls` included):
+
+- *Exit status is the deck's verdict.* `run_drc.py` exits 0 when its merged
+  database has no violations and 1 when it has some, but 1 is also every one
+  of its error paths. So 0 is accepted only with zero markers and the deck's
+  "KLayout DRC Check Passed" line, 1 only with markers and its "KLayout DRC
+  Check Failed: Violations were detected" line; any other status, or a status
+  that disagrees with the database, is refused.
+- *Completion.* The merged `<stem>_comparator_full.lyrdb` and both rule-set
+  logs (`<stem>_comparator_main.log`, `..._sg13g2_maximal.log`) must exist and
+  each log must carry the deck's "completed in" line.
+- *Coverage.* The database must declare every category in
+  `REQUIRED_CATEGORIES` (`pdk_drc.py`): 101 from the main tables and 272 from
+  the maximal set. KLayout creates an `output()` category whether or not it
+  has markers, so these are present in every complete run. They were derived
+  statically from the pinned deck source: literal-named `output()` calls
+  whose enclosing blocks are only switches this invocation turns on (the main
+  table gates, `unless PRECHECK_DRC`, `RECOMMENDED`/`$recommendedRules`,
+  `CONNECTIVITY_RULES`, `$fillerRules`/`$latchUpRules`, and the maximal deck's
+  immediately invoked lambdas). Deliberately not required: categories whose
+  names are computed in loops/helpers (M2-M5, V2-V4, fillers, offgrid, angle,
+  forbidden, pin, Seal.b, Pad.fR, Slt.e1), the layout-dependent Seal.l (needs
+  an EdgeSeal boundary) and MIM.gR (needs MIM area), and everything behind
+  switches left off (density, antenna, precheck). Extra categories are fine.
+  A zero-marker run that passes all three checks is still `clean`;
+  violations keep the existing exit semantics (`--strict` exits 1).
+
+`test_pdk_drc.py` exercises these refusals against a fake `run_drc.py` (no
+PDK or KLayout needed). `layout/tests/pinned_deck_contract.py` re-derives
+`REQUIRED_CATEGORIES` from the source of a local checkout matching the pinned
+tree (a static check; it does not run the deck). CI has no PDK, so it is kept
+out of the CI discovery pattern (`test_*.py`) and runs by hand:
+`python3 -I layout/tests/pinned_deck_contract.py`. A missing or non-pinned
+deck fails that run (exit 1) rather than skipping. The checks have not yet been
+exercised by a real deck run: the host that added them has only KLayout
+0.28.16 (`klayout_too_old`). The committed `pdk_drc_report.json` predates them
+and is not rewritten; its 862 executed categories and all-executed `targeted`
+table are consistent with the contract.
 
 **Checked vs skipped.** "Executed" means the deck emitted a result category
 for the rule. A rule whose layers are not drawn here (pads, MiM, HBT, seal
@@ -259,7 +310,9 @@ unchanged (`lvs_*` files byte-identical). Extracted parasitics may differ:
 previous GDS (`67e44380...`) and are not rewritten; re-extraction belongs to
 the PEX campaign (#61/#191). `layout/tests/klayout_test_implant_geometry.py` checks the committed GDS and
 that the old geometry is detected. It needs the klayout module, so it is kept
-out of the stdlib-only CI discovery (`test_*.py`) and runs on demand:
+out of the stdlib-only CI discovery (`test_*.py`); it runs in the
+KLayout-equipped `layout-reproducibility` CI job (issue #257), where an empty
+population, a skip or a failure fails the job, and on demand locally:
 `uvx --from klayout==0.30.12 python -I -m unittest discover -s layout/tests -p 'klayout_test_*.py'`.
 
 **Negative controls.** Two temp copies of the stream, each with one deliberate

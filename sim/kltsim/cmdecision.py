@@ -187,7 +187,11 @@ def load_points(envelope: dict, vcm_v: float | None = None) -> dict:
             m = (idx or {}).get("vcm_meas")
             if m is None or m.get("value") is None:
                 problem = "vcm_meas probe missing"
-            elif abs(float(m["value"]) - vcm_v) > VCM_TOL_V:
+            elif (isinstance(m["value"], bool) or not isinstance(m["value"], (int, float))
+                  or not math.isfinite(m["value"])):
+                problem = (f"vcm_meas probe malformed or non-finite ({m['value']!r}); "
+                           "condition not verified")
+            elif abs(m["value"] - vcm_v) > VCM_TOL_V:
                 problem = f"vcm_meas={m['value']} V does not match condition {vcm_v} V"
         values = None
         if problem is None:
@@ -250,7 +254,10 @@ def summarize(points: dict) -> dict:
 
 
 def reproduction(nominal_env: dict, reference_env: dict) -> dict:
-    """Exact comparison of every measurement the two envelopes share."""
+    """Exact comparison of every reference measurement at every expected point.
+
+    A reference measurement absent from the nominal envelope is a mismatch;
+    only an extra nominal measurement (e.g. the ``vcm_meas`` probe) is allowed."""
     def table(env):
         out = {}
         for c in env.get("corners") or []:
@@ -265,7 +272,11 @@ def reproduction(nominal_env: dict, reference_env: dict) -> dict:
         if k not in a or k not in b:
             mismatches.append({"point": key_label(k), "reason": "missing in one envelope"})
             continue
-        for n in sorted(set(a[k]) & set(b[k])):
+        for n in sorted(b[k]):
+            if n not in a[k]:
+                mismatches.append({"point": key_label(k), "measurement": n,
+                                   "reason": "reference measurement missing from nominal"})
+                continue
             compared += 1
             if a[k][n] != b[k][n]:
                 mismatches.append({"point": key_label(k), "measurement": n,

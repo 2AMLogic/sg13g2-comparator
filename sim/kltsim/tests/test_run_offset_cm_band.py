@@ -1,10 +1,13 @@
-"""Orchestration tests for sim/run_offset_cm_band.py (issue #186). Stdlib only;
-kcli._submit, kcli._last_attempt_refused_at_cap and time.sleep are patched."""
+"""Orchestration tests for sim/run_offset_cm_band.py (issues #186, #194).
+Stdlib only; kcli._submit, kcli._last_attempt_refused_at_cap and time.sleep
+are patched."""
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
+import io
 import json
 import math
 import sys
@@ -63,6 +66,23 @@ class Base(unittest.TestCase):
     def cond_dir(self):
         return self.series / COND
 
+    def make_requests(self, tags=TAGS):
+        self.cond_dir.mkdir(parents=True, exist_ok=True)
+        for t in tags:
+            (self.cond_dir / f"{t}.request.json").write_text("{}")
+
+    def envelope(self, tag, text="{}"):
+        self.cond_dir.mkdir(parents=True, exist_ok=True)
+        path = self.cond_dir / f"{tag}.envelope.json"
+        path.write_text(text)
+        return path
+
+    def capture(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = rcb.cmd_run(self.args)
+        return code, err.getvalue()
+
 
 class RetryTests(Base):
     def go(self, retry):
@@ -100,11 +120,6 @@ class RetryTests(Base):
 
 
 class RunTests(Base):
-    def make_requests(self, tags=TAGS):
-        self.cond_dir.mkdir(parents=True)
-        for t in tags:
-            (self.cond_dir / f"{t}.request.json").write_text("{}")
-
     def test_submits_every_part(self):
         self.make_requests()
         self.assertEqual(rcb.cmd_run(self.args), 0)
@@ -116,19 +131,90 @@ class RunTests(Base):
         self.assertEqual(rcb.cmd_run(self.args), 1)
         self.assertEqual(self.calls, [])
 
+    def test_missing_request_at_later_tag_submits_nothing(self):
+        self.make_requests(TAGS[:-1])
+        code, err = self.capture()
+        self.assertEqual(code, 1)
+        self.assertEqual(self.calls, [])  # preflight precedes any submission
+        self.assertIn(f"no request at {self.cond_dir / f'{TAGS[-1]}.request.json'}", err)
+        self.assertIn("`build`", err)
+
     def test_skip_existing_skips_only_enveloped_parts(self):
         self.make_requests()
-        (self.cond_dir / f"{TAGS[0]}.envelope.json").write_text("{}")
+        self.envelope(TAGS[0])
         self.args.skip_existing = True
         self.assertEqual(rcb.cmd_run(self.args), 0)
         self.assertEqual([c[0] for c in self.calls], TAGS[1:])
 
-    def test_without_skip_existing_resubmits_enveloped_part(self):
-        # Pins current behaviour (see issue #186): not a statement it is right.
+    def test_default_mode_refuses_existing_envelope(self):
         self.make_requests()
-        (self.cond_dir / f"{TAGS[0]}.envelope.json").write_text("{}")
-        rcb.cmd_run(self.args)
-        self.assertEqual([c[0] for c in self.calls], TAGS)
+        path = self.envelope(TAGS[0], '{"recorded": true}')
+        code, err = self.capture()
+        self.assertEqual(code, 1)
+        self.assertEqual(self.calls, [])
+        self.assertIn(TAGS[0], err)
+        self.assertIn(str(path), err)
+        self.assertIn("--skip-existing", err)
+        self.assertIn("--series", err)
+        self.assertEqual(path.read_text(), '{"recorded": true}')  # untouched
+
+    def test_conflict_at_last_tag_submits_nothing(self):
+        self.make_requests()
+        self.envelope(TAGS[-1])
+        code, _ = self.capture()
+        self.assertEqual(code, 1)
+        self.assertEqual(self.calls, [])
+
+    def test_names_every_conflicting_tag(self):
+        self.make_requests()
+        self.envelope(TAGS[0])
+        self.envelope(TAGS[-1])
+        code, err = self.capture()
+        self.assertEqual(code, 1)
+        self.assertIn(TAGS[0], err)
+        self.assertIn(TAGS[-1], err)
+
+    def test_resume_all_enveloped_is_successful_noop(self):
+        for t in TAGS:
+            self.envelope(t)
+        self.args.skip_existing = True
+        code, err = self.capture()
+        self.assertEqual(code, 0)
+        self.assertEqual(self.calls, [])
+        for t in TAGS:
+            self.assertIn(f"{t}: envelope present, skipped", err)
+
+    def test_resume_skipped_part_needs_no_request(self):
+        self.envelope(TAGS[0])
+        self.make_requests(TAGS[1:])
+        self.args.skip_existing = True
+        self.assertEqual(rcb.cmd_run(self.args), 0)
+        self.assertEqual([c[0] for c in self.calls], TAGS[1:])
+
+    def test_unselected_parts_are_ignored(self):
+        self.envelope(TAGS[0])  # unselected envelope does not refuse
+        self.make_requests([TAGS[1]])
+        self.args.part = [TAGS[1]]
+        self.assertEqual(rcb.cmd_run(self.args), 0)
+        self.assertEqual([c[0] for c in self.calls], [TAGS[1]])
+
+    def test_force_does_not_override_refusal(self):
+        self.make_requests()
+        path = self.envelope(TAGS[0], '{"recorded": true}')
+        self.args.force = True
+        code, _ = self.capture()
+        self.assertEqual(code, 1)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(path.read_text(), '{"recorded": true}')
+
+    def test_force_resume_still_skips_envelope(self):
+        self.make_requests()
+        path = self.envelope(TAGS[0], '{"recorded": true}')
+        self.args.force = True
+        self.args.skip_existing = True
+        self.assertEqual(rcb.cmd_run(self.args), 0)
+        self.assertEqual([c[0] for c in self.calls], TAGS[1:])
+        self.assertEqual(path.read_text(), '{"recorded": true}')
 
     def test_part_filter(self):
         self.make_requests()
@@ -140,6 +226,41 @@ class RunTests(Base):
         self.make_requests()
         self.codes = [0, 4, 3] + [0] * len(TAGS)
         self.assertEqual(rcb.cmd_run(self.args), 4)
+
+    def test_per_part_failures_named_and_max_preserved(self):
+        self.make_requests()
+        self.codes = [4] + [0] * (len(TAGS) - 2) + [3]
+        code, err = self.capture()
+        self.assertEqual(code, 4)  # aggregate stays max of part codes
+        self.assertEqual(len(self.calls), len(TAGS))  # later parts still run
+        self.assertIn(f"{TAGS[0]}: part failed with final code 4", err)
+        self.assertIn(f"{TAGS[-1]}: part failed with final code 3", err)
+
+
+class CliTests(Base):
+    def test_run_help_documents_refusal_and_resume(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as raised:
+            rcb.main(["run", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        text = out.getvalue()
+        self.assertIn("--skip-existing", text)
+        self.assertIn("resume", text)
+        self.assertIn("append-only", text)
+        self.assertIn("--series", text)
+
+    def test_main_run_submits_every_part(self):
+        self.make_requests()
+        self.assertEqual(
+            rcb.main(["run", "--series", self.series.name, "--condition", COND]), 0)
+        self.assertEqual([c[0] for c in self.calls], TAGS)
+
+    def test_main_run_refuses_conflict_without_submissions(self):
+        self.make_requests()
+        self.envelope(TAGS[2])
+        self.assertEqual(
+            rcb.main(["run", "--series", self.series.name, "--condition", COND]), 1)
+        self.assertEqual(self.calls, [])
 
 
 class ControlRepeatGuardTests(Base):
