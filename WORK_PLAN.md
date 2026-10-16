@@ -46,7 +46,8 @@ Issues currently being built (`loom:building`).
 
 PRs waiting on Judge (`loom:review-requested`).
 
-_None._
+- **#218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
+- **#249**: Validate Monte Carlo sample populations before compliance grading
 
 ## Approved (Awaiting Merge)
 
@@ -96,7 +97,7 @@ _None._
 | Important | 1 |
 | Ready (`loom:issue`) | 7 |
 | In Progress (`loom:building`) | 1 |
-| PRs awaiting review | 0 |
+| PRs awaiting review | 2 |
 | Approved PRs awaiting merge | 6 |
 | Curated | 15 |
 | Architect / Hermit proposals | 0 |
