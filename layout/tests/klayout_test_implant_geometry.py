@@ -1,8 +1,10 @@
 """pSD geometry regression for issue #184 (needs the klayout Python module).
 
-On demand only: the name deliberately does not match the `test_*.py` pattern
-of the stdlib-only CI discovery over layout/tests (which forbids skipped
-tests). Run it from the repo root with
+Runs in the KLayout-equipped `layout-reproducibility` CI job (issue #257),
+which installs the pinned klayout==0.30.12 and runs this module explicitly.
+The name deliberately does not match the `test_*.py` pattern of the
+stdlib-only discovery over layout/tests (which forbids skipped tests and has
+no klayout). To run it locally from the repo root:
 `uvx --from klayout==0.30.12 python -I -m unittest discover -s layout/tests -p 'klayout_test_*.py'`.
 Checks the committed GDS against pSD.i (0.30 enclosure of a PFET gate) and
 pSD.b (0.31 space/notch), and proves both checks detect the pre-fix geometry

@@ -185,6 +185,19 @@ jobs:
       - name: Regenerate and verify the committed layout
         run: KLT_NATIVE=1 layout/run_flow.sh --check
 
+      # Issue #257: the pSD.i/pSD.b geometry regression needs the klayout
+      # module installed above, so it is outside the stdlib-only `test_*.py`
+      # discovery of harness-unit-tests. Run it here explicitly. A missing
+      # module, a failing test, an empty population or any skipped test
+      # fails the step; a skip is never success.
+      - name: Run KLayout implant geometry regression tests
+        run: |
+          set -o pipefail
+          test -f layout/tests/klayout_test_implant_geometry.py
+          python3 -I -m unittest discover -v -s layout/tests -p 'klayout_test_*.py' 2>&1 | tee "${RUNNER_TEMP:-/tmp}/klayout_tests.log"
+          grep -Eq '^Ran [1-9][0-9]* tests? ' "${RUNNER_TEMP:-/tmp}/klayout_tests.log"
+          ! grep -Eq 'skipped|NO TESTS RAN' "${RUNNER_TEMP:-/tmp}/klayout_tests.log"
+
   # Schematic-to-netlist freshness (issue #224): design/comparator.spice is
   # the hashed T1 item 1 anchor (manifests/README.md) and is DERIVED from the
   # xschem schematics, which nothing else hashes. This job runs the real
@@ -282,6 +295,7 @@ jobs:
             /sim/klt-corner-verification/campaigns/20261010-n200/*.jsonl
             /sim/klt-corner-verification/campaigns/20261010-n200/*.spice
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json
+            /sim/klt-corner-verification/campaigns/20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json
             /sim/klt-yield/
             /sim/characterization/
             /sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md

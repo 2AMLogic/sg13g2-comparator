@@ -284,6 +284,36 @@ inconsistent inputs are refused and write nothing. The manifest pins the hash of
 `PYTHONPATH=sim python3 -m unittest kltsim.tests.test_characterization`
 (also run by the `kltsim` discover step in "What CI runs").
 
+## Derived report pairs (grading, noise-full, clock comparison)
+
+`grade` (`grading.{json,md}`), `noise-full` (`noise_full.{json,md}`) and
+`run_clock_supply_sensitivity.py compare` (`comparison.{json,md}`) write
+append-only evidence through the one planned-byte writer
+`sim/kltsim/artifacts.py` (also used by `build` and `characterize.sh report`).
+Both members are composed in memory first, then:
+
+- an existing member with different bytes (or a symlink / non-regular file)
+  refuses the whole pair with exit 1 before anything is written, including a
+  conflict only in the second member;
+- an identical rerun is a no-op that keeps bytes and timestamps;
+- a partial pair whose existing member matches is completed by exclusive
+  creation of the absent file; a concurrent writer is never clobbered (no
+  whole-set rollback is promised after such a race).
+
+`--check` on each command is the read-only twin: exit 0 only when every member
+exists and equals a fresh regeneration; missing, stale or unsafe members exit 1.
+It creates no file or directory.
+
+A changed grader, renderer or analysis is not permission to edit a historical
+report. Publish it in a NEW namespace, leaving the original campaign inputs and
+reports untouched, e.g.
+`... grade --campaign ID --report-dir sim/<new-dir>` (likewise `compare --series
+ID --report-dir DIR`, `noise-full --campaign ID --report-dir DIR`). Inputs are
+always read from `--campaign`/`--series`; the new `grading`/`comparison` JSON
+and Markdown cite the original directory (`source_campaign_dir` /
+`source_series_dir`), and `noise_full.json` carries `campaign`. There is no
+force switch.
+
 ## Reproducing one record
 
 Every record ends with the exact command that regenerates it. It is always:
@@ -566,7 +596,7 @@ transitive inputs):
 |---|---|
 | signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
-| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
+| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
 | netlist-regeneration | `design/`, `sim/harness/`, `sim/pdk.json` |
 | append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` |
 

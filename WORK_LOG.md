@@ -2,6 +2,51 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-15
+
+- **PR #243**: Preserve derived campaign report pairs before regeneration (#237)
+- **Issue #237** (closed): Preserve derived campaign report pairs before regeneration
+
+### 2026-10-12
+
+- **PR #273**: Reject mixed-geometry sizing finalists in candidate Target summaries
+- **Issue #269** (closed): Reject mixed-geometry sizing finalists in candidate Target summaries
+- **PR #271**: Validate bias mirror/headroom screening probes before aggregation
+- **Issue #267** (closed): Validate bias mirror headroom screening probes before aggregation
+- **Issue #260** (closed): Auditor process proposal: run final evidence-size preflight before requesting review
+
+- **PR #259**: yield: re-derive the index in the engine-free consistency check
+- **PR #258**: ci: run KLayout implant geometry regression in layout-reproducibility (#257)
+- **PR #256**: cmband: empty reproduction is INCOMPLETE; count rejected draws per record
+- **PR #254**: PDK DRC: reject incomplete deck runs before reporting clean (#253)
+- **PR #251**: Validate CM-offset draw identities, probes, pairing and reproduction completeness (#250)
+- **PR #246**: README claims guard: verify noise compliance verdicts (#242)
+- **Issue #257** (closed): Run implant geometry regression tests in the KLayout-equipped CI job
+- **Issue #255** (closed): Recompute yield index statistics during engine-free consistency checks
+- **Issue #253** (closed): PDK DRC: reject incomplete deck runs before reporting clean
+- **Issue #252** (closed): cmband.reproduction(): empty comparison yields vacuous REPRODUCED verdict
+- **Issue #250** (closed): Validate common-mode offset draw identities, probes and reproduction completeness
+- **Issue #242** (closed): Verify public noise compliance verdict statements
+- **PR #241**: PEX timing compliance: require matching valid decision states
+- **Issue #240** (closed): PEX timing compliance: require matching valid decision states
+
+### 2026-10-11
+
+- **PR #239**: noise_full: validate provenance per tn_full_* config before arithmetic (#236)
+- **PR #234**: check_readme_claims: pin README kickback residue claims to the historical harness record
+- **PR #233**: docs: require evidence size check on final HEAD before review (#223)
+- **PR #231**: README evidence: verify common-mode offset characterization counts and ranges
+- **PR #230**: CI: verify source schematics regenerate the committed comparator netlist
+- **PR #229**: Supplemental DRC: count report items and reject malformed marker evidence
+- **PR #227**: fix: validate the complete physical PVT grid in README evidence loaders
+- **Issue #236** (closed): Bind full-noise analysis to verified configuration and submission provenance
+- **Issue #232** (closed): README evidence: pin kickback residue claims to their historical measurement population
+- **Issue #223** (closed): Builder preflight: check tracked sim size before requesting review
+- **Issue #228** (closed): README evidence: verify common-mode offset characterization counts and ranges
+- **Issue #224** (closed): CI: verify source schematics regenerate the committed comparator netlist
+- **Issue #220** (closed): Supplemental DRC: count report items and reject malformed marker evidence
+- **Issue #217** (closed): README evidence loaders: validate the complete physical PVT identity set
+
 ### 2026-10-11
 
 - **PR #225**: Reject incomplete reproduction and non-finite CM probes in decision-band validation
