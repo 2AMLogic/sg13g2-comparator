@@ -49,16 +49,16 @@ The total is the measured overage, 117933 B (blob bytes at the PR head, from
 ## Decision
 
 Raise the `sim/` total ceiling by exactly **117933 B**. The single `sim` entry
-carries the cumulative 28180787 + 117933 = **28298720 B** and cites this record. No
+carries the cumulative 28263838 + 117933 = **28381771 B** and cites this record. No
 ratified spec bound is relaxed or changed.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 28298720}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 28381771}
 ```
 
-(Cumulative: 28180787 B from DR-0005 to DR-0023 and 117933 B authorized here.)
+(Cumulative: 28263838 B from DR-0005 to DR-0030 and 117933 B authorized here.)
 
 ## Consequences
 
