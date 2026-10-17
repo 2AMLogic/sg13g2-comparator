@@ -8,6 +8,8 @@ Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a h
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
 - **#199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
+- **#218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
+- **#249**: Validate Monte Carlo sample populations before compliance grading
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 - **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
 - **#281**: feat: read per-PR evidence-size exception files so open PRs stop conflicting
@@ -31,7 +33,6 @@ Human-approved issues ready for implementation (`loom:issue`).
 - **#89**: sim: complete the two vcm-m050 CM-band offset points that abort (timestep too small) with a uniform tighter max step
 - **#159**: Memory / hysteresis characterization bench: does the previous decision bias the next?
 - **#235**: Validate clock-supply probes and reject ambiguous sample identities
-- **#245**: Validate actual Monte Carlo populations before compliance grading
 - **#247**: Derive evidence-size estimate denominators from selected reference campaigns
 - **#264**: Reject invalid local PVT grid inputs before simulation
 - **#266**: Validate CM decision timing dimensions and physical domains
@@ -40,14 +41,14 @@ Human-approved issues ready for implementation (`loom:issue`).
 
 Issues currently being built (`loom:building`).
 
+- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
 - **#278**: Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
-- **#249**: Validate Monte Carlo sample populations before compliance grading
+_None._
 
 ## Approved (Awaiting Merge)
 
@@ -56,6 +57,8 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
 - **#199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
+- **#218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
+- **#249**: Validate Monte Carlo sample populations before compliance grading
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 - **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
 - **#281**: feat: read per-PR evidence-size exception files so open PRs stop conflicting
@@ -82,7 +85,7 @@ Issues carrying `loom:curated`.
 
 ## Proposed (Architect / Hermit)
 
-_None._
+- **#286**: Remove scripts/diagnostics: delivered #188 guard-repro handoff, unreferenced *(hermit)*
 
 ## Epics
 
@@ -92,14 +95,14 @@ _None._
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 6 |
+| Operator merge-risk holds | 8 |
 | Very important | 0 |
 | Important | 1 |
-| Ready (`loom:issue`) | 7 |
-| In Progress (`loom:building`) | 1 |
-| PRs awaiting review | 2 |
-| Approved PRs awaiting merge | 6 |
+| Ready (`loom:issue`) | 6 |
+| In Progress (`loom:building`) | 2 |
+| PRs awaiting review | 0 |
+| Approved PRs awaiting merge | 8 |
 | Curated | 15 |
-| Architect / Hermit proposals | 0 |
+| Architect / Hermit proposals | 1 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
