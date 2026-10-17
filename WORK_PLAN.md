@@ -41,7 +41,6 @@ Human-approved issues ready for implementation (`loom:issue`).
 
 Issues currently being built (`loom:building`).
 
-- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
 - **#278**: Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
 
 ## PRs Awaiting Review
@@ -85,7 +84,7 @@ Issues carrying `loom:curated`.
 
 ## Proposed (Architect / Hermit)
 
-- **#286**: Remove scripts/diagnostics: delivered #188 guard-repro handoff, unreferenced *(hermit)*
+_None._
 
 ## Epics
 
@@ -99,10 +98,10 @@ Issues carrying `loom:curated`.
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 6 |
-| In Progress (`loom:building`) | 2 |
+| In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 8 |
 | Curated | 15 |
-| Architect / Hermit proposals | 1 |
+| Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
