@@ -267,11 +267,6 @@ def parse_measurements_checked(text: str) -> tuple[dict[str, float], dict[str, s
     return found, invalid
 
 
-def parse_measurements(text: str) -> dict[str, float]:
-    """Finite measurements only (see ``parse_measurements_checked``)."""
-    return parse_measurements_checked(text)[0]
-
-
 def _stream_text(data: str | bytes | None) -> str:
     """Normalize a captured stream from ``TimeoutExpired`` to text.
 
