@@ -56,6 +56,7 @@ ADAPTED FOR SG13G2, structurally:
 from __future__ import annotations
 
 import itertools
+import math
 from dataclasses import dataclass, field
 
 # Default PVT axes. CLAUDE.md mandates PVT corners on every recorded result.
@@ -156,18 +157,71 @@ def sabotage(corner_list: list[Corner]) -> list[Corner]:
     ]
 
 
+def _finite_number(value, where: str) -> float:
+    """Return ``value`` as a float, rejecting bool / str / None / NaN / Inf /
+    ints too large for a float, with a field-specific message."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{where} must be a finite number, got {value!r}")
+    try:
+        result = float(value)
+    except OverflowError:
+        raise ValueError(f"{where} must be finite, got {value!r}") from None
+    if not math.isfinite(result):
+        raise ValueError(f"{where} must be finite, got {value!r}")
+    return result
+
+
+def validate_supply_params(nominal_v, tolerance) -> tuple[float, float]:
+    """Validate nominal supply (finite, > 0) and tolerance (finite, >= 0).
+
+    A tolerance of exactly 0 is a deliberate nominal-only sweep; a tolerance
+    >= 1 would generate a zero or negative low rail and is rejected.
+    """
+    nominal = _finite_number(nominal_v, "nominal_supply_v")
+    if nominal <= 0:
+        raise ValueError(f"nominal_supply_v must be > 0, got {nominal_v!r}")
+    tol = _finite_number(tolerance, "supply_tolerance")
+    if tol < 0:
+        raise ValueError(f"supply_tolerance must be >= 0, got {tolerance!r}")
+    if tol >= 1:
+        raise ValueError(
+            f"supply_tolerance must be < 1 (a tolerance of {tolerance!r} gives a "
+            "zero or negative supply rail)"
+        )
+    return nominal, tol
+
+
+def validate_temperatures(temperatures, where: str = "temperatures_c") -> list[float]:
+    """Validate a nonempty sequence of finite temperatures (any finite value)."""
+    if isinstance(temperatures, (str, bytes)) or not hasattr(temperatures, "__iter__"):
+        raise ValueError(f"{where} must be a list of numbers, got {temperatures!r}")
+    values = [_finite_number(t, f"{where}[{i}]") for i, t in enumerate(temperatures)]
+    if not values:
+        raise ValueError(f"{where} must not be empty")
+    return values
+
+
 def supply_points(
     nominal_v: float = DEFAULT_NOMINAL_SUPPLY_V,
     tolerance: float = DEFAULT_SUPPLY_TOLERANCE,
 ) -> list[float]:
     """Nominal supply and its +/- tolerance rails, low to high."""
-    if tolerance <= 0:
-        return [round(nominal_v, 6)]
-    return [
-        round(nominal_v * (1.0 - tolerance), 6),
-        round(nominal_v, 6),
-        round(nominal_v * (1.0 + tolerance), 6),
-    ]
+    nominal_v, tolerance = validate_supply_params(nominal_v, tolerance)
+    if tolerance == 0:
+        points = [round(nominal_v, 6)]
+    else:
+        points = [
+            round(nominal_v * (1.0 - tolerance), 6),
+            round(nominal_v, 6),
+            round(nominal_v * (1.0 + tolerance), 6),
+        ]
+    for v in points:
+        if not math.isfinite(v) or v <= 0:
+            raise ValueError(
+                f"supply rails {points!r} must be finite and > 0 "
+                f"(nominal_supply_v={nominal_v!r}, supply_tolerance={tolerance!r})"
+            )
+    return points
 
 
 @dataclass(frozen=True)
@@ -225,8 +279,19 @@ def build_grid(
             share a ``corner_id`` (see that class's docstring for why this
             can happen and why it must be a loud, immediate error).
     """
+    if not corners:
+        raise ValueError("corners must not be empty")
+    temperatures = validate_temperatures(temperatures)
+    if isinstance(supplies, (str, bytes)) or not hasattr(supplies, "__iter__"):
+        raise ValueError(f"supplies must be a list of numbers, got {supplies!r}")
+    supplies = [_finite_number(v, f"supplies[{i}]") for i, v in enumerate(supplies)]
+    if not supplies:
+        raise ValueError("supplies must not be empty")
+    for i, v in enumerate(supplies):
+        if v <= 0:
+            raise ValueError(f"supplies[{i}] must be > 0, got {v!r}")
     points = [
-        PvtPoint(corner=corner, temp_c=float(temp), vdd=float(vdd), index=i)
+        PvtPoint(corner=corner, temp_c=temp, vdd=vdd, index=i)
         for i, (corner, temp, vdd) in enumerate(
             itertools.product(corners, temperatures, supplies)
         )

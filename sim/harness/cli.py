@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import dataclasses
+import math
 import os
 import sys
 from pathlib import Path
@@ -155,6 +156,17 @@ def _list() -> int:
     return 0
 
 
+def _cli_number(text: str) -> float:
+    """argparse ``type=`` for numeric overrides: textual numbers, finite only."""
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid number {text!r}") from None
+    if not math.isfinite(value):
+        raise argparse.ArgumentTypeError(f"must be finite, got {text!r}")
+    return value
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="run_corners.py",
@@ -165,8 +177,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--print-env", action="store_true", help="emit shell exports (sim/env.sh)")
     parser.add_argument("--list", action="store_true", help="list known experiments and exit")
     parser.add_argument("--corners", nargs="*", help="corner or corner-set names (default: manifest)")
-    parser.add_argument("--temps", nargs="*", type=float, help="temperatures in degC")
-    parser.add_argument("--supply-tolerance", type=float, help="fractional supply tolerance")
+    parser.add_argument("--temps", nargs="*", type=_cli_number, help="temperatures in degC")
+    parser.add_argument("--supply-tolerance", type=_cli_number, help="fractional supply tolerance")
     parser.add_argument("-j", "--jobs", type=int, default=1, help="concurrent ngspice processes")
     parser.add_argument("--num-threads", type=int, default=1,
                         help="ngspice internal threads per point (0 = ngspice default)")
@@ -197,6 +209,21 @@ def main(argv: list[str] | None = None) -> int:
         tb = tb_mod.load(directory)
     except (ValueError, FileNotFoundError) as exc:
         print(f"invalid testbench manifest: {exc}", file=sys.stderr)
+        return 1
+
+    # Validate requested PVT coordinates before touching the PDK, simulator
+    # or evidence tree: an invalid grid must fail with no side effects.
+    try:
+        if args.temps is not None and not args.temps:
+            raise ValueError("--temps must not be empty")
+        temperatures = args.temps if args.temps is not None else list(tb.temperatures_c)
+        validate_temps = corners_mod.validate_temperatures(temperatures, "--temps")
+        tolerance = (
+            args.supply_tolerance if args.supply_tolerance is not None else tb.supply_tolerance
+        )
+        supplies = corners_mod.supply_points(tb.nominal_supply_v, tolerance)
+    except ValueError as exc:
+        print(f"invalid PVT grid: {exc}", file=sys.stderr)
         return 1
 
     try:
@@ -256,12 +283,11 @@ def main(argv: list[str] | None = None) -> int:
     sabotaged = bool(args.sabotage_corners)
     if sabotaged:
         corner_list = corners_mod.sabotage(corner_list)
-    temperatures = args.temps if args.temps else list(tb.temperatures_c)
-    tolerance = (
-        args.supply_tolerance if args.supply_tolerance is not None else tb.supply_tolerance
-    )
-    supplies = corners_mod.supply_points(tb.nominal_supply_v, tolerance)
-    points = corners_mod.build_grid(corner_list, temperatures, supplies)
+    try:
+        points = corners_mod.build_grid(corner_list, validate_temps, supplies)
+    except ValueError as exc:  # includes CornerIdCollisionError
+        print(f"invalid PVT grid: {exc}", file=sys.stderr)
+        return 1
 
     write = not (args.no_write or sabotaged)
     # Captured BEFORE the run writes anything, so the flag describes the tree
