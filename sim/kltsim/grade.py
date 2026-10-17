@@ -1078,11 +1078,6 @@ def grade(rows_spec: dict, benches: dict[str, BenchEvidence], dut: DutReference)
     })
 
 
-def _spec_meas(bench_name: str) -> str:
-    bench = _bench_spec(bench_name)
-    return next(m.name for m in bench.measurements if m.role == "spec")
-
-
 def _expected_n(rows_spec: dict, bench_name: str) -> int:
     for row in rows_spec["rows"]:
         ev = row["evidence"]
