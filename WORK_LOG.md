@@ -2,6 +2,10 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-17
+
+- **Issue #286** (closed): Remove scripts/diagnostics: delivered #188 guard-repro handoff, unreferenced
+
 ### 2026-10-15
 
 - **PR #243**: Preserve derived campaign report pairs before regeneration (#237)
