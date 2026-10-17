@@ -4,6 +4,8 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-17
 
+- **PR #296**: refactor: share cm-band undo_transform between cmband and cmdecision
+- **Issue #295** (closed): Remove dead _spec_meas and dedupe cmband/cmdecision undo_transform
 - **PR #292**: refactor: remove three zero-caller helpers from sim harness and kltsim
 - **Issue #291** (closed): Remove four zero-caller helpers in sim/harness and sim/kltsim
 - **PR #290**: refactor: share fleet-cap retry and local smoke runner across klt sim drivers
