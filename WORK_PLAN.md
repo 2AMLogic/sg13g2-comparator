@@ -41,7 +41,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 
 Issues currently being built (`loom:building`).
 
-- **#278**: Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
+_None._
 
 ## PRs Awaiting Review
 
@@ -98,7 +98,7 @@ Issues carrying `loom:curated`.
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 6 |
-| In Progress (`loom:building`) | 1 |
+| In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 8 |
 | Curated | 15 |
