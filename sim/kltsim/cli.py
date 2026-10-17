@@ -508,14 +508,7 @@ def cmd_run(args) -> int:
         if (out_dir / f"{tag}.envelope.json").exists() and args.skip_existing:
             print(f"{tag}: envelope present, skipped", file=sys.stderr)
             continue
-        for attempt in range(1, args.retry_refused + 2):
-            code = _submit(request_path, out_dir, tag, args)
-            if code == 0 or not _last_attempt_refused_at_cap(out_dir):
-                break
-            if attempt <= args.retry_refused:
-                print(f"{tag}: fleet at its instance cap; retry {attempt}/"
-                      f"{args.retry_refused} in {args.retry_wait}s", file=sys.stderr)
-                time.sleep(args.retry_wait)
+        code = _submit_with_retry(request_path, out_dir, tag, args)
         rc = max(rc, code)
     return rc
 
@@ -526,6 +519,46 @@ def _last_attempt_refused_at_cap(out_dir: Path) -> bool:
     lines = (out_dir / "attempts.jsonl").read_text(encoding="utf-8").splitlines()
     last = json.loads(lines[-1]) if lines else {}
     return "exceeds BATCH_MAX_CONCURRENT_INSTANCES" in (last.get("stderr_tail") or "")
+
+
+def _submit_with_retry(request: Path, out_dir: Path, tag: str, args,
+                       extra: dict | None = None) -> int:
+    """``_submit``, resubmitted while the shared fleet refuses at its instance
+    cap: sleep ``args.retry_wait`` between up to ``args.retry_refused`` retries."""
+    code = 1
+    for attempt in range(1, args.retry_refused + 2):
+        code = _submit(request, out_dir, tag, args, extra=extra)
+        if code == 0 or not _last_attempt_refused_at_cap(out_dir):
+            break
+        if attempt <= args.retry_refused:
+            print(f"{tag}: fleet at its instance cap; retry {attempt}/{args.retry_refused} "
+                  f"in {args.retry_wait}s", file=sys.stderr)
+            time.sleep(args.retry_wait)
+    return code
+
+
+def run_local_smoke(req: dict, work: Path, klt: str) -> int:
+    """Write ``req`` under ``work``, run it once with ``klt sim --backend local``,
+    keep the envelope, and print one ``corner_id status {measurements}`` line
+    per corner."""
+    request = work / "request.json"
+    request.write_text(json.dumps(req, indent=2) + "\n", encoding="utf-8")
+    cmd = [klt, "sim", str(request), "--backend", "local", "--format", "json",
+           "-o", str(work / "artifacts")]
+    print("$ " + " ".join(cmd), file=sys.stderr)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    (work / "envelope.json").write_text(proc.stdout, encoding="utf-8")
+    print(f"klt sim exit {proc.returncode}; work dir {work}", file=sys.stderr)
+    if proc.stderr.strip():
+        print(proc.stderr.strip()[-2000:], file=sys.stderr)
+    try:
+        env = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return 1
+    for corner in env.get("corners", []):
+        print(corner["corner_id"], corner["status"],
+              {m["name"]: m["value"] for m in corner["measurements"]})
+    return 0
 
 
 _NAMESPACE_HINT = ("Reports are append-only evidence. Publish changed analysis under a NEW "

@@ -20,7 +20,6 @@ import argparse
 import json
 import shutil
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -58,16 +57,7 @@ def cmd_run(args) -> int:
         print(f"{cd.TAG}: envelope present, skipped", file=sys.stderr)
         return 0
     extra = {"condition": cd.condition_metadata(cond), "kind": "campaign"}
-    code = 1
-    for attempt in range(1, args.retry_refused + 2):
-        code = kcli._submit(request, out_dir, cd.TAG, args, extra=extra)
-        if code == 0 or not kcli._last_attempt_refused_at_cap(out_dir):
-            break
-        if attempt <= args.retry_refused:
-            print(f"fleet at its instance cap; retry {attempt}/{args.retry_refused} "
-                  f"in {args.retry_wait}s", file=sys.stderr)
-            time.sleep(args.retry_wait)
-    return code
+    return kcli._submit_with_retry(request, out_dir, cd.TAG, args, extra=extra)
 
 
 def cmd_compare(args) -> int:
