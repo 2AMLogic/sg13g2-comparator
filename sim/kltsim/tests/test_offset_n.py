@@ -14,6 +14,7 @@ import contextlib
 import hashlib
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -301,8 +302,9 @@ class SizeEstimate(unittest.TestCase):
     YIELD = [("y/offset.yield.json", 100_000), ("y/index.json", 50_000), ("y/noise.yield.json", 500_000)]
     BUDGET = {"new_unit_ceiling_bytes": 4_000_000, "total_ceiling_bytes": 100_000_000}
 
-    def est(self, n, current=10_000_000):
-        return estimate.estimate_from_sizes(n, "ref", "HEAD", self.REF, self.YIELD, self.BUDGET, current)
+    def est(self, n, current=10_000_000, ref_n=60, yield_ref_n=60):
+        return estimate.estimate_from_sizes(n, "ref", "HEAD", self.REF, self.YIELD, self.BUDGET, current,
+                                            ref_n=ref_n, yield_ref_n=yield_ref_n)
 
     def test_scales_per_sample_files_only_and_ignores_other_benches(self):
         a, b = self.est(60), self.est(120)
@@ -327,7 +329,62 @@ class SizeEstimate(unittest.TestCase):
 
     def test_missing_reference_evidence_is_an_error(self):
         with self.assertRaises(estimate.EstimateError):
-            estimate.estimate_from_sizes(200, "ref", "HEAD", [("grading.json", 1)], [], self.BUDGET, 0)
+            estimate.estimate_from_sizes(200, "ref", "HEAD", [("grading.json", 1)], [], self.BUDGET, 0,
+                                          ref_n=60, yield_ref_n=60)
+
+    def test_reference_counts(self):
+        same = self.est(200, ref_n=200, yield_ref_n=200)  # N = ref N: variable bytes scale by 1
+        self.assertEqual((same["campaign_unit_bytes"], same["yield_unit_bytes"]), (1_803_700, 150_000))
+        e = self.est(100, ref_n=50, yield_ref_n=60)  # actual ratios, independent denominators
+        self.assertEqual((e["campaign_unit_bytes"], e["yield_unit_bytes"]), (3_403_700, 250_000))
+        self.assertEqual(self.est(100, ref_n=200)["yield_unit_bytes"], 250_000)
+        self.assertIn("yield reference", estimate.render(e))
+
+
+def _req(n):
+    return json.dumps({"monte_carlo": {"n": n}}).encode()
+
+
+class ReferenceResolution(unittest.TestCase):
+    def test_offset_n(self):
+        ok = {p: _req(200) for p in estimate.OFFSET_PARTS}
+        n = lambda d: estimate.reference_offset_n("c", "T", lambda p: d[p.split("_")[-2]])  # noqa: E731
+        self.assertEqual(n(ok), 200)
+        for bad in (_req(60), b"{x", b"{}", _req(1), _req("200"), _req(True), None):  # None: missing
+            with self.assertRaises(estimate.EstimateError):
+                n({**ok, "ss": bad})
+
+    def test_yield_n(self):
+        n = lambda ns: estimate.reference_yield_n("T", lambda _: json.dumps(  # noqa: E731
+            {"measurements": [{"n": k} for k in ns]}))
+        self.assertEqual(n([60, 60]), 60)
+        for bad in ([60, 200], [], [0]):
+            with self.assertRaises(estimate.EstimateError):
+                n(bad)
+
+
+class CommittedTreeControls(unittest.TestCase):
+    def test_tree_not_working_tree(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, camp = Path(d), Path(d, estimate.CAMPAIGNS, "c")
+            git = lambda *a: subprocess.run(["git", "-C", d, "-c", "user.name=t", "-c",  # noqa: E731
+                                             "user.email=t@t", *a], check=True, capture_output=True)
+            git("init", "-q")
+            camp.mkdir(parents=True)
+            Path(d, estimate.YIELD_REFERENCE).mkdir(parents=True)
+            Path(d, estimate.BUDGET).write_text('{"new_unit_ceiling_bytes": 1, "total_ceiling_bytes": 1}')
+            Path(d, estimate.YIELD_OFFSET_REPORT).write_text('{"measurements": [{"n": 60}]}')
+            reqs = [camp / f"offset_mc.mos_{p}_mismatch.request.json" for p in estimate.OFFSET_PARTS]
+            for r in reqs:
+                r.write_bytes(_req(200))
+            git("add", "-A")
+            git("commit", "-qm", "c")
+            for r in reqs:
+                r.write_bytes(_req(60))
+            with mock.patch.object(estimate.build_mod, "REPO_ROOT", root):
+                e = estimate.estimate_offset_campaign(200, "c", "HEAD")
+                self.assertRaises(estimate.EstimateError, estimate.reference_offset_n, "gone", "HEAD")
+            self.assertEqual((e["reference_n"], e["yield_reference_n"], e["tree"]), (200, 60, "HEAD"))
 
     def test_cli_rejects_invalid_n(self):
         with contextlib.redirect_stderr(io.StringIO()):
