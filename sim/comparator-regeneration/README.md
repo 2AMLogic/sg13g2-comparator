@@ -52,6 +52,28 @@ Two design decisions make the measurement robust:
   own supply, crossed at 0.5). A fixed absolute threshold would turn the
   ±10 % supply axis into a measurement artefact.
 
+### Reverse-polarity ladder (supplemental, not scored)
+
+The three rungs above time the LOW->HIGH output decision. Since issue #274
+(twin of gf180-comparator#158/#166) the same transient can also carry a
+mirrored HIGH->LOW ladder: instances RA/RB/RC in the separate fragment
+`testbench/tb_regeneration_reverse.spice`, declared under tb.json's
+`reverse_ladder` key (NOT in `analyses`: `analyses`, `options` and the forward
+fragment are consumed fields and stay byte-identical, so committed records
+keep re-grading). The harness appends the fragment (`.include`) and its nine
+`.meas` cards to the same transient and records the fragment's sha256 in
+provenance. Measures: `td_od{50,1,01}_rev_ns`, `tau_rev_ps`,
+`dout_od*_rev_first` (>= 0.9) / `dout_od*_rev_end` (<= 0.1) and the
+reverse-minus-forward `dtd_od*_rev_ps` / `dtau_rev_ps`. They are reported,
+never scored; no spec row reads them. Records taken before this change do not
+carry the columns (append-only).
+
+Controls: `python3 sim/tools/regen_reverse_control.py` runs one PVT point twice
+(positive: all reverse checks pass; negative: `suppress_reverse_flip` removes
+the second reverse decision, so `tdr_*` is unmeasurable and the ends are
+observed HIGH). Wired into `sim/selftest.sh` step 2b. Stdlib tests:
+`sim/harness/tests/test_regeneration_reverse.py`.
+
 Mismatch is off (this bench runs the `mos` corner set, not `mos_mismatch` —
 see `sim/harness/corners.py`). Regeneration time and offset are separable and
 are budgeted separately: offset moves the input at which the decision flips
