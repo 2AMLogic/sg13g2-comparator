@@ -19,8 +19,12 @@ Both initial allowances are 10% of the baseline ``sim/`` blob bytes rounded up
 to the next MiB (``--emit-budget`` derives and prints the whole file). A
 deliberate overage needs an exact entry in the budget's ``exceptions`` backed
 by a ``spec/decision-records/*.md`` record that names the same path and
-additional bytes in a fenced json block (see ``sim/README.md``). There is no
-bypass flag or environment override.
+additional bytes in a fenced json block (see ``sim/README.md``). The same
+object may instead live in its own file ``sim/evidence-size-exceptions/*.json``
+so two open PRs never edit the same line; repeated ``sim`` exceptions are
+summed (unit paths may appear once). Records for such entries may sit in
+``spec/decision-records/evidence-size/``. There is no bypass flag or
+environment override.
 
 Exit codes: 0 within budget, 1 budget violation or invalid budget/exception,
 2 usage / git / measurement error, including a partial (blob-filtered) clone,
@@ -40,7 +44,9 @@ import subprocess
 import sys
 
 BUDGET_PATH = "sim/evidence-size-budget.json"
+EXC_DIR = "sim/evidence-size-exceptions/"
 RECORD_DIR = "spec/decision-records/"
+RECORD_SUBDIR = RECORD_DIR + "evidence-size/"
 PROTECTED_DIRS = ("records", "corners", "netlist-snapshots", "campaigns", "reports")
 MIB = 1024 * 1024
 POLICY_PERCENT = 10
@@ -283,9 +289,11 @@ def validate_budget(repo: str, tree: str, b) -> dict:
         raise BudgetError("units must map exact evidence-unit paths to byte counts")
     if not isinstance(b["exceptions"], list):
         raise BudgetError("exceptions must be a list")
+    entries = [(f"exceptions[{i}]", e) for i, e in enumerate(b["exceptions"])]
+    entries += _load_exception_files(repo, tree)
     extras: dict[str, int] = {}
-    for i, e in enumerate(b["exceptions"]):
-        w = f"exceptions[{i}]"
+    seen_sim: set[tuple[str, int]] = set()
+    for w, e in entries:
         if not isinstance(e, dict) or set(e) != EXC_KEYS:
             raise BudgetError(f"{w}: keys must be exactly {sorted(EXC_KEYS)}")
         p, extra = e["path"], e["additional_bytes"]
@@ -293,7 +301,7 @@ def validate_budget(repo: str, tree: str, b) -> dict:
             raise BudgetError(
                 f"{w}.path {p!r} must be exactly 'sim' or one evidence unit "
                 "sim/<bench>/<protected-dir>/<name> (no wildcards)")
-        if p in extras:
+        if p in extras and p != TOTAL_KEY:
             raise BudgetError(f"{w} duplicates path {p!r}")
         if not _is_int(extra) or extra <= 0:
             raise BudgetError(f"{w}.additional_bytes must be a positive integer")
@@ -302,9 +310,18 @@ def validate_budget(repo: str, tree: str, b) -> dict:
         rec = e["decision_record"]
         if not (isinstance(rec, str) and rec.startswith(RECORD_DIR)
                 and rec.endswith(".md") and _canonical(rec)
-                and "/" not in rec[len(RECORD_DIR):]):
+                and ("/" not in rec[len(RECORD_DIR):]
+                     or ("/" not in rec[len(RECORD_SUBDIR):]
+                         and rec.startswith(RECORD_SUBDIR)))):
             raise BudgetError(
-                f"{w}.decision_record must be a spec/decision-records/*.md path")
+                f"{w}.decision_record must be a spec/decision-records/*.md or "
+                "spec/decision-records/evidence-size/*.md path")
+        if p == TOTAL_KEY:
+            if (rec, extra) in seen_sim:
+                raise BudgetError(
+                    f"{w} repeats the sim exception ({rec!r}, {extra} B); each "
+                    "sim exception needs its own decision record")
+            seen_sim.add((rec, extra))
         text = _blob(repo, tree, rec)
         if text is None:
             raise BudgetError(f"{w}: decision record {rec!r} is not a tracked "
@@ -313,13 +330,39 @@ def validate_budget(repo: str, tree: str, b) -> dict:
             raise BudgetError(
                 f"{w}: {rec!r} has no fenced json block with "
                 f'{{"kind": "{KIND}", "path": "{p}", "additional_bytes": {extra}}}')
-        extras[p] = extra
+        extras[p] = extras.get(p, 0) + extra
     return extras
 
 
+def _load_exception_files(repo: str, tree: str) -> list:
+    """Per-file exceptions: direct ``*.json`` blobs of ``EXC_DIR`` (sorted)."""
+    out = git(repo, "ls-tree", "-z", tree, "--", EXC_DIR)
+    found = []
+    for rec in out.split(b"\0"):
+        if not rec:
+            continue
+        meta, _, name = rec.partition(b"\t")
+        typ = meta.decode("utf-8", "replace").split(" ")[1]
+        path = name.decode("utf-8", "surrogateescape")
+        if typ == "blob" and path.endswith(".json") \
+                and posixpath.dirname(path) + "/" == EXC_DIR:
+            found.append(path)
+    entries = []
+    for path in sorted(found):
+        raw = _blob(repo, tree, path)
+        if raw is None:
+            raise BudgetError(f"{path}: not a regular tracked file (symlink?)")
+        try:
+            entries.append((path, json.loads(raw.decode("utf-8"))))
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise BudgetError(f"{path} is not valid JSON: {exc}") from exc
+    return entries
+
+
 def evaluate(m: dict, b: dict, extras: dict) -> list[str]:
-    route = ("route: add an exception to sim/evidence-size-budget.json backed by "
-             "a spec/decision-records/*.md fenced json block "
+    route = ("route: add an exception file sim/evidence-size-exceptions/<n>.json "
+             "(or an entry in sim/evidence-size-budget.json) backed by "
+             "a spec/decision-records/ fenced json block "
              '{"kind": "evidence-size", "path": ..., "additional_bytes": ...}; '
              "see sim/README.md (\"Evidence size budget\")")
     v = []
