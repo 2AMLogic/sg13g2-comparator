@@ -4,6 +4,8 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-17
 
+- **PR #290**: refactor: share fleet-cap retry and local smoke runner across klt sim drivers
+- **Issue #289** (closed): Consolidate duplicated klt-sim fleet-cap retry loop (4 copies) and local smoke runner (2 copies) across campaign drivers
 - **Issue #286** (closed): Remove scripts/diagnostics: delivered #188 guard-repro handoff, unreferenced
 
 ### 2026-10-15

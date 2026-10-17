@@ -6,7 +6,6 @@
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
-- **#199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
 - **#218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
 - **#249**: Validate Monte Carlo sample populations before compliance grading
@@ -42,6 +41,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 Issues currently being built (`loom:building`).
 
 - **#278**: Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
+- **#291**: Remove four zero-caller helpers in sim/harness and sim/kltsim
 
 ## PRs Awaiting Review
 
@@ -61,6 +61,7 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 - **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
 - **#281**: feat: read per-PR evidence-size exception files so open PRs stop conflicting
+- **#292**: refactor: remove three zero-caller helpers from sim harness and kltsim
 
 ## Proposed
 
@@ -94,13 +95,13 @@ _None._
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 8 |
+| Operator merge-risk holds | 7 |
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 6 |
-| In Progress (`loom:building`) | 1 |
+| In Progress (`loom:building`) | 2 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 8 |
+| Approved PRs awaiting merge | 9 |
 | Curated | 15 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
