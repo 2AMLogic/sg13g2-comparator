@@ -42,7 +42,6 @@ Human-approved issues ready for implementation (`loom:issue`).
 Issues currently being built (`loom:building`).
 
 - **#278**: Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
-- **#295**: Remove dead _spec_meas and dedupe cmband/cmdecision undo_transform
 
 ## PRs Awaiting Review
 
@@ -62,7 +61,6 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 - **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
 - **#281**: feat: read per-PR evidence-size exception files so open PRs stop conflicting
-- **#296**: refactor: share cm-band undo_transform between cmband and cmdecision
 
 ## Proposed
 
@@ -100,9 +98,9 @@ Issues carrying `loom:curated`.
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 6 |
-| In Progress (`loom:building`) | 2 |
+| In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 9 |
+| Approved PRs awaiting merge | 8 |
 | Curated | 15 |
 | Architect / Hermit proposals | 1 |
 | Active epics | 1 |
