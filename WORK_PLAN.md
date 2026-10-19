@@ -6,7 +6,6 @@
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
-- **#199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
 - **#218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
 - **#249**: Validate Monte Carlo sample populations before compliance grading
@@ -94,7 +93,7 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 8 |
+| Operator merge-risk holds | 7 |
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 6 |
