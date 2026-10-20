@@ -4,6 +4,8 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-20
 
+- **PR #249**: Validate Monte Carlo sample populations before compliance grading
+- **Issue #245** (closed): Validate actual Monte Carlo populations before compliance grading
 - **PR #281**: feat: read per-PR evidence-size exception files so open PRs stop conflicting
 - **Issue #278** (closed): Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
 
