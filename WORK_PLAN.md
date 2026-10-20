@@ -39,6 +39,7 @@ Human-approved issues ready for implementation (`loom:issue`).
 Issues currently being built (`loom:building`).
 
 - **#302**: Consolidate remaining comparison/ibsweep report writers onto artifacts.publish (parallel drift with #237)
+- **#308**: Remove dead _spec_meas left behind by closed #295
 
 ## PRs Awaiting Review
 
@@ -78,7 +79,6 @@ Issues carrying `loom:curated`.
 ## Proposed (Architect / Hermit)
 
 - **#297**: Remove scripts/diagnostics/: completed #188 guard-handoff repro, unrelated to the comparator *(hermit)*
-- **#308**: Remove dead _spec_meas left behind by closed #295 *(hermit)*
 
 ## Epics
 
@@ -92,10 +92,10 @@ Issues carrying `loom:curated`.
 | Very important | 0 |
 | Important | 0 |
 | Ready (`loom:issue`) | 6 |
-| In Progress (`loom:building`) | 1 |
+| In Progress (`loom:building`) | 2 |
 | PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 6 |
 | Curated | 13 |
-| Architect / Hermit proposals | 2 |
+| Architect / Hermit proposals | 1 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
