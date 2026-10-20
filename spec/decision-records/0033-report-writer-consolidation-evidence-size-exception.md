@@ -3,7 +3,7 @@
 - **Status**: proposed. **This record covers the evidence budget only.** It
   ratifies no bound and relaxes no Target or Stretch number. It authorizes one
   raise of the `sim/` total ceiling in `sim/evidence-size-budget.json` (issue
-  #132's contract), exactly the measured overage of 3300 B. It takes effect
+  #132's contract), exactly the measured overage of 3292 B. It takes effect
   only with the reviewed merge of the PR that lands it, as for DR-0005 to
   DR-0032. The drafting agent does not merge it, and drafting it is not agents
   relaxing the ratified spec.
@@ -15,9 +15,10 @@
   (previous `sim/` total raise, on main; still stands)
 - **Supersedes**: none. **Superseded by**: none
 - **Numbering**: this record chains its cumulative `sim` entry on DR-0032, the
-  latest raise on main (renumbered from 0031 on rebase). Whichever open PR merges first keeps its number
+  latest raise on main (renumbered from 0031 on rebase). Whichever open PR merges first keeps its
+  number
   and cumulative figure; the others are renumbered on rebase with their
-  cumulative `sim` entry re-measured. This record's own 3300 B does not change
+  cumulative `sim` entry re-measured. This record's own 3292 B does not change
   unless this PR's `sim/` diff changes.
 
 ## Context
@@ -34,26 +35,26 @@ and docs. No committed evidence file is modified and no report is regenerated.
 | `sim/kltsim/cli.py`, `sim/kltsim/ibsweep.py`, `sim/run_offset_cm_band.py`, `sim/run_decision_cm_band.py` | publish through `artifacts.publish`, `--check`, `--report-dir` | net of removed `write_text` writers |
 | `sim/kltsim/tests/test_report_preserve.py` | three more producers in the shared conflict / rerun / check matrix | |
 | `sim/README.md` | "Derived report pairs" lists the new producers | |
-| `sim/evidence-size-budget.json` | extended cumulative entry | +118 |
+| `sim/evidence-size-budget.json` | extended cumulative entry | +112 |
 
-The total is the measured overage, 3182 B of code, tests and docs plus 118 B
-of budget file = 3300 B. This record lives under `spec/` and adds nothing to
+The total is the measured overage, 3180 B of code, tests and docs plus 112 B
+of budget file = 3292 B. This record lives under `spec/` and adds nothing to
 `sim/`.
 
 ## Decision
 
-Raise the `sim/` total ceiling by exactly **3300 B**. The single `sim` entry
-carries the cumulative 28381771 + 3300 = **28385071 B** and cites this record.
+Raise the `sim/` total ceiling by exactly **3292 B**. The single `sim` entry
+carries the cumulative 28381771 + 3300 = **28385063 B** and cites this record.
 The baseline, the 10 % allowance and all existing evidence are unchanged. No
 ratified spec bound is relaxed or changed.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 28385071}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 28385063}
 ```
 
-(Cumulative: 28381771 B from DR-0005 to DR-0032 and 3300 B authorized here.)
+(Cumulative: 28381771 B from DR-0005 to DR-0032 and 3292 B authorized here.)
 
 ## Consequences
 
