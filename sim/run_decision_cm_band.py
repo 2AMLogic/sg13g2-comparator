@@ -24,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from kltsim import artifacts as artifacts_mod  # noqa: E402
 from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import cmdecision as cd  # noqa: E402
@@ -63,8 +64,20 @@ def cmd_run(args) -> int:
 def cmd_compare(args) -> int:
     series = _series(args)
     result = cd.compare_series(series, reference_campaign=args.reference_campaign)
-    (series / "comparison.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    (series / "comparison.md").write_text(cd.render_markdown(result), encoding="utf-8")
+    report_dir = Path(args.report_dir) if args.report_dir else series
+    md = cd.render_markdown(result)
+    if report_dir != series:
+        result["source_series_dir"] = kcli._cite(series)
+        md = kcli._cite_note(md, "series", series)
+    rc = artifacts_mod.publish(
+        "compare",
+        [(report_dir / "comparison.json", (json.dumps(result, indent=2) + "\n").encode("utf-8")),
+         (report_dir / "comparison.md", md.encode("utf-8"))],
+        check_only=args.check,
+        namespace_hint=kcli._NAMESPACE_HINT.replace("--campaign/--series", "--series"),
+        require_dir=report_dir)
+    if rc or args.check:
+        return rc
     for name, c in result["conditions"].items():
         if c.get("missing"):
             print(f"{name}: not run")
@@ -101,6 +114,11 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("compare")
     g.add_argument("--series", required=True)
     g.add_argument("--reference-campaign", default=cd.REFERENCE_CAMPAIGN)
+    g.add_argument("--report-dir", help="write comparison.{json,md} here instead of the series "
+                   "directory (new directory; cites the series; different existing files are "
+                   "never overwritten)")
+    g.add_argument("--check", action="store_true",
+                   help="read-only: exit 1 if the reports are missing, stale or unsafe")
     g.set_defaults(func=cmd_compare)
     args = ap.parse_args(argv)
     return args.func(args)
