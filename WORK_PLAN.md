@@ -40,13 +40,13 @@ Human-approved issues ready for implementation (`loom:issue`).
 
 Issues currently being built (`loom:building`).
 
-_None._
+- **#302**: Consolidate remaining comparison/ibsweep report writers onto artifacts.publish (parallel drift with #237)
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-_None._
+- **#303**: refactor: publish comparison and ibsweep reports through artifacts.publish
 
 ## Approved (Awaiting Merge)
 
@@ -97,8 +97,8 @@ Issues carrying `loom:curated`.
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 6 |
-| In Progress (`loom:building`) | 0 |
-| PRs awaiting review | 0 |
+| In Progress (`loom:building`) | 1 |
+| PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 8 |
 | Curated | 15 |
 | Architect / Hermit proposals | 1 |
