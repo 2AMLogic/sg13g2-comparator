@@ -386,6 +386,122 @@ class Exceptions(Base):
         self.bad("duplicates path")
 
 
+SUBREC = "spec/decision-records/evidence-size/278-sim-raise.md"
+EXC_DIR = "sim/evidence-size-exceptions"
+
+
+class ExceptionFiles(Base):
+    """Issue #278: one file per exception so open PRs never share a line."""
+
+    def add_file(self, name, path, extra, rec=SUBREC, rec_items=None, **kw):
+        items = rec_items if rec_items is not None else [
+            {"kind": "evidence-size", "path": path, "additional_bytes": extra}]
+        self.write(rec, "# DR\n\n```json\n" + json.dumps(items) + "\n```\n")
+        self.write(f"{EXC_DIR}/{name}", json.dumps({
+            "path": path, "additional_bytes": extra, "reason": "why",
+            "decision_record": rec, **kw}))
+
+    def test_empty_or_missing_dir_and_non_json_ignored(self):
+        self.write(f"{EXC_DIR}/README.md", "not an exception")
+        self.write(f"{EXC_DIR}/sub/x.json", "{bad")
+        self.commit("x")
+        self.assertEqual(self.run_main()[0], 0)
+
+    def test_file_exception_in_subdir_record_raises_ceiling(self):
+        self.write("sim/big.txt", "b" * 1500)
+        self.add_file("278.json", "sim", 2000)
+        self.commit("x")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 0, err)
+
+    def test_sim_exceptions_sum_across_files_and_budget(self):
+        self.add_exception("sim", 1000)
+        self.add_file("a.json", "sim", 500, rec="spec/decision-records/evidence-size/a.md")
+        self.add_file("b.json", "sim", 700, rec="spec/decision-records/evidence-size/b.md")
+        self.commit("x")
+        extras = chk.validate_budget(str(self.root), "HEAD", chk.load_budget(
+            str(self.root), "HEAD"))
+        self.assertEqual(extras["sim"], 2200)
+
+    def test_sum_is_exact(self):
+        self.add_file("a.json", "sim", 500, rec="spec/decision-records/evidence-size/a.md")
+        self.add_file("b.json", "sim", 700, rec="spec/decision-records/evidence-size/b.md")
+        self.commit("x")
+        m = chk.measure(str(self.root), "HEAD")
+        self.write("sim/pad.txt", "p" * (6200 - m["sim_bytes"]))
+        self.commit("fill")
+        self.assertEqual(self.run_main()[0], 0)
+        self.write("sim/pad2.txt", "p")
+        self.commit("over")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1)
+        self.assertIn("total ceiling 6200 B", err)
+
+    def test_same_sim_record_and_bytes_pair_rejected(self):
+        self.add_file("a.json", "sim", 500)
+        self.add_file("b.json", "sim", 500)
+        self.commit("x")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1)
+        self.assertIn("b.json repeats the sim exception", err)
+
+    def test_duplicate_unit_path_across_file_and_budget_rejected(self):
+        self.add_exception(NEW, 5)
+        self.add_file("a.json", NEW, 5, rec="spec/decision-records/evidence-size/a.md")
+        self.commit("x")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1)
+        self.assertIn("a.json duplicates path", err)
+
+    def test_duplicate_unit_path_across_two_files_rejected(self):
+        self.add_file("a.json", NEW, 5, rec="spec/decision-records/evidence-size/a.md")
+        self.add_file("b.json", NEW, 6, rec="spec/decision-records/evidence-size/b.md")
+        self.commit("x")
+        self.assertEqual(self.run_main()[0], 1)
+
+    def test_bad_record_names_file(self):
+        self.add_file("a.json", "sim", 500, rec_items=[
+            {"kind": "evidence-size", "path": "sim", "additional_bytes": 501}])
+        self.commit("x")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1)
+        self.assertIn(f"{EXC_DIR}/a.json: ", err)
+
+    def test_malformed_file_rejected(self):
+        self.write(f"{EXC_DIR}/a.json", "{nope")
+        self.commit("x")
+        rc, _, err = self.run_main()
+        self.assertEqual((rc, "a.json is not valid JSON" in err), (1, True))
+
+    def test_record_path_escapes_rejected(self):
+        for rec in ("spec/decision-records/evidence-size/../x.md",
+                    "spec/decision-records/evidence-size/a/b.md",
+                    "spec/decision-records/other/a.md"):
+            with self.subTest(rec=rec):
+                self.setUp()
+                self.add_file("a.json", "sim", 5, rec=SUBREC)
+                self.write(f"{EXC_DIR}/a.json", json.dumps({
+                    "path": "sim", "additional_bytes": 5, "reason": "r",
+                    "decision_record": rec}))
+                self.commit("x")
+                rc, _, err = self.run_main()
+                self.assertEqual(rc, 1)
+                self.assertIn("decision_record must be", err)
+
+    def test_two_branches_adding_different_files_merge_cleanly(self):
+        self.commit("budget")
+        for br, n in (("one", 1), ("two", 2)):
+            self.git("checkout", "-q", "-b", br, "main")
+            self.add_file(f"{n}.json", "sim", 100 * n,
+                          rec=f"spec/decision-records/evidence-size/{n}.md")
+            self.commit(br)
+        self.git("checkout", "-q", "one")
+        self.git("merge", "-q", "--no-edit", "two")
+        extras = chk.validate_budget(str(self.root), "HEAD", chk.load_budget(
+            str(self.root), "HEAD"))
+        self.assertEqual(extras["sim"], 300)
+
+
 class RepoBudget(unittest.TestCase):
     def test_committed_budget_is_valid_and_matches_issue_baseline(self):
         b = json.loads((ROOT / "sim/evidence-size-budget.json").read_text())
