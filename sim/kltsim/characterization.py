@@ -92,6 +92,13 @@ ROW_CAVEATS = {
 }
 
 
+#: Every module that decides what the grader accepts or computes. Each is an
+#: indexed ``grader`` source, so changing any of them (including the shared
+#: sample-population acceptance policy in ``populations.py``) makes the report
+#: stale; ``verify_index`` also rejects an index that omits one of them.
+GRADER_SOURCES = ("sim/kltsim/grade.py", "sim/kltsim/populations.py")
+
+
 class CharacterizationError(RuntimeError):
     """Inputs are stale, tampered, inconsistent or unusable: no report is made."""
 
@@ -189,7 +196,8 @@ def build_index(grading: dict, rows_spec: dict, campaign_dir: Path,
     add("sim/dut.json", "dut-binding")
     add(grading["dut"]["netlist"], "dut-netlist")
     add(rows_spec["spec_source"], "ratified-spec")
-    add("sim/kltsim/grade.py", "grader")
+    for rel in GRADER_SOURCES:
+        add(rel, "grader")
     for rel in _retained_paths(grading):
         add(rel, "retained-record")
     sources.sort(key=lambda s: s["path"])
@@ -216,6 +224,11 @@ def verify_index(index: dict, root: Path | None = None) -> list[str]:
     problems = []
     if index.get("schema") != SCHEMA_INDEX:
         problems.append(f"index schema is {index.get('schema')!r}, expected {SCHEMA_INDEX}")
+    graders = {src.get("path") for src in index.get("sources") or []
+               if src.get("role") == "grader"}
+    for rel in GRADER_SOURCES:
+        if rel not in graders:
+            problems.append(f"{rel}: grader source is not indexed (stale index)")
     for src in index.get("sources") or []:
         path = root / src["path"]
         if not path.is_file():
@@ -584,8 +597,16 @@ def render_markdown(report: dict) -> str:
 # --------------------------------------------------------------------------- #
 
 
+#: Report directories are append-only, so a grader change (its sha256 is an
+#: indexed source) mints a NEW report directory rather than rewriting one.
+#: campaign id -> current report directory name; the superseded directory
+#: (``<campaign>-schematic``) stays as history.
+REPORT_DIR_NAMES = {"20261009-d73a9ac": "20261009-d73a9ac-schematic-r2"}
+
+
 def default_out_dir(campaign_id: str, root: Path | None = None) -> Path:
-    return (root or build_mod.REPO_ROOT) / "sim" / "characterization" / f"{campaign_id}-schematic"
+    name = REPORT_DIR_NAMES.get(campaign_id, f"{campaign_id}-schematic")
+    return (root or build_mod.REPO_ROOT) / "sim" / "characterization" / name
 
 
 def build_artifacts(campaign_dir: Path, out_dir: Path, root: Path | None = None,
