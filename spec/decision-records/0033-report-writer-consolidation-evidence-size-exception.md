@@ -44,7 +44,7 @@ of budget file = 3292 B. This record lives under `spec/` and adds nothing to
 ## Decision
 
 Raise the `sim/` total ceiling by exactly **3292 B**. The single `sim` entry
-carries the cumulative 28381771 + 3300 = **28385063 B** and cites this record.
+carries the cumulative 28381771 + 3292 = **28385063 B** and cites this record.
 The baseline, the 10 % allowance and all existing evidence are unchanged. No
 ratified spec bound is relaxed or changed.
 
