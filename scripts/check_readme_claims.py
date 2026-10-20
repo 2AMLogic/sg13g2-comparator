@@ -3,7 +3,7 @@
 
 The README "target-spec table" (rows from `| Parameter |` on) quotes
 hand-copied figures from the aggregated report
-`sim/characterization/20261009-d73a9ac-schematic/report.json` (the T1 item 8
+`sim/characterization/20261009-d73a9ac-schematic-r2/report.json` (the T1 item 8
 evidence, itself gated by `sim/characterize.sh report check`). This script
 keeps the prose from drifting from that evidence: for a small, explicit
 allowlist of claims (`CLAIMS` below -- the one reviewed pattern/field mapping
@@ -90,7 +90,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_README = REPO_ROOT / "README.md"
 DEFAULT_REPORT = (
-    REPO_ROOT / "sim" / "characterization" / "20261009-d73a9ac-schematic" / "report.json"
+    REPO_ROOT / "sim" / "characterization" / "20261009-d73a9ac-schematic-r2" / "report.json"
 )
 
 #: Column of the README table that carries the measured figures.

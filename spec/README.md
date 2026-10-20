@@ -46,6 +46,14 @@ rewritten once ratified — a later change supersedes it with a new,
 higher-numbered record rather than editing history in place, the same
 append-only convention [`sim/README.md`](../sim/README.md) uses for evidence.
 
+Evidence-size decision records (issue #278) are the exception to the
+sequential counter: they live in `spec/decision-records/evidence-size/` and are
+named `<issue-number>-<slug>.md` (issue numbers are unique, so two open PRs
+never take the same number). They back a per-PR
+`sim/evidence-size-exceptions/*.json` file; see the "Evidence size budget"
+section of [`sim/README.md`](../sim/README.md). Existing numbered records are
+unchanged.
+
 Ratification flows through the two-key mechanism (an EE key and a market
 key); scope-only spec DRs ratified with both keys need no per-PR operator
 statement. The two reviewer variants live in this repo, installed as

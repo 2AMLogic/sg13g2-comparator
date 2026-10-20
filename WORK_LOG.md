@@ -2,6 +2,28 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-20
+
+- **PR #249**: Validate Monte Carlo sample populations before compliance grading
+- **Issue #245** (closed): Validate actual Monte Carlo populations before compliance grading
+- **PR #281**: feat: read per-PR evidence-size exception files so open PRs stop conflicting
+- **Issue #278** (closed): Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
+
+### 2026-10-17
+
+- **PR #296**: refactor: share cm-band undo_transform between cmband and cmdecision
+- **Issue #295** (closed): Remove dead _spec_meas and dedupe cmband/cmdecision undo_transform
+- **PR #292**: refactor: remove three zero-caller helpers from sim harness and kltsim
+- **Issue #291** (closed): Remove four zero-caller helpers in sim/harness and sim/kltsim
+- **PR #290**: refactor: share fleet-cap retry and local smoke runner across klt sim drivers
+- **Issue #289** (closed): Consolidate duplicated klt-sim fleet-cap retry loop (4 copies) and local smoke runner (2 copies) across campaign drivers
+- **Issue #286** (closed): Remove scripts/diagnostics: delivered #188 guard-repro handoff, unreferenced
+
+### 2026-10-15
+
+- **PR #243**: Preserve derived campaign report pairs before regeneration (#237)
+- **Issue #237** (closed): Preserve derived campaign report pairs before regeneration
+
 ### 2026-10-12
 
 - **PR #273**: Reject mixed-geometry sizing finalists in candidate Target summaries

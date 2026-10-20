@@ -43,18 +43,18 @@ retained, failures included. Nothing existing is modified.
 Raise the `sim/` total ceiling by exactly **331408 B** (331406 B of new
 evidence plus 2 B of budget-file growth from the merged `reason` text). The checker rejects
 duplicate exception paths, so the single `sim` entry carries the cumulative
-28263838 (main after DR-0030 and DR-0024) + 331408 = **28595246 B** and cites
-this record. The 28263838 B covers DR-0005 to DR-0030 on merged `main`
-(including DR-0024's 17962 B) and carries over
+28381771 (main after DR-0032) + 331408 = **28713179 B** and cites
+this record. The 28381771 B covers DR-0005 to DR-0030 and DR-0032 on merged
+`main` (including DR-0024's 17962 B and DR-0032's 117933 B) and carries over
 unchanged; the only new allowance here is the 331408 B increment.
 
 ## Authorizations
 
 ```json
-{"kind": "evidence-size", "path": "sim", "additional_bytes": 28595246}
+{"kind": "evidence-size", "path": "sim", "additional_bytes": 28713179}
 ```
 
-(Cumulative: 28263838 B from DR-0005 to DR-0030 on merged `main` and 331408 B
+(Cumulative: 28381771 B from DR-0005 to DR-0032 on merged `main` and 331408 B
 authorized here.)
 
 ## Consequences

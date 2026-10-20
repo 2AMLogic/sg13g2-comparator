@@ -31,7 +31,6 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -61,20 +60,6 @@ def cmd_build(args) -> int:
         for r in requests:
             print(f"wrote {r.relative_to(build_mod.REPO_ROOT)}")
     return 0
-
-
-def _submit_with_retry(request: Path, out_dir: Path, tag: str, args, extra: dict) -> int:
-    code = 1
-    for attempt in range(1, args.retry_refused + 2):
-        code = kcli._submit(request, out_dir, tag, args, extra=extra)
-        if code == 0 or not kcli._last_attempt_refused_at_cap(out_dir):
-            break
-        if attempt <= args.retry_refused:
-            print(f"{tag}: fleet at its instance cap; retry {attempt}/{args.retry_refused} "
-                  f"in {args.retry_wait}s", file=sys.stderr)
-            import time
-            time.sleep(args.retry_wait)
-    return code
 
 
 def cmd_run(args) -> int:
@@ -109,7 +94,7 @@ def cmd_run(args) -> int:
         return 1
     rc = 0
     for tag, request in todo:
-        code = _submit_with_retry(request, out_dir, tag, args, _extra(cond, "campaign"))
+        code = kcli._submit_with_retry(request, out_dir, tag, args, _extra(cond, "campaign"))
         if code:
             print(f"{tag}: part failed with final code {code}", file=sys.stderr)
         rc = max(rc, code)
@@ -145,7 +130,7 @@ def cmd_control(args) -> int:
         temperature=args.temperature, n=args.n,
         note=(f"MISMATCH-OFF NEGATIVE CONTROL: plain `{args.process}` section, so every "
               "sample must report the same offset (sigma = 0). Not spec evidence."))
-    return _submit_with_retry(request, out_dir, tag, args, _extra(cond, "negative-control"))
+    return kcli._submit_with_retry(request, out_dir, tag, args, _extra(cond, "negative-control"))
 
 
 def cmd_repeat(args) -> int:
@@ -164,7 +149,7 @@ def cmd_repeat(args) -> int:
         note=("SAME-SEED REPEAT: the campaign's first grid point of this process (corner "
               "index 0 in both requests), full N, resubmitted as a separate batch job; every "
               "draw must reproduce the campaign's. Not additional spec evidence."))
-    return _submit_with_retry(request, out_dir, tag, args, _extra(cond, "same-seed-repeat"))
+    return kcli._submit_with_retry(request, out_dir, tag, args, _extra(cond, "same-seed-repeat"))
 
 
 def cmd_smoke(args) -> int:
@@ -176,24 +161,7 @@ def cmd_smoke(args) -> int:
     req["corners"]["supply_v"] = {k: [args.supply] for k in OFFSET_MC.supply_keys}
     req["corners"]["temperature_c"] = [args.temperature]
     req["monte_carlo"]["n"] = 1
-    request = work / "request.json"
-    request.write_text(json.dumps(req, indent=2) + "\n", encoding="utf-8")
-    cmd = [args.klt, "sim", str(request), "--backend", "local", "--format", "json",
-           "-o", str(work / "artifacts")]
-    print("$ " + " ".join(cmd), file=sys.stderr)
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    (work / "envelope.json").write_text(proc.stdout, encoding="utf-8")
-    print(f"klt sim exit {proc.returncode}; work dir {work}", file=sys.stderr)
-    if proc.stderr.strip():
-        print(proc.stderr.strip()[-2000:], file=sys.stderr)
-    try:
-        env = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return 1
-    for c in env.get("corners", []):
-        print(c["corner_id"], c["status"],
-              {m["name"]: m["value"] for m in c["measurements"]})
-    return 0
+    return kcli.run_local_smoke(req, work, args.klt)
 
 
 def cmd_compare(args) -> int:
