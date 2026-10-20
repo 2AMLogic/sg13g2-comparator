@@ -2,6 +2,11 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-20
+
+- **PR #281**: feat: read per-PR evidence-size exception files so open PRs stop conflicting
+- **Issue #278** (closed): Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
+
 ### 2026-10-17
 
 - **PR #296**: refactor: share cm-band undo_transform between cmband and cmdecision

@@ -11,7 +11,6 @@ Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a h
 - **#249**: Validate Monte Carlo sample populations before compliance grading
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 - **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
-- **#281**: feat: read per-PR evidence-size exception files so open PRs stop conflicting
 
 ## Very Important
 
@@ -23,7 +22,7 @@ _None._
 
 `loom:important`; taken before unlabelled work.
 
-- **#278**: Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
+_None._
 
 ## Ready
 
@@ -59,7 +58,6 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#249**: Validate Monte Carlo sample populations before compliance grading
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 - **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
-- **#281**: feat: read per-PR evidence-size exception files so open PRs stop conflicting
 - **#303**: refactor: publish comparison and ibsweep reports through artifacts.publish
 
 ## Proposed
@@ -80,11 +78,10 @@ Issues carrying `loom:curated`.
 - **#264**: Reject invalid local PVT grid inputs before simulation *(curated)*
 - **#266**: Validate CM decision timing dimensions and physical domains *(curated)*
 - **#274**: Mirror gf180's supplemental reverse-polarity ladder fragment (bench-structure parity, gf180-comparator#158/#166) *(curated)*
-- **#278**: Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-- **#297**: Remove scripts/diagnostics/: completed #188 guard-handoff repro, unrelated to the comparator *(hermit)*
+_None._
 
 ## Epics
 
@@ -94,14 +91,14 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 7 |
+| Operator merge-risk holds | 6 |
 | Very important | 0 |
-| Important | 1 |
+| Important | 0 |
 | Ready (`loom:issue`) | 6 |
 | In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 9 |
-| Curated | 15 |
-| Architect / Hermit proposals | 1 |
+| Approved PRs awaiting merge | 8 |
+| Curated | 14 |
+| Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
