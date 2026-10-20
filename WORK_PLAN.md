@@ -46,7 +46,7 @@ Issues currently being built (`loom:building`).
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#303**: refactor: publish comparison and ibsweep reports through artifacts.publish
+_None._
 
 ## Approved (Awaiting Merge)
 
@@ -60,6 +60,7 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 - **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
 - **#281**: feat: read per-PR evidence-size exception files so open PRs stop conflicting
+- **#303**: refactor: publish comparison and ibsweep reports through artifacts.publish
 
 ## Proposed
 
@@ -98,8 +99,8 @@ Issues carrying `loom:curated`.
 | Important | 1 |
 | Ready (`loom:issue`) | 6 |
 | In Progress (`loom:building`) | 1 |
-| PRs awaiting review | 1 |
-| Approved PRs awaiting merge | 8 |
+| PRs awaiting review | 0 |
+| Approved PRs awaiting merge | 9 |
 | Curated | 15 |
 | Architect / Hermit proposals | 1 |
 | Active epics | 1 |
