@@ -456,10 +456,10 @@ class SparseCones(unittest.TestCase):
 
 class ShDiagnostics(unittest.TestCase):
     def test_failure_text_includes_git_output(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(subprocess.CalledProcessError) as cm:
-                sh(["git", "clone", "-q", str(Path(tmp) / "nonexistent"),
-                    str(Path(tmp) / "dst")], tmp)
+        with tempfile.TemporaryDirectory() as tmp, \
+                self.assertRaises(subprocess.CalledProcessError) as cm:
+            sh(["git", "clone", "-q", str(Path(tmp) / "nonexistent"),
+                str(Path(tmp) / "dst")], tmp)
         self.assertIn("fatal:", str(cm.exception))
 
     def test_failure_output_is_truncated_to_tail(self):
