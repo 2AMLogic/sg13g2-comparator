@@ -19,12 +19,23 @@ Both initial allowances are 10% of the baseline ``sim/`` blob bytes rounded up
 to the next MiB (``--emit-budget`` derives and prints the whole file). A
 deliberate overage needs an exact entry in the budget's ``exceptions`` backed
 by a ``spec/decision-records/*.md`` record that names the same path and
-additional bytes in a fenced json block (see ``sim/README.md``). There is no
-bypass flag or environment override.
+additional bytes in a fenced json block (see ``sim/README.md``). The same
+object may instead live in its own file ``sim/evidence-size-exceptions/*.json``
+so two open PRs never edit the same line; repeated ``sim`` exceptions are
+summed (unit paths may appear once). Records for such entries may sit in
+``spec/decision-records/evidence-size/``. There is no bypass flag or
+environment override.
 
-Exit codes: 0 within budget, 1 budget violation or invalid budget/exception,
-2 usage / git / measurement error, including a partial (blob-filtered) clone,
-which is refused up front and never lazily fetched (never reported as success).
+A budget carrying a ``suspended`` block (``by``/``date``/``until``, issue #312)
+is *report-only*: ceiling breaches are printed with the measured size and
+growth but exit 0. The numbers stay in the file, so restoring enforcement is
+deleting that one block. Suspension never relaxes the budget's own validation
+or the measurement itself, and the separate append-only guard is unaffected.
+
+Exit codes: 0 within budget (or over it while suspended), 1 budget violation
+or invalid budget/exception, 2 usage / git / measurement error, including a
+partial (blob-filtered) clone, which is refused up front and never lazily
+fetched (never reported as success).
 
 Stdlib only; needs ``git`` on PATH.
 """
@@ -40,7 +51,9 @@ import subprocess
 import sys
 
 BUDGET_PATH = "sim/evidence-size-budget.json"
+EXC_DIR = "sim/evidence-size-exceptions/"
 RECORD_DIR = "spec/decision-records/"
+RECORD_SUBDIR = RECORD_DIR + "evidence-size/"
 PROTECTED_DIRS = ("records", "corners", "netlist-snapshots", "campaigns", "reports")
 MIB = 1024 * 1024
 POLICY_PERCENT = 10
@@ -53,6 +66,9 @@ BUDGET_KEYS = {
     "version", "baseline", "allowance", "total_ceiling_bytes",
     "new_unit_ceiling_bytes", "units", "exceptions",
 }
+SUSPENDED_KEY = "suspended"
+SUSPENDED_KEYS = {"by", "date", "until"}
+DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 
 
 class MeasureError(Exception):
@@ -258,9 +274,19 @@ def _record_authorizes(text: str, path: str, extra: int) -> bool:
 
 def validate_budget(repo: str, tree: str, b) -> dict:
     """Validate schema + derivation + exceptions. Returns {path: extra}."""
-    if not isinstance(b, dict) or set(b) != BUDGET_KEYS or b["version"] != 1:
+    if not isinstance(b, dict) or set(b) - {SUSPENDED_KEY} != BUDGET_KEYS \
+            or b["version"] != 1:
         raise BudgetError(f"{BUDGET_PATH}: keys must be exactly {sorted(BUDGET_KEYS)}"
-                          " with version 1")
+                          f" (plus optional {SUSPENDED_KEY!r}) with version 1")
+    if SUSPENDED_KEY in b:
+        sus = b[SUSPENDED_KEY]
+        if not (isinstance(sus, dict) and set(sus) == SUSPENDED_KEYS
+                and all(isinstance(sus[k], str) and sus[k].strip()
+                        for k in SUSPENDED_KEYS)
+                and DATE_RE.match(sus["date"])):
+            raise BudgetError(
+                f"{BUDGET_PATH}: {SUSPENDED_KEY!r} must be an object with exactly "
+                f"{sorted(SUSPENDED_KEYS)} (nonempty strings, date YYYY-MM-DD)")
     base, al, units = b["baseline"], b["allowance"], b["units"]
     if not (isinstance(base, dict) and isinstance(base.get("commit"), str)
             and SHA_RE.match(base["commit"])
@@ -283,9 +309,11 @@ def validate_budget(repo: str, tree: str, b) -> dict:
         raise BudgetError("units must map exact evidence-unit paths to byte counts")
     if not isinstance(b["exceptions"], list):
         raise BudgetError("exceptions must be a list")
+    entries = [(f"exceptions[{i}]", e) for i, e in enumerate(b["exceptions"])]
+    entries += _load_exception_files(repo, tree)
     extras: dict[str, int] = {}
-    for i, e in enumerate(b["exceptions"]):
-        w = f"exceptions[{i}]"
+    seen_sim: set[tuple[str, int]] = set()
+    for w, e in entries:
         if not isinstance(e, dict) or set(e) != EXC_KEYS:
             raise BudgetError(f"{w}: keys must be exactly {sorted(EXC_KEYS)}")
         p, extra = e["path"], e["additional_bytes"]
@@ -293,7 +321,7 @@ def validate_budget(repo: str, tree: str, b) -> dict:
             raise BudgetError(
                 f"{w}.path {p!r} must be exactly 'sim' or one evidence unit "
                 "sim/<bench>/<protected-dir>/<name> (no wildcards)")
-        if p in extras:
+        if p in extras and p != TOTAL_KEY:
             raise BudgetError(f"{w} duplicates path {p!r}")
         if not _is_int(extra) or extra <= 0:
             raise BudgetError(f"{w}.additional_bytes must be a positive integer")
@@ -302,9 +330,18 @@ def validate_budget(repo: str, tree: str, b) -> dict:
         rec = e["decision_record"]
         if not (isinstance(rec, str) and rec.startswith(RECORD_DIR)
                 and rec.endswith(".md") and _canonical(rec)
-                and "/" not in rec[len(RECORD_DIR):]):
+                and ("/" not in rec[len(RECORD_DIR):]
+                     or ("/" not in rec[len(RECORD_SUBDIR):]
+                         and rec.startswith(RECORD_SUBDIR)))):
             raise BudgetError(
-                f"{w}.decision_record must be a spec/decision-records/*.md path")
+                f"{w}.decision_record must be a spec/decision-records/*.md or "
+                "spec/decision-records/evidence-size/*.md path")
+        if p == TOTAL_KEY:
+            if (rec, extra) in seen_sim:
+                raise BudgetError(
+                    f"{w} repeats the sim exception ({rec!r}, {extra} B); each "
+                    "sim exception needs its own decision record")
+            seen_sim.add((rec, extra))
         text = _blob(repo, tree, rec)
         if text is None:
             raise BudgetError(f"{w}: decision record {rec!r} is not a tracked "
@@ -313,13 +350,39 @@ def validate_budget(repo: str, tree: str, b) -> dict:
             raise BudgetError(
                 f"{w}: {rec!r} has no fenced json block with "
                 f'{{"kind": "{KIND}", "path": "{p}", "additional_bytes": {extra}}}')
-        extras[p] = extra
+        extras[p] = extras.get(p, 0) + extra
     return extras
 
 
+def _load_exception_files(repo: str, tree: str) -> list:
+    """Per-file exceptions: direct ``*.json`` blobs of ``EXC_DIR`` (sorted)."""
+    out = git(repo, "ls-tree", "-z", tree, "--", EXC_DIR)
+    found = []
+    for rec in out.split(b"\0"):
+        if not rec:
+            continue
+        meta, _, name = rec.partition(b"\t")
+        typ = meta.decode("utf-8", "replace").split(" ")[1]
+        path = name.decode("utf-8", "surrogateescape")
+        if typ == "blob" and path.endswith(".json") \
+                and posixpath.dirname(path) + "/" == EXC_DIR:
+            found.append(path)
+    entries = []
+    for path in sorted(found):
+        raw = _blob(repo, tree, path)
+        if raw is None:
+            raise BudgetError(f"{path}: not a regular tracked file (symlink?)")
+        try:
+            entries.append((path, json.loads(raw.decode("utf-8"))))
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise BudgetError(f"{path} is not valid JSON: {exc}") from exc
+    return entries
+
+
 def evaluate(m: dict, b: dict, extras: dict) -> list[str]:
-    route = ("route: add an exception to sim/evidence-size-budget.json backed by "
-             "a spec/decision-records/*.md fenced json block "
+    route = ("route: add an exception file sim/evidence-size-exceptions/<n>.json "
+             "(or an entry in sim/evidence-size-budget.json) backed by "
+             "a spec/decision-records/ fenced json block "
              '{"kind": "evidence-size", "path": ..., "additional_bytes": ...}; '
              "see sim/README.md (\"Evidence size budget\")")
     v = []
@@ -390,8 +453,19 @@ def main(argv=None) -> int:
         print(f"FAIL (budget): {exc}", file=sys.stderr)
         return 1
     violations = evaluate(m, b, extras)
+    sus = b.get(SUSPENDED_KEY)
     if not args.quiet or violations:
         print(report(m, b, extras))
+    if sus:
+        print(f"SUSPENDED (report-only): size ceiling suspended by {sus['by']} on "
+              f"{sus['date']} until {sus['until']}; measured sim/ {m['sim_bytes']} B "
+              f"({m['sim_bytes'] - b['baseline']['sim_bytes']:+d} B vs baseline "
+              f"{b['baseline']['sim_bytes']} B)")
+        for line in violations:
+            print(f"  would-fail (not enforced): {line}")
+        print(f"OK (report-only): {len(violations)} ceiling breach(es) in "
+              f"{args.tree} not enforced while suspended")
+        return 0
     if violations:
         print(f"FAIL: {len(violations)} evidence size violation(s) in {args.tree}:",
               file=sys.stderr)
