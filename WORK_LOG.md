@@ -2,6 +2,11 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-21
+
+- **PR #313**: ci: make sim evidence-size check report-only while suspended
+- **Issue #312** (closed): Suspend the sim/ evidence-size ceiling (report-only) until the fleet S3 evidence store lands
+
 ### 2026-10-20
 
 - **PR #249**: Validate Monte Carlo sample populations before compliance grading
