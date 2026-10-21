@@ -110,10 +110,25 @@ def runs_of(jbody):
     return out
 
 
+class ShError(subprocess.CalledProcessError):
+    """CalledProcessError whose text carries the captured output.
+
+    unittest tracebacks print only str(exc); the stock message is just
+    "exit status N", which hides git's own `fatal:` line in CI logs.
+    """
+
+    def __str__(self):
+        return (f"{super().__str__()}\n--- output (last 3000 chars) ---\n"
+                f"{(self.output or '')[-3000:]}")
+
+
 def sh(args, cwd, env=None, check=True):
-    return subprocess.run(args, cwd=cwd, env=env or ENV, check=check,
-                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          text=True)
+    r = subprocess.run(args, cwd=cwd, env=env or ENV, check=False,
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                       text=True)
+    if check and r.returncode != 0:
+        raise ShError(r.returncode, args, output=r.stdout)
+    return r
 
 
 def klt_matches_pin():
@@ -437,6 +452,27 @@ class SparseCones(unittest.TestCase):
             self.assertNotEqual(r2.returncode, 0, r2.stdout[-3000:])
             self.assertIn("F821", r2.stdout)
             self.assertIn("sim/device-mismatch-confirm/summarize_dvgs.py", r2.stdout)
+
+
+class ShDiagnostics(unittest.TestCase):
+    def test_failure_text_includes_git_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(subprocess.CalledProcessError) as cm:
+                sh(["git", "clone", "-q", str(Path(tmp) / "nonexistent"),
+                    str(Path(tmp) / "dst")], tmp)
+        self.assertIn("fatal:", str(cm.exception))
+
+    def test_failure_output_is_truncated_to_tail(self):
+        script = "import sys; print('A' * 4 + 'x' * 5000 + 'Z' * 4); sys.exit(3)"
+        with self.assertRaises(subprocess.CalledProcessError) as cm:
+            sh(["python3", "-c", script], ROOT)
+        self.assertEqual(cm.exception.returncode, 3)
+        text = str(cm.exception)
+        self.assertIn("ZZZZ", text)
+        self.assertNotIn("AAAA", text)
+
+    def test_success_does_not_raise(self):
+        self.assertEqual(sh(["true"], ROOT).returncode, 0)
 
 
 if __name__ == "__main__":
