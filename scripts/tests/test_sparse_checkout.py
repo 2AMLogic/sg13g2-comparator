@@ -194,7 +194,9 @@ class SparseCones(unittest.TestCase):
                 "-u", UPLOAD_PACK, f"file://{ROOT}", str(dst)], tmp)
             sh(["git", "config", "remote.origin.uploadpack", UPLOAD_PACK], dst)
         else:
-            sh(["git", "clone", "-q", "--no-checkout", "--local",
+            # --no-hardlinks: tmp and ROOT may be on different filesystems (CI
+            # run 39630563943: "failed to create link ... Invalid cross-device link").
+            sh(["git", "clone", "-q", "--no-checkout", "--local", "--no-hardlinks",
                 str(ROOT), str(dst)], tmp)
         if checkout["patterns"]:
             sh(["git", "config", "core.sparseCheckout", "true"], dst)
