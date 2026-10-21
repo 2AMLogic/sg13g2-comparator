@@ -536,6 +536,14 @@ below; this grants none. No Python: say local validation is unavailable and
 cite the passing `append-only-evidence` CI for that commit (skipped is not
 success).
 
+**Suspended (report-only).** By operator ruling the ceiling is suspended from
+2026-10-20 until the fleet S3 artifact store (2AMLogic/2am#5553) lands: the
+budget's `suspended` block makes the check print the measured size and each
+breach as `would-fail (not enforced)` and exit 0. Measurement errors (exit 2),
+an invalid budget (exit 1) and the append-only guard still fail. Record:
+`spec/decision-records/evidence-size/312-suspend-evidence-size-ceiling.md`;
+restore by deleting the `suspended` block.
+
 **Accounting.** Bytes are Git blob sizes from `git ls-tree -rl <tree>` of the
 named commit/tree -- not working-tree or pack sizes. The checker reports
 repo and `sim/` totals plus per **evidence unit**: the entry

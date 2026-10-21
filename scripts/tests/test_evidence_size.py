@@ -216,6 +216,59 @@ class Measuring(Base):
                 self.assertIn("FAIL (budget)", err)
 
 
+class Suspended(Base):
+    """Issue #312: a `suspended` block makes the size check report-only."""
+
+    def suspend(self):
+        self.budget["suspended"] = {
+            "by": "operator", "date": "2026-10-20", "until": "2AMLogic/2am#5553"}
+        self.write_budget()
+
+    def test_breach_is_reported_but_exits_0_while_suspended(self):
+        self.suspend()
+        self.write(NEW + "/big.bin", "n" * 5000)  # over every ceiling
+        self.commit("big")
+        rc, out, err = self.run_main()
+        self.assertEqual(rc, 0, err)
+        self.assertIn("SUSPENDED (report-only)", out)
+        self.assertIn("2AMLogic/2am#5553", out)
+        self.assertIn(f"would-fail (not enforced): {NEW}: 5000 B measured", out)
+        self.assertIn("sim/ ", out)  # measured size line still printed
+        self.assertEqual(err, "")
+
+    def test_same_breach_fails_without_suspension(self):
+        self.write(NEW + "/big.bin", "n" * 5000)
+        self.commit("big")
+        self.assertEqual(self.run_main()[0], 1)
+
+    def test_suspended_still_exits_2_on_measurement_error(self):
+        self.suspend()
+        self.commit("budget")
+        self.assertEqual(self.run_main("no-such-rev")[0], 2)
+
+    def test_suspended_still_validates_budget(self):
+        self.suspend()
+        self.budget["allowance"]["percent"] = 20
+        self.write_budget()
+        self.commit("bad")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1, err)
+        self.assertIn("FAIL (budget)", err)
+
+    def test_malformed_suspended_block_rejected(self):
+        for bad in ({"by": "operator"}, "yes", {"by": "", "date": "2026-10-20", "until": "x"},
+                    {"by": "o", "date": "today", "until": "x"},
+                    {"by": "o", "date": "2026-10-20", "until": "x", "more": 1}):
+            with self.subTest(bad=bad):
+                self.setUp()
+                self.budget["suspended"] = bad
+                self.write_budget()
+                self.commit("bad")
+                rc, _, err = self.run_main()
+                self.assertEqual(rc, 1, err)
+                self.assertIn("FAIL (budget)", err)
+
+
 class PartialClone(Base):
     """A blob-filtered partial clone must fail closed fast, never lazy-fetch.
 
@@ -516,6 +569,13 @@ class RepoBudget(unittest.TestCase):
         self.assertEqual(set(extras), {"sim", "sim/klt-corner-verification/campaigns/20261010-n200"})
         self.assertTrue(all(v > 0 for v in extras.values()))
         self.assertEqual(sum(1 for _ in b["units"]), len(b["units"]))
+
+    def test_committed_budget_records_operator_suspension(self):
+        b = json.loads((ROOT / "sim/evidence-size-budget.json").read_text())
+        self.assertEqual(b["suspended"], {
+            "by": "operator", "date": "2026-10-20", "until": "2AMLogic/2am#5553"})
+        self.assertTrue((ROOT / "spec/decision-records/evidence-size/"
+                         "312-suspend-evidence-size-ceiling.md").is_file())
 
     def test_head_within_committed_budget(self):
         rc = chk.main(["--repo", str(ROOT), "--tree", "HEAD", "--quiet"])
