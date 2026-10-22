@@ -576,7 +576,10 @@ def render_record(
         f"`{context['dut_netlist']}` (sha256 `{context['dut_netlist_sha256'][:16]}`)",
         f"- **Testbench**: `sim/{tb.experiment}/testbench/{tb.netlist.name}` "
         f"(sha256 `{tb.netlist_sha256[:16]}`), manifest sha256 "
-        f"`{tb.manifest_sha256[:16]}`",
+        f"`{tb.manifest_sha256[:16]}`"
+        + (f"; supplemental reverse-ladder fragment "
+           f"`{tb.reverse_ladder_path.name}` (sha256 `{tb.reverse_ladder_sha256[:16]}`)"
+           if getattr(tb, "reverse_ladder", None) else ""),
         f"- **Commit**: `{context['commit']}`"
         + ("  — **taken against a DIRTY working tree**; not citable as a "
            "clean-tree result" if context.get("dirty") else "")
@@ -770,6 +773,12 @@ def write_record(
         + dut_netlist.read_text()
         + "\n* ---------------- TESTBENCH FRAGMENT ----------------\n"
         + tb.netlist.read_text()
+        + (
+            "\n* ---------------- SUPPLEMENTAL REVERSE-LADDER FRAGMENT ----------------\n"
+            + tb.reverse_ladder_path.read_text()
+            if getattr(tb, "reverse_ladder", None)
+            else ""
+        )
     )
     json_text = (
         json.dumps(
