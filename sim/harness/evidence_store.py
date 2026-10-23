@@ -201,8 +201,12 @@ def check_klt_uri_scheme(exe: str, *, run=subprocess.run) -> None:
                      "--format", "json"], capture_output=True, text=True,
                     timeout=PROBE_TIMEOUT_S, check=False, cwd=tmp)
             rc, stderr = p.returncode, p.stderr or ""
-        except (OSError, subprocess.TimeoutExpired):
-            rc, stderr = None, ""
+        except subprocess.TimeoutExpired:
+            raise StoreError(f"`klt` uri-scheme probe timed out after {PROBE_TIMEOUT_S}s; "
+                             "cannot confirm klt writes artifact:<key> uris") from None
+        except OSError as exc:
+            raise StoreError(f"`klt` uri-scheme probe failed to start ({exc}); "
+                             "cannot confirm klt writes artifact:<key> uris") from None
     try:
         err = json.loads(stderr)["error"]
         problems = err.get("problems")

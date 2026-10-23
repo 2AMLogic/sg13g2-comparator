@@ -263,12 +263,18 @@ class KltSchemeProbe(unittest.TestCase):
             "wrong exit code": answer(2, {"code": "invalid_manifest",
                                           "problems": ["is not artifact:<key>"]}),
             "not json": answer(1, stderr="Traceback ..."),
-            "timeout": raises(subprocess.TimeoutExpired("klt", 30)),
-            "cannot exec": raises(OSError("no such file")),
         }
         for label, run in cases.items():
             with self.subTest(label), \
                     self.assertRaisesRegex(es.StoreError, "older than klayout-tools"):
+                self.check(run)
+        # A probe that never answered says so rather than blaming klt's age.
+        no_answer = {
+            "timeout": (raises(subprocess.TimeoutExpired("klt", 30)), "probe timed out"),
+            "cannot exec": (raises(OSError("no such file")), "probe failed to start"),
+        }
+        for label, (run, message) in no_answer.items():
+            with self.subTest(label), self.assertRaisesRegex(es.StoreError, message):
                 self.check(run)
 
     def test_min_commit_is_the_artifact_uri_revision(self):
