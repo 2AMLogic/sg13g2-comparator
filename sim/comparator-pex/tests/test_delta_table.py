@@ -21,6 +21,20 @@ def row(spec, corner, s, x, status="pass"):
             "extracted_value": x, "delta_pct": None, "status": status}
 
 
+def states(ch, pts, first=0.0, end=1.0, bench="regeneration", var="pvt"):
+    """Decision-state rows for channel ch (a/c) at the given (proc, volts, temp) points."""
+    return [r for p, v, t in pts for r in (row(f"{bench}.{var}.d{ch}_first", f"{p}/{v}V/{t}C", 0.0, first),
+                                           row(f"{bench}.{var}.d{ch}_end", f"{p}/{v}V/{t}C", 1.0, end))]
+
+
+def grid_pts():
+    return [(p, v, t) for p in sorted(mdt.GRID[0]) for v in ("1.08", "1.2", "1.32") for t in (-40, 27, 125)]
+
+
+def td_rows(key="td_a", ex=1e-9, pts=None):
+    return [row(f"regeneration.pvt.{key}", f"{p}/{v}V/{t}C", 7e-10, ex) for p, v, t in (pts or grid_pts())]
+
+
 def by(out):
     return {(r["spec_row"], r["corner_id"]): r for r in out["rows"]}
 
@@ -102,7 +116,8 @@ class Synthetic(unittest.TestCase):
 
     def test_full_grid_met_only_when_complete(self):
         grid = [f"{p}/{v:.3f}V/{t}C" for p in mdt.GRID[0] for v in (1.08, 1.2, 1.32) for t in (-40, 27, 125)]
-        rows = [row("regeneration.pvt.td_a", c, 7e-10, 1e-9) for c in grid]
+        rows = [row("regeneration.pvt.td_a", c, 7e-10, 1e-9) for c in grid] + states("a", [
+            (p, f"{v:.3f}", t) for p in mdt.GRID[0] for v in (1.08, 1.2, 1.32) for t in (-40, 27, 125)])
         self.assertTrue(self.render(rows)[0]["delay_compliance_extracted"]["regeneration.td_a"]
                         .startswith("met at every"))
         rows[0]["extracted_value"] = None
@@ -124,7 +139,7 @@ class Synthetic(unittest.TestCase):
     def test_distinct_spellings_cover_full_grid(self):
         # every point written with a different decimal spelling still counts once each
         rows = [row("regeneration.pvt.td_a", f"{p}/{v}{'0' * (i % 4)}V/{t}C", 7e-10, 1e-9)
-                for i, (p, v, t) in enumerate(self.grid())]
+                for i, (p, v, t) in enumerate(self.grid())] + states("a", self.grid())
         out, _ = self.render(rows)
         self.assertTrue(out["delay_compliance_extracted"]["regeneration.td_a"].startswith("met at every"))
         self.assertEqual(out["pvt_grid_points"], 45)
@@ -179,6 +194,106 @@ class Synthetic(unittest.TestCase):
         for env in bad:
             with self.subTest(env=env), self.assertRaises(ValueError):
                 mdt.render(env, "fixture")
+
+
+class DecisionValidity(unittest.TestCase):
+    """Issue #240: in-bound delays only establish compliance with matching valid decision states."""
+
+    def summ(self, rows, key="regeneration.td_a"):
+        out, md = mdt.render({"status": "error", "delta": rows}, "fixture")
+        return out, out["delay_compliance_extracted"][key], md
+
+    def test_wrong_polarity_complete_grid_not_met(self):
+        out, s, _ = self.summ(td_rows() + states("a", grid_pts(), first=1.0, end=0.0))
+        self.assertTrue(s.startswith("not established: 45/45 grid points within"), s)
+        self.assertNotIn("met at every", s)
+        self.assertIn("wrong 90", s)
+        self.assertIn("invalid at 45 point(s)", s)
+        v = by(out)["regeneration.pvt.td_a", "tt/1.08V/-40C"]["interpretation"]
+        self.assertEqual(v["verdict"], "within")  # numeric comparison stays visible
+        self.assertTrue(v["decision_validity"].startswith("decision state not valid"))
+        self.assertEqual(len(out["delay_decision_validity"]["regeneration.td_a"]["invalid"]), 45)
+
+    def test_correct_states_met_for_a_and_c(self):
+        for ch in "ac":
+            rows = td_rows(f"td_{ch}") + states(ch, grid_pts())
+            _, s, _ = self.summ(rows, f"regeneration.td_{ch}")
+            self.assertTrue(s.startswith("met at every PVT grid point"), s)
+
+    def test_td_c_wrong_and_channels_not_mixed(self):
+        rows = td_rows("td_c") + states("c", grid_pts(), first=1.0, end=0.0)
+        self.assertTrue(self.summ(rows, "regeneration.td_c")[1].startswith("not established"))
+        # correct a-channel states do not validate td_c
+        rows = td_rows("td_c") + states("a", grid_pts())
+        s = self.summ(rows, "regeneration.td_c")[1]
+        self.assertTrue(s.startswith("not established") and "missing 90" in s, s)
+
+    def test_missing_and_indeterminate_states(self):
+        pts = grid_pts()
+        rows = td_rows() + states("a", pts[1:]) + states("a", pts[:1], first=0.5, end=None)
+        out, s, _ = self.summ(rows)
+        self.assertTrue(s.startswith("not established: 45/45"), s)
+        self.assertIn("indeterminate 1", s)
+        self.assertIn("missing 1", s)
+        inv = out["delay_decision_validity"]["regeneration.td_a"]["invalid"]
+        self.assertEqual(inv[0]["corner"], "%s/%s/%d" % (pts[0][0], mdt.canonical("%s/%sV/%dC" % pts[0])[1], pts[0][2]))
+        self.assertEqual(len(inv), 1)
+        # an absent state row is reported with the measurement name
+        rows = td_rows() + states("a", pts)[2:]
+        out, s, _ = self.summ(rows)
+        self.assertIn("missing 2", s)
+        self.assertIn("regeneration.da_first missing (no row)",
+                      out["delay_decision_validity"]["regeneration.td_a"]["invalid"][0]["reasons"])
+
+    def test_order_and_spelling_do_not_matter(self):
+        pts = grid_pts()
+        rows = [row("regeneration.pvt.td_a", f"{p}/{v}{'0' * (i % 3)}V/{t}C", 7e-10, 1e-9)
+                for i, (p, v, t) in enumerate(pts)]
+        st = states("a", [(p, v + "0" * ((i + 1) % 3), t) for i, (p, v, t) in enumerate(pts)])
+        st = [r for r in st if r["spec_row"].endswith("end")] + [r for r in st if r["spec_row"].endswith("first")]
+        allr = st[::-1] + rows[::-1]
+        self.assertTrue(self.summ(allr)[1].startswith("met at every"))
+
+    def test_canonical_duplicate_state_still_rejected(self):
+        rows = td_rows() + states("a", grid_pts()) + states("a", [("tt", "1.200", 27)], var="nominal")
+        with self.assertRaisesRegex(ValueError, "repeats the physical point"):
+            self.summ(rows)
+
+    def test_kickback_states_do_not_validate(self):
+        rows = td_rows() + states("a", grid_pts(), bench="kickback")
+        s = self.summ(rows)[1]
+        self.assertTrue(s.startswith("not established") and "missing 90" in s, s)
+
+    def test_mixed_fixture(self):
+        pts = grid_pts()
+        rows = td_rows(pts=pts[:20]) + td_rows(ex=3e-9, pts=pts[20:21]) + td_rows(pts=pts[21:])
+        rows += states("a", pts[:10]) + states("a", pts[10:20], first=1.0, end=0.0) + states("a", pts[20:])
+        out, s, md = self.summ(rows)
+        self.assertTrue(s.startswith("NOT MET: extracted exceeds at 1 corner(s)"), s)
+        self.assertIn("decision states valid at 35/45", s)
+        r = by(out)
+        self.assertEqual(r["regeneration.pvt.td_a", "ss/1.32V/125C"]["interpretation"]["verdict"], "within")
+        self.assertEqual(r["regeneration.pvt.td_a", "ss/1.32V/125C"]["extracted_value"], 1e-9)
+        self.assertEqual(r["regeneration.pvt.td_a", "ff/1.08V/-40C"]["interpretation"]["verdict"], "within")
+        self.assertIn("decision state not valid", md)
+        # exceeding point with wrong states still reports the over-limit value
+        rows = td_rows(ex=3e-9, pts=pts[:1]) + td_rows(pts=pts[1:]) + states("a", pts, first=1.0, end=0.0)
+        out, s, _ = self.summ(rows)
+        self.assertTrue(s.startswith("NOT MET"))
+
+    def test_mapping_matches_staged_requests(self):
+        for (bench, td), sts in mdt.TIMING_STATES.items():
+            self.assertIn((bench, td), mdt.DELAY)
+            ch = td[-1]
+            self.assertEqual({k[1] for k in sts}, {f"d{ch}_first", f"d{ch}_end"})
+            for var in ("nominal", "pvt"):
+                req = json.loads((PEX / f"requests/{bench}.{var}.json").read_text())
+                spice = {m["name"]: m["spice"] for m in req["measurements"]}
+                self.assertIn(f"targ v(d{ch}n)", spice[td])
+                for b, k in sts:
+                    self.assertIn(f"v(d{ch}n)", spice[k])
+                    self.assertEqual(b, bench)
+        self.assertEqual(set(mdt.TIMING_STATES), set(mdt.DELAY))
 
 
 class Cli(unittest.TestCase):

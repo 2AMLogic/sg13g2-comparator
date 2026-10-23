@@ -120,8 +120,10 @@ class CommittedArtifactTests(unittest.TestCase):
         self.assertEqual([b["id"] for b in index["spec_bounds"]], [r["id"] for r in ROWS["rows"]])
         paths = {s["path"] for s in index["sources"]}
         for need in ("sim/klt-corner-verification/rows.json", "sim/dut.json", "design/comparator.spice",
-                     "sim/kltsim/grade.py", ROWS["spec_source"]):
+                     "sim/kltsim/grade.py", "sim/kltsim/populations.py", ROWS["spec_source"]):
             self.assertIn(need, paths)
+        graders = {s["path"] for s in index["sources"] if s["role"] == "grader"}
+        self.assertEqual(graders, set(ch.GRADER_SOURCES))
         self.assertEqual(ch.verify_index(index), [])
 
     def test_no_campaign_file_is_written(self):
@@ -291,6 +293,29 @@ class FreshnessTests(unittest.TestCase):
             self.assertTrue(any(rel in p and "stale or tampered" in p for p in problems), (rel, problems))
             path.write_bytes(original)
         self.assertEqual(self._check(), [])
+
+    def test_changed_population_validator_is_rejected(self):
+        # populations.py carries the sample-acceptance policy the grader applies;
+        # a validator-only edit that leaves the graded numbers unchanged must
+        # still make the report stale (issue #245 review).
+        rel = "sim/kltsim/populations.py"
+        path = self.root / rel
+        original = path.read_bytes()
+        path.write_bytes(original.replace(b"if len(indices) != expected_n:",
+                                          b"if False and len(indices) != expected_n:", 1))
+        self.assertNotEqual(path.read_bytes(), original)
+        problems = self._check()
+        self.assertTrue(any(rel in p and "stale or tampered" in p for p in problems), problems)
+        path.write_bytes(original)
+        self.assertEqual(self._check(), [])
+
+    def test_index_omitting_a_grader_source_is_rejected(self):
+        index = json.loads((self.out / ch.INDEX_NAME).read_text(encoding="utf-8"))
+        index["sources"] = [s for s in index["sources"]
+                            if s["path"] != "sim/kltsim/populations.py"]
+        problems = ch.verify_index(index, self.root)
+        self.assertTrue(any("sim/kltsim/populations.py" in p and "not indexed" in p
+                            for p in problems), problems)
 
     def test_missing_indexed_source_is_rejected(self):
         (self.campaign / "attempts.jsonl").unlink()

@@ -335,10 +335,6 @@ def write_inputs(kind: str, c: Condition, out_dir: Path, *, osdi_dir: str = buil
 # ambiguous even when the copies agree: every copy is rejected and none is
 # selected, so the result cannot depend on the order of the corners.
 
-def load_envelope(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 TOL_V = 1e-6
 TOL_T = 1e-3
 
