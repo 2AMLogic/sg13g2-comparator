@@ -18,7 +18,6 @@ sim/comparator-clock-supply-sensitivity/README.md. Run from the repository root.
 from __future__ import annotations
 
 import argparse
-import json
 import shutil
 import sys
 import tempfile
@@ -102,7 +101,7 @@ def cmd_compare(args) -> int:
         md = kcli._cite_note(md, "series", series)
     rc = artifacts_mod.publish(
         "compare",
-        [(report_dir / "comparison.json", (json.dumps(result, indent=2) + "\n").encode("utf-8")),
+        [(report_dir / "comparison.json", rep.dumps_report(result).encode("utf-8")),
          (report_dir / "comparison.md", md.encode("utf-8"))],
         check_only=args.check, namespace_hint=kcli._NAMESPACE_HINT.replace("--campaign/--series", "--series"),
         require_dir=report_dir)

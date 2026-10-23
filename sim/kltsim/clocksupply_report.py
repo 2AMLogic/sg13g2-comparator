@@ -38,7 +38,8 @@ def _reference_checks(base_regen: dict, base_off: dict, ref_dir: Path) -> dict:
         diffs = []
         for k, v in base_regen.items():
             r = ref.get(k)
-            if r and v["td50_ns"] is not None and r["td50_ns"] is not None:
+            if (r and not r["problem"] and not v["problem"]
+                    and v["td50_ns"] is not None and r["td50_ns"] is not None):
                 diffs.append((abs(v["td50_ns"] - r["td50_ns"]),
                               abs((v["tau_ps"] or 0) - (r["tau_ps"] or 0)),
                               abs((v["td01_ns"] or 0) - (r["td01_ns"] or 0))))
@@ -53,7 +54,7 @@ def _reference_checks(base_regen: dict, base_off: dict, ref_dir: Path) -> dict:
             for k, v in cs.offset_samples(_load(q)[0]).items():
                 ref_samples[k] = v
     if ref_samples:
-        compared = identical = seed_mismatch = 0
+        compared = identical = seed_mismatch = seed_absent = 0
         max_diff = 0.0
         for k, mine in base_off.items():
             theirs = ref_samples.get(k)
@@ -61,7 +62,11 @@ def _reference_checks(base_regen: dict, base_off: dict, ref_dir: Path) -> dict:
                 continue
             for i, s in mine.items():
                 t = theirs.get(i)
-                if t is None or s["vos_mv"] is None or t["vos_mv"] is None:
+                if (t is None or s["problem"] or t["problem"]
+                        or s["vos_mv"] is None or t["vos_mv"] is None):
+                    continue
+                if s["seed"] is None or t["seed"] is None:
+                    seed_absent += 1
                     continue
                 if s["seed"] != t["seed"]:
                     seed_mismatch += 1
@@ -71,7 +76,8 @@ def _reference_checks(base_regen: dict, base_off: dict, ref_dir: Path) -> dict:
                 max_diff = max(max_diff, d)
                 identical += d == 0.0
         out["offset"] = {"samples_compared": compared, "identical": identical,
-                         "seed_mismatches_not_compared": seed_mismatch, "max_abs_diff_mv": max_diff}
+                         "seed_mismatches_not_compared": seed_mismatch,
+                         "seed_absent_not_compared": seed_absent, "max_abs_diff_mv": max_diff}
     return out
 
 
@@ -111,12 +117,14 @@ def compare_series(series_dir: Path) -> dict:
         pair = cs.offset_pair(smp, base_o)
         pair["per_point"] = {grade_mod.key_label(k): v for k, v in sorted(pair["per_point"].items(), key=str)}
         pair["clipped"] = sum(1 for pt in smp.values() for s in pt.values() if s["clipped"])
+        pair["coverage"] = cs.offset_coverage(smp)
         pair["untrusted"] = sum(1 for pt in smp.values() for s in pt.values() if s["problem"])
         result["offset"][name] = pair
     if base_o is not None:
         b = cs.offset_pair(base_o, base_o)
         result["offset"][cs.BASELINE] = {
             "n_pairs": b["n_pairs"], "pooled_sigma_mv": b["pooled_sigma_mv"],
+            "coverage": cs.offset_coverage(base_o),
             "clipped": sum(1 for pt in base_o.values() for s in pt.values() if s["clipped"]),
             "untrusted": sum(1 for pt in base_o.values() for s in pt.values() if s["problem"]),
         }
@@ -124,6 +132,12 @@ def compare_series(series_dir: Path) -> dict:
         result["reference"] = _reference_checks(
             base_r, base_o, build_mod.EXPERIMENT_DIR / "campaigns" / REFERENCE_CAMPAIGN)
     return result
+
+
+def dumps_report(result: dict) -> str:
+    """Strict JSON (RFC 8259): ``allow_nan=False``; any stray non-finite
+    float is written as null rather than a NaN/Infinity token."""
+    return grade_mod.dumps_strict(result, indent=2) + "\n"
 
 
 def _f(x, nd=3) -> str:
@@ -160,20 +174,20 @@ def render_markdown(r: dict) -> str:
         o = ref.get("offset")
         if o:
             out.append(f"- `base` offset draws vs the same campaign's draws with an identical seed "
-                       f"({o['samples_compared']} compared; {o['seed_mismatches_not_compared']} seed-mismatched, "
-                       f"not compared): {o['identical']} bit-identical, max |Δvos| = {o['max_abs_diff_mv']:.3g} mV.")
+                       f"({o['samples_compared']} compared; {o['seed_mismatches_not_compared']} seed-mismatched and "
+                       f"{o.get('seed_absent_not_compared', 0)} seed-absent, not compared): {o['identical']} bit-identical, max |Δvos| = {o['max_abs_diff_mv']:.3g} mV.")
     else:
         out.append("Not evaluated.")
     out += ["", "## Decision time, tau and decision correctness (45-point PVT grid)", "",
             "td in ns from the clock's 50 % rising crossing to the output's 50 % crossing, supply-normalised. "
             "Correct = both polarities decided right (first strobe low, second high). ≤ 1.5 ns is quoted as a "
             "reference only (the ratified Target is stated at the ratified clock).", "",
-            "| condition | td50 min … max (ns) | binding point | Δtd50 vs base min … max | td(1 mV) min … max | tau min … max (ps) | td50 ≤ 1.5 ns | correct 50 mV | correct 1 mV | correct 0.1 mV | untrusted |",
-            "|---|---|---|---|---|---|---|---|---|---|---|"]
+            "| condition | td50 min … max (ns) | binding point | Δtd50 vs base min … max | td(1 mV) min … max | tau min … max (ps) | td50 ≤ 1.5 ns | correct 50 mV | correct 1 mV | correct 0.1 mV | untrusted | coverage (usable/expected) |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for c in cs.CONDITIONS:
         s = r["regen"].get(c.name)
         if not s:
-            out.append(f"| `{c.name}` | not run |||||||||")
+            out.append(f"| `{c.name}` | not run ||||||||||")
             continue
         td = s["td50_ns"]
         d = s.get("d_td50_ns")
@@ -182,27 +196,30 @@ def render_markdown(r: dict) -> str:
             f"| `{c.name}` | {_rng(td)} | `{td['binding'] if td else '—'}` | "
             f"{dtxt} | {_rng(s['td1_ns'])} | "
             f"{_rng(s['tau_ps'], 1)} | {s['td50_within_1p5ns']}/{s['points']} | {s['correct50']}/{s['points']} | "
-            f"{s['correct1']}/{s['points']} | {s['correct01']}/{s['points']} | {len(s['untrusted'])} |")
+            f"{s['correct1']}/{s['points']} | {s['correct01']}/{s['points']} | {len(s['untrusted'])} | "
+            f"{s['coverage']['usable']}/{s['coverage']['expected']} {s['coverage']['label']} |")
     fails = [(n, s) for n, s in r["regen"].items() if s["failed_1mv_points"]]
     if fails:
         out += ["", "Points where the 1 mV decision was not correct:", ""]
         for n, s in fails:
             out.append(f"- `{n}`: {', '.join(f'`{p}`' for p in s['failed_1mv_points'])}")
     out += ["", "## Offset shift (paired draws against `base`)", "",
-            "| condition | pairs | mean shift ± SEM (mV) | sd of Δ (mV) | draws that moved a level | pooled spread (mV) | base pooled spread (mV) | clipped | untrusted |",
-            "|---|---|---|---|---|---|---|---|---|"]
+            "| condition | pairs | mean shift ± SEM (mV) | sd of Δ (mV) | draws that moved a level | pooled spread (mV) | base pooled spread (mV) | clipped | untrusted | seed-absent | coverage (usable/expected) |",
+            "|---|---|---|---|---|---|---|---|---|---|---|"]
     base_sig = (r["offset"].get(cs.BASELINE) or {}).get("pooled_sigma_mv")
     for c in cs.CONDITIONS:
         if c.name == cs.BASELINE:
             continue
         o = r["offset"].get(c.name)
         if not o:
-            out.append(f"| `{c.name}` | not run ||||||||")
+            out.append(f"| `{c.name}` | not run ||||||||||")
             continue
         out.append(
             f"| `{c.name}` | {o['n_pairs']} | {_f(o['mean_shift_mv'])} ± {_f(o['sem_mv'])} | "
             f"{_f(o['sd_delta_mv'])} | {o['changed']}/{o['n_pairs']} | {_f(o['pooled_sigma_mv'])} | "
-            f"{_f(base_sig)} | {o['clipped']} | {o['untrusted']} |")
+            f"{_f(base_sig)} | {o['clipped']} | {o['untrusted']} | "
+            f"{o['seed_absent']} | {o['coverage']['usable']}/{o['coverage']['expected']} "
+            f"{o['coverage']['label']} |")
     out += ["", "## Envelopes", ""]
     for e in r["sources"]:
         out.append(f"- `{e['tag']}`: status `{e['status']}`, {e['corner_count']} units, errored {e['errored']}, "
