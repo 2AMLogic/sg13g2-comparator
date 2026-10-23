@@ -555,27 +555,57 @@ class ExceptionFiles(Base):
         self.assertEqual(extras["sim"], 300)
 
 
+class ManifestOnly(Base):
+    """Issue #318: after the re-baseline new evidence is a manifest plus a
+    summary, so ordinary growth needs no exception (the #276 case)."""
+
+    def test_source_growth_under_sim_passes_without_exception(self):
+        self.commit("budget")
+        self.assertEqual(self.budget["exceptions"], [])
+        self.write("sim/harness/new_module.py", "s" * 300)
+        self.commit("source")
+        rc, out, err = self.run_main()
+        self.assertEqual(rc, 0, err)
+
+    def test_manifest_and_summary_run_passes_without_exception(self):
+        self.commit("budget")
+        self.write("manifests/artifacts/a-r2.manifest.json", "m" * 2000)  # outside sim/
+        self.write("sim/a/records/r2.md", "# summary\n")
+        self.commit("stored run")
+        rc, out, err = self.run_main()
+        self.assertEqual(rc, 0, err)
+        self.assertIn("sim/a/records/r2.md", out)
+
+    def test_new_unit_over_ceiling_fails_without_exception(self):
+        self.commit("budget")
+        # Raise the total so only the per-unit ceiling can trip.
+        self.add_exception("sim", 5000)
+        self.write(NEW + "/blob.bin", "b" * 1001)
+        self.commit("committed blob")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1)
+        self.assertIn(f"{NEW}: 1001 B measured > new-unit ceiling 1000 B", err)
+
+
 class RepoBudget(unittest.TestCase):
     def test_committed_budget_is_valid_and_matches_issue_baseline(self):
+        # Issue #318: re-baselined at main 4c0db1c86 with exceptions cleared
+        # (spec/decision-records/evidence-size/318-manifest-store-rebaseline.md).
         b = json.loads((ROOT / "sim/evidence-size-budget.json").read_text())
+        self.assertEqual(b["baseline"]["commit"], "4c0db1c86b9318a5f4af922f6750d8d7e3441adb")
         self.assertEqual(b["allowance"]["derivation"],
-                         "ceil(10% x 489675829 B / 1048576 B/MiB) = 47 MiB")
-        self.assertEqual(b["baseline"]["sim_bytes"], 489675829)
-        self.assertEqual(b["baseline"]["sim_blobs"], 96352)
-        self.assertEqual(b["total_ceiling_bytes"], 489675829 + 47 * 1048576)
-        extras = chk.validate_budget(str(ROOT), "HEAD", b)
-        # Issue #167: exactly the two DR-0005 raises (validate_budget has already
-        # required a decision record carrying each exact path and byte count).
-        self.assertEqual(set(extras), {"sim", "sim/klt-corner-verification/campaigns/20261010-n200"})
-        self.assertTrue(all(v > 0 for v in extras.values()))
-        self.assertEqual(sum(1 for _ in b["units"]), len(b["units"]))
+                         "ceil(10% x 567379629 B / 1048576 B/MiB) = 55 MiB")
+        self.assertEqual(b["baseline"]["sim_bytes"], 567379629)
+        self.assertEqual(b["baseline"]["sim_blobs"], 114687)
+        self.assertEqual(b["total_ceiling_bytes"], 567379629 + 55 * 1048576)
+        self.assertEqual(b["exceptions"], [])
+        self.assertEqual(chk.validate_budget(str(ROOT), "HEAD", b), {})
 
-    def test_committed_budget_records_operator_suspension(self):
+    def test_committed_budget_is_enforced(self):
         b = json.loads((ROOT / "sim/evidence-size-budget.json").read_text())
-        self.assertEqual(b["suspended"], {
-            "by": "operator", "date": "2026-10-20", "until": "2AMLogic/2am#5553"})
+        self.assertNotIn("suspended", b)
         self.assertTrue((ROOT / "spec/decision-records/evidence-size/"
-                         "312-suspend-evidence-size-ceiling.md").is_file())
+                         "318-manifest-store-rebaseline.md").is_file())
 
     def test_head_within_committed_budget(self):
         rc = chk.main(["--repo", str(ROOT), "--tree", "HEAD", "--quiet"])

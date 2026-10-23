@@ -468,3 +468,12 @@ not committed around.
 [#3]: https://github.com/2AMLogic/sg13g2-comparator/issues/3
 [#38]: https://github.com/2AMLogic/sg13g2-comparator/issues/38
 [#64]: https://github.com/2AMLogic/sg13g2-comparator/issues/64
+
+## Stored-evidence manifests (`manifests/artifacts/`)
+
+Separate from the signoff manifest above: since issue #318, new simulation
+evidence is stored in the fleet artifact store, and git keeps one manifest per
+run under [`artifacts/`](artifacts/README.md). Writing them needs a `klt` with
+the `artifact` verb. That client is not the signoff build pinned in
+`klt-pin.json`, and the pin is unchanged. See `sim/README.md`, "Stored
+evidence".

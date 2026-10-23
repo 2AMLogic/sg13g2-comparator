@@ -350,7 +350,8 @@ def git_short_sha() -> str:
 #: committed record says nothing about whether THIS run is reproducible from
 #: committed sources. Tracked modifications anywhere, and untracked files
 #: anywhere else, still count.
-_EVIDENCE_DIRS = ("/records/", "/corners/", "/netlist-snapshots/")
+_EVIDENCE_DIRS = ("/records/", "/corners/", "/netlist-snapshots/",
+                  "/manifests/artifacts/")
 
 
 def _filter_status(stdout: str) -> list[str]:
@@ -743,8 +744,14 @@ def write_record(
     summaries: dict[str, MeasurementSummary],
     context: dict,
     dut_netlist: Path,
+    experiment_dir: Path | None = None,
 ) -> Path:
     """Write the markdown record, its JSON twin, and the netlist snapshot.
+
+    ``experiment_dir`` defaults to ``tb.experiment_dir``. The CLI passes a
+    git-ignored staging copy of it (issue #318): the bundle is written there,
+    then stored through the artifact store, and only the Markdown summary and
+    the manifest reach the repo (``harness/evidence_store.py``).
 
     Append-only: if the record, JSON twin or snapshot for this id already
     exists, raise ``EvidenceCollision`` BEFORE writing any member, so the
@@ -753,7 +760,7 @@ def write_record(
     pre-check still cannot overwrite a member. The ``corners/<rid>/`` log
     directory is expected to exist (``reserve_run`` creates it).
     """
-    experiment_dir = tb.experiment_dir
+    experiment_dir = experiment_dir if experiment_dir is not None else tb.experiment_dir
     rid = context["record_id"]
     paths = bundle_paths(experiment_dir, rid)
     taken = [m for m in occupied_members(experiment_dir, rid) if m != "logs"]
