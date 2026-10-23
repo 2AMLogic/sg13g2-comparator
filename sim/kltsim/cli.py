@@ -637,9 +637,24 @@ def cmd_noise_full(args) -> int:
 
 
 def cmd_ibsweep(args) -> int:
-    result = ibsweep_mod.run(args.campaign, CAMPAIGNS_DIR)
-    print((CAMPAIGNS_DIR / args.campaign / "ibsweep.md").read_text(encoding="utf-8"))
-    return 0 if result["points"] else 1
+    """Issue #80/#302: dut_ib sweep table. Append-only through the shared
+    planned-byte writer, like ``grade``: a different existing report is never
+    overwritten, an identical rerun is a no-op, ``--check`` is read-only."""
+    out_dir = _campaign_dir(args.campaign)
+    result = ibsweep_mod.sweep(out_dir)
+    report_dir = Path(args.report_dir) if args.report_dir else out_dir
+    md = ibsweep_mod.render_markdown(result)
+    if report_dir != out_dir:
+        result["source_campaign_dir"] = _cite(out_dir)
+        md = _cite_note(md, "campaign", out_dir)
+    rc = artifacts_mod.publish(
+        "ibsweep",
+        [(report_dir / "ibsweep.json", (grade_mod.dumps_strict(result, indent=2) + "\n").encode("utf-8")),
+         (report_dir / "ibsweep.md", md.encode("utf-8"))],
+        check_only=args.check, namespace_hint=_NAMESPACE_HINT, require_dir=report_dir)
+    if rc == 0 and not args.check:
+        print(md)
+    return rc if rc else (0 if result["points"] else 1)
 
 
 def cmd_sizesweep(args) -> int:
@@ -730,6 +745,11 @@ def main(argv: list[str] | None = None) -> int:
 
     ib = sub.add_parser("ibsweep", help="tabulate a dut_ib sweep campaign (issue #80)")
     ib.add_argument("--campaign", required=True)
+    ib.add_argument("--report-dir", help="write ibsweep.{json,md} here instead of the campaign "
+                    "directory (new directory; cites the campaign; different existing files are "
+                    "never overwritten)")
+    ib.add_argument("--check", action="store_true",
+                    help="read-only: exit 1 if the reports are missing, stale or unsafe")
     ib.set_defaults(func=cmd_ibsweep)
 
     sz = sub.add_parser("sizesweep", help="tabulate an input-pair sizing study (issue #92)")
