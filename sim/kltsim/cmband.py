@@ -84,7 +84,8 @@ BODY_NAME = f"{BENCH_NAME}.body.spice"
 
 VCM_LINE = "vcm cm 0 dc {dut_vcm}"
 VCM_LINE_CM = "vcm cm 0 dc {dut_vcm+vcm_delta}"
-CONDITION_MARK = "* ---- CM-band condition (issue #79):"
+CONDITION_MARK_PREFIX = "* ---- CM-band condition"
+CONDITION_MARK = f"{CONDITION_MARK_PREFIX} (issue #79):"
 
 #: DR-0002 Row 1 Target, quoted as a reference only (see module docstring).
 TARGET_3SIGMA_MV = 15.0
@@ -183,10 +184,14 @@ def apply_transform(body: str, cond: Condition) -> str:
 
 
 def undo_transform(body: str) -> str:
-    """Inverse of the line rewrite (header excepted) -- for tests/audit."""
+    """Inverse of the line rewrite (header excepted) -- for tests/audit.
+
+    Matches the mark by its issue-independent prefix, so it also undoes bodies
+    stamped by `cmdecision.apply_transform`.
+    """
     out = []
     for line in body.split("\n"):
-        if line.startswith(CONDITION_MARK) or line.startswith(".param vcm_delta="):
+        if line.startswith(CONDITION_MARK_PREFIX) or line.startswith(".param vcm_delta="):
             continue
         out.append(VCM_LINE if line == VCM_LINE_CM else line)
     return "\n".join(out)

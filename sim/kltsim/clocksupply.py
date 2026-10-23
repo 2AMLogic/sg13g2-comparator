@@ -339,10 +339,6 @@ def _val(values: dict, name: str):
     return None if m is None else m.get("value")
 
 
-def load_envelope(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
 def regen_points(env: dict) -> dict[tuple, dict]:
     """Per grid point: decision times, tau and gate verdicts (None where the
     measurement did not evaluate), plus a ``problem`` string when the corner

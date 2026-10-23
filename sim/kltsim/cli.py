@@ -39,6 +39,7 @@ from . import build as build_mod
 from . import declared_n as declared_n_mod
 from . import estimate as estimate_mod
 from . import fixture as fixture_mod
+from . import artifacts as artifacts_mod
 from . import grade as grade_mod
 from . import ibsweep as ibsweep_mod
 from . import sizesweep as sizesweep_mod
@@ -507,14 +508,7 @@ def cmd_run(args) -> int:
         if (out_dir / f"{tag}.envelope.json").exists() and args.skip_existing:
             print(f"{tag}: envelope present, skipped", file=sys.stderr)
             continue
-        for attempt in range(1, args.retry_refused + 2):
-            code = _submit(request_path, out_dir, tag, args)
-            if code == 0 or not _last_attempt_refused_at_cap(out_dir):
-                break
-            if attempt <= args.retry_refused:
-                print(f"{tag}: fleet at its instance cap; retry {attempt}/"
-                      f"{args.retry_refused} in {args.retry_wait}s", file=sys.stderr)
-                time.sleep(args.retry_wait)
+        code = _submit_with_retry(request_path, out_dir, tag, args)
         rc = max(rc, code)
     return rc
 
@@ -527,6 +521,63 @@ def _last_attempt_refused_at_cap(out_dir: Path) -> bool:
     return "exceeds BATCH_MAX_CONCURRENT_INSTANCES" in (last.get("stderr_tail") or "")
 
 
+def _submit_with_retry(request: Path, out_dir: Path, tag: str, args,
+                       extra: dict | None = None) -> int:
+    """``_submit``, resubmitted while the shared fleet refuses at its instance
+    cap: sleep ``args.retry_wait`` between up to ``args.retry_refused`` retries."""
+    code = 1
+    for attempt in range(1, args.retry_refused + 2):
+        code = _submit(request, out_dir, tag, args, extra=extra)
+        if code == 0 or not _last_attempt_refused_at_cap(out_dir):
+            break
+        if attempt <= args.retry_refused:
+            print(f"{tag}: fleet at its instance cap; retry {attempt}/{args.retry_refused} "
+                  f"in {args.retry_wait}s", file=sys.stderr)
+            time.sleep(args.retry_wait)
+    return code
+
+
+def run_local_smoke(req: dict, work: Path, klt: str) -> int:
+    """Write ``req`` under ``work``, run it once with ``klt sim --backend local``,
+    keep the envelope, and print one ``corner_id status {measurements}`` line
+    per corner."""
+    request = work / "request.json"
+    request.write_text(json.dumps(req, indent=2) + "\n", encoding="utf-8")
+    cmd = [klt, "sim", str(request), "--backend", "local", "--format", "json",
+           "-o", str(work / "artifacts")]
+    print("$ " + " ".join(cmd), file=sys.stderr)
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    (work / "envelope.json").write_text(proc.stdout, encoding="utf-8")
+    print(f"klt sim exit {proc.returncode}; work dir {work}", file=sys.stderr)
+    if proc.stderr.strip():
+        print(proc.stderr.strip()[-2000:], file=sys.stderr)
+    try:
+        env = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return 1
+    for corner in env.get("corners", []):
+        print(corner["corner_id"], corner["status"],
+              {m["name"]: m["value"] for m in corner["measurements"]})
+    return 0
+
+
+_NAMESPACE_HINT = ("Reports are append-only evidence. Publish changed analysis under a NEW "
+                   "directory with --report-dir (it cites the original campaign); "
+                   "inputs are always read from --campaign/--series.")
+
+
+def _cite(path: Path) -> str:
+    try:
+        return str(Path(path).resolve().relative_to(build_mod.REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
+def _cite_note(markdown: str, kind: str, source: Path) -> str:
+    return (markdown.rstrip("\n") + f"\n\nSource {kind} (original evidence, unmodified): "
+            f"`{_cite(source)}`\n")
+
+
 def cmd_grade(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     offset_n = getattr(args, "offset_n", None)
@@ -537,10 +588,20 @@ def cmd_grade(args) -> int:
             print(f"grade: {exc}", file=sys.stderr)
             return 2
     result = declared_n_mod.grade_campaign(out_dir, offset_n)
-    (out_dir / "grading.json").write_text(grade_mod.dumps_strict(result, indent=2) + "\n", encoding="utf-8")
-    (out_dir / "grading.md").write_text(grade_mod.render_markdown(result), encoding="utf-8")
-    print(grade_mod.render_summary(result))
-    return 0
+    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else out_dir
+    md = grade_mod.render_markdown(result)
+    if report_dir != out_dir:
+        result["source_campaign_dir"] = _cite(out_dir)
+        md = _cite_note(md, "campaign", out_dir)
+    rc = artifacts_mod.publish(
+        "grade",
+        [(report_dir / "grading.json", (grade_mod.dumps_strict(result, indent=2) + "\n").encode("utf-8")),
+         (report_dir / "grading.md", md.encode("utf-8"))],
+        check_only=getattr(args, "check", False), namespace_hint=_NAMESPACE_HINT,
+        require_dir=report_dir)
+    if rc == 0 and not getattr(args, "check", False):
+        print(grade_mod.render_summary(result))
+    return rc
 
 
 def cmd_estimate(args) -> int:
@@ -557,7 +618,8 @@ def cmd_estimate(args) -> int:
 def cmd_noise_full(args) -> int:
     """Issue #81/#236: provenance-validated per-config probit sigmas + quadrature
     split for a campaign. Output is append-only: a report directory that already
-    holds ``noise_full.*`` is never overwritten (publish under a new namespace)."""
+    holds ``noise_full.*`` with different bytes is never overwritten (publish under a new namespace); an identical
+    rerun is a no-op and a matching partial pair is completed."""
     out_dir = _campaign_dir(args.campaign)
     report_dir = Path(args.report_dir) if args.report_dir else out_dir
     result = noise_full_mod.analyse(out_dir)
@@ -565,23 +627,34 @@ def cmd_noise_full(args) -> int:
     text = noise_full_mod.render_markdown(result)
     targets = {report_dir / "noise_full.json": json.dumps(result, separators=(",", ":")) + "\n",
                report_dir / "noise_full.md": text}
-    clash = [str(p) for p in targets if p.exists()]
-    if clash:
-        print("noise-full: refusing to overwrite append-only evidence: " + ", ".join(clash)
-              + "; pass --report-dir <new directory>", file=sys.stderr)
-        return 1
-    report_dir.mkdir(parents=True, exist_ok=True)
-    for path, data in targets.items():
-        with open(path, "x", encoding="utf-8") as handle:
-            handle.write(data)
-    print(text)
-    return 0
+    rc = artifacts_mod.publish(
+        "noise-full", [(p, d.encode("utf-8")) for p, d in targets.items()],
+        check_only=getattr(args, "check", False), namespace_hint=_NAMESPACE_HINT,
+        require_dir=report_dir)
+    if rc == 0 and not getattr(args, "check", False):
+        print(text)
+    return rc
 
 
 def cmd_ibsweep(args) -> int:
-    result = ibsweep_mod.run(args.campaign, CAMPAIGNS_DIR)
-    print((CAMPAIGNS_DIR / args.campaign / "ibsweep.md").read_text(encoding="utf-8"))
-    return 0 if result["points"] else 1
+    """Issue #80/#302: dut_ib sweep table. Append-only through the shared
+    planned-byte writer, like ``grade``: a different existing report is never
+    overwritten, an identical rerun is a no-op, ``--check`` is read-only."""
+    out_dir = _campaign_dir(args.campaign)
+    result = ibsweep_mod.sweep(out_dir)
+    report_dir = Path(args.report_dir) if args.report_dir else out_dir
+    md = ibsweep_mod.render_markdown(result)
+    if report_dir != out_dir:
+        result["source_campaign_dir"] = _cite(out_dir)
+        md = _cite_note(md, "campaign", out_dir)
+    rc = artifacts_mod.publish(
+        "ibsweep",
+        [(report_dir / "ibsweep.json", (grade_mod.dumps_strict(result, indent=2) + "\n").encode("utf-8")),
+         (report_dir / "ibsweep.md", md.encode("utf-8"))],
+        check_only=args.check, namespace_hint=_NAMESPACE_HINT, require_dir=report_dir)
+    if rc == 0 and not args.check:
+        print(md)
+    return rc if rc else (0 if result["points"] else 1)
 
 
 def cmd_sizesweep(args) -> int:
@@ -672,6 +745,11 @@ def main(argv: list[str] | None = None) -> int:
 
     ib = sub.add_parser("ibsweep", help="tabulate a dut_ib sweep campaign (issue #80)")
     ib.add_argument("--campaign", required=True)
+    ib.add_argument("--report-dir", help="write ibsweep.{json,md} here instead of the campaign "
+                    "directory (new directory; cites the campaign; different existing files are "
+                    "never overwritten)")
+    ib.add_argument("--check", action="store_true",
+                    help="read-only: exit 1 if the reports are missing, stale or unsafe")
     ib.set_defaults(func=cmd_ibsweep)
 
     sz = sub.add_parser("sizesweep", help="tabulate an input-pair sizing study (issue #92)")
@@ -685,6 +763,11 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--offset-n", type=int, metavar="N",
                    help="declared offset_mc draws per PVT point of a non-historical campaign "
                         "(issue #167); the saved requests must carry exactly this N")
+    g.add_argument("--report-dir", help="write grading.{json,md} here instead of the campaign "
+                   "directory (new directory; cites the campaign; existing different files "
+                   "are never overwritten)")
+    g.add_argument("--check", action="store_true",
+                   help="read-only: exit 1 if the reports are missing, stale or unsafe")
     g.set_defaults(func=cmd_grade)
 
     e = sub.add_parser("estimate", help="issue #167: estimate a larger offset campaign's committed "
@@ -697,7 +780,9 @@ def main(argv: list[str] | None = None) -> int:
     nf = sub.add_parser("noise-full", help="issue #81: analyse the tn_full_* configurations of a campaign")
     nf.add_argument("--campaign", required=True)
     nf.add_argument("--report-dir", help="write noise_full.{json,md} here (new directory; "
-                    "existing files are never overwritten); default: the campaign directory")
+                    "existing different files are never overwritten); default: the campaign directory")
+    nf.add_argument("--check", action="store_true",
+                    help="read-only: exit 1 if the reports are missing, stale or unsafe")
     nf.set_defaults(func=cmd_noise_full)
 
     args = ap.parse_args(argv)

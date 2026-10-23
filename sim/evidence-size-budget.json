@@ -1,23 +1,25 @@
 {
   "version": 1,
   "baseline": {
-    "commit": "2c60027759c891d5e56b63f6896ac38b96057de2",
+    "commit": "4c0db1c86b9318a5f4af922f6750d8d7e3441adb",
     "accounting": "git ls-tree -rl <commit> blob bytes (not working tree, not pack size)",
-    "repo_blobs": 97217,
-    "repo_bytes": 509447840,
-    "sim_blobs": 96352,
-    "sim_bytes": 489675829
+    "repo_blobs": 115641,
+    "repo_bytes": 587974295,
+    "sim_blobs": 114687,
+    "sim_bytes": 567379629
   },
   "allowance": {
     "percent": 10,
-    "operand_sim_bytes": 489675829,
-    "derivation": "ceil(10% x 489675829 B / 1048576 B/MiB) = 47 MiB",
-    "mib": 47,
-    "bytes": 49283072
+    "operand_sim_bytes": 567379629,
+    "derivation": "ceil(10% x 567379629 B / 1048576 B/MiB) = 55 MiB",
+    "mib": 55,
+    "bytes": 57671680
   },
-  "total_ceiling_bytes": 538958901,
-  "new_unit_ceiling_bytes": 49283072,
+  "total_ceiling_bytes": 625051309,
+  "new_unit_ceiling_bytes": 57671680,
   "units": {
+    "sim/comparator-clock-supply-sensitivity/campaigns/20261011-ce8cb93": 10784109,
+    "sim/comparator-decision-cm-band/campaigns/20261011-94b6bc5b4": 1484273,
     "sim/comparator-kickback/corners/20260910-233015-8148438": 286846,
     "sim/comparator-kickback/corners/20260916-022249-36773c7": 387783,
     "sim/comparator-kickback/netlist-snapshots/20260910-233015-8148438.spice": 12715,
@@ -43,14 +45,19 @@
     "sim/comparator-offset-transient-mc/netlist-snapshots/20260917-060858-ea40b57.spice": 10516,
     "sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json": 39788,
     "sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.md": 15728,
+    "sim/comparator-pex/reports/batch-probe.pvt.20261010-c.md": 3821,
     "sim/comparator-pex/reports/batch-probe.regeneration.nominal.json": 15065,
     "sim/comparator-pex/reports/batch-probe.regeneration.pvt.20261009.json": 282091,
     "sim/comparator-pex/reports/batch-probe.regeneration.pvt.20261009.md": 1218,
+    "sim/comparator-pex/reports/batch-probe.regeneration.pvt.20261010-b.json": 330,
+    "sim/comparator-pex/reports/batch-probe.regeneration.pvt.20261010-b.md": 1240,
+    "sim/comparator-pex/reports/batch-probe.regeneration.pvt.20261010-c.json": 282090,
     "sim/comparator-pex/reports/batch-probe.regeneration.pvt.20261010.json": 330,
     "sim/comparator-pex/reports/batch-probe.regeneration.pvt.20261010.md": 803,
     "sim/comparator-pex/reports/delta-nominal-20261009.json": 6766,
     "sim/comparator-pex/reports/delta-nominal-20261009.md": 3018,
     "sim/comparator-pex/reports/pex.attempt-20261009.json": 16104,
+    "sim/comparator-pex/reports/pex.batch-probe.pvt.20261010-c.json": 493530,
     "sim/comparator-preamp-noise/corners/20260910-232822-8148438": 58065,
     "sim/comparator-preamp-noise/corners/20260916-021939-36773c7": 53865,
     "sim/comparator-preamp-noise/corners/20260916-113303-180cca7": 48785,
@@ -75,6 +82,7 @@
     "sim/comparator-regeneration/records/20260916-021945-36773c7.md": 14459,
     "sim/comparator-regeneration/records/20260916-113309-180cca7.json": 52011,
     "sim/comparator-regeneration/records/20260916-113309-180cca7.md": 14628,
+    "sim/comparator-transient-noise-full/reports/analysis-20261011-issue236": 112019,
     "sim/comparator-transient-noise/corners/20260921-154729-41cbc7f": 13718870,
     "sim/comparator-transient-noise/netlist-snapshots/20260921-154729-41cbc7f.spice": 15837,
     "sim/comparator-transient-noise/records/20260921-154729-41cbc7f.json": 28548,
@@ -90,20 +98,10 @@
     "sim/klt-corner-verification/campaigns/20261009-issue78": 121147,
     "sim/klt-corner-verification/campaigns/20261009-issue80": 124321690,
     "sim/klt-corner-verification/campaigns/20261009-issue81": 15395018,
-    "sim/klt-corner-verification/campaigns/20261009-issue92": 189470186
+    "sim/klt-corner-verification/campaigns/20261009-issue92": 189470186,
+    "sim/klt-corner-verification/campaigns/20261010-n200": 61709133,
+    "sim/klt-yield/campaigns/20261010-d73a9ac": 1191634,
+    "sim/klt-yield/campaigns/20261010-n200": 837432
   },
-  "exceptions": [
-    {
-      "path": "sim",
-      "additional_bytes": 28228705,
-      "reason": "cumulative: issue #167 N=200 offset campaign (DR-0005, 15571193 B) plus issue #82 offset-significance analysis (DR-0006, 14103 B) plus issue #177 repeated-measurement harness fix (DR-0007, 2806 B) plus issue #178 harness check-bound validation code (DR-0008, 5831 B) plus issue #181 PEX delta-table renderer code (DR-0009, 14615 B) plus issue #179 harness frozen-input capture (DR-0010, 6513 B) plus issue #186 CM-band runner tests (DR-0011, 5524 B) plus issue #192 noise-analysis uncertainty code and tests (DR-0012, 5936 B) plus issue #197 runner timeout-diagnostics code and tests (DR-0013, 4369 B) plus issue #196 OSDI model identity code, tests and docs (DR-0014, 14940 B) plus issue #203 runtime SPICE model-source identity code, tests and docs (DR-0015, 19404 B) plus issue #173 clock/supply sensitivity campaign (DR-0016, 10838239 B) plus issue #164 decision-time CM-band campaign (DR-0017, 1514937 B) plus issue #211 PEX delta-table renderer code and tests (DR-0018, 6122 B) plus issue #194 CM-band preflight run-submission guard code, tests and docs (DR-0019, 7127 B) plus issue #216 sparse lint-population preflight docs (DR-0020, 759 B) plus issue #209 CM decision-band reproduction and probe validation code and tests (DR-0021, 3604 B) plus issue #236 noise-full provenance validation code, tests, docs and re-analysis (DR-0022, 133526 B) plus issue #240 PEX delta-table decision-state validity code, tests and docs (DR-0023, 11239 B) plus issue #250 CM-offset draw identity, pairing and reproduction validation code, tests and docs (DR-0025, 30220 B) plus issue #252 CM-band empty-reproduction verdict and per-record rejected-draw count code and tests (DR-0026, 4925 B) plus issue #255 yield index re-derivation check code, tests and docs (DR-0027, 12773 B); see DR-0027",
-      "decision_record": "spec/decision-records/0027-yield-index-rederivation-evidence-size-exception.md"
-    },
-    {
-      "path": "sim/klt-corner-verification/campaigns/20261010-n200",
-      "additional_bytes": 12426061,
-      "reason": "issue #167: one N=200 whole-latch offset campaign (45 PVT points x 200 draws, envelopes plus per-corner artifacts) exceeds the 47 MiB new-unit ceiling",
-      "decision_record": "spec/decision-records/0005-offset-n200-evidence-size-exception.md"
-    }
-  ]
+  "exceptions": []
 }
