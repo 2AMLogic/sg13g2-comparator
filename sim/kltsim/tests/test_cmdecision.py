@@ -9,7 +9,7 @@ from kltsim.benches import REGENERATION
 
 
 def _corner(key, *, vcm=0.6, td50=0.7, td01=1.3, tau=100.0, status="pass", gate_ok=True,
-            drop=None):
+            drop=None, ms_over=None):
     proc, v, t = key
     proc = f"mos_{proc}"
     ms = {
@@ -18,12 +18,16 @@ def _corner(key, *, vcm=0.6, td50=0.7, td01=1.3, tau=100.0, status="pass", gate_
         "tau_ps": (tau, "ps"), "resolve_decades": (8.0, "1"), "p_avg_uw": (50.0, "uW"),
         "vcm_meas": (vcm, "V"),
     }
+    ms.update(ms_over or {})
     for g in cd.GATES:
         first = g.endswith("_first")
         ms[g] = ((0.0 if first else 1.0) if gate_ok else 0.5, "V/V")
     out = [{"name": n, "value": val, "unit": u,
             "status": "pass" if (gate_ok or n not in cd.GATES) else "fail"}
            for n, (val, u) in ms.items() if n != drop]
+    for m in out:  # a (value, None) override models a missing unit
+        if m["unit"] is None:
+            del m["unit"]
     return {"corner_id": f"{proc}/{v}/{t}", "process": proc,
             "supply_v": {"vsup": v, "vsupa": v}, "temperature_c": t,
             "status": status, "measurements": out}
@@ -91,6 +95,66 @@ class AnalysisTests(unittest.TestCase):
         self.assertIn("vcm_meas", reasons[cd.key_label(keys[1])])
         self.assertIn("gate", reasons[cd.key_label(keys[2])])
         self.assertIn("tau_ps", reasons[cd.key_label(keys[3])])
+
+    def _one(self, **kw):
+        k = cd.expected_keys()[3]
+        s = cd.summarize(cd.load_points(_env({k: kw}), 0.6))
+        return k, s
+
+    def test_unit_scaling_s_ps_mv(self):
+        k, s = self._one(ms_over={"td_od50_ns": (0.7e-9, "s"), "td_od01_ns": (1300.0, "ps"),
+                                  "tau_ps": (1e-10, "s"), "vcm_meas": (600.0, "mV")})
+        self.assertEqual((s["points_valid"], s["rejected"]), (45, []))
+        row = next(r for r in s["rows"] if tuple(r["key"]) == k)
+        self.assertAlmostEqual(row["td_od50_ns"], 0.7)
+        self.assertAlmostEqual(row["td_od01_ns"], 1.3)
+        self.assertAlmostEqual(row["tau_ps"], 100.0)
+
+    def test_seconds_value_is_scaled_so_it_fails_not_passes(self):
+        # 0.7 s mislabelled as ns used to PASS; correctly scaled it is a numerical FAIL.
+        k, s = self._one(ms_over={"td_od50_ns": (0.7, "s")})
+        self.assertEqual(s["points_valid"], 45)
+        row = next(r for r in s["rows"] if tuple(r["key"]) == k)
+        self.assertEqual(row["td_od50_ns_target"], "FAIL")
+        self.assertEqual(s["grid"]["td_od50_ns"]["target_fail_points"], 1)
+
+    def test_bad_measurements_rejected_with_named_reason(self):
+        cases = {
+            "negative delay": ({"td_od50_ns": (-1.0, "ns")}, "td_od50_ns", "> 0"),
+            # ZERO-DELAY POLICY (issue #266): exactly zero is rejected, delay must be > 0.
+            "zero delay": ({"td_od01_ns": (0.0, "ns")}, "td_od01_ns", "> 0"),
+            "zero tau": ({"tau_ps": (0.0, "ps")}, "tau_ps", "> 0"),
+            "negative tau": ({"tau_ps": (-5.0, "ps")}, "tau_ps", "> 0"),
+            "bool": ({"td_od50_ns": (True, "ns")}, "td_od50_ns", "not a number"),
+            "nan": ({"tau_ps": (float("nan"), "ps")}, "tau_ps", "not finite"),
+            "missing unit": ({"td_od50_ns": (0.7, None)}, "td_od50_ns", "no declared unit"),
+            "wrong dimension": ({"td_od50_ns": (0.7, "V")}, "td_od50_ns", "not usable"),
+            "unknown unit": ({"tau_ps": (100.0, "furlong")}, "tau_ps", "not usable"),
+            "bad vcm unit": ({"vcm_meas": (0.6, "ns")}, "vcm_meas", "not usable"),
+            "no vcm unit": ({"vcm_meas": (0.6, None)}, "vcm_meas", "no declared unit"),
+            "bool vcm": ({"vcm_meas": (True, "V")}, "vcm_meas", "not a number"),
+            "bad td_od1": ({"td_od1_ns": (-1.0, "ns")}, "td_od1_ns", "> 0"),
+            "bool decades": ({"resolve_decades": (True, "1")}, "resolve_decades", "not a number"),
+            "nan power": ({"p_avg_uw": (float("inf"), "uW")}, "p_avg_uw", "not finite"),
+            "power unit": ({"p_avg_uw": (50.0, "V")}, "p_avg_uw", "not usable"),
+            "negative power": ({"p_avg_uw": (-1.0, "uW")}, "p_avg_uw", ">= 0"),
+        }
+        for label, (over, name, text) in cases.items():
+            with self.subTest(label):
+                k, s = self._one(ms_over=over)
+                self.assertEqual(s["points_valid"], 44)
+                (rej,) = s["rejected"]
+                self.assertEqual(rej["point"], cd.key_label(k))
+                self.assertIn(name, rej["reason"])
+                self.assertIn(text, rej["reason"])
+
+    def test_raw_envelope_not_mutated(self):
+        import copy
+        k = cd.expected_keys()[3]
+        env = _env({k: {"ms_over": {"td_od50_ns": (700.0, "ps")}}})
+        before = copy.deepcopy(env)
+        cd.load_points(env, 0.6)
+        self.assertEqual(env, before)
 
     def test_missing_point_is_rejected(self):
         env = _env()
