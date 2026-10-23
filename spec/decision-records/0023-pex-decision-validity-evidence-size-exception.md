@@ -14,7 +14,7 @@
   (previous `sim/` total raise; still stands),
   [`0018-pex-delta-table-evidence-size-exception-2.md`](0018-pex-delta-table-evidence-size-exception-2.md),
   [`0009-pex-delta-table-evidence-size-exception.md`](0009-pex-delta-table-evidence-size-exception.md)
-- **Supersedes**: none. **Superseded by**: none
+- **Supersedes**: none. **Superseded by**: [`evidence-size/323-retire-incremental-evidence-size-raises.md`](evidence-size/323-retire-incremental-evidence-size-raises.md) (the authorization below no longer applies)
 
 ## Context
 

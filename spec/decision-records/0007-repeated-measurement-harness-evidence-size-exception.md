@@ -24,7 +24,7 @@
   (the previous `sim/` total raise of 14103 B),
   [`0005-offset-n200-evidence-size-exception.md`](0005-offset-n200-evidence-size-exception.md)
   (15571193 B). Both are unchanged and still stand.
-- **Supersedes**: none. **Superseded by**: none
+- **Supersedes**: none. **Superseded by**: [`evidence-size/323-retire-incremental-evidence-size-raises.md`](evidence-size/323-retire-incremental-evidence-size-raises.md) (the authorization below no longer applies)
 
 ## Context
 
