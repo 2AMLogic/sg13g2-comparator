@@ -4,7 +4,10 @@
 Fails when a path under ``sim/<bench>/{records,corners,netlist-snapshots,
 campaigns,reports}/`` that exists at ``--base`` is not present at ``--head``
 with the same Git blob ID and mode. Aggregated characterization reports under
-``sim/characterization/<report-id>/`` are protected the same way (issue #155).
+``sim/characterization/<report-id>/`` are protected the same way (issue #155),
+and so are stored-evidence manifests ``manifests/artifacts/*.manifest.json``
+(issue #318): a manifest is the only committed handle on bytes that live in
+the artifact store, so it may not be edited or deleted either.
 Additions are always allowed. A move is a
 deletion plus an addition (``--no-renames``), so moving evidence away fails on
 the old path while moving something *into* a protected directory passes.
@@ -33,6 +36,7 @@ PROTECTED_DIRS = frozenset(
     {"records", "corners", "netlist-snapshots", "campaigns", "reports"}
 )
 AGGREGATE_ROOT = "characterization"
+MANIFEST_RE = re.compile(r"^manifests/artifacts/[^/]+\.manifest\.json$")
 EXCEPTIONS_PATH = "sim/evidence-exceptions.json"
 RECORD_DIR = "spec/decision-records/"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -55,6 +59,8 @@ class RegistryError(Exception):
 
 
 def is_protected(path: str) -> bool:
+    if MANIFEST_RE.match(path):
+        return True
     parts = path.split("/")
     if len(parts) >= 4 and parts[0] == "sim" and parts[1] == AGGREGATE_ROOT \
             and all(parts[2:]):
