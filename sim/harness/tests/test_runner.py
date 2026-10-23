@@ -704,7 +704,7 @@ class FrozenInputsTest(unittest.TestCase):
                 entries.append({"sha256": sha, "size": len(data), "kind": "evidence",
                                 "producer": {"tool": "klt", "version": "t",
                                              "loom.repo": "o/r", "commit": None},
-                                "uri": f"s3://b/evidence/o__r/{sha[:2]}/{sha}",
+                                "uri": f"artifact:evidence/o__r/{sha[:2]}/{sha}",
                                 "name": name})
             return {"schema_version": 1, "entries": entries}, []
 

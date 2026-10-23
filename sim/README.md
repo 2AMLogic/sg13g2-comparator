@@ -482,14 +482,21 @@ the broker admits can fetch what it names.
   `sim/<bench>/campaigns/<run-id>.md` (`--kind` picks another protected
   directory).
 - **Configuration** is the environment only, read by `klt`:
-  `KLT_ARTIFACT_BROKER` (broker base URL), `KLT_ARTIFACT_BUCKET` (bucket for
-  manifest `uri`s when the broker does not name it) and, optionally,
+  `KLT_ARTIFACT_BROKER` (broker base URL) and, optionally,
   `KLT_ARTIFACT_REPO`. There are no defaults, and none is written in this
-  repo. `klt` must include the `artifact` verb (klayout-tools `75ba0e5f674c`
-  or later, PR #4066). That client is separate from the signoff/layout build
-  pinned in `manifests/klt-pin.json`, which is unchanged.
+  repo. There is no bucket setting: a manifest `uri` is the logical
+  `artifact:<key>`, which only the broker resolves (operator ruling H1,
+  2AMLogic/2am#5553), so a public manifest names no storage location. The
+  writer and `check_artifact_manifests.py` refuse any other scheme. `klt`
+  must be klayout-tools `7e3561f` or later (PR #4070), the first revision that
+  writes `artifact:<key>`. `klt` reports no commit, so the writer checks the
+  behaviour: it hands `klt artifact verify` an offline probe manifest with a
+  legacy bucket-naming `uri` and requires `klt` to refuse it. That client is
+  separate from the signoff/layout build pinned in `manifests/klt-pin.json`,
+  which is unchanged.
 - **Fail closed.** If the broker is unset, unreachable or refuses, or `klt`
-  lacks the verb, `run_corners.py` refuses before simulating (exit 10). A
+  lacks the verb or is older than `7e3561f`, `run_corners.py` refuses before
+  simulating (exit 10). A
   put that fails after the grid also exits 10. In both cases nothing goes
   under `manifests/` or `sim/`, and the staged bytes stay in
   `sim/.work/.stage/`. There is no option to commit the bytes instead.

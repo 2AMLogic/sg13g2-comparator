@@ -43,7 +43,7 @@ def entry(data: bytes, name="sim/b/records/r1.json", sha=None, size=None):
     sha = sha or hashlib.sha256(data).hexdigest()
     return {"sha256": sha, "size": len(data) if size is None else size, "kind": "evidence",
             "producer": {"tool": "klt", "version": "0.7.0", "loom.repo": REPO, "commit": None},
-            "uri": f"s3://bucket/{key_for(sha)}", "name": name}
+            "uri": f"artifact:{key_for(sha)}", "name": name}
 
 
 class FakeBroker:
@@ -195,7 +195,7 @@ class Schema(unittest.TestCase):
     def test_rejections(self):
         e = entry(b"x")
         cases = {
-            "uri key does not end": {**e, "uri": "s3://bucket/" + key_for("a" * 64)},
+            "uri key does not end": {**e, "uri": "artifact:" + key_for("a" * 64)},
             "kind must be": {**e, "kind": "pdk"},
             "name must be": {**e, "name": "/abs/path"},
             "name is required": {k: v for k, v in e.items() if k != "name"},
@@ -211,6 +211,23 @@ class Schema(unittest.TestCase):
                          ["has no entries"])
         dup = chk.manifest_problems({"schema_version": 1, "entries": [e, e]})
         self.assertTrue(any("duplicate name" in p for p in dup))
+
+    def test_only_the_artifact_scheme_is_accepted(self):
+        # Operator ruling H1 (2AMLogic/2am#5553): the uri is the logical
+        # artifact:<key>; a bucket-naming uri or any other scheme is refused.
+        e = entry(b"x")
+        self.assertEqual(chk.uri_key(e["uri"]), key_for(e["sha256"]))
+        key = key_for(e["sha256"])
+        legacy = "s3" + "://"  # built, so a grep for the literal stays clean
+        for uri in (f"{legacy}bucket/{key}", f"{legacy}{key}", f"https://host/{key}",
+                    f"file:///{key}", f"Artifact:{key}", f"artifact:/{key}",
+                    f"artifact:{key} ", "artifact:", key, None, 7):
+            with self.subTest(uri=uri):
+                self.assertIsNone(chk.uri_key(uri))
+                problems = chk.manifest_problems({"schema_version": 1,
+                                                  "entries": [{**e, "uri": uri}]})
+                self.assertTrue(any("uri must be artifact:<key>" in p for p in problems),
+                                problems)
 
 
 class Check(unittest.TestCase):
