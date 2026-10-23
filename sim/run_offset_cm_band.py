@@ -225,8 +225,8 @@ def cmd_supplement_run(args) -> int:
                 print(f"{cond.name}/{tag}: envelope present -- supplementary evidence "
                       "is append-only; use a new --series", file=sys.stderr)
                 return 1
-            rc = max(rc, _submit_with_retry(request, out_dir, tag, args,
-                                             _extra(cond, "max-step-supplement")))
+            rc = max(rc, kcli._submit_with_retry(request, out_dir, tag, args,
+                                                 _extra(cond, "max-step-supplement")))
     return rc
 
 
