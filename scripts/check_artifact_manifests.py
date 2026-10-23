@@ -12,9 +12,10 @@ of that contract. Two subcommands:
 ``check --tree REV``
     Reads every manifest committed in ``REV`` (blob contents via git, so a
     sparse working tree does not matter) and fails if one is malformed: wrong
-    schema, an unknown or missing field, a ``uri`` whose key does not end in
-    the entry's sha256, a ``name`` that is not a canonical ``sim/...`` path,
-    or a duplicate name. It also fails if any entry's ``name`` is a tracked
+    schema, an unknown or missing field, a ``uri`` that is not the logical
+    ``artifact:<key>`` (an ``s3`` bucket uri or any other scheme is refused),
+    a key that does not end in the entry's sha256, a ``name`` that is not a
+    canonical ``sim/...`` path, or a duplicate name. It also fails if any entry's ``name`` is a tracked
     path in ``REV``: the point of a manifest is that the bytes are *not*
     committed, so a blob beside its own manifest is the fallback this repo
     forbids. ``check`` never contacts the broker and says so: schema-valid
@@ -68,7 +69,10 @@ OPTIONAL = ("name", "media_type")
 PRODUCER_FIELDS = ("tool", "version", "loom.repo", "commit")
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-URI_RE = re.compile(r"^s3://([^/]+)/(.+)$")
+#: The manifest ``uri`` is a logical name only the broker resolves,
+#: ``artifact:<key>`` (operator ruling H1, 2AMLogic/2am#5553; klayout-tools
+#: ``7e3561f``). It names no storage location; any other scheme is refused.
+URI_RE = re.compile(r"^artifact:([^/\s]\S*)$")
 REPO_RE = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
 
 BROKER_TIMEOUT_S = 60
@@ -90,9 +94,10 @@ class ToolError(Exception):
 # --------------------------------------------------------------------------
 
 
-def split_uri(uri: str) -> tuple[str, str] | None:
+def uri_key(uri: str) -> str | None:
+    """The broker key of an ``artifact:<key>`` uri, else ``None``."""
     m = URI_RE.match(uri) if isinstance(uri, str) else None
-    return (m.group(1), m.group(2)) if m else None
+    return m.group(1) if m else None
 
 
 def repo_from_key(key: str) -> str | None:
@@ -137,11 +142,10 @@ def entry_problems(entry) -> list[str]:
                 problems.append(f"producer.{f} must be a non-empty string")
         if producer.get("commit") is not None and not isinstance(producer["commit"], str):
             problems.append("producer.commit must be a string or null")
-    parts = split_uri(entry.get("uri"))
-    if parts is None:
-        problems.append("uri must be s3://<bucket>/<key>")
+    key = uri_key(entry.get("uri"))
+    if key is None:
+        problems.append("uri must be artifact:<key> (no other scheme)")
     else:
-        key = parts[1]
         if key.rsplit("/", 1)[-1] != sha:
             problems.append("uri key does not end in the entry's sha256")
         key_repo = repo_from_key(key)
@@ -338,7 +342,7 @@ def _fetch_hash(url: str) -> tuple[str, int]:
 
 
 def verify_entry(broker: Broker, entry: dict) -> dict:
-    _, key = split_uri(entry["uri"])
+    key = uri_key(entry["uri"])
     repo = repo_from_key(key) or entry["producer"]["loom.repo"]
     if not REPO_RE.match(repo):
         raise ToolError(f"entry {entry['sha256']}: repo {repo!r} is not owner/name")

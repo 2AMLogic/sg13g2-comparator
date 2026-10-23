@@ -25,8 +25,9 @@
    it simulates.
 3. **Bytes private, manifests public** (operator decision 1.1). A manifest is
    safe to commit in this public repo; only callers the broker admits can
-   resolve its `uri`s. The broker URL and bucket come from the environment
-   (`KLT_ARTIFACT_BROKER`, `KLT_ARTIFACT_BUCKET`); this repo configures neither.
+   resolve its `uri`s. The broker URL and bucket come from the environment;
+   this repo configures neither. *(Amended 2026-10-23: there is no longer a
+   bucket setting. See the note at the end.)*
 4. **The ceiling is restored, re-baselined at `main`.** The `suspended` block is
    removed. The baseline moves to `4c0db1c86b9318a5f4af922f6750d8d7e3441adb`
    (115,641 blobs / 587,974,295 B repo; 114,687 blobs / 567,379,629 B under
@@ -65,3 +66,27 @@ deployed. That is the intended fail-closed behaviour, not a regression.
 stored object's bytes are also committed. `verify` re-hashes the stored bytes
 through the broker. It needs the broker, so it is an out-of-band step until
 the broker is deployed.
+
+## Note, 2026-10-23: logical `artifact:<key>` uris, no bucket setting (issue #320)
+
+Operator ruling H1 (2AMLogic/2am#5553, 2026-10-23) changes point 3. A
+manifest entry's `uri` is the logical **`artifact:<key>`**, which only the
+fleet broker resolves, and there is **no bucket setting**. A public manifest
+therefore never names a storage bucket. klt implements this from
+klayout-tools `7e3561f` (PR #4070), which removed `--bucket` and
+`KLT_ARTIFACT_BUCKET` and whose `get`/`verify` refuse `s3://` uris.
+
+As first written, point 3 read: "The broker URL and bucket come from the
+environment (`KLT_ARTIFACT_BROKER`, `KLT_ARTIFACT_BUCKET`); this repo
+configures neither." Only that sentence was edited, to drop the variable
+names. The rest of this record stands. From issue #320:
+
+- `sim/harness/evidence_store.py` and `scripts/check_artifact_manifests.py`
+  accept `artifact:<key>` only and reject every other scheme.
+- The only configuration is `KLT_ARTIFACT_BROKER` (and optionally
+  `KLT_ARTIFACT_REPO`).
+- The writer requires klt `7e3561f` or later. Before it simulates, it runs
+  an offline behavioural probe, because klt reports no commit. An older klt
+  fails closed with exit 10.
+
+No committed manifest used the old form, so nothing is migrated.
