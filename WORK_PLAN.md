@@ -8,7 +8,6 @@ Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a h
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
 - **#218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
-- **#249**: Validate Monte Carlo sample populations before compliance grading
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 - **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
 
@@ -40,12 +39,13 @@ Human-approved issues ready for implementation (`loom:issue`).
 Issues currently being built (`loom:building`).
 
 - **#302**: Consolidate remaining comparison/ibsweep report writers onto artifacts.publish (parallel drift with #237)
+- **#308**: Remove dead _spec_meas left behind by closed #295
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-_None._
+- **#303**: refactor: publish comparison and ibsweep reports through artifacts.publish
 
 ## Approved (Awaiting Merge)
 
@@ -55,10 +55,8 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
 - **#212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
 - **#218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
-- **#249**: Validate Monte Carlo sample populations before compliance grading
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
 - **#276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
-- **#303**: refactor: publish comparison and ibsweep reports through artifacts.publish
 
 ## Proposed
 
@@ -72,7 +70,6 @@ Issues carrying `loom:curated`.
 - **#165**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (evidence for DR-0004 CM-range row) *(curated)*
 - **#191**: PEX diagnostic: separate extracted device geometry from routing RC delay *(curated)*
 - **#235**: Validate clock-supply probes and reject ambiguous sample identities *(curated)*
-- **#245**: Validate actual Monte Carlo populations before compliance grading *(curated)*
 - **#247**: Derive evidence-size estimate denominators from selected reference campaigns *(curated)*
 - **#263**: Validate timestep smoke evidence before computing noise convergence *(curated)*
 - **#264**: Reject invalid local PVT grid inputs before simulation *(curated)*
@@ -81,7 +78,7 @@ Issues carrying `loom:curated`.
 
 ## Proposed (Architect / Hermit)
 
-_None._
+- **#297**: Remove scripts/diagnostics/: completed #188 guard-handoff repro, unrelated to the comparator *(hermit)*
 
 ## Epics
 
@@ -91,14 +88,14 @@ _None._
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 6 |
+| Operator merge-risk holds | 5 |
 | Very important | 0 |
 | Important | 0 |
 | Ready (`loom:issue`) | 6 |
-| In Progress (`loom:building`) | 1 |
-| PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 8 |
-| Curated | 14 |
-| Architect / Hermit proposals | 0 |
+| In Progress (`loom:building`) | 2 |
+| PRs awaiting review | 1 |
+| Approved PRs awaiting merge | 6 |
+| Curated | 13 |
+| Architect / Hermit proposals | 1 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
