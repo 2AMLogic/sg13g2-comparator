@@ -18,7 +18,6 @@ sim/comparator-clock-supply-sensitivity/README.md. Run from the repository root.
 from __future__ import annotations
 
 import argparse
-import json
 import shutil
 import sys
 import tempfile
