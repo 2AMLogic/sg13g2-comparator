@@ -26,9 +26,16 @@ summed (unit paths may appear once). Records for such entries may sit in
 ``spec/decision-records/evidence-size/``. There is no bypass flag or
 environment override.
 
-Exit codes: 0 within budget, 1 budget violation or invalid budget/exception,
-2 usage / git / measurement error, including a partial (blob-filtered) clone,
-which is refused up front and never lazily fetched (never reported as success).
+A budget carrying a ``suspended`` block (``by``/``date``/``until``, issue #312)
+is *report-only*: ceiling breaches are printed with the measured size and
+growth but exit 0. The numbers stay in the file, so restoring enforcement is
+deleting that one block. Suspension never relaxes the budget's own validation
+or the measurement itself, and the separate append-only guard is unaffected.
+
+Exit codes: 0 within budget (or over it while suspended), 1 budget violation
+or invalid budget/exception, 2 usage / git / measurement error, including a
+partial (blob-filtered) clone, which is refused up front and never lazily
+fetched (never reported as success).
 
 Stdlib only; needs ``git`` on PATH.
 """
@@ -59,6 +66,9 @@ BUDGET_KEYS = {
     "version", "baseline", "allowance", "total_ceiling_bytes",
     "new_unit_ceiling_bytes", "units", "exceptions",
 }
+SUSPENDED_KEY = "suspended"
+SUSPENDED_KEYS = {"by", "date", "until"}
+DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 
 
 class MeasureError(Exception):
@@ -264,9 +274,19 @@ def _record_authorizes(text: str, path: str, extra: int) -> bool:
 
 def validate_budget(repo: str, tree: str, b) -> dict:
     """Validate schema + derivation + exceptions. Returns {path: extra}."""
-    if not isinstance(b, dict) or set(b) != BUDGET_KEYS or b["version"] != 1:
+    if not isinstance(b, dict) or set(b) - {SUSPENDED_KEY} != BUDGET_KEYS \
+            or b["version"] != 1:
         raise BudgetError(f"{BUDGET_PATH}: keys must be exactly {sorted(BUDGET_KEYS)}"
-                          " with version 1")
+                          f" (plus optional {SUSPENDED_KEY!r}) with version 1")
+    if SUSPENDED_KEY in b:
+        sus = b[SUSPENDED_KEY]
+        if not (isinstance(sus, dict) and set(sus) == SUSPENDED_KEYS
+                and all(isinstance(sus[k], str) and sus[k].strip()
+                        for k in SUSPENDED_KEYS)
+                and DATE_RE.match(sus["date"])):
+            raise BudgetError(
+                f"{BUDGET_PATH}: {SUSPENDED_KEY!r} must be an object with exactly "
+                f"{sorted(SUSPENDED_KEYS)} (nonempty strings, date YYYY-MM-DD)")
     base, al, units = b["baseline"], b["allowance"], b["units"]
     if not (isinstance(base, dict) and isinstance(base.get("commit"), str)
             and SHA_RE.match(base["commit"])
@@ -433,8 +453,19 @@ def main(argv=None) -> int:
         print(f"FAIL (budget): {exc}", file=sys.stderr)
         return 1
     violations = evaluate(m, b, extras)
+    sus = b.get(SUSPENDED_KEY)
     if not args.quiet or violations:
         print(report(m, b, extras))
+    if sus:
+        print(f"SUSPENDED (report-only): size ceiling suspended by {sus['by']} on "
+              f"{sus['date']} until {sus['until']}; measured sim/ {m['sim_bytes']} B "
+              f"({m['sim_bytes'] - b['baseline']['sim_bytes']:+d} B vs baseline "
+              f"{b['baseline']['sim_bytes']} B)")
+        for line in violations:
+            print(f"  would-fail (not enforced): {line}")
+        print(f"OK (report-only): {len(violations)} ceiling breach(es) in "
+              f"{args.tree} not enforced while suspended")
+        return 0
     if violations:
         print(f"FAIL: {len(violations)} evidence size violation(s) in {args.tree}:",
               file=sys.stderr)
