@@ -216,6 +216,59 @@ class Measuring(Base):
                 self.assertIn("FAIL (budget)", err)
 
 
+class Suspended(Base):
+    """Issue #312: a `suspended` block makes the size check report-only."""
+
+    def suspend(self):
+        self.budget["suspended"] = {
+            "by": "operator", "date": "2026-10-20", "until": "2AMLogic/2am#5553"}
+        self.write_budget()
+
+    def test_breach_is_reported_but_exits_0_while_suspended(self):
+        self.suspend()
+        self.write(NEW + "/big.bin", "n" * 5000)  # over every ceiling
+        self.commit("big")
+        rc, out, err = self.run_main()
+        self.assertEqual(rc, 0, err)
+        self.assertIn("SUSPENDED (report-only)", out)
+        self.assertIn("2AMLogic/2am#5553", out)
+        self.assertIn(f"would-fail (not enforced): {NEW}: 5000 B measured", out)
+        self.assertIn("sim/ ", out)  # measured size line still printed
+        self.assertEqual(err, "")
+
+    def test_same_breach_fails_without_suspension(self):
+        self.write(NEW + "/big.bin", "n" * 5000)
+        self.commit("big")
+        self.assertEqual(self.run_main()[0], 1)
+
+    def test_suspended_still_exits_2_on_measurement_error(self):
+        self.suspend()
+        self.commit("budget")
+        self.assertEqual(self.run_main("no-such-rev")[0], 2)
+
+    def test_suspended_still_validates_budget(self):
+        self.suspend()
+        self.budget["allowance"]["percent"] = 20
+        self.write_budget()
+        self.commit("bad")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1, err)
+        self.assertIn("FAIL (budget)", err)
+
+    def test_malformed_suspended_block_rejected(self):
+        for bad in ({"by": "operator"}, "yes", {"by": "", "date": "2026-10-20", "until": "x"},
+                    {"by": "o", "date": "today", "until": "x"},
+                    {"by": "o", "date": "2026-10-20", "until": "x", "more": 1}):
+            with self.subTest(bad=bad):
+                self.setUp()
+                self.budget["suspended"] = bad
+                self.write_budget()
+                self.commit("bad")
+                rc, _, err = self.run_main()
+                self.assertEqual(rc, 1, err)
+                self.assertIn("FAIL (budget)", err)
+
+
 class PartialClone(Base):
     """A blob-filtered partial clone must fail closed fast, never lazy-fetch.
 
@@ -386,20 +439,173 @@ class Exceptions(Base):
         self.bad("duplicates path")
 
 
+SUBREC = "spec/decision-records/evidence-size/278-sim-raise.md"
+EXC_DIR = "sim/evidence-size-exceptions"
+
+
+class ExceptionFiles(Base):
+    """Issue #278: one file per exception so open PRs never share a line."""
+
+    def add_file(self, name, path, extra, rec=SUBREC, rec_items=None, **kw):
+        items = rec_items if rec_items is not None else [
+            {"kind": "evidence-size", "path": path, "additional_bytes": extra}]
+        self.write(rec, "# DR\n\n```json\n" + json.dumps(items) + "\n```\n")
+        self.write(f"{EXC_DIR}/{name}", json.dumps({
+            "path": path, "additional_bytes": extra, "reason": "why",
+            "decision_record": rec, **kw}))
+
+    def test_empty_or_missing_dir_and_non_json_ignored(self):
+        self.write(f"{EXC_DIR}/README.md", "not an exception")
+        self.write(f"{EXC_DIR}/sub/x.json", "{bad")
+        self.commit("x")
+        self.assertEqual(self.run_main()[0], 0)
+
+    def test_file_exception_in_subdir_record_raises_ceiling(self):
+        self.write("sim/big.txt", "b" * 1500)
+        self.add_file("278.json", "sim", 2000)
+        self.commit("x")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 0, err)
+
+    def test_sim_exceptions_sum_across_files_and_budget(self):
+        self.add_exception("sim", 1000)
+        self.add_file("a.json", "sim", 500, rec="spec/decision-records/evidence-size/a.md")
+        self.add_file("b.json", "sim", 700, rec="spec/decision-records/evidence-size/b.md")
+        self.commit("x")
+        extras = chk.validate_budget(str(self.root), "HEAD", chk.load_budget(
+            str(self.root), "HEAD"))
+        self.assertEqual(extras["sim"], 2200)
+
+    def test_sum_is_exact(self):
+        self.add_file("a.json", "sim", 500, rec="spec/decision-records/evidence-size/a.md")
+        self.add_file("b.json", "sim", 700, rec="spec/decision-records/evidence-size/b.md")
+        self.commit("x")
+        m = chk.measure(str(self.root), "HEAD")
+        self.write("sim/pad.txt", "p" * (6200 - m["sim_bytes"]))
+        self.commit("fill")
+        self.assertEqual(self.run_main()[0], 0)
+        self.write("sim/pad2.txt", "p")
+        self.commit("over")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1)
+        self.assertIn("total ceiling 6200 B", err)
+
+    def test_same_sim_record_and_bytes_pair_rejected(self):
+        self.add_file("a.json", "sim", 500)
+        self.add_file("b.json", "sim", 500)
+        self.commit("x")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1)
+        self.assertIn("b.json repeats the sim exception", err)
+
+    def test_duplicate_unit_path_across_file_and_budget_rejected(self):
+        self.add_exception(NEW, 5)
+        self.add_file("a.json", NEW, 5, rec="spec/decision-records/evidence-size/a.md")
+        self.commit("x")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1)
+        self.assertIn("a.json duplicates path", err)
+
+    def test_duplicate_unit_path_across_two_files_rejected(self):
+        self.add_file("a.json", NEW, 5, rec="spec/decision-records/evidence-size/a.md")
+        self.add_file("b.json", NEW, 6, rec="spec/decision-records/evidence-size/b.md")
+        self.commit("x")
+        self.assertEqual(self.run_main()[0], 1)
+
+    def test_bad_record_names_file(self):
+        self.add_file("a.json", "sim", 500, rec_items=[
+            {"kind": "evidence-size", "path": "sim", "additional_bytes": 501}])
+        self.commit("x")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1)
+        self.assertIn(f"{EXC_DIR}/a.json: ", err)
+
+    def test_malformed_file_rejected(self):
+        self.write(f"{EXC_DIR}/a.json", "{nope")
+        self.commit("x")
+        rc, _, err = self.run_main()
+        self.assertEqual((rc, "a.json is not valid JSON" in err), (1, True))
+
+    def test_record_path_escapes_rejected(self):
+        for rec in ("spec/decision-records/evidence-size/../x.md",
+                    "spec/decision-records/evidence-size/a/b.md",
+                    "spec/decision-records/other/a.md"):
+            with self.subTest(rec=rec):
+                self.setUp()
+                self.add_file("a.json", "sim", 5, rec=SUBREC)
+                self.write(f"{EXC_DIR}/a.json", json.dumps({
+                    "path": "sim", "additional_bytes": 5, "reason": "r",
+                    "decision_record": rec}))
+                self.commit("x")
+                rc, _, err = self.run_main()
+                self.assertEqual(rc, 1)
+                self.assertIn("decision_record must be", err)
+
+    def test_two_branches_adding_different_files_merge_cleanly(self):
+        self.commit("budget")
+        for br, n in (("one", 1), ("two", 2)):
+            self.git("checkout", "-q", "-b", br, "main")
+            self.add_file(f"{n}.json", "sim", 100 * n,
+                          rec=f"spec/decision-records/evidence-size/{n}.md")
+            self.commit(br)
+        self.git("checkout", "-q", "one")
+        self.git("merge", "-q", "--no-edit", "two")
+        extras = chk.validate_budget(str(self.root), "HEAD", chk.load_budget(
+            str(self.root), "HEAD"))
+        self.assertEqual(extras["sim"], 300)
+
+
+class ManifestOnly(Base):
+    """Issue #318: after the re-baseline new evidence is a manifest plus a
+    summary, so ordinary growth needs no exception (the #276 case)."""
+
+    def test_source_growth_under_sim_passes_without_exception(self):
+        self.commit("budget")
+        self.assertEqual(self.budget["exceptions"], [])
+        self.write("sim/harness/new_module.py", "s" * 300)
+        self.commit("source")
+        rc, out, err = self.run_main()
+        self.assertEqual(rc, 0, err)
+
+    def test_manifest_and_summary_run_passes_without_exception(self):
+        self.commit("budget")
+        self.write("manifests/artifacts/a-r2.manifest.json", "m" * 2000)  # outside sim/
+        self.write("sim/a/records/r2.md", "# summary\n")
+        self.commit("stored run")
+        rc, out, err = self.run_main()
+        self.assertEqual(rc, 0, err)
+        self.assertIn("sim/a/records/r2.md", out)
+
+    def test_new_unit_over_ceiling_fails_without_exception(self):
+        self.commit("budget")
+        # Raise the total so only the per-unit ceiling can trip.
+        self.add_exception("sim", 5000)
+        self.write(NEW + "/blob.bin", "b" * 1001)
+        self.commit("committed blob")
+        rc, _, err = self.run_main()
+        self.assertEqual(rc, 1)
+        self.assertIn(f"{NEW}: 1001 B measured > new-unit ceiling 1000 B", err)
+
+
 class RepoBudget(unittest.TestCase):
     def test_committed_budget_is_valid_and_matches_issue_baseline(self):
+        # Issue #318: re-baselined at main 4c0db1c86 with exceptions cleared
+        # (spec/decision-records/evidence-size/318-manifest-store-rebaseline.md).
         b = json.loads((ROOT / "sim/evidence-size-budget.json").read_text())
+        self.assertEqual(b["baseline"]["commit"], "4c0db1c86b9318a5f4af922f6750d8d7e3441adb")
         self.assertEqual(b["allowance"]["derivation"],
-                         "ceil(10% x 489675829 B / 1048576 B/MiB) = 47 MiB")
-        self.assertEqual(b["baseline"]["sim_bytes"], 489675829)
-        self.assertEqual(b["baseline"]["sim_blobs"], 96352)
-        self.assertEqual(b["total_ceiling_bytes"], 489675829 + 47 * 1048576)
-        extras = chk.validate_budget(str(ROOT), "HEAD", b)
-        # Issue #167: exactly the two DR-0005 raises (validate_budget has already
-        # required a decision record carrying each exact path and byte count).
-        self.assertEqual(set(extras), {"sim", "sim/klt-corner-verification/campaigns/20261010-n200"})
-        self.assertTrue(all(v > 0 for v in extras.values()))
-        self.assertEqual(sum(1 for _ in b["units"]), len(b["units"]))
+                         "ceil(10% x 567379629 B / 1048576 B/MiB) = 55 MiB")
+        self.assertEqual(b["baseline"]["sim_bytes"], 567379629)
+        self.assertEqual(b["baseline"]["sim_blobs"], 114687)
+        self.assertEqual(b["total_ceiling_bytes"], 567379629 + 55 * 1048576)
+        self.assertEqual(b["exceptions"], [])
+        self.assertEqual(chk.validate_budget(str(ROOT), "HEAD", b), {})
+
+    def test_committed_budget_is_enforced(self):
+        b = json.loads((ROOT / "sim/evidence-size-budget.json").read_text())
+        self.assertNotIn("suspended", b)
+        self.assertTrue((ROOT / "spec/decision-records/evidence-size/"
+                         "318-manifest-store-rebaseline.md").is_file())
 
     def test_head_within_committed_budget(self):
         rc = chk.main(["--repo", str(ROOT), "--tree", "HEAD", "--quiet"])

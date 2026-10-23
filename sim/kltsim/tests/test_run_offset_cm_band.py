@@ -87,7 +87,7 @@ class Base(unittest.TestCase):
 class RetryTests(Base):
     def go(self, retry):
         self.args.retry_refused = retry
-        return rcb._submit_with_retry(Path("r"), Path("o"), "t", self.args, {"kind": "k"})
+        return kcli._submit_with_retry(Path("r"), Path("o"), "t", self.args, {"kind": "k"})
 
     def test_success_first_try(self):
         self.assertEqual(self.go(3), 0)
@@ -117,6 +117,31 @@ class RetryTests(Base):
         self.assertEqual(self.go(3), 5)
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(self.sleeps, [])
+
+
+class LocalSmokeTests(unittest.TestCase):
+    def run_smoke(self, stdout, returncode=0):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        work = Path(tmp.name)
+        proc = mock.Mock(stdout=stdout, stderr="", returncode=returncode)
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(kcli.subprocess, "run", return_value=proc) as run, \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = kcli.run_local_smoke({"a": 1}, work, "klt")
+        return code, out.getvalue(), run, work
+
+    def test_prints_each_corner_and_saves_envelope(self):
+        env = ('{"corners": [{"corner_id": "c0", "status": "ok", '
+               '"measurements": [{"name": "m", "value": 1.5}]}]}')
+        code, out, run, work = self.run_smoke(env)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip(), "c0 ok {'m': 1.5}")
+        self.assertEqual((work / "envelope.json").read_text(), env)
+        self.assertIn("local", run.call_args[0][0])
+
+    def test_unparseable_stdout_returns_1(self):
+        self.assertEqual(self.run_smoke("not json", 2)[0], 1)
 
 
 class RunTests(Base):

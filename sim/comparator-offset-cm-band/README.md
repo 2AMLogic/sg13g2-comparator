@@ -118,7 +118,7 @@ That tool gap is tracked at 2AMLogic/klayout-tools#2918.
 
 ### Supplementary max-step attempt (#89), not yet successful
 
-`campaigns/20261011-33aef587e-maxstep20p/` is the first submission of the
+`campaigns/20261011-33aef587e-maxstep20p.md` summarises the first submission of the
 supplementary campaign (`tran 100p 990n 0 20p`, seed 20260916, N=60, all three
 conditions at the two points). **It produced no simulation data**: all six
 batch jobs failed within about 5 s (`batch_job_failed`, runner exit 87) because
@@ -128,10 +128,14 @@ were mixed: five retained envelopes were submitted by klt 0.7.0+g04ca88ce427c,
 and `vcm-p050/offset_cm.mos_sf_mismatch` by 0.6.0+g3a75c3ae705b. The other 21
 attempts in `attempts.jsonl` (all 0.6.0, exit 1) were refused at the fleet's
 concurrency cap and produced no envelope. The retained envelopes are evidence
-of that failed attempt only. They are committed as byte-exact `gzip -9n`
-copies (`*.envelope.json.gz`). The decompressed bytes hash to each
+of that failed attempt only. Their bytes (envelopes as byte-exact `gzip -9n`
+copies, spice decks, requests, invocations, `attempts.jsonl` and
+`supplement-report.json`) are in the fleet artifact store, named by
+`manifests/artifacts/comparator-offset-cm-band-20261011-33aef587e-maxstep20p.manifest.json`;
+git keeps only that manifest and the summary. The decompressed envelope bytes hash to each
 invocation's `envelope_sha256`. They say nothing about the max step,
 a bench artifact, or a convergence weakness, so the question above stays open.
 The 43/45 result of the parent campaign is unchanged. Re-submission needs a
 fleet runner image compatible with the client; `supplement-report` regenerates
-the report from whichever envelopes exist.
+the report from whichever envelopes exist in a series directory (fetch stored
+objects with `klt artifact get <manifest>#<name>`).

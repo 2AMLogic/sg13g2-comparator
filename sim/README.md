@@ -241,9 +241,23 @@ locally launched grid.
 simulation-free step (issue #64):
 
 ```bash
-./sim/characterize.sh report          # regenerate sim/characterization/20261009-d73a9ac-schematic/
+./sim/characterize.sh report          # regenerate sim/characterization/20261009-d73a9ac-schematic-r2/
 ./sim/characterize.sh report check    # re-hash every indexed source; fail if anything is stale
 ```
+
+A grader change re-mints the report directory (the sha256 of every grader source,
+`sim/kltsim/grade.py` and `sim/kltsim/populations.py`, is an indexed source);
+`sim/kltsim/characterization.py` `REPORT_DIR_NAMES` names the current
+one (`-r2` after issue #245) and the superseded directory stays as history.
+
+**Sample-population integrity (issue #245).** Before the offset and
+transient-noise reducers use a klt per-corner summary, `sim/kltsim/populations.py`
+(shared with `yield_reports.collect_populations`) requires each PVT point's
+sample records to carry unique nonnegative integer `sample_index` values across
+all envelopes, one base corner id, exactly the declared N records, and a summary
+whose `n + errored` equals those records. A point failing this supplies no
+compliance value (INCOMPLETE, point-specific reason); a numerical miss at
+another trusted point still reports FAIL.
 
 Report directories are append-only evidence. `report` into an existing
 directory succeeds only when every existing artifact is byte-identical to the
@@ -356,11 +370,17 @@ sim/<experiment-slug>/
   README.md                       method, provenance, and what was NOT ported
   testbench/tb.json               manifest: analyses, measurements, checks
   testbench/<name>.spice          netlist FRAGMENT (harness owns models/OSDI/.temp/.control)
-  records/<record-id>.md          the evidence record   <- append-only
-  records/<record-id>.json        the same, machine-readable
-  corners/<record-id>/<corner-id>.log   raw ngspice output, one per PVT point
-  netlist-snapshots/<record-id>.spice   DUT + fragment exactly as simulated
+  records/<record-id>.md          the evidence record   <- append-only, committed
+  records/<record-id>.json        the same, machine-readable          (stored)
+  corners/<record-id>/<corner-id>.log   raw ngspice output, one per PVT point (stored)
+  netlist-snapshots/<record-id>.spice   DUT + fragment exactly as simulated (stored)
+manifests/artifacts/<experiment-slug>-<record-id>.manifest.json   <- committed
 ```
+
+Since issue #318 the three "(stored)" members of a new record are written to
+the fleet artifact store, not to git: the paths above are the `name`s their
+manifest gives them. Records minted before #318 keep all four members in git.
+See "Stored evidence" below.
 
 `<record-id>` is `<UTC-YYYYmmdd-HHMMSS>-<short-sha>-<token>`, where `<token>`
 is 6 random hex digits (issue #110). Records minted before #110 have no
@@ -377,7 +397,10 @@ writes any deck or log (`harness/report.py` `reserve_run`):
    or `corners/<id>/`. Orphans left by a crashed run (logs without a
    record, or a stray snapshot) occupy the ID the same as a finished record.
 3. The ID is claimed with an atomic `mkdir` of `corners/<id>/` (evidence
-   runs only), then of a private scratch dir `sim/.work/<slug>/<id>/`. If
+   runs only; since #318 that directory is in the git-ignored staging tree
+   `sim/.work/.stage/<slug>/sim/<slug>/`, and the ID is also refused if the
+   committed record or its manifest already exists), then of a private
+   scratch dir `sim/.work/<slug>/<id>/`. If
    either already exists, another run owns it. This run undoes only the
    empty directory it just created and retries with a new token. After 32
    failed attempts it refuses with exit code 5 and simulates nothing.
@@ -430,10 +453,62 @@ it:
 - the full per-corner result table, the grid spread, the per-axis corner
   sensitivity, the verdict, and the reproduction command.
 
-Raw per-corner ngspice logs are committed alongside (`.gitignore` explicitly
-un-ignores `sim/*/corners/**/*.log` for this reason), so a reader can check a
+Raw per-corner ngspice logs are kept with the record, so a reader can check a
 number against the tool's own output rather than against a table somebody
-transcribed.
+transcribed. Records minted before issue #318 commit them (`.gitignore`
+un-ignores `sim/*/corners/**/*.log`); newer ones store them, and the record's
+"Stored evidence" table names each log's sha256.
+
+## Stored evidence
+
+New evidence bytes go to the fleet artifact store; git keeps a manifest and a
+Markdown summary (issue #318, implementing 2AMLogic/2am#5562; decision record
+[`318-manifest-store-rebaseline.md`](../spec/decision-records/evidence-size/318-manifest-store-rebaseline.md)).
+**Evidence bytes are private and manifests are public** (operator decision
+1.1, 2026-10-22): a manifest is safe in this public repo, and only callers
+the broker admits can fetch what it names.
+
+- **Corner-runner records.** `python3 sim/run_corners.py <bench>` writes the
+  bundle into `sim/.work/.stage/` (git-ignored), stores the JSON twin,
+  netlist snapshot and per-corner logs with `klt artifact put`, then commits
+  `manifests/artifacts/<bench>-<record-id>.manifest.json` and
+  `sim/<bench>/records/<record-id>.md`. The record ends with a "Stored
+  evidence" table (name, size, sha256 per object). Zero-byte files cannot
+  be stored and are listed there as empty.
+- **Campaigns and other outputs.** Write them to scratch (`sim/.work/...` or
+  outside the repo), then
+  `python3 sim/run_store_evidence.py <bench> <run-id> <dir> --summary <summary.md>`.
+  It commits `manifests/artifacts/<bench>-<run-id>.manifest.json` and
+  `sim/<bench>/campaigns/<run-id>.md` (`--kind` picks another protected
+  directory).
+- **Configuration** is the environment only, read by `klt`:
+  `KLT_ARTIFACT_BROKER` (broker base URL) and, optionally,
+  `KLT_ARTIFACT_REPO`. There are no defaults, and none is written in this
+  repo. There is no bucket setting: a manifest `uri` is the logical
+  `artifact:<key>`, which only the broker resolves (operator ruling H1,
+  2AMLogic/2am#5553), so a public manifest names no storage location. The
+  writer and `check_artifact_manifests.py` refuse any other scheme. `klt`
+  must be klayout-tools `7e3561f` or later (PR #4070), the first revision that
+  writes `artifact:<key>`. `klt` reports no commit, so the writer checks the
+  behaviour: it hands `klt artifact verify` an offline probe manifest with a
+  legacy bucket-naming `uri` and requires `klt` to refuse it. That client is
+  separate from the signoff/layout build pinned in `manifests/klt-pin.json`,
+  which is unchanged.
+- **Fail closed.** If the broker is unset, unreachable or refuses, or `klt`
+  lacks the verb or is older than `7e3561f`, `run_corners.py` refuses before
+  simulating (exit 10). A
+  put that fails after the grid also exits 10. In both cases nothing goes
+  under `manifests/` or `sim/`, and the staged bytes stay in
+  `sim/.work/.stage/`. There is no option to commit the bytes instead.
+  `--no-write` exploration needs no store.
+- **Verify by hash.** `klt artifact get <manifest>#<name> -o <out>` fetches
+  one object and re-hashes it. `python3 scripts/check_artifact_manifests.py
+  verify <manifest>...` re-hashes every entry against the manifest and the
+  broker's key and reports `ok`, `missing`, `size_mismatch`, `hash_mismatch`
+  or `key_mismatch` (exit 3 on any failure, 2 if the broker cannot be
+  reached). CI runs `check_artifact_manifests.py check --tree <sha>`: schema,
+  and no stored object also committed. CI cannot reach the broker, so it
+  does not hash-verify and says so.
 
 ## What CI runs
 
@@ -463,7 +538,8 @@ Commands and regeneration:
 characterization reports, issue #155), and every file under `sim/<bench>/{records,corners,netlist-snapshots,campaigns,reports}/`
 for any bench name (matched by path component), including campaign request
 JSON, copied DUTs, generated decks, probes, failed attempts, and
-`comparator-pex/reports/`. A protected path present at the base must exist at
+`comparator-pex/reports/`, plus every stored-evidence manifest
+`manifests/artifacts/*.manifest.json` (issue #318). A protected path present at the base must exist at
 the head with the same blob ID and mode; additions are always fine. Edits,
 deletions, type/mode changes, and moves *away* from a protected path fail (a
 move is a deletion plus an addition; moving a file *into* a protected
@@ -471,7 +547,7 @@ directory, or copying evidence unchanged, passes).
 
 **Not protected (mutable sources):** `sim/*/testbench/`,
 `sim/klt-corner-verification/benches/`, `sim/comparator-pex/{dut,requests}/`,
-harness/adapter code, READMEs, manifests, and
+harness/adapter code, READMEs, the signoff manifests under `manifests/`, and
 `layout/comparator/{comparator.pex.spice,pex_report.json}`.
 
 **Comparison modes (CI):** pull request -- `git merge-base base head` to the
@@ -513,8 +589,7 @@ Committed evidence dominates repository size, so growth is bounded by a
 machine-checked contract (issue #132). The `append-only-evidence` job runs
 `scripts/check_evidence_size.py --tree <target sha>` (stdlib only) against
 `sim/evidence-size-budget.json`. Bulk-storage policy (compression versus
-external storage) is deliberately out of scope here; this only measures and
-caps growth, and never edits, moves or externalizes existing evidence.
+external storage) is out of scope; this only measures and caps growth.
 
 **Before review.** Run `python3 scripts/check_evidence_size.py --tree HEAD` on
 the final commit; the PR states that SHA, exit status (0 ok, 1 violation, 2
@@ -523,55 +598,71 @@ below; this grants none. No Python: say local validation is unavailable and
 cite the passing `append-only-evidence` CI for that commit (skipped is not
 success).
 
+**Measured against manifests (issue #318).** The ceiling was suspended
+from 2026-10-20 (`spec/decision-records/evidence-size/312-suspend-evidence-size-ceiling.md`)
+and is enforced again: new evidence bytes are stored (see "Stored evidence"),
+so the budget now governs what a run commits, which is a manifest under
+`manifests/artifacts/` (outside `sim/`, not counted) and a summary under
+`sim/<bench>/` (counted), plus source growth. The budget was re-baselined at
+`main` with `exceptions` cleared
+(`spec/decision-records/evidence-size/318-manifest-store-rebaseline.md`); the
+old exception records stay as history. Ordinary source changes under `sim/`
+need no exception (the #276 case). A committed blob that pushes a new unit
+past the new-unit ceiling, or `sim/` past the total, fails. The checker still
+supports a `suspended` block (report-only, exit 0 on a breach) for an
+operator ruling; none is set.
+
 **Accounting.** Bytes are Git blob sizes from `git ls-tree -rl <tree>` of the
 named commit/tree -- not working-tree or pack sizes. The checker reports
-repository-wide and `sim/` totals plus per **evidence unit**: the entry
+repo and `sim/` totals plus per **evidence unit**: the entry
 `sim/<bench>/<records|corners|netlist-snapshots|campaigns|reports>/<name>`
-(a campaign or run directory, or one record/report file). A missing or
-non-numeric size fails closed (exit 2), so never use a blob filter. The checker
-also refuses a partial clone up front (`extensions.partialClone` or a
-`remote.<name>.promisor` remote: exit 2, naming the cause) and runs git with
-`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error, not a lazy fetch
-(CI run 38029844566 hung that way). A shallow
-clone is accepted: it holds every blob of the commits it has.
+(a campaign/run directory or one record/report file). A missing or
+non-numeric size fails closed (exit 2): no blob filters. The checker
+refuses a partial clone up front (`extensions.partialClone` or a
+`remote.<name>.promisor` remote: exit 2) and runs git with
+`GIT_NO_LAZY_FETCH=1`, so a missing blob is an error, not a lazy fetch (CI run
+38029844566 hung that way). A shallow clone is accepted.
 
-**Baseline and grandfathering.** The budget file records the baseline commit
-(`2c6002775...`: 97,217 blobs / 509,447,840 B repo, 96,352 blobs /
-489,675,829 B under `sim/`) and the bytes of every existing unit. An existing
+**Baseline and grandfathering.** The budget records the baseline commit
+(`4c0db1c86...`: 115,641 blobs / 587,974,295 B repo, 114,687 blobs /
+567,379,629 B under `sim/`; issue #318, superseding the issue #132 baseline
+`2c6002775...`) and the bytes of every existing unit. An existing
 unit may not exceed its recorded bytes (grandfathered at exactly that size).
 
 **Thresholds.** Allowance = 10% of baseline `sim/` bytes rounded up to the next
-MiB: ceil(10% x 489,675,829 B / 1,048,576) = 47 MiB = 49,283,072 B.
-* total ceiling = baseline `sim/` bytes + allowance = 538,958,901 B (the
+MiB: ceil(10% x 567,379,629 B / 1,048,576) = 55 MiB = 57,671,680 B.
+* total ceiling = baseline `sim/` bytes + allowance = 625,051,309 B (the
   budget file and any other `sim/` file count toward it);
-* a unit not in the baseline (a new campaign) is capped at the same 49,283,072 B.
-The checker validates the derivation (percentage, operands, ceilings); changing
-the percentage or resetting the baseline is a reviewed change to
-`scripts/check_evidence_size.py` plus a decision record, not a quiet edit of
-the JSON. Regenerate numbers for a new baseline with
+* a unit not in the baseline (a new campaign) is capped at the same 57,671,680 B.
+The checker validates the derivation; changing the percentage or resetting the
+baseline is a reviewed change to `scripts/check_evidence_size.py` plus a
+decision record, not a quiet edit of the JSON. Regenerate numbers for a new baseline with
 `python3 scripts/check_evidence_size.py --tree <commit> --emit-budget <commit>`.
 
-**Exceptions.** There is no bypass flag or environment override. An entry in
-the budget's `exceptions` list names one exact path (`sim` for the total, or one
-evidence unit; no wildcards), the exact `additional_bytes`, a `reason`, and a
-tracked `spec/decision-records/*.md` containing a fenced `json` block with the
-same path and bytes:
+**Exceptions.** No bypass flag or environment override exists. An entry names
+one exact path (`sim` for the total, or one evidence unit; no wildcards), the
+exact `additional_bytes`, a `reason`, and a tracked `spec/decision-records/`
+`*.md` with a fenced `json` block carrying the same path and bytes:
 
 ```json
 {"kind": "evidence-size", "path": "sim/<bench>/campaigns/<id>", "additional_bytes": 12345678}
 ```
 
 The bytes raise only that path's ceiling (baseline or new-unit) by exactly that
-amount. Missing or mismatching records, extra/missing keys, wildcards,
-non-positive or non-integer bytes, and duplicates fail validation.
-Overage output names the path, measured bytes, ceiling and this route.
+amount. Bad or missing records, keys, wildcards, non-positive or non-integer bytes
+and duplicates fail validation. Overage output names this route.
+
+Entries may live one per file in
+`sim/evidence-size-exceptions/<issue>-<slug>.json` (issue #278), so open PRs
+never edit a shared line; the checker sums them with the budget's `exceptions`. `sim` may repeat (own record each);
+a unit path once. Name the record
+`spec/decision-records/evidence-size/<issue>-<slug>.md` (see `spec/README.md`).
 
 **Sparse CI checkouts.** Every job in `.github/workflows/ci.yml` checks out
 only its explicit, audited inputs (non-cone patterns, never a `filter:`).
 Caveat: `actions/checkout` silently adds `--filter=blob:none` whenever its
-`sparse-checkout:` input is set, and an empty `filter:` cannot turn that off.
-Jobs reading only inside their cone use that input (blob-less partial
-clones, harmless for them). The `append-only-evidence` job measures blob
+`sparse-checkout:` input is set (an empty `filter:` cannot undo it); jobs reading
+only inside their cone use it, harmlessly. The `append-only-evidence` job measures blob
 sizes, so it must be a complete clone: its checkout has `fetch-depth: 0` and
 **no** `sparse-checkout:` input, and the next step applies its patterns with
 `git sparse-checkout set --no-cone --stdin` (failing with exit 2 if the clone
@@ -582,9 +673,9 @@ transitive inputs):
 |---|---|
 | signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
-| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `sim/comparator-offset-cm-band/campaigns/20261009-5185f52/{vcm-m050,vcm-nom,vcm-p050}/{*.spice,*.request.json}`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
+| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh,tools/regen_reverse_control.py}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `sim/comparator-offset-cm-band/campaigns/20261009-5185f52/{vcm-m050,vcm-nom,vcm-p050}/{*.spice,*.request.json}`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
 | netlist-regeneration | `design/`, `sim/harness/`, `sim/pdk.json` |
-| append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` |
+| append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `sim/evidence-size-exceptions/`, `spec/decision-records/` (the size and manifest checks read blobs from the target commit, not the working tree) |
 
 A new input a job starts reading must be added to its patterns in the same
 change. `scripts/tests/test_sparse_checkout.py` proves the cones: it builds a
@@ -594,9 +685,8 @@ for a `sparse-checkout:` input, complete clone otherwise) and runs the job's
 exact `run:` commands, including the narrowing step (tests skipping because an
 input is outside the cone fail). It also asserts that every job running the
 size checker gets a complete clone, and that the size step exits 2 quickly in
-a `blob:none` clone. The two jobs that need the pinned `klt` run there only when the
-pinned build is first on `PATH`; otherwise they are skipped locally and proven
-by the real CI jobs.
+a `blob:none` clone. The two jobs needing the pinned `klt` run there only when it is first on
+`PATH`; otherwise they are skipped locally and proven by real CI.
 
 The harness job's lint population is guarded by
 `scripts/check_lint_population.py` (issue #216): it derives the intended set
