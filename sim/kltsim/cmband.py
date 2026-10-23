@@ -45,6 +45,19 @@ the ratified quantization-corrected 3-sigma,
 errored or probe-inconsistent draw, with N other than the ratified 60, or
 with zero spread (mismatch not applied) is REJECTED: no sigma is reported
 for it.
+
+DRAW EVIDENCE (issue #250). Before any reduction, every draw's numbers go
+through the shared evidence policy (``grade.finite`` / ``grade.convert``):
+``vos_mv`` is a finite offset normalized to mV, ``vcm_meas`` a finite
+voltage normalized to V, and NaN/Infinity, booleans, strings or a wrong-
+dimension unit make the draw a named untrusted draw. Each draw's identity
+-- ``monte_carlo.sample_index`` and ``seed`` -- must be a nonnegative
+integer; a population whose indices repeat (or are not ``0..N-1``) or whose
+seeds repeat is rejected without selecting a copy. ``paired()`` pairs only
+two complete trusted populations with the same indices and the same valid
+seeds, and records ``pair_rejected`` otherwise. ``reproduction()`` accounts
+for both sides' full identity sets and reports a complete-reproduction
+``verdict`` separately from the informational surviving-draw counts.
 """
 
 from __future__ import annotations
@@ -71,7 +84,8 @@ BODY_NAME = f"{BENCH_NAME}.body.spice"
 
 VCM_LINE = "vcm cm 0 dc {dut_vcm}"
 VCM_LINE_CM = "vcm cm 0 dc {dut_vcm+vcm_delta}"
-CONDITION_MARK = "* ---- CM-band condition (issue #79):"
+CONDITION_MARK_PREFIX = "* ---- CM-band condition"
+CONDITION_MARK = f"{CONDITION_MARK_PREFIX} (issue #79):"
 
 #: DR-0002 Row 1 Target, quoted as a reference only (see module docstring).
 TARGET_3SIGMA_MV = 15.0
@@ -170,10 +184,14 @@ def apply_transform(body: str, cond: Condition) -> str:
 
 
 def undo_transform(body: str) -> str:
-    """Inverse of the line rewrite (header excepted) -- for tests/audit."""
+    """Inverse of the line rewrite (header excepted) -- for tests/audit.
+
+    Matches the mark by its issue-independent prefix, so it also undoes bodies
+    stamped by `cmdecision.apply_transform`.
+    """
     out = []
     for line in body.split("\n"):
-        if line.startswith(CONDITION_MARK) or line.startswith(".param vcm_delta="):
+        if line.startswith(CONDITION_MARK_PREFIX) or line.startswith(".param vcm_delta="):
             continue
         out.append(VCM_LINE if line == VCM_LINE_CM else line)
     return "\n".join(out)
@@ -236,17 +254,74 @@ def part_tags() -> list[str]:
 # --------------------------------------------------------------------------- #
 
 
+#: Units the per-draw evidence is normalized to before any comparison or
+#: statistic (issue #250): offsets in mV, the common-mode probe in V.
+VOS_UNIT = "mV"
+VCM_UNIT = "V"
+
+
+def valid_identity(value) -> bool:
+    """A Monte-Carlo identity (``sample_index`` / ``seed``): a nonnegative
+    integer, never a bool, float, string or missing value (issue #250)."""
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _identity_sort_key(sample: dict):
+    """Total order over samples even when an identity is malformed: valid
+    indices first, numerically; anything else after, by its repr."""
+    idx = sample.get("sample_index")
+    if valid_identity(idx):
+        return (0, idx, "")
+    return (1, 0, repr(idx))
+
+
+def _normalized(entry: dict, what: str, unit: str) -> tuple[float | None, str | None]:
+    """``entry['value']`` as a finite float in ``unit``, or ``(None, reason)``.
+
+    Reuses the shared evidence policy (``grade.finite`` / ``grade.convert``):
+    NaN, +/-Infinity, booleans and non-numeric strings are not numbers; a
+    missing, non-string or wrong-dimension unit is not convertible -- never a
+    silent pass-through or a crash."""
+    try:
+        raw = grade_mod.finite(entry.get("value"), what)
+    except grade_mod.NonFiniteError as exc:
+        return None, f"invalid numeric evidence: {exc}"
+    src = entry.get("unit")
+    if not isinstance(src, str):
+        return None, f"{what} has missing or malformed unit {src!r} (expected {unit} or a compatible unit)"
+    try:
+        return grade_mod.finite(grade_mod.convert(raw, src, unit), what), None
+    except grade_mod.UnitError:
+        return None, f"{what} unit {src!r} is not convertible to {unit}"
+    except grade_mod.NonFiniteError as exc:
+        return None, f"invalid numeric evidence: {exc}"
+
+
 def load_points(envelopes: list[dict], vcm_v: float | None = None) -> dict[tuple, list[dict]]:
     """Per grid point, its Monte-Carlo samples (sorted by sample index).
 
-    With ``vcm_v``, a sample whose ``vcm_meas`` probe is missing or differs
-    from it is untrusted (the condition was not applied)."""
+    Every sampled corner is kept -- trusted or not -- so the population's
+    identity set stays accountable. A sample is untrusted (``problem`` set)
+    when its corner errored or failed a probe, its measurement list is
+    malformed or ambiguous, its ``sample_index`` or ``seed`` is not a
+    nonnegative integer, or its ``lowcount`` / ``vos_mv`` is missing,
+    non-finite or of an incompatible unit (issue #250). ``vos_mv`` is
+    normalized to mV (None when it cannot be trusted as a number).
+
+    With ``vcm_v``, a sample whose ``vcm_meas`` probe is missing, not a finite
+    voltage, or differs from it is untrusted (the condition was not applied)."""
     points: dict[tuple, list[dict]] = {}
     for env in envelopes:
         for corner in env.get("corners") or []:
+            if not isinstance(corner, dict):
+                continue
             mc = corner.get("monte_carlo")
             if mc is None:
                 continue
+            if not isinstance(mc, dict):
+                mc, mc_problem = {}, f"malformed monte_carlo record ({type(mc).__name__})"
+            else:
+                mc_problem = None
             key = grade_mod._corner_key(corner)
             # Validated lookup (issue #150): a repeated or malformed measurement
             # entry makes the sample untrusted; no copy is selected.
@@ -255,29 +330,92 @@ def load_points(envelopes: list[dict], vcm_v: float | None = None) -> dict[tuple
             vos = values.get("vos_mv") or {}
             problem = grade_mod._corner_problems(corner, OFFSET_MC.name, gates=[])
             clipped = lc.get("value") is not None and lc.get("status") != "pass"
+            if problem is None:
+                problem = mc_problem
+            sample_index, seed = mc.get("sample_index"), mc.get("seed")
+            if problem is None and not valid_identity(sample_index):
+                problem = f"invalid monte_carlo.sample_index {sample_index!r} (not a nonnegative integer)"
+            if problem is None and not valid_identity(seed):
+                problem = f"invalid monte_carlo.seed {seed!r} (missing or not a nonnegative integer)"
             if lc.get("value") is None and problem is None:
                 problem = "lowcount not reported"
+            if problem is None:
+                try:
+                    grade_mod.finite(lc.get("value"), "lowcount")
+                except grade_mod.NonFiniteError as exc:
+                    problem = f"invalid numeric evidence: {exc}"
             if vos.get("value") is None and problem is None:
                 problem = "vos_mv not reported"
+            vos_mv = None
+            if vos.get("value") is not None:
+                vos_mv, bad = _normalized(vos, "vos_mv", VOS_UNIT)
+                if bad and problem is None:
+                    problem = bad
             if vcm_v is not None and problem is None:
-                probe = (values.get(VCM_PROBE.name) or {}).get("value")
-                if probe is None:
+                probe_entry = values.get(VCM_PROBE.name) or {}
+                if probe_entry.get("value") is None:
                     problem = "common-mode probe vcm_meas missing"
-                elif abs(float(probe) - vcm_v) > VCM_TOL_V:
-                    problem = f"common-mode probe vcm_meas={probe} V is not the condition's {vcm_v} V"
+                else:
+                    probe, bad = _normalized(probe_entry, "common-mode probe vcm_meas", VCM_UNIT)
+                    if bad:
+                        problem = bad
+                    elif abs(probe - vcm_v) > VCM_TOL_V:
+                        problem = (f"common-mode probe vcm_meas={probe_entry.get('value')} "
+                                   f"{probe_entry.get('unit')} is not the condition's {vcm_v} V")
             points.setdefault(key, []).append({
                 "corner_id": corner.get("corner_id"),
-                "sample_index": mc.get("sample_index"),
-                "seed": mc.get("seed"),
-                "vos_mv": vos.get("value"),
+                "sample_index": sample_index,
+                "seed": seed,
+                "vos_mv": vos_mv,
                 "lowcount": lc.get("value"),
                 "clipped": bool(clipped),
                 "problem": problem,
                 "runtime_s": corner.get("runtime_s"),
             })
     for samples in points.values():
-        samples.sort(key=lambda s: s["sample_index"])
+        samples.sort(key=_identity_sort_key)
     return points
+
+
+def identity_problems(samples: list[dict], expected_n: int | None = OFFSET_MC_N
+                      ) -> list[tuple[str, str]]:
+    """Why this point's draw identities do not establish one population, as
+    ``(kind, reason)`` pairs (kind ``ambiguous`` or ``range``), or [].
+
+    Cross-sample checks (per-sample malformed identities are already
+    ``problem``s): a repeated ``sample_index`` or a repeated ``seed`` is an
+    ambiguous draw -- no copy is selected -- and, with ``expected_n``, the
+    valid indices must be exactly ``0 .. expected_n-1``. Counting-based, so
+    the verdict is invariant under envelope and sample order."""
+    out = []
+    idx_counts: dict[int, int] = {}
+    seed_counts: dict[int, int] = {}
+    for s in samples:
+        if valid_identity(s.get("sample_index")):
+            idx_counts[s["sample_index"]] = idx_counts.get(s["sample_index"], 0) + 1
+        if valid_identity(s.get("seed")):
+            seed_counts[s["seed"]] = seed_counts.get(s["seed"], 0) + 1
+    dup_idx = sorted(k for k, c in idx_counts.items() if c > 1)
+    if dup_idx:
+        out.append(("ambiguous", "duplicate sample index(es) "
+                   + ", ".join(f"{k} (x{idx_counts[k]})" for k in dup_idx[:10])
+                   + ": ambiguous draw identity, no copy selected"))
+    dup_seed = sorted(k for k, c in seed_counts.items() if c > 1)
+    if dup_seed:
+        out.append(("ambiguous", f"{len(dup_seed)} seed(s) reported by more than one draw: "
+                                 "ambiguous mismatch draw identity"))
+    if expected_n is not None and not dup_idx:
+        missing = sorted(set(range(expected_n)) - set(idx_counts))
+        extra = sorted(set(idx_counts) - set(range(expected_n)))
+        if missing or extra:
+            parts = []
+            if missing:
+                parts.append(f"missing {missing[:10]}")
+            if extra:
+                parts.append(f"outside the basis {extra[:10]}")
+            out.append(("range", f"sample indices are not 0..{expected_n - 1}: "
+                        + "; ".join(parts)))
+    return out
 
 
 def population_stats(values: list[float]) -> dict:
@@ -308,10 +446,18 @@ def point_stats(samples: list[dict], expected_n: int = OFFSET_MC_N) -> dict:
         "runtime_max_s": max(runtimes) if runtimes else None,
         "runtime_mean_s": sum(runtimes) / len(runtimes) if runtimes else None,
     }
+    identity = identity_problems(samples, expected_n)
+    out["identity_problems"] = [reason for _, reason in identity] or None
+    ambiguous = [reason for kind, reason in identity if kind == "ambiguous"]
+    off_basis = [reason for kind, reason in identity if kind == "range"]
     values = [s["vos_mv"] for s in samples if s["vos_mv"] is not None and not s["problem"]]
     if values and len(values) > 1:
         out.update({k: v for k, v in population_stats(values).items() if k != "n"})
-    if untrusted:
+    if ambiguous:
+        # Which draws were measured is not established: no sigma, and no
+        # informational partial either (it could count a draw twice).
+        out["rejected"] = ambiguous[0]
+    elif untrusted:
         out["rejected"] = (f"{len(untrusted)} untrusted draw(s): "
                            f"{untrusted[0]['corner_id']}: {untrusted[0]['problem']}")
     elif clipped:
@@ -319,13 +465,16 @@ def point_stats(samples: list[dict], expected_n: int = OFFSET_MC_N) -> dict:
                            "+/-48 mV staircase)")
     elif n != expected_n:
         out["rejected"] = f"N = {n}, ratified basis is N = {expected_n}"
+    elif off_basis:
+        out["rejected"] = off_basis[0]
     elif not out["sigma_raw_mv"]:
         out["rejected"] = "zero spread: mismatch not applied"
     if out["rejected"]:
         # Informational only, and only when every in-hand draw is trusted and
         # in-window (a solver abort / missing draw, not a clipped one): the
         # statistic over the draws that did complete. Never a valid population.
-        partial = out["three_sigma_mv"] if (not clipped and len(values) > 1) else None
+        partial = (out["three_sigma_mv"]
+                   if (not clipped and not ambiguous and len(values) > 1) else None)
         out["three_sigma_partial_mv"] = partial
         out["n_partial"] = len(values) if partial is not None else None
         out["sigma_corr_mv"] = None
@@ -343,16 +492,73 @@ def _pearson(xs: list[float], ys: list[float]) -> float | None:
     return sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / math.sqrt(sxx * syy)
 
 
+def _identity_map(samples: list[dict]) -> tuple[dict[int, dict], dict[str, str]]:
+    """``sample_index -> sample`` over the draws whose identity is
+    established (a valid, unrepeated index), plus ``{repr(index): reason}``
+    for every draw left out (one entry per distinct repr; see
+    ``_identity_records`` for one entry per record)."""
+    out, records = _identity_records(samples)
+    return out, dict(records)
+
+
+def _identity_records(samples: list[dict]) -> tuple[dict[int, dict], list[tuple[str, str]]]:
+    """Like ``_identity_map`` but the second element lists ``(repr(index),
+    reason)`` once per rejected sample record, so repeated invalid indices
+    and every copy of a duplicate valid index are all counted (issue #252).
+    A repeated index drops every copy: no copy is ever selected, so the
+    result cannot depend on envelope/sample order."""
+    counts: dict[int, int] = {}
+    for s in samples:
+        if valid_identity(s.get("sample_index")):
+            counts[s["sample_index"]] = counts.get(s["sample_index"], 0) + 1
+    out: dict[int, dict] = {}
+    bad: list[tuple[str, str]] = []
+    for s in samples:
+        idx = s.get("sample_index")
+        if not valid_identity(idx):
+            bad.append((repr(idx), f"invalid sample_index {idx!r}"))
+        elif counts[idx] > 1:
+            bad.append((repr(idx), f"sample index {idx} reported {counts[idx]} times"))
+        else:
+            out[idx] = s
+    return out, sorted(bad)
+
+
 def paired(cm: list[dict], nom: list[dict]) -> dict:
-    """Paired comparison of one grid point under a condition vs nominal."""
-    a = {s["sample_index"]: s for s in cm}
-    b = {s["sample_index"]: s for s in nom}
-    seeds_paired = set(a) == set(b) and all(a[k]["seed"] == b[k]["seed"] for k in a)
+    """Paired comparison of one grid point under a condition vs nominal.
+
+    ``seeds_paired`` holds only when both sides carry the same set of
+    unambiguous sample indices and every one of them names the same valid
+    seed on both sides (two absent seeds never match). The paired statistics
+    are computed only for two complete trusted populations; otherwise
+    ``pair_rejected`` says why (issue #250)."""
+    a, bad_a = _identity_map(cm)
+    b, bad_b = _identity_map(nom)
+    seeds_paired = (not bad_a and not bad_b and set(a) == set(b)
+                    and all(valid_identity(a[k].get("seed")) and a[k]["seed"] == b[k]["seed"]
+                            for k in a))
     out = {"seeds_paired": seeds_paired, "n_pairs": len(set(a) & set(b)),
            "delta_mean_mv": None, "delta_sd_mv": None, "delta_sem_mv": None,
-           "corr": None, "ratio_3sigma": None, "ratio_ci95": None, "delta_3sigma_mv": None}
+           "corr": None, "ratio_3sigma": None, "ratio_ci95": None, "delta_3sigma_mv": None,
+           "pair_rejected": None}
     st_a, st_b = point_stats(cm), point_stats(nom)
-    if not seeds_paired or st_a["rejected"] or st_b["rejected"]:
+    if st_a["rejected"]:
+        out["pair_rejected"] = f"condition population rejected: {st_a['rejected']}"
+    elif st_b["rejected"]:
+        out["pair_rejected"] = f"nominal population rejected: {st_b['rejected']}"
+    elif not seeds_paired:
+        if bad_a or bad_b:
+            why = next(iter((bad_a or bad_b).values()))
+            out["pair_rejected"] = f"ambiguous draw identity: {why}"
+        elif set(a) != set(b):
+            only = sorted(set(a) ^ set(b))
+            out["pair_rejected"] = f"sample identities differ: {only[:10]}"
+        else:
+            k = next(k for k in sorted(a) if not (valid_identity(a[k].get("seed"))
+                                                  and a[k]["seed"] == b[k]["seed"]))
+            out["pair_rejected"] = (f"sample {k} is not the same mismatch draw "
+                                    f"(seed {a[k].get('seed')!r} vs {b[k].get('seed')!r})")
+    if out["pair_rejected"]:
         return out
     idx = sorted(a)
     xs = [a[k]["vos_mv"] for k in idx]
@@ -382,17 +588,87 @@ def paired(cm: list[dict], nom: list[dict]) -> dict:
     return out
 
 
-def reproduction(a: dict[tuple, list[dict]], b: dict[tuple, list[dict]]) -> dict:
-    """Sample-for-sample comparison of two populations over shared points."""
+#: Reproduction reports at most this many unaccounted draw identities by
+#: name (the counts are always complete).
+REPRO_LIST_MAX = 50
+
+REPRODUCED = "REPRODUCED"
+NOT_REPRODUCED = "NOT_REPRODUCED"
+REPRO_INCOMPLETE = "INCOMPLETE"
+
+
+def reproduction(a: dict[tuple, list[dict]], b: dict[tuple, list[dict]], *,
+                 labels: tuple[str, str] = ("a", "b"),
+                 expected_n: int | None = OFFSET_MC_N) -> dict:
+    """Sample-for-sample comparison of two populations.
+
+    Every point on either side is accounted for. At each shared point the
+    expected identity set is ``0 .. expected_n-1`` (plus any other valid
+    index either side reports); a draw absent from a side is ``missing``, a
+    draw that is untrusted, has no offset, or whose index is invalid or
+    repeated on a side is ``rejected`` -- both are listed by identity and
+    prevent a complete reproduction (issue #250).
+
+    A comparison with zero expected draws (no shared point, or shared points
+    with ``expected_n`` None/0 and no reported draws) is INCOMPLETE, never
+    vacuously REPRODUCED (issue #252).
+
+    ``verdict`` is REPRODUCED only when the comparison is complete (every
+    expected draw trusted on both sides and compared) and every compared
+    draw has the same seed and a bit-identical offset; INCOMPLETE when any
+    draw or point is unaccounted for; NOT_REPRODUCED otherwise. The
+    ``samples_compared`` / ``identical`` / ``max_abs_diff_mv`` counts are an
+    informational comparison of the surviving draws only."""
     compared = identical = seed_mismatch = 0
     max_diff = 0.0
-    missing = sorted(set(a) ^ set(b), key=str)
+    expected_total = 0
+    unaccounted: list[dict] = []
+    n_missing = n_rejected = 0
+    unmatched = sorted(set(a) ^ set(b), key=str)
+    sides = ((labels[0], a), (labels[1], b))
+
+    def note(point, side, index, kind, reason):
+        unaccounted.append({"point": point, "side": side, "sample_index": index,
+                            "kind": kind, "reason": reason})
+
+    for key in unmatched:
+        present = labels[0] if key in a else labels[1]
+        absent = labels[1] if key in a else labels[0]
+        n_missing += 1
+        note(_label(key) if key is not None else None, absent, None, "missing",
+             f"grid point absent from {absent} (present in {present})")
     for key in sorted(set(a) & set(b), key=str):
-        bmap = {s["sample_index"]: s for s in b[key]}
-        for s in a[key]:
-            t = bmap.get(s["sample_index"])
-            if t is None or s["vos_mv"] is None or t["vos_mv"] is None:
+        point = _label(key) if key is not None else None
+        maps, bads = [], []
+        for side, pts in sides:
+            m, records = _identity_records(pts[key])
+            for idx_repr, reason in records:
+                n_rejected += 1  # one per rejected record, not per distinct repr
+                note(point, side, idx_repr, "rejected", reason)
+            maps.append(m)
+            bads.append({r for r, _ in records})
+        amap, bmap = maps
+        expected = set(amap) | set(bmap)
+        if expected_n is not None:
+            expected |= set(range(expected_n))
+        expected_total += len(expected)
+        for k in sorted(expected):
+            ok = True
+            for (side, _), m, bad in zip(sides, maps, bads):
+                s = m.get(k)
+                if s is None and repr(k) in bad:
+                    ok = False  # already listed as rejected (repeated index)
+                elif s is None:
+                    n_missing += 1
+                    note(point, side, k, "missing", "draw absent")
+                    ok = False
+                elif s.get("problem") or s.get("vos_mv") is None:
+                    n_rejected += 1
+                    note(point, side, k, "rejected", s.get("problem") or "vos_mv not reported")
+                    ok = False
+            if not ok:
                 continue
+            s, t = amap[k], bmap[k]
             compared += 1
             if s["seed"] != t["seed"]:
                 seed_mismatch += 1
@@ -400,9 +676,29 @@ def reproduction(a: dict[tuple, list[dict]], b: dict[tuple, list[dict]]) -> dict
             max_diff = max(max_diff, diff)
             if diff == 0.0:
                 identical += 1
-    return {"points_compared": len(set(a) & set(b)), "points_unmatched": len(missing),
+    empty = expected_total == 0
+    complete = (not empty and not unmatched and n_missing == 0 and n_rejected == 0
+                and compared == expected_total)
+    if not complete:
+        verdict = REPRO_INCOMPLETE
+    elif identical == compared and seed_mismatch == 0:
+        verdict = REPRODUCED
+    else:
+        verdict = NOT_REPRODUCED
+    return {"points_compared": len(set(a) & set(b)), "points_unmatched": len(unmatched),
             "samples_compared": compared, "identical": identical,
-            "seed_mismatches": seed_mismatch, "max_abs_diff_mv": max_diff}
+            "seed_mismatches": seed_mismatch, "max_abs_diff_mv": max_diff,
+            "sides": list(labels), "expected_draws": expected_total,
+            "missing_draws": n_missing, "rejected_draws": n_rejected,
+            "complete": complete, "verdict": verdict,
+            "empty_comparison": empty,
+            "empty_reason": ("no draws to compare: zero expected draws, so no reproduction "
+                             "can be certified" if empty else None),
+            "unaccounted": unaccounted[:REPRO_LIST_MAX],
+            "unaccounted_truncated": len(unaccounted) > REPRO_LIST_MAX,
+            "surviving_draws_note": ("samples_compared / identical / seed_mismatches / "
+                                     "max_abs_diff_mv describe the surviving draws only; "
+                                     "the verdict is the complete-reproduction claim")}
 
 
 def _load_envelopes(directory: Path, pattern: str) -> list[tuple[str, dict, str]]:
@@ -546,7 +842,7 @@ def compare_series(series_dir: Path, *, grid=None, reference_campaign: str | Non
         ref = _load_envelopes(ref_dir, "offset_mc.*.envelope.json")
         if ref:
             ref_points = load_points([e for _, e, _ in ref])
-            rep = reproduction(loaded[NOMINAL], ref_points)
+            rep = reproduction(loaded[NOMINAL], ref_points, labels=(NOMINAL, "reference"))
             rep["reference"] = f"sim/klt-corner-verification/campaigns/{reference_campaign}"
             result["nominal_reproduction"] = rep
 
@@ -593,7 +889,8 @@ def _controls(controls_dir: Path, loaded: dict) -> dict:
     for tag, env, sha in _load_envelopes(controls_dir, "repeat.*.envelope.json"):
         cond = tag.split(".")[1]
         pts = load_points([env])
-        rep = reproduction(pts, {k: v for k, v in loaded.get(cond, {}).items() if k in pts})
+        rep = reproduction(pts, {k: v for k, v in loaded.get(cond, {}).items() if k in pts},
+                           labels=("repeat", cond))
         rep.update({"tag": tag, "envelope_sha256": sha, "condition": cond,
                     "points": [_label(k) for k in sorted(pts, key=str)]})
         out["repeat"].append(rep)
@@ -611,6 +908,23 @@ def _f(value, nd=3) -> str:
     if isinstance(value, float):
         return f"{value:.{nd}f}"
     return str(value)
+
+
+def _repro_verdict(rep: dict) -> str:
+    """The complete-reproduction verdict line (issue #250); reports from
+    before the verdict existed say so rather than implying completeness."""
+    verdict = rep.get("verdict")
+    if verdict is None:
+        return "complete-reproduction verdict not recorded"
+    text = (f"{verdict} ({rep.get('expected_draws')} expected draws, "
+            f"{rep.get('missing_draws')} missing, {rep.get('rejected_draws')} rejected")
+    if rep.get("empty_comparison"):
+        text += f"; {rep.get('empty_reason') or 'no draws to compare'}"
+    if rep.get("unaccounted"):
+        first = rep["unaccounted"][0]
+        text += (f"; first: {first['side']} {first['point']} sample "
+                 f"{first['sample_index']}: {first['reason']}")
+    return text + ")"
 
 
 def render_markdown(result: dict) -> str:
@@ -704,7 +1018,8 @@ def render_markdown(result: dict) -> str:
     if rep:
         out.append(
             f"`{NOMINAL}` against `{rep['reference']}` (issue #62 `offset_mc`, same seed, same "
-            f"circuit): {rep['identical']}/{rep['samples_compared']} draws bit-identical over "
+            f"circuit): **{_repro_verdict(rep)}**. Surviving draws (informational): "
+            f"{rep['identical']}/{rep['samples_compared']} draws bit-identical over "
             f"{rep['points_compared']} points, {rep['seed_mismatches']} seed mismatches, max "
             f"|Δvos| = {rep['max_abs_diff_mv']:.6g} mV.")
     else:
@@ -732,6 +1047,7 @@ def render_markdown(result: dict) -> str:
         for r in ctl["repeat"]:
             out.append(
                 f"- Same-seed repeat (`{r['tag']}`, {', '.join(f'`{p}`' for p in r['points'])}): "
+                f"**{_repro_verdict(r)}**; surviving draws (informational): "
                 f"{r['identical']}/{r['samples_compared']} draws bit-identical to the campaign, "
                 f"{r['seed_mismatches']} seed mismatches, max |Δvos| = {r['max_abs_diff_mv']:.6g} mV.")
         if not ctl["negative"] and not ctl["repeat"]:

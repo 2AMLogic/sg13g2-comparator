@@ -42,6 +42,7 @@ from pathlib import Path
 from . import build as build_mod
 from . import declared_n
 from . import grade
+from . import populations as pop_mod
 from . import benches as BENCH_MODS
 from .benches import BENCHES
 
@@ -182,15 +183,13 @@ def collect_populations(bench: grade.BenchEvidence, measurement: str, unit: str 
         corners = grouped.get(key)
         if not corners:
             raise YieldInputError(f"{bench.name}: no Monte-Carlo population for {label}")
-        base_ids = {c["corner_id"].rsplit("/mc", 1)[0] for _, c in corners}
-        if len(base_ids) != 1:
-            raise YieldInputError(f"{bench.name}: {label} maps to several base corners {sorted(base_ids)}")
-        pop = Population(label, base_ids.pop(), measurement, unit, expected_n)
+        try:
+            base_id, _ = pop_mod.validate_point([c for _, c in corners], expected_n)
+        except pop_mod.PopulationError as exc:
+            raise YieldInputError(_population_message(bench.name, label, exc, expected_n)) from None
+        pop = Population(label, base_id, measurement, unit, expected_n)
         corners = sorted(corners, key=lambda tc: _sample_index(tc[1], bench.name))
         indices = [_sample_index(c, bench.name) for _, c in corners]
-        if len(set(indices)) != len(indices):
-            raise YieldInputError(f"{bench.name}: {label} reports a sample index more than once "
-                                  "(duplicate population)")
         draws: dict[tuple, int] = {}
         if indep_names:
             for _, c in corners:
@@ -214,13 +213,21 @@ def collect_populations(bench: grade.BenchEvidence, measurement: str, unit: str 
     return pops
 
 
+def _population_message(bench_name: str, label: str, exc: pop_mod.PopulationError,
+                        expected_n: int) -> str:
+    if exc.kind == "index":
+        return f"{bench_name}: {exc.message}"
+    if exc.kind == "count":  # historical wording, kept for report/test compatibility
+        return (f"{bench_name}: {label} has {exc.count} draws, the ratified basis is "
+                f"N = {expected_n}")
+    return f"{bench_name}: {label} {exc.message}"
+
+
 def _sample_index(corner: dict, bench_name: str) -> int:
-    mc = corner.get("monte_carlo")
-    idx = mc.get("sample_index") if isinstance(mc, dict) else None
-    if not isinstance(idx, int) or isinstance(idx, bool) or idx < 0:
-        raise YieldInputError(f"{bench_name}: corner {corner.get('corner_id')!r} has no valid "
-                              f"monte_carlo.sample_index ({idx!r})")
-    return idx
+    try:
+        return pop_mod.sample_index(corner)
+    except pop_mod.PopulationError as exc:
+        raise YieldInputError(f"{bench_name}: {exc.message}") from None
 
 
 def _classify_sample(pop: Population, corner: dict, idx: int, bench_name: str, gates: list[str],
@@ -863,15 +870,65 @@ def render_index_md(index: dict) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def _index_diffs(saved, derived, limit: int = 20) -> list[str]:
+    """Field-level differences between the saved index and a freshly derived
+    one, as JSON paths (issue #255). Exact equality throughout: both sides
+    come from the same deterministic code path over the same committed bytes
+    (the only float arithmetic is the grader's own reduction, recomputed),
+    so any difference is a real inconsistency, never rounding."""
+    out: list[str] = []
+
+    def walk(a, b, path):
+        if len(out) >= limit:
+            return
+        if isinstance(a, dict) and isinstance(b, dict):
+            for k in sorted(set(a) | set(b)):
+                if k not in a:
+                    out.append(f"{path}.{k}: absent from the saved index, re-derived {b[k]!r}")
+                elif k not in b:
+                    out.append(f"{path}.{k}: saved {a[k]!r}, not re-derived")
+                else:
+                    walk(a[k], b[k], f"{path}.{k}")
+        elif isinstance(a, list) and isinstance(b, list):
+            if len(a) != len(b):
+                out.append(f"{path}: {len(a)} saved entries, re-derived {len(b)}")
+            for i, (x, y) in enumerate(zip(a, b)):
+                walk(x, y, f"{path}[{i}]")
+        elif type(a) is not type(b) or a != b:  # bool is never int here
+            out.append(f"{path}: saved {a!r}, re-derived {b!r}")
+
+    walk(saved, derived, "index")
+    return out
+
+
+def _recorded_provenance(index: dict) -> tuple[str | None, dict, list[str] | None]:
+    """The ``tool`` block read back as recorded provenance.
+
+    ``check`` never re-executes the historical invocation, so the reported
+    version, the command and the pin values the generator copied are inputs to
+    the re-derivation, not claims it can test; only ``pin_file`` (a constant
+    of :func:`build_index`) is effectively compared. This keeps a superseded
+    campaign generated under an older pin re-deriving byte-for-byte; verifying
+    the engine itself against today's pin is ``--rerun``'s job."""
+    tool = index.get("tool") or {}
+    pin = {"klt_commit": tool.get("klt_commit"), "klt_version": tool.get("klt_version")}
+    return tool.get("klt_version_reported"), pin, tool.get("command")
+
+
 def check(campaign_id: str = DEFAULT_CAMPAIGN_ID, source_rel: str = SOURCE_CAMPAIGN,
           klt_cmd: list[str] | None = None, rerun: bool = False,
           manifest_path: str = "manifests/sg13g2-comparator.json",
           offset_n: int | None = None, require_cited: bool = False) -> list[str]:
     """Problems found (empty = consistent): derived inputs regenerate
     byte-for-byte from the source, index hashes match the files, each
-    report names the committed samples document, and the manifest's item-6
-    citation pins the samples hash. ``rerun`` also re-executes the pinned
-    engine and requires identical report bytes."""
+    report names the committed samples document, the manifest's item-6
+    citation pins the samples hash, and the index itself re-derives from
+    the validated populations, the committed reports and the grader —
+    every yield/interval number, ratified statistic, population
+    identity/completeness record, declared block, summary and the rendered
+    Markdown (issue #255; tool metadata is read back as recorded
+    provenance). ``rerun`` also re-executes the pinned engine and requires
+    identical report bytes."""
     problems: list[str] = []
     out_dir = REPO_ROOT / OUT_ROOT / campaign_id
     index_path = out_dir / "index.json"
@@ -926,6 +983,37 @@ def check(campaign_id: str = DEFAULT_CAMPAIGN_ID, source_rel: str = SOURCE_CAMPA
             for p in row["populations"]:
                 if not p["ratified_statistic"]["agrees_with_grader"]:
                     problems.append(f"{p['point']}: ratified offset statistic disagrees with the grader")
+    # The index itself must re-derive (issue #255): with the hash chain above
+    # proven, every derived claim in index.json is rebuilt from the validated
+    # populations, the committed engine reports and the grader, and diffed
+    # field by field against what was saved. A stored `agrees_with_grader`
+    # boolean can no longer conceal a numerical disagreement because the
+    # number and the boolean are both recomputed here.
+    try:
+        reports, report_bytes = {}, {}
+        for row in index["rows"]:
+            key = "offset" if row.get("row_id") == "1" else "noise"
+            report_bytes[key] = (REPO_ROOT / row["report"]).read_bytes()
+            reports[key] = json.loads(report_bytes[key])
+        tool_version, pin, klt_rec = _recorded_provenance(index)
+        derived_index = build_index(campaign_id, source_rel, derived, reports, report_bytes,
+                                    tool_version, pin, klt_rec)
+    except (OSError, ValueError, KeyError, TypeError, IndexError, YieldInputError) as exc:
+        problems.append(f"index does not re-derive from the committed reports and the source "
+                        f"campaign: {exc!r}")
+    else:
+        for diff in _index_diffs(index, derived_index):
+            problems.append(f"index does not re-derive: {diff}")
+        if (out_dir / "index.json").read_text(encoding="utf-8") != dumps(derived_index):
+            problems.append("index.json does not regenerate byte-for-byte (formatting or key "
+                            "order differ from the re-derived index)")
+        try:
+            rendered = render_index_md(index)
+        except (KeyError, TypeError, ValueError, IndexError) as exc:
+            problems.append(f"index.md cannot be rendered from index.json: {exc!r}")
+        else:
+            if (out_dir / "index.md").read_text(encoding="utf-8") != rendered:
+                problems.append("index.md does not match render_index_md of index.json")
     manifest = json.loads((REPO_ROOT / manifest_path).read_text(encoding="utf-8"))
     cite = (manifest.get("evidence") or {}).get("6")
     if not isinstance(cite, dict):

@@ -41,6 +41,7 @@ from pathlib import Path
 
 from harness import internal_noise as internal_noise_mod
 
+from . import artifacts as artifacts_mod
 from .benches import MODELS, SUPPLIES_V, TEMPERATURES_C, Bench
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -396,42 +397,23 @@ def commit_inputs(files: list[tuple[Path, bytes]]) -> list[Path]:
     created with exclusive creation (``x``), so a concurrent writer cannot be
     clobbered between check and write. Returns the paths newly created.
     """
-    proposed: dict[Path, bytes] = {}
-    conflicts: list[str] = []
-    for path, data in files:
-        if path in proposed and proposed[path] != data:
-            conflicts.append(f"{path}: selected benches propose two different contents")
-        proposed.setdefault(path, data)
-    for path, data in proposed.items():
-        if path.is_symlink() or (path.exists() and not path.is_file()):
-            conflicts.append(f"{path}: exists and is not a regular file")
-        elif path.exists() and path.read_bytes() != data:
-            conflicts.append(f"{path}: existing content differs from the proposed content")
-    if conflicts:
+    try:
+        return artifacts_mod.commit(
+            files,
+            differs="existing content differs from the proposed content",
+            dup="selected benches propose two different contents")
+    except artifacts_mod.ArtifactConflict as exc:
+        if exc.concurrent:
+            raise BuildError(
+                f"{exc.conflicts[0]}; use a NEW campaign ID") from None
         raise BuildError(
             "refusing to rebuild: campaign inputs are append-only evidence and "
             "nothing was written. Conflicting input(s):\n  "
-            + "\n  ".join(conflicts)
+            + "\n  ".join(exc.conflicts)
             + "\nThe DUT, its parameters or a bench definition changed since this "
             "campaign's inputs were built. Rebuild under a NEW campaign ID "
             "(`build --campaign <new-id>`) instead of replacing these files."
-        )
-    created: list[Path] = []
-    for path, data in proposed.items():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            with open(path, "xb") as handle:
-                handle.write(data)
-        except FileExistsError:
-            # Lost a race (or an identical file was already present): safe
-            # only if the winner wrote the same bytes.
-            if path.read_bytes() != data:
-                raise BuildError(
-                    f"{path}: created concurrently with different content; "
-                    "use a NEW campaign ID") from None
-            continue
-        created.append(path)
-    return created
+        ) from None
 
 
 def write_bench_inputs(
