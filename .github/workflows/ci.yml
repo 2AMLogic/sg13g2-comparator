@@ -276,6 +276,7 @@ jobs:
             /sim/harness/
             /sim/run_*.py
             /sim/tools/build-osdi.sh
+            /sim/tools/regen_reverse_control.py
             /sim/kltsim/
             /sim/comparator-pex/
             /sim/comparator-regeneration/testbench/
@@ -415,13 +416,14 @@ jobs:
           /.github/workflows/ci.yml
           /scripts/
           /README.md
-          /sim/characterization/20261009-d73a9ac-schematic/report.json
+          /sim/characterization/20261009-d73a9ac-schematic-r2/report.json
           /sim/klt-corner-verification/campaigns/20261009-issue81/noise_full.json
           /sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json
           /sim/comparator-offset-cm-band/campaigns/20261009-5185f52/comparison.json
           /sim/comparator-kickback/records/20260916-022249-36773c7.json
           /sim/evidence-exceptions.json
           /sim/evidence-size-budget.json
+          /sim/evidence-size-exceptions/
           /spec/decision-records/
           EOF
           echo "tracked files in working tree: $(git ls-files -t | grep -c '^H ' || true)"
@@ -481,6 +483,17 @@ jobs:
         env:
           TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: python3 scripts/check_evidence_size.py --tree "$TARGET_SHA"
+
+      # Issue #318: new evidence bytes live in the fleet artifact store; git
+      # keeps manifests under manifests/artifacts/. Reads the target tree via
+      # git (sparse working tree irrelevant): schema, and that no stored
+      # object's bytes are also committed. CI cannot reach the broker, so the
+      # bytes are NOT hash-verified here and the step says so; `verify` is the
+      # out-of-band step (sim/README.md, "Stored evidence").
+      - name: Check stored-evidence manifests (schema + no committed blobs)
+        env:
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/check_artifact_manifests.py check --tree "$TARGET_SHA"
 
       # Issue #216: the sparse-cone proof's ruff-dependent negative controls
       # (glob under-expansion stays green; undefined name in a previously

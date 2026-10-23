@@ -4,7 +4,7 @@
     python3 sim/run_clock_supply_sensitivity.py build   --series ID [--condition C ...]
     python3 sim/run_clock_supply_sensitivity.py run     --series ID [--kind regen|offset] [--condition C ...] [--klt KLT]
     python3 sim/run_clock_supply_sensitivity.py smoke   --kind K --condition C --osdi-dir DIR [--klt KLT]
-    python3 sim/run_clock_supply_sensitivity.py compare --series ID
+    python3 sim/run_clock_supply_sensitivity.py compare --series ID [--report-dir DIR] [--check]
 
 Nine conditions x two benches (regen: 45-point PVT grid; offset: 5 process x
 {1.08, 1.32} V x {-40, 125} C, N = 16 paired draws) = 18 ``klt sim`` requests
@@ -20,14 +20,13 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from kltsim import artifacts as artifacts_mod  # noqa: E402
 from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import clocksupply as cs  # noqa: E402
@@ -72,15 +71,8 @@ def cmd_run(args) -> int:
             if (out_dir / f"{tag}.envelope.json").exists():
                 print(f"{tag}: envelope present, skipped", file=sys.stderr)
                 continue
-            code = 1
-            for attempt in range(1, args.retry_refused + 2):
-                code = kcli._submit(request, out_dir, tag, args, extra={"condition": c.metadata(), "kind": kind})
-                if code == 0 or not kcli._last_attempt_refused_at_cap(out_dir):
-                    break
-                if attempt <= args.retry_refused:
-                    print(f"{tag}: fleet at its instance cap; retry {attempt}/{args.retry_refused} "
-                          f"in {args.retry_wait}s", file=sys.stderr)
-                    time.sleep(args.retry_wait)
+            code = kcli._submit_with_retry(request, out_dir, tag, args,
+                                           extra={"condition": c.metadata(), "kind": kind})
             rc = max(rc, code)
     return rc
 
@@ -97,33 +89,26 @@ def cmd_smoke(args) -> int:
     req["corners"]["temperature_c"] = [args.temperature]
     if "monte_carlo" in req:
         req["monte_carlo"]["n"] = 1
-    request = work / "request.json"
-    request.write_text(json.dumps(req, indent=2) + "\n", encoding="utf-8")
-    cmd = [args.klt, "sim", str(request), "--backend", "local", "--format", "json",
-           "-o", str(work / "artifacts")]
-    print("$ " + " ".join(cmd), file=sys.stderr)
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    (work / "envelope.json").write_text(proc.stdout, encoding="utf-8")
-    print(f"klt sim exit {proc.returncode}; work dir {work}", file=sys.stderr)
-    if proc.stderr.strip():
-        print(proc.stderr.strip()[-2000:], file=sys.stderr)
-    try:
-        env = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return 1
-    for corner in env.get("corners", []):
-        print(corner["corner_id"], corner["status"],
-              {m["name"]: m["value"] for m in corner["measurements"]})
-    return 0
+    return kcli.run_local_smoke(req, work, args.klt)
 
 
 def cmd_compare(args) -> int:
     series = _series(args)
     result = rep.compare_series(series)
-    (series / "comparison.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    (series / "comparison.md").write_text(rep.render_markdown(result), encoding="utf-8")
-    print(f"wrote {series / 'comparison.md'}")
-    return 0
+    report_dir = Path(args.report_dir) if args.report_dir else series
+    md = rep.render_markdown(result)
+    if report_dir != series:
+        result["source_series_dir"] = kcli._cite(series)
+        md = kcli._cite_note(md, "series", series)
+    rc = artifacts_mod.publish(
+        "compare",
+        [(report_dir / "comparison.json", (json.dumps(result, indent=2) + "\n").encode("utf-8")),
+         (report_dir / "comparison.md", md.encode("utf-8"))],
+        check_only=args.check, namespace_hint=kcli._NAMESPACE_HINT.replace("--campaign/--series", "--series"),
+        require_dir=report_dir)
+    if rc == 0 and not args.check:
+        print(f"comparison reports preserved under {report_dir}")
+    return rc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -162,6 +147,11 @@ def main(argv: list[str] | None = None) -> int:
 
     g = sub.add_parser("compare")
     g.add_argument("--series", required=True)
+    g.add_argument("--report-dir", help="write comparison.{json,md} here instead of the series "
+                   "directory (new directory; cites the series; different existing files are "
+                   "never overwritten)")
+    g.add_argument("--check", action="store_true",
+                   help="read-only: exit 1 if the reports are missing, stale or unsafe")
     g.set_defaults(func=cmd_compare)
 
     args = ap.parse_args(argv)
