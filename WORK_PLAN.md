@@ -27,17 +27,23 @@ _None._
 
 Human-approved issues ready for implementation (`loom:issue`).
 
-- **#89**: sim: complete the two vcm-m050 CM-band offset points that abort (timestep too small) with a uniform tighter max step
-- **#159**: Memory / hysteresis characterization bench: does the previous decision bias the next?
-- **#235**: Validate clock-supply probes and reject ambiguous sample identities
-- **#247**: Derive evidence-size estimate denominators from selected reference campaigns
-- **#264**: Reject invalid local PVT grid inputs before simulation
-- **#266**: Validate CM decision timing dimensions and physical domains
+_None._
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
+- **#89**: sim: complete the two vcm-m050 CM-band offset points that abort (timestep too small) with a uniform tighter max step
+- **#159**: Memory / hysteresis characterization bench: does the previous decision bias the next?
+- **#160**: Draft decision record: input common-mode range row for the ratified spec
+- **#165**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (evidence for DR-0004 CM-range row)
+- **#191**: PEX diagnostic: separate extracted device geometry from routing RC delay
+- **#235**: Validate clock-supply probes and reject ambiguous sample identities
+- **#247**: Derive evidence-size estimate denominators from selected reference campaigns
+- **#263**: Validate timestep smoke evidence before computing noise convergence
+- **#264**: Reject invalid local PVT grid inputs before simulation
+- **#266**: Validate CM decision timing dimensions and physical domains
+- **#274**: Mirror gf180's supplemental reverse-polarity ladder fragment (bench-structure parity, gf180-comparator#158/#166)
 - **#302**: Consolidate remaining comparison/ibsweep report writers onto artifacts.publish (parallel drift with #237)
 - **#308**: Remove dead _spec_meas left behind by closed #295
 
@@ -91,8 +97,8 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 5 |
 | Very important | 0 |
 | Important | 0 |
-| Ready (`loom:issue`) | 6 |
-| In Progress (`loom:building`) | 2 |
+| Ready (`loom:issue`) | 0 |
+| In Progress (`loom:building`) | 13 |
 | PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 6 |
 | Curated | 13 |
