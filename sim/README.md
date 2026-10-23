@@ -284,11 +284,12 @@ inconsistent inputs are refused and write nothing. The manifest pins the hash of
 `PYTHONPATH=sim python3 -m unittest kltsim.tests.test_characterization`
 (also run by the `kltsim` discover step in "What CI runs").
 
-## Derived report pairs (grading, noise-full, clock comparison)
+## Derived report pairs (grading, noise-full, comparison, ibsweep)
 
-`grade` (`grading.{json,md}`), `noise-full` (`noise_full.{json,md}`) and
-`run_clock_supply_sensitivity.py compare` (`comparison.{json,md}`) write
-append-only evidence through the one planned-byte writer
+`grade` (`grading.{json,md}`), `noise-full` (`noise_full.{json,md}`),
+`ibsweep` (`ibsweep.{json,md}`) and the `compare` subcommands of
+`run_clock_supply_sensitivity.py`, `run_offset_cm_band.py` and
+`run_decision_cm_band.py` (`comparison.{json,md}`) write append-only evidence through the one planned-byte writer
 `sim/kltsim/artifacts.py` (also used by `build` and `characterize.sh report`).
 Both members are composed in memory first, then:
 
@@ -308,7 +309,8 @@ A changed grader, renderer or analysis is not permission to edit a historical
 report. Publish it in a NEW namespace, leaving the original campaign inputs and
 reports untouched, e.g.
 `... grade --campaign ID --report-dir sim/<new-dir>` (likewise `compare --series
-ID --report-dir DIR`, `noise-full --campaign ID --report-dir DIR`). Inputs are
+ID --report-dir DIR`, `noise-full --campaign ID --report-dir DIR`, `ibsweep
+--campaign ID --report-dir DIR`). Inputs are
 always read from `--campaign`/`--series`; the new `grading`/`comparison` JSON
 and Markdown cite the original directory (`source_campaign_dir` /
 `source_series_dir`), and `noise_full.json` carries `campaign`. There is no

@@ -1,4 +1,4 @@
-"""Append-only preservation of derived report pairs (issue #237).
+"""Append-only preservation of derived report pairs (issues #237, #302).
 
 Only analysis/rendering is mocked; every test drives the public CLI entry
 points against a temporary directory. No simulator, no network.
@@ -13,17 +13,26 @@ from pathlib import Path
 from unittest import mock
 
 import run_clock_supply_sensitivity as clock
+import run_decision_cm_band as decision
+import run_offset_cm_band as offset
 from kltsim import artifacts
 from kltsim import cli
 from kltsim import clocksupply as cs
+from kltsim import cmband
+from kltsim import cmdecision
 from kltsim import clocksupply_report as rep
 from kltsim import declared_n
 from kltsim import grade as grade_mod
+from kltsim import ibsweep
 from kltsim import noise_full
 
 SIDE = {"grade": ("grading.json", "grading.md"),
         "noise": ("noise_full.json", "noise_full.md"),
-        "clock": ("comparison.json", "comparison.md")}
+        "clock": ("comparison.json", "comparison.md"),
+        "offset": ("comparison.json", "comparison.md"),
+        "decision": ("comparison.json", "comparison.md"),
+        "ibsweep": ("ibsweep.json", "ibsweep.md")}
+SERIES_RUNNERS = {"clock": clock, "offset": offset, "decision": decision}
 
 
 class Harness(unittest.TestCase):
@@ -51,15 +60,24 @@ class Harness(unittest.TestCase):
         stack.enter_context(mock.patch.object(noise_full, "render_markdown", lambda r: self.md))
         stack.enter_context(mock.patch.object(rep, "compare_series", lambda d: dict(self.result)))
         stack.enter_context(mock.patch.object(rep, "render_markdown", lambda r: self.md))
+        for mod in (cmband, cmdecision):
+            stack.enter_context(mock.patch.object(mod, "SERIES_DIR", self.campaigns))
+            stack.enter_context(mock.patch.object(
+                mod, "compare_series", lambda d, **kw: {**self.result, "conditions": {}}))
+            stack.enter_context(mock.patch.object(mod, "render_markdown", lambda r: self.md))
+        stack.enter_context(mock.patch.object(
+            ibsweep, "sweep", lambda d: {**self.result, "points": [1]}))
+        stack.enter_context(mock.patch.object(ibsweep, "render_markdown", lambda r: self.md))
 
     def argv(self, *extra):
-        return {"grade": ["grade", "--campaign", "C1"], "noise": ["noise-full", "--campaign", "C1"]}[self.kind] + list(extra)
+        return {"grade": ["grade", "--campaign", "C1"], "noise": ["noise-full", "--campaign", "C1"],
+                "ibsweep": ["ibsweep", "--campaign", "C1"]}[self.kind] + list(extra)
 
     def run_cmd(self, *extra):
         err, out = io.StringIO(), io.StringIO()
         with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
-            if self.kind == "clock":
-                rc = clock.main(["compare", "--series", "C1", *extra])
+            if self.kind in SERIES_RUNNERS:
+                rc = SERIES_RUNNERS[self.kind].main(["compare", "--series", "C1", *extra])
             else:
                 rc = cli.main(self.argv(*extra))
         return rc, out.getvalue(), err.getvalue()
@@ -197,6 +215,18 @@ class NoiseFullTest(_Cases, Harness):
 
 class ClockTest(_Cases, Harness):
     kind = "clock"
+
+
+class OffsetCmBandTest(_Cases, Harness):
+    kind = "offset"
+
+
+class DecisionCmBandTest(_Cases, Harness):
+    kind = "decision"
+
+
+class IbsweepTest(_Cases, Harness):
+    kind = "ibsweep"
 
 
 class WriterTest(unittest.TestCase):
