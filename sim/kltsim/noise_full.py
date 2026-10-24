@@ -33,8 +33,12 @@ Precision (delta method). With rung hit fractions p over N trials,
 z = PhiInv(p) has variance p(1-p) / (N phi(z)^2); sigma = 2 od_x /
 (z+ - z-) therefore has relative variance (var z+ + var z-) / (z+ - z-)^2.
 Per-point only: the grid mean's standard error is the quadrature sum of the
-per-point errors / 45 (points are independent apart from the shared-draw note
-``grade`` already raises).
+per-point errors / 45 -- CONDITIONAL on the points being independent. The
+grader's cross-point shared-draw note and per-point counts are carried into the
+result, and the conservative fully-correlated bound (sum of the per-point
+errors / included points; no correlation coefficient or effective sample size
+is invented) is reported beside it. Failing to detect a repeated draw is not
+evidence of independence.
 """
 
 from __future__ import annotations
@@ -47,6 +51,8 @@ from statistics import NormalDist
 
 from . import build as build_mod
 from . import grade as grade_mod
+from .benches import ALL_BENCHES
+from harness import internal_noise as internal_noise_mod
 
 CONFIGS = {
     "fe": "tn_full_fe",
@@ -54,6 +60,13 @@ CONFIGS = {
     "both": "tn_full_both",
 }
 EXTRA = {"zero": "tn_full_zero", "int_x4": "tn_full_int_x4", "int_x8": "tn_full_int_x8"}
+UNCERTAINTY_BASIS = (
+    "grid_mean_se assumes independent grid points. Cross-point shared noise draws detected by "
+    "the grader are reported per configuration (shared_draw_*, grader_notes); absence of a "
+    "detected repeat does not establish independence. grid_mean_se_fully_correlated_bound is "
+    "the conservative upper bound (sum of per-point SEs / included points). No correlation "
+    "coefficient or effective sample size is estimated."
+)
 PROCESSES = ("mos_tt", "mos_ff", "mos_ss", "mos_fs", "mos_sf")
 
 
@@ -116,24 +129,134 @@ def read_envelope_bytes(path: Path) -> bytes | None:
     return None
 
 
-def _details(campaign_dir: Path, bench_name: str, ev: dict, grid: dict) -> list[dict]:
-    envelopes = []
-    shas = {}
-    for section in PROCESSES:
-        tag = f"{bench_name}.{section}"
-        raw = read_envelope_bytes(campaign_dir / f"{tag}.envelope.json")
-        if raw is not None:
-            envelopes.append((tag, json.loads(raw)))
-            shas[tag] = build_mod.sha256_bytes(raw)
+def _config_identity_problems(bench, body_text: str, tag: str) -> list[str]:
+    """Reasons the committed body is not the ``tn_full_*`` configuration it is
+    filed under (empty = ok). A matching measurement set does not identify the
+    injection configuration; the body's own front-end scale and internal-noise
+    hook do, so both are compared with what the bench definition would emit."""
+    problems: list[str] = []
+    first = body_text.split("\n", 1)[0]
+    if not first.startswith(f"* {bench.name} --"):
+        problems.append(f"{tag}: body header names {first[:60]!r}, not bench {bench.name!r}")
+    for key, value in sorted((bench.params or {}).items()):
+        want = f".param {key}={value!r}"
+        got = [ln.strip() for ln in body_text.split("\n") if ln.strip().startswith(f".param {key}=")]
+        if got != [want]:
+            problems.append(f"{tag}: body bench parameter {got or 'absent'} is not `{want}` "
+                            f"({bench.name} configuration)")
+    _, _, embedded = build_mod.extract_dut_block(body_text)
+    marker = "internal-noise hook"
+    if bench.internal_noise:
+        if embedded is None:
+            problems.append(f"{tag}: body has no DUT block to resolve the internal-noise hook against")
+        else:
+            try:
+                hook = "\n".join(
+                    internal_noise_mod.emit_internal_noise(bench.internal_noise, embedded)
+                ).rstrip("\n")
+            except Exception as exc:  # noqa: BLE001 -- any emit failure is a rejection reason
+                problems.append(f"{tag}: cannot regenerate the internal-noise hook ({exc})")
+            else:
+                if not body_text.rstrip("\n").endswith(hook):
+                    problems.append(
+                        f"{tag}: body's internal-noise hook is not the {bench.name} configuration "
+                        f"(scale {bench.internal_noise.get('scale')})")
+    elif marker in body_text:
+        problems.append(f"{tag}: body carries an internal-noise hook but {bench.name} has none")
+    return problems
+
+
+def validate_config(campaign_dir: Path, bench_name: str, dut: grade_mod.DutReference
+                    ) -> tuple[list[tuple[str, dict]], dict[str, str], list[str], dict]:
+    """Provenance-check one ``tn_full_*`` configuration before any arithmetic.
+
+    Reuses the main grader's mechanisms with the configuration's OWN bench
+    contract: ``check_chain`` (request/invocation/envelope hashes plus
+    ``check_request_semantics``) and ``check_dut`` (body present, embedded DUT
+    is the schematic DUT, every envelope's input hash is the body's hash),
+    plus the configuration identity of the body. Envelope bytes are hashed
+    AFTER decompression (the invocation records the original bytes).
+
+    Returns ``(envelopes, envelope_shas, problems, provenance)``. Any problem
+    means the configuration must not be summarised.
+    """
+    bench = ALL_BENCHES[bench_name]
+    problems: list[str] = []
+    envelopes: list[tuple[str, dict]] = []
+    shas: dict[str, str] = {}
+    sources: dict[str, dict] = {}
+    for tag in build_mod.part_tags(bench):
+        path = campaign_dir / f"{tag}.envelope.json"
+        try:
+            raw = read_envelope_bytes(path)
+        except (OSError, EOFError, gzip.BadGzipFile) as exc:
+            problems.append(f"{tag}: envelope {path.name}(.gz) cannot be read ({exc})")
+            continue
+        if raw is None:
+            problems.append(f"{tag}: envelope {path.name} (or .gz) is missing")
+            continue
+        shas[tag] = build_mod.sha256_bytes(raw)
+        stored = path if path.is_file() else path.with_name(path.name + ".gz")
+        sources[tag] = {"envelope_file": stored.name, "envelope_sha256": shas[tag]}
+        try:
+            env = json.loads(raw)
+        except (ValueError, UnicodeDecodeError) as exc:
+            problems.append(f"{tag}: envelope is not valid JSON ({exc})")
+            continue
+        if not isinstance(env, dict):
+            problems.append(f"{tag}: envelope is not a JSON object")
+            continue
+        envelopes.append((tag, env))
+        checked = grade_mod.check_chain(bench, tag, campaign_dir, shas[tag], problems)
+        sources[tag].update({k: v for k, v in checked.items() if k != "envelope_sha256"})
+        section = tag[len(bench.name) + 1:]
+        wrong = sorted({str(c.get("process")) for c in env.get("corners") or []
+                        if grade_mod._process_name(c.get("process"))
+                        != grade_mod._process_name(section)})
+        if wrong:
+            problems.append(f"{tag}: envelope holds corners of process {', '.join(wrong)}, "
+                            f"not {section}")
+    body_path = campaign_dir / f"{bench_name}.body.spice"
+    body_text = body_path.read_text(encoding="utf-8") if body_path.is_file() else None
+    evidence = grade_mod.BenchEvidence(bench_name, envelopes, body_text, shas)
+    problems.extend(f"{bench_name}: {p}" for p in grade_mod.check_dut(evidence, dut))
+    if body_text is not None:
+        problems.extend(_config_identity_problems(bench, body_text, bench_name))
+    provenance = {
+        "bench": bench_name,
+        "body_sha256": (build_mod.sha256_bytes(body_text.encode("utf-8"))
+                        if body_text is not None else None),
+        "dut": {"netlist": dut.netlist_rel, "provenance": dut.dut_json.get("provenance"),
+                "sha256": build_mod.sha256_bytes(dut.netlist_bytes)},
+        "sources": sources,
+        "status": "rejected" if problems else "validated",
+        "problems": problems,
+    }
+    for tag, env in envelopes:
+        sources[tag]["input_content_hash"] = ((env.get("provenance") or {}).get("input")
+                                              or {}).get("content_hash")
+    return envelopes, shas, problems, provenance
+
+
+def _details(campaign_dir: Path, bench_name: str, ev: dict, grid: dict,
+             dut: grade_mod.DutReference) -> tuple[list[dict], list[str], dict]:
+    envelopes, shas, problems, provenance = validate_config(campaign_dir, bench_name, dut)
+    if problems:
+        # Rejected: no arithmetic at all, so no sigma can be published.
+        why = "provenance rejected: " + "; ".join(problems)
+        details = [{"point": grade_mod.key_label(k), "sigma": None, "problem": why}
+                   for k in grade_mod.grid_keys(grid)]
+        return details, [why], provenance
     # Reuse the Row 2 rules verbatim: they key their per-sample gates and
     # independence probes by the bench name `transient_noise`, whose
-    # measurement names these circuits share.
+    # measurement names these circuits share. (The alias selects arithmetic
+    # only; provenance above was checked against the configuration's own bench.)
     evidence = grade_mod.BenchEvidence("transient_noise", envelopes, None, shas)
-    details, _notes = grade_mod.mc_probit_noise(evidence, ev, grid)
+    details, notes = grade_mod.mc_probit_noise(evidence, ev, grid)
     for d in details:
         if d["sigma"] is not None:
             _, d["sigma_se"] = sigma_se(d["p_plus"], d["p_minus"], d["n"], float(ev["od_x_mv"]))
-    return details
+    return details, notes, provenance
 
 
 def _present(campaign_dir: Path, bench_name: str) -> bool:
@@ -141,17 +264,39 @@ def _present(campaign_dir: Path, bench_name: str) -> bool:
                for sec in PROCESSES)
 
 
-def _summarise(details: list[dict]) -> dict:
+def grid_mean_se_bounds(ses: list[float]) -> tuple[float, float]:
+    """(independent-points SE, fully-correlated upper bound) of the mean of
+    len(ses) per-point estimates with standard errors ``ses``: quadrature sum
+    / n, and plain sum / n (the maximum possible for any correlation)."""
+    n = len(ses)
+    return math.sqrt(sum(e * e for e in ses)) / n, sum(ses) / n
+
+
+def _summarise(details: list[dict], notes: list[str] | None = None) -> dict:
     valid = [d for d in details if d["sigma"] is not None]
     item: dict = {"points_valid": len(valid), "points_expected": len(details)}
+    shared = [d.get("samples_sharing_a_draw_with_another_point") or 0 for d in details]
+    item["shared_draw_samples"] = sum(shared)
+    item["shared_draw_points"] = sum(1 for c in shared if c)
+    item["grader_notes"] = list(notes or [])
     if valid:
         mean = sum(d["sigma"] for d in valid) / len(valid)
+        se_ind, se_corr = grid_mean_se_bounds([d["sigma_se"] for d in valid])
         item.update({
             "grid_mean": mean,
-            "grid_mean_se": math.sqrt(sum(d["sigma_se"] ** 2 for d in valid)) / len(valid),
+            "grid_mean_se": se_ind,
+            "grid_mean_se_assumption": "independent points (conditional)",
+            "grid_mean_se_fully_correlated_bound": se_corr,
+            "grid_mean_se_fully_correlated_bound_definition":
+                "sum of per-point delta-method SEs / included points; upper bound for any "
+                "inter-point correlation, not an estimate",
             "min": min(d["sigma"] for d in valid), "max": max(d["sigma"] for d in valid),
             "complete": len(valid) == len(details),
         })
+        if not item["complete"]:
+            item["partial"] = True
+            item["partial_label"] = (f"PARTIAL: mean and both SEs cover {len(valid)} of "
+                                     f"{len(details)} points only; ungraded")
     bounded = [d["sigma_ub95"] for d in details if d.get("sigma_ub95") is not None]
     if bounded:
         item["saturated_points"] = len(bounded)
@@ -159,20 +304,23 @@ def _summarise(details: list[dict]) -> dict:
     return item
 
 
-def analyse(campaign_dir: Path) -> dict:
+def analyse(campaign_dir: Path, dut: grade_mod.DutReference | None = None) -> dict:
     rows = json.loads((build_mod.EXPERIMENT_DIR / "rows.json").read_text(encoding="utf-8"))
     grid = rows["grid"]
     row2 = next(r for r in rows["rows"] if r["id"] == "2")
     ev = row2["evidence"]
     od_x = float(ev["od_x_mv"])
     names = {**CONFIGS, **{c: b for c, b in EXTRA.items() if _present(campaign_dir, b)}}
-    per_cfg = {cfg: _details(campaign_dir, bench, ev, grid) for cfg, bench in names.items()}
+    dut = dut or grade_mod.load_dut_reference()
+    got = {cfg: _details(campaign_dir, bench, ev, grid, dut) for cfg, bench in names.items()}
+    per_cfg = {cfg: g[0] for cfg, g in got.items()}
     for details in per_cfg.values():
         for d in details:
             if (d["sigma"] is None and (d.get("problem") or "").startswith("probit needs")
                     and d.get("p_plus") == 1.0 and d.get("p_minus") == 0.0):
                 d["sigma_ub95"] = sigma_upper_bound_95(d["n"], od_x)
-    keys = ("sigma", "sigma_se", "sigma_ub95", "p_plus", "p_minus", "p_zero", "n", "problem")
+    keys = ("sigma", "sigma_se", "sigma_ub95", "p_plus", "p_minus", "p_zero", "n", "problem",
+            "samples_sharing_a_draw_with_another_point")
     points = []
     for i, d_fe in enumerate(per_cfg["fe"]):
         entry: dict = {"point": d_fe["point"],
@@ -199,8 +347,17 @@ def analyse(campaign_dir: Path) -> dict:
         "od_x_mv": ev["od_x_mv"], "expected_n": ev["expected_n"],
         "target_max_mv": row2["target"]["max"], "stretch_max_mv": row2["stretch"]["max"],
         "unit": "mV rms", "points": points,
-        "configs": {cfg: _summarise(d) for cfg, d in per_cfg.items()},
+        "configs": {cfg: _summarise(d, got[cfg][1]) for cfg, d in per_cfg.items()},
+        "uncertainty_basis": UNCERTAINTY_BASIS,
+        "provenance": {cfg: got[cfg][2] for cfg in per_cfg},
     }
+    for cfg, c in out["configs"].items():
+        prov = got[cfg][2]
+        c["provenance_status"] = prov["status"]
+        if prov["status"] == "rejected":
+            c["rejected"] = True
+            c["complete"] = False
+            c["rejection_reasons"] = list(prov["problems"])
     splits = [p["split"] for p in points if "split" in p]
     if splits:
         out["split_grid"] = {
@@ -240,7 +397,7 @@ def analyse(campaign_dir: Path) -> dict:
     if ts["steps"]:
         out["timestep"] = ts
     both = out["configs"]["both"]
-    if both.get("complete"):
+    if both.get("complete") and not both.get("rejected"):
         m = both["grid_mean"]
         out["as_measured"] = {
             "statistic": "grid-wide mean of per-point two-rung probit-slope sigma, complete injection",
@@ -249,8 +406,12 @@ def analyse(campaign_dir: Path) -> dict:
             "stretch": "MET" if m <= out["stretch_max_mv"] else "NOT MET",
         }
     else:
-        out["as_measured"] = {"incomplete": True,
-                              "why": "not every grid point of the `both` configuration is valid"}
+        why = ("the `both` configuration was REJECTED by provenance validation: "
+               + "; ".join(both["rejection_reasons"][:3])
+               + ("; ..." if len(both["rejection_reasons"]) > 3 else "")
+               if both.get("rejected")
+               else "not every grid point of the `both` configuration is valid")
+        out["as_measured"] = {"incomplete": True, "why": why}
     return out
 
 
@@ -262,14 +423,43 @@ def render_markdown(result: dict) -> str:
           "sources only (1x), `both` = complete injection; `zero` = negative control (internal "
           "densities scaled to 0, front end on); `int_x4` / `int_x8` = internal only, every "
           "internal density scaled up (sensitivity runs, not spec configurations).", ""]
-    L += ["| config | valid points | grid mean (mV) | +/- SE of mean | min | max | saturated points | 95 % upper bound (mV) |",
-          "|---|---|---|---|---|---|---|---|"]
+    L += ["**Uncertainty basis.** " + result.get("uncertainty_basis", UNCERTAINTY_BASIS), ""]
+    L += ["| config | valid points | grid mean (mV) | +/- SE of mean (independent points assumed) | "
+          "+/- SE bound (fully correlated) | min | max | samples sharing a draw across points | "
+          "saturated points | 95 % upper bound (mV) |",
+          "|---|---|---|---|---|---|---|---|---|---|"]
     for cfg, c in result["configs"].items():
-        mean = (f"{c['grid_mean']:.3f} | {c['grid_mean_se']:.3f} | {c['min']:.3f} | {c['max']:.3f}"
-                if "grid_mean" in c else "- | - | - | -")
+        part = " (PARTIAL, ungraded)" if c.get("partial") else ""
+        mean = (f"{c['grid_mean']:.3f}{part} | {c['grid_mean_se']:.3f} | "
+                f"{c['grid_mean_se_fully_correlated_bound']:.3f} | {c['min']:.3f} | {c['max']:.3f}"
+                if "grid_mean" in c else "- | - | - | - | -")
+        mean += f" | {c.get('shared_draw_samples', 0)} ({c.get('shared_draw_points', 0)} points)"
         sat = (f"{c['saturated_points']} | <= {c['sigma_ub95_mv']:.2f}"
                if "saturated_points" in c else "- | -")
         L.append(f"| {cfg} | {c['points_valid']}/{c['points_expected']} | {mean} | {sat} |")
+    for cfg, c in result["configs"].items():
+        if c.get("rejected"):
+            L.append(f"\n- `{cfg}` REJECTED by provenance validation (excluded from every "
+                     "summary, quadrature split and control): " + "; ".join(c["rejection_reasons"]))
+            continue
+        for note in c.get("grader_notes") or []:
+            L.append(f"\n- `{cfg}` grader note: {note}")
+    L += ["", "Significance calculations below (`zero` vs `fe` z-scores, timestep moves in SE units, "
+          "linearity and closure ratios) treat their inputs as independent; none certifies "
+          "independence of the underlying noise draws."]
+    prov = result.get("provenance")
+    if prov:
+        L += ["", "## Source provenance (validated before any arithmetic)", "",
+              "Each configuration's request/invocation/envelope hashes (envelopes hashed after "
+              "decompression), request semantics against its own `tn_full_*` bench contract, "
+              "envelope input hash against the committed body, embedded DUT against the "
+              "schematic reference and body configuration identity were checked "
+              "(`kltsim.grade.check_chain` / `check_dut`). Full per-part hashes: `noise_full.json` "
+              "`provenance`.", "",
+              "| config | bench | status | body sha256 | parts checked |", "|---|---|---|---|---|"]
+        for cfg, pv in prov.items():
+            L.append(f"| {cfg} | {pv['bench']} | {pv['status']} | "
+                     f"`{(pv.get('body_sha256') or '-')[:16]}` | {len(pv['sources'])} |")
     sg = result.get("split_grid")
     if sg:
         L += ["", f"Quadrature split over {sg['points']} points with `fe` and `both` valid "

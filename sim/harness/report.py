@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .runner import PointResult
+from .runner import AMBIGUOUS_PREFIX, PointResult
 from .testbench import Testbench
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -200,8 +200,9 @@ def summarize(tb: Testbench, results: list[PointResult]) -> dict[str, Measuremen
                     f"`{r.point.corner_id}` rejected"
                 )
             elif name in r.invalid:
+                kind = "ambiguous" if r.invalid[name].startswith(AMBIGUOUS_PREFIX) else "non-finite"
                 summary.failures.append(
-                    f"non-finite measurement {r.invalid[name]} at `{r.point.corner_id}` rejected"
+                    f"{kind} measurement {r.invalid[name]} at `{r.point.corner_id}` rejected"
                 )
         if values:
             summary.minimum = min(values.values())
@@ -349,7 +350,8 @@ def git_short_sha() -> str:
 #: committed record says nothing about whether THIS run is reproducible from
 #: committed sources. Tracked modifications anywhere, and untracked files
 #: anywhere else, still count.
-_EVIDENCE_DIRS = ("/records/", "/corners/", "/netlist-snapshots/")
+_EVIDENCE_DIRS = ("/records/", "/corners/", "/netlist-snapshots/",
+                  "/manifests/artifacts/")
 
 
 def _filter_status(stdout: str) -> list[str]:
@@ -575,7 +577,10 @@ def render_record(
         f"`{context['dut_netlist']}` (sha256 `{context['dut_netlist_sha256'][:16]}`)",
         f"- **Testbench**: `sim/{tb.experiment}/testbench/{tb.netlist.name}` "
         f"(sha256 `{tb.netlist_sha256[:16]}`), manifest sha256 "
-        f"`{tb.manifest_sha256[:16]}`",
+        f"`{tb.manifest_sha256[:16]}`"
+        + (f"; supplemental reverse-ladder fragment "
+           f"`{tb.reverse_ladder_path.name}` (sha256 `{tb.reverse_ladder_sha256[:16]}`)"
+           if getattr(tb, "reverse_ladder", None) else ""),
         f"- **Commit**: `{context['commit']}`"
         + ("  — **taken against a DIRTY working tree**; not citable as a "
            "clean-tree result" if context.get("dirty") else "")
@@ -587,6 +592,29 @@ def render_record(
         f"- **Toolchain**: {context['toolchain']['observed']['ngspice']}, "
         f"Python {context['toolchain']['observed']['python']}",
     ]
+    osdi = context.get("osdi")
+    if osdi:
+        lines.append(
+            f"- **OSDI model bytes**: inventory sha256 `{osdi['inventory_sha256'][:16]}` "
+            f"({len(osdi['files'])} files, unchanged after the grid; byte identity, "
+            "not compiler or PDK authenticity); build provenance "
+            f"**{osdi['build_provenance']['status']}**")
+    sources = context.get("model_sources")
+    if sources:
+        scope = sources["scope"]
+        lines.append(
+            f"- **SPICE model sources**: inventory sha256 "
+            f"`{sources['inventory_sha256'][:16]}` ({len(sources['files'])} files under "
+            f"`{scope['tree']}/`, unchanged after the grid; deck roots "
+            f"{', '.join(f'`{r}`' for r in scope['roots']) or '(none)'}); scope: "
+            f"{scope['note']}")
+        if not scope["complete"]:
+            gaps = ([f"link `{p}` leaves the tree" for p in scope["outside_tree_links"]]
+                    + [f"directory `{p}` not inventoried" for p in scope["uninventoried_dirs"]]
+                    + [f"`{r['from']}` references `{r['ref']}` ({r['reason']})"
+                       for r in scope["uninventoried_references"]])
+            lines.append("  - **Inventory scope INCOMPLETE** — model loading may read "
+                         "bytes this hash does not cover: " + "; ".join(gaps))
     if context["toolchain"]["drift"]:
         lines.append("- **TOOLCHAIN DRIFT ACCEPTED** (`--allow-toolchain-drift`):")
         lines += [f"  - {d}" for d in context["toolchain"]["drift"]]
@@ -716,8 +744,14 @@ def write_record(
     summaries: dict[str, MeasurementSummary],
     context: dict,
     dut_netlist: Path,
+    experiment_dir: Path | None = None,
 ) -> Path:
     """Write the markdown record, its JSON twin, and the netlist snapshot.
+
+    ``experiment_dir`` defaults to ``tb.experiment_dir``. The CLI passes a
+    git-ignored staging copy of it (issue #318): the bundle is written there,
+    then stored through the artifact store, and only the Markdown summary and
+    the manifest reach the repo (``harness/evidence_store.py``).
 
     Append-only: if the record, JSON twin or snapshot for this id already
     exists, raise ``EvidenceCollision`` BEFORE writing any member, so the
@@ -726,7 +760,7 @@ def write_record(
     pre-check still cannot overwrite a member. The ``corners/<rid>/`` log
     directory is expected to exist (``reserve_run`` creates it).
     """
-    experiment_dir = tb.experiment_dir
+    experiment_dir = experiment_dir if experiment_dir is not None else tb.experiment_dir
     rid = context["record_id"]
     paths = bundle_paths(experiment_dir, rid)
     taken = [m for m in occupied_members(experiment_dir, rid) if m != "logs"]
@@ -746,6 +780,12 @@ def write_record(
         + dut_netlist.read_text()
         + "\n* ---------------- TESTBENCH FRAGMENT ----------------\n"
         + tb.netlist.read_text()
+        + (
+            "\n* ---------------- SUPPLEMENTAL REVERSE-LADDER FRAGMENT ----------------\n"
+            + tb.reverse_ladder_path.read_text()
+            if getattr(tb, "reverse_ladder", None)
+            else ""
+        )
     )
     json_text = (
         json.dumps(

@@ -65,3 +65,299 @@ class SaturationAndControlTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _pt(name, sigma, se, shared=0):
+    return {"point": name, "sigma": sigma, "sigma_se": se, "problem": None,
+            "samples_sharing_a_draw_with_another_point": shared}
+
+
+class GridUncertaintyTest(unittest.TestCase):
+    def test_conservative_bound_formula_unequal_errors(self):
+        ind, corr = nf.grid_mean_se_bounds([0.1, 0.2, 0.3])
+        self.assertAlmostEqual(ind, math.sqrt(0.14) / 3)
+        self.assertAlmostEqual(corr, 0.2)
+        self.assertGreaterEqual(corr, ind)
+
+    def test_independent_fixture_has_no_shared_draws(self):
+        c = nf._summarise([_pt("a", 1.0, 0.1), _pt("b", 1.2, 0.3)], [])
+        self.assertEqual((c["shared_draw_samples"], c["shared_draw_points"]), (0, 0))
+        self.assertEqual(c["grader_notes"], [])
+        self.assertAlmostEqual(c["grid_mean_se"], math.hypot(0.1, 0.3) / 2)
+        self.assertAlmostEqual(c["grid_mean_se_fully_correlated_bound"], 0.2)
+        self.assertTrue(c["complete"])
+        self.assertNotIn("partial", c)
+
+    def test_shared_draw_notes_and_counts_survive(self):
+        note = "5/160 samples repeat a raw noise draw also seen at ANOTHER grid point"
+        c = nf._summarise([_pt("a", 1.0, 0.1, 3), _pt("b", 1.2, 0.3, 2), _pt("c", 1.1, 0.2)],
+                          [note])
+        self.assertEqual((c["shared_draw_samples"], c["shared_draw_points"]), (5, 2))
+        self.assertEqual(c["grader_notes"], [note])
+
+    def test_incomplete_grid_labelled_partial(self):
+        bad = {"point": "c", "sigma": None, "problem": "saturated"}
+        c = nf._summarise([_pt("a", 1.0, 0.1), _pt("b", 1.2, 0.3), bad], [])
+        self.assertFalse(c["complete"])
+        self.assertTrue(c["partial"])
+        self.assertIn("PARTIAL", c["partial_label"])
+        self.assertAlmostEqual(c["grid_mean_se_fully_correlated_bound"], 0.2)  # 2 included points
+
+    def test_render_carries_disclosures(self):
+        note = "2/80 samples repeat a raw noise draw also seen at ANOTHER grid point"
+        bad = {"point": "c", "sigma": None, "problem": "saturated"}
+        cfg = nf._summarise([_pt("a", 1.0, 0.1, 2), bad], [note])
+        pts = [{"point": "a", "both": {"sigma": 1.0, "sigma_se": 0.1}},
+               {"point": "c", "both": {"sigma": None, "problem": "saturated"}}]
+        result = {"od_x_mv": 1.0, "expected_n": 80, "target_max_mv": 1.0, "stretch_max_mv": 0.6,
+                  "configs": {"both": cfg}, "points": pts, "uncertainty_basis": nf.UNCERTAINTY_BASIS,
+                  "as_measured": {"incomplete": True, "why": "x"}}
+        md = nf.render_markdown(result)
+        for text in ("independent points assumed", "fully correlated", "PARTIAL, ungraded",
+                     "grader note: " + note, "2 (1 points)", "none certifies"):
+            self.assertIn(text, md)
+
+
+# --------------------------------------------------------------------------- #
+# issue #236: provenance validation before the noise arithmetic
+# --------------------------------------------------------------------------- #
+
+import gzip
+import hashlib
+import json
+import tempfile
+from pathlib import Path
+
+from kltsim import build as build_mod
+from kltsim import grade as grade_mod
+from kltsim.benches import ALL_BENCHES
+
+
+def _sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _write_config(root: Path, bench_name: str, *, gz: bool = False) -> None:
+    """A self-consistent tn_full_* campaign slice built with the real builders
+    (no PDK, no ngspice): body + per-process request, invocation, envelope."""
+    bench = ALL_BENCHES[bench_name]
+    _, _, files = build_mod.plan_bench_inputs(bench, root, target="batch")
+    for path, data in files:
+        path.write_bytes(data)
+    body_sha = _sha((root / f"{bench_name}.body.spice").read_bytes())
+    for tag in build_mod.part_tags(bench):
+        section = tag[len(bench_name) + 1:]
+        env = {"provenance": {"input": {"content_hash": f"sha256:{body_sha}"}},
+               "environment": {"netlist_source": "schematic"},
+               "corners": [{"process": section, "corner_id": f"{section}_x/mc0"}]}
+        raw = json.dumps(env, indent=2).encode("utf-8")
+        if gz:
+            (root / f"{tag}.envelope.json.gz").write_bytes(gzip.compress(raw, mtime=0))
+        else:
+            (root / f"{tag}.envelope.json").write_bytes(raw)
+        inv = {"tag": tag, "envelope_sha256": _sha(raw),
+               "request_sha256": _sha((root / f"{tag}.request.json").read_bytes())}
+        (root / f"{tag}.invocation.json").write_text(json.dumps(inv), encoding="utf-8")
+
+
+class ProvenanceValidationTest(unittest.TestCase):
+    bench = "tn_full_both"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dut = grade_mod.load_dut_reference()
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def validate(self, bench=None):
+        return nf.validate_config(self.root, bench or self.bench, self.dut)
+
+    def assertRejected(self, text, bench=None):
+        _, _, problems, prov = self.validate(bench)
+        self.assertEqual(prov["status"], "rejected")
+        self.assertTrue(any(text in p for p in problems), problems)
+
+    def test_valid_plain_and_gzip_validate(self):
+        for gz in (False, True):
+            with self.subTest(gz=gz):
+                self.setUp()
+                _write_config(self.root, self.bench, gz=gz)
+                envs, shas, problems, prov = self.validate()
+                self.assertEqual(problems, [])
+                self.assertEqual(prov["status"], "validated")
+                self.assertEqual(len(envs), 5)
+                tag = f"{self.bench}.mos_tt"
+                self.assertEqual(prov["sources"][tag]["envelope_sha256"], shas[tag])
+                for key in ("request_sha256", "invocation_request_sha256",
+                            "invocation_envelope_sha256", "input_content_hash"):
+                    self.assertIn(key, prov["sources"][tag])
+                self.assertEqual(prov["sources"][tag]["envelope_file"].endswith(".gz"), gz)
+
+    def test_every_tn_full_configuration_validates(self):
+        for name in ("tn_full_fe", "tn_full_int_probed", "tn_full_both", "tn_full_zero",
+                     "tn_full_int_x4", "tn_full_int_x8"):
+            with self.subTest(bench=name):
+                self.setUp()
+                _write_config(self.root, name)
+                self.assertEqual(self.validate(name)[2], [])
+
+    def test_missing_body(self):
+        _write_config(self.root, self.bench)
+        (self.root / f"{self.bench}.body.spice").unlink()
+        self.assertRejected("committed netlist body is missing")
+
+    def test_missing_request(self):
+        _write_config(self.root, self.bench)
+        (self.root / f"{self.bench}.mos_tt.request.json").unlink()
+        self.assertRejected(f"{self.bench}.mos_tt.request.json is missing")
+
+    def test_missing_invocation(self):
+        _write_config(self.root, self.bench)
+        (self.root / f"{self.bench}.mos_ss.invocation.json").unlink()
+        self.assertRejected(f"{self.bench}.mos_ss.invocation.json is missing")
+
+    def test_missing_envelope_part(self):
+        _write_config(self.root, self.bench)
+        (self.root / f"{self.bench}.mos_ff.envelope.json").unlink()
+        self.assertRejected("envelope")
+
+    def test_envelopes_only_is_rejected(self):
+        # The issue's reproduction: envelopes alone, no body/request/invocation.
+        _write_config(self.root, self.bench, gz=True)
+        for p in list(self.root.glob("*.body.spice")) + list(self.root.glob("*.request.json")) \
+                + list(self.root.glob("*.invocation.json")):
+            p.unlink()
+        _, _, problems, prov = self.validate()
+        self.assertEqual(prov["status"], "rejected")
+        self.assertTrue(any("body is missing" in p for p in problems))
+        self.assertTrue(any("request" in p and "missing" in p for p in problems))
+        self.assertTrue(any("invocation" in p and "missing" in p for p in problems))
+
+    def test_changed_request(self):
+        _write_config(self.root, self.bench)
+        path = self.root / f"{self.bench}.mos_tt.request.json"
+        req = json.loads(path.read_text(encoding="utf-8"))
+        req["monte_carlo"]["n"] = 7
+        path.write_text(json.dumps(req), encoding="utf-8")
+        _, _, problems, _ = self.validate()
+        self.assertTrue(any("request_sha256 mismatch" in p for p in problems), problems)
+        self.assertTrue(any("request monte_carlo" in p for p in problems), problems)
+
+    def test_changed_envelope(self):
+        _write_config(self.root, self.bench)
+        path = self.root / f"{self.bench}.mos_tt.envelope.json"
+        env = json.loads(path.read_text(encoding="utf-8"))
+        env["tampered"] = True
+        path.write_text(json.dumps(env), encoding="utf-8")
+        self.assertRejected("envelope_sha256 mismatch")
+
+    def test_changed_gzip_envelope_hashed_after_decompression(self):
+        _write_config(self.root, self.bench, gz=True)
+        path = self.root / f"{self.bench}.mos_tt.envelope.json.gz"
+        env = json.loads(gzip.decompress(path.read_bytes()))
+        env["tampered"] = True
+        path.write_bytes(gzip.compress(json.dumps(env).encode("utf-8"), mtime=0))
+        self.assertRejected("envelope_sha256 mismatch")
+
+    def test_input_hash_mismatch(self):
+        _write_config(self.root, self.bench)
+        path = self.root / f"{self.bench}.mos_tt.envelope.json"
+        env = json.loads(path.read_text(encoding="utf-8"))
+        env["provenance"]["input"]["content_hash"] = "sha256:" + "0" * 64
+        raw = json.dumps(env).encode("utf-8")
+        path.write_bytes(raw)
+        inv_path = self.root / f"{self.bench}.mos_tt.invocation.json"
+        inv = json.loads(inv_path.read_text(encoding="utf-8"))
+        inv["envelope_sha256"] = _sha(raw)  # chain consistent: only the input hash is wrong
+        inv_path.write_text(json.dumps(inv), encoding="utf-8")
+        _, _, problems, _ = self.validate()
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("provenance.input.content_hash", problems[0])
+
+    def test_substituted_dut(self):
+        _write_config(self.root, self.bench)
+        path = self.root / f"{self.bench}.body.spice"
+        text = path.read_text(encoding="utf-8")
+        path.write_text(text.replace(".subckt comparator ", ".subckt comparator  ", 1)
+                        .replace("* ==== BEGIN DUT", "* ==== BEGIN DUT", 1), encoding="utf-8")
+        # Body bytes changed => its hash no longer matches the envelopes either.
+        _, _, problems, _ = self.validate()
+        self.assertTrue(any("is not today's" in p or "declared sha256" in p for p in problems),
+                        problems)
+        self.assertTrue(any("content_hash" in p for p in problems), problems)
+
+    def test_wrong_configuration_body(self):
+        # A `fe` body filed as `both`: right measurements, wrong injection.
+        _write_config(self.root, "tn_full_fe")
+        _write_config(self.root, self.bench)
+        body = self.root / f"{self.bench}.body.spice"
+        body.write_bytes((self.root / "tn_full_fe.body.spice").read_bytes())
+        _, _, problems, _ = self.validate()
+        self.assertTrue(any("body header names" in p for p in problems), problems)
+        self.assertTrue(any("internal-noise hook" in p for p in problems), problems)
+
+    def test_wrong_scale_hook(self):
+        _write_config(self.root, "tn_full_zero")
+        _write_config(self.root, self.bench)
+        zero = (self.root / "tn_full_zero.body.spice").read_text(encoding="utf-8")
+        (self.root / f"{self.bench}.body.spice").write_text(
+            zero.replace("* tn_full_zero --", f"* {self.bench} --", 1), encoding="utf-8")
+        self.assertRejected("internal-noise hook is not the tn_full_both configuration")
+
+    def test_wrong_front_end_scale(self):
+        _write_config(self.root, self.bench)
+        body = self.root / f"{self.bench}.body.spice"
+        body.write_text(body.read_text(encoding="utf-8").replace(
+            ".param fe_scale=1.0", ".param fe_scale=0.0"), encoding="utf-8")
+        self.assertRejected("bench parameter")
+
+    def test_request_for_other_configuration(self):
+        # tn_full_int_x4's request filed under tn_full_int_x8: names the wrong body.
+        _write_config(self.root, "tn_full_int_x8")
+        _write_config(self.root, "tn_full_int_x4")
+        tag = "tn_full_int_x8.mos_tt"
+        src = (self.root / "tn_full_int_x4.mos_tt.request.json").read_bytes()
+        (self.root / f"{tag}.request.json").write_bytes(src)
+        self.assertRejected("request names body", "tn_full_int_x8")
+
+    def test_wrong_process_in_envelope(self):
+        _write_config(self.root, self.bench)
+        path = self.root / f"{self.bench}.mos_tt.envelope.json"
+        env = json.loads(path.read_text(encoding="utf-8"))
+        env["corners"][0]["process"] = "mos_ss"
+        raw = json.dumps(env).encode("utf-8")
+        path.write_bytes(raw)
+        inv_path = self.root / f"{self.bench}.mos_tt.invocation.json"
+        inv = json.loads(inv_path.read_text(encoding="utf-8"))
+        inv["envelope_sha256"] = _sha(raw)
+        inv_path.write_text(json.dumps(inv), encoding="utf-8")
+        self.assertRejected("not mos_tt")
+
+
+class RejectedConfigurationNeverCompleteTest(unittest.TestCase):
+    def test_envelopes_only_campaign_is_never_complete(self):
+        dut = grade_mod.load_dut_reference()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("tn_full_fe", "tn_full_int_probed", "tn_full_both"):
+                _write_config(root, name, gz=True)
+                for p in list(root.glob("*.body.spice")) + list(root.glob("*.request.json")) \
+                        + list(root.glob("*.invocation.json")):
+                    p.unlink()
+            result = nf.analyse(root, dut)
+        for cfg in ("fe", "int", "both"):
+            c = result["configs"][cfg]
+            self.assertTrue(c["rejected"])
+            self.assertFalse(c["complete"])
+            self.assertNotIn("grid_mean", c)
+            self.assertEqual(c["points_valid"], 0)
+            self.assertTrue(c["rejection_reasons"])
+        self.assertTrue(result["as_measured"]["incomplete"])
+        self.assertIn("REJECTED", result["as_measured"]["why"])
+        self.assertNotIn("split_grid", result)
+        md = nf.render_markdown(result)
+        self.assertIn("REJECTED by provenance validation", md)
+        self.assertIn("body is missing", md)

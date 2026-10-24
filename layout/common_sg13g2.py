@@ -113,6 +113,7 @@ VN_A = 0.19  # deck: Via2 size (min and max)
 MN_A = 0.20  # deck: Metal2/Metal3 min width
 MN_B = 0.21  # deck: Metal2/Metal3 min space
 PSD_C = 0.18  # rules pSD.c: pSD (and here also nSD) enclosure of Activ
+PSD_G = 0.30  # rules pSD.i: pSD enclosure of a PFET gate (LV); PMOS rows only
 NW_ENC = 0.62  # NWell enclosure of P+ Activ / N+ tap: drawn at the
 #               thick-oxide value (NW.c1) as margin over the LV value
 CONT_PITCH = CNT_A + CNT_B

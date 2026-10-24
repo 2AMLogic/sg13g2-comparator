@@ -655,3 +655,16 @@ python3 sim/run_klt_corner_verification.py grade --campaign $C/full_w8_l034
   was resubmitted. The committed tt envelope is that resubmission's.
 - **Not in scope here:** post-layout (#61), the `klt yield` report (#63),
   the aggregate characterization artifact (#64), and any spec change.
+
+## Addendum (issue #82): the +13 % offset_mc shift is within sampling error
+
+Append-only note; the report/comparison notes elsewhere are unchanged and
+remain historical. The offset_mc grid-mean 3 sigma (9.511 mV, N = 60 per point,
+45-point PVT grid) vs the in-process record (8.404 mV) is +13.2 %, which is
+**1.3 sigma** once common random numbers are accounted for (record: one shared
+stream, effective N = 60, ~9 % SE; klt: seeds repeat across the 5 process
+sections, 9 independent streams, ~3 % SE), not the ~5 sigma of the naive
+independent-point estimate. Derivation and script:
+`sim/klt-vs-record-offset-significance/`. The remaining ~13 % method
+uncertainty note is therefore sampling-limited, not evidence of a systematic
+method difference.

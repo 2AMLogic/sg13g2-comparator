@@ -123,6 +123,9 @@ def compose_deck(
         "* not survive ngspice's parse of it (confirmed empirically, issue #8;",
         "* see this module's docstring).",
     ]
+    # Issue #203: this .lib (and every file its sections include) is an
+    # external runtime input; cli.py inventories pdk.models_dir around the grid
+    # (pdk.model_source_identity) and refuses if this root is outside it.
     for section in point.corner.sections:
         lines.append(f'.lib "{pdk.mos_corner_lib}" {section}')
 
@@ -156,6 +159,11 @@ def compose_deck(
         "* ---- testbench ------------------------------------------------------",
         f'.include "{tb.netlist}"',
     ]
+    if getattr(tb, "reverse_ladder", None):
+        lines += [
+            "* ---- supplemental reverse-polarity ladder (tb.json reverse_ladder) --",
+            f'.include "{tb.reverse_ladder_path}"',
+        ]
     if tb.internal_noise:
         # Optional hook (issue #81); absent key => nothing emitted, deck unchanged.
         lines += [""]
@@ -181,6 +189,8 @@ def compose_deck(
     if num_threads:
         lines.append(f"set num_threads={num_threads}")
     lines += [f"  {analysis}" for analysis in tb.analyses]
+    if getattr(tb, "reverse_ladder", None):
+        lines += [f"  {analysis}" for analysis in tb.reverse_ladder["analyses"]]
     for name, expr in tb.measure.items():
         lines.append(f"  let m_{name} = {expr}")
     for name in tb.measure:
@@ -226,34 +236,74 @@ class PointResult:
         return record
 
 
+# Prefix of the invalid-map entry for a name printed more than once; report.py
+# keys its "ambiguous" label on this shared constant.
+AMBIGUOUS_PREFIX = "repeated "
+
+
 def parse_measurements_checked(text: str) -> tuple[dict[str, float], dict[str, str]]:
     """Return ``(finite measurements, {name: raw text} for non-finite ones)``.
 
     ``float("-1e999")`` is ``-inf``; the regex accepts it, so finiteness is
-    checked here rather than trusted.
+    checked here rather than trusted. A name printed more than once is
+    ambiguous (even if the values agree): it is reported in the invalid map
+    with its raw repeated values and is never in the finite map.
     """
-    found: dict[str, float] = {}
-    invalid: dict[str, str] = {}
+    raws: dict[str, list[str]] = {}
     for line in text.splitlines():
         match = _MEAS_RE.match(line)
         if match:
-            name, raw = match.group(1), match.group(2)
-            try:
-                value = float(raw)
-            except ValueError:  # pragma: no cover - regex already constrains this
-                continue
-            if math.isfinite(value):
-                found[name] = value
-                invalid.pop(name, None)
-            else:
-                invalid[name] = raw
-                found.pop(name, None)
+            raws.setdefault(match.group(1), []).append(match.group(2))
+    found: dict[str, float] = {}
+    invalid: dict[str, str] = {}
+    for name, values in raws.items():
+        if len(values) > 1:
+            # Ambiguous: never pick first/last/worst, and a later valid
+            # occurrence must not clear an earlier one (issue #177).
+            invalid[name] = f"{AMBIGUOUS_PREFIX}{len(values)}x: " + ", ".join(values)
+            continue
+        raw = values[0]
+        try:
+            value = float(raw)
+        except ValueError:  # pragma: no cover - regex already constrains this
+            continue
+        if math.isfinite(value):
+            found[name] = value
+        else:
+            invalid[name] = raw
     return found, invalid
 
 
-def parse_measurements(text: str) -> dict[str, float]:
-    """Finite measurements only (see ``parse_measurements_checked``)."""
-    return parse_measurements_checked(text)[0]
+def _stream_text(data: str | bytes | None) -> str:
+    """Normalize a captured stream from ``TimeoutExpired`` to text.
+
+    ``TimeoutExpired.stdout``/``stderr`` may be ``bytes`` (a known CPython
+    quirk even under ``text=True``), ``str`` or ``None``. Bytes are decoded as
+    UTF-8 with ``errors="replace"`` (undecodable bytes become U+FFFD) so a
+    truncated multi-byte sequence cannot lose the rest of the diagnostics.
+    """
+    if data is None:
+        return ""
+    if isinstance(data, bytes):
+        return data.decode("utf-8", errors="replace")
+    return data
+
+
+def _timeout_log(timeout_s: int, stdout: str | bytes | None, stderr: str | bytes | None) -> str:
+    """Per-corner log body for a timed-out run: marker plus labelled streams."""
+    out, err = _stream_text(stdout), _stream_text(stderr)
+    return (
+        f"TIMEOUT after {timeout_s}s\n"
+        "(partial output follows; run incomplete, no measurements accepted;"
+        " bytes decoded as UTF-8 with errors=replace)\n"
+        "===== partial stdout =====\n"
+        + (out if not out or out.endswith("\n") else out + "\n")
+        + ("" if out else "(none captured)\n")
+        + "===== partial stderr =====\n"
+        + (err if not err or err.endswith("\n") else err + "\n")
+        + ("" if err else "(none captured)\n")
+        + "===== end partial output =====\n"
+    )
 
 
 def run_point(
@@ -306,9 +356,11 @@ def run_point(
         returncode = proc.returncode
     except FileNotFoundError as exc:
         raise NgspiceMissing(str(exc)) from exc
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         elapsed = time.monotonic() - started
-        log_path.write_text(f"TIMEOUT after {timeout_s}s\n")
+        # Keep the partial simulator diagnostics as evidence. The point is
+        # always an error: partial output is never parsed for measurements.
+        log_path.write_text(_timeout_log(timeout_s, exc.stdout, exc.stderr))
         return PointResult(
             point=point,
             status="error",
@@ -348,7 +400,7 @@ def run_point(
             deck=deck_path.name,
             log=log_path.name,
             message=(
-                ("non-finite measurement(s): " + ", ".join(f"{n}={r}" for n, r in invalid.items()))
+                ("non-finite or ambiguous measurement(s): " + ", ".join(f"{n}={r}" for n, r in invalid.items()))
                 if invalid
                 else first_error or errors or f"ngspice exit {returncode}, no measurements parsed"
             ),

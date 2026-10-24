@@ -13,6 +13,8 @@ one-command flow that regenerates and checks it (issue #58, T1 item 2).
 | `comparator/check_stream.py` | Structural smoke test of a stream: top cell, ports, no host paths. |
 | `common_sg13g2.py` | SG13G2 layer table, rule values and drawing primitives (boxes, contacts, vias). |
 | `run_flow.sh` | One command that regenerates the stream and runs every check below. |
+| `pdk_drc.sh`, `comparator/pdk_drc.py` | **Supplemental** check against IHP's own DRC deck (issue #180); see "Supplemental PDK-deck DRC". Not part of `run_flow.sh` or CI. |
+| `comparator/pdk_drc_report.json` | **Committed supplemental evidence (issue #180).** Status `clean` (0 markers, 862 rules executed, both negative controls detected) after the pSD repair of issue #184. Not cited by the manifest. |
 
 Downstream work reads the stream at `layout/comparator/comparator.gds`, top
 cell `comparator`. That covers DRC #59, LVS #60, post-layout #61 and
@@ -189,6 +191,151 @@ The generator alone needs only the `klayout` Python module:
 CI runs `layout/run_flow.sh --check` on every PR. That is the
 `layout-reproducibility` job in `.github/workflows/ci.yml`.
 
+## Supplemental PDK-deck DRC (issue #180)
+
+Three tiers, kept apart on purpose:
+
+| Tier | What | Verdict of record |
+|---|---|---|
+| Curated DRC | klt's `sg13g2` deck, stage 6 of `run_flow.sh`, committed `drc_report.json`, cited by the manifest | `clean`, 0 violations. **Unchanged.** |
+| Supplemental verification | IHP's own KLayout deck (IHP-Open-PDK v0.3.0, the release `sim/pdk.json` pins), run by `pdk_drc.sh`, committed `pdk_drc_report.json` | `clean`: 0 markers (was pSD.b x10, pSD.i x52 before issue #184). **Not cited by the manifest.** |
+| Remaining gaps | foundry signoff, density/fill, seal ring, antenna, latch-up beyond the deck's own rules | not checked (below) |
+
+```bash
+layout/pdk_drc.sh            # run; write layout/comparator/pdk_drc_report.json
+layout/pdk_drc.sh --check    # require the committed report to reproduce (writes nothing)
+layout/pdk_drc.sh --strict   # additionally exit 1 when the status is `violations`
+```
+
+**Prerequisites** (each missing one gives `status: unavailable` on stdout,
+exit `3`, and leaves the committed report alone; unavailable is never clean):
+
+- `uvx` (fetches the `klayout==0.30.12` Python module into uv's cache);
+- the IHP-Open-PDK v0.3.0 checkout at `--pdk`, `$IHP_PDK_DIR`,
+  `$PDK_ROOT/ihp-sg13g2` or `~/share/pdk/ihp-sg13g2`. Its
+  `.fetched-version` must read `0.3.0` and the sha256 over its
+  `libs.tech/klayout/tech/drc` tree (excluding docs, images, `testing/`) must
+  equal the pin in `pdk_drc.py`; otherwise `deck_identity_mismatch`;
+- a **KLayout executable >= 0.29.11** (`$KLAYOUT_BIN`, `--klayout`, or
+  `klayout` on `PATH`). The deck is Ruby, so the pip `klayout` wheel (module
+  only) is not enough. A host with only Ubuntu's 0.28.16 gets
+  `klayout_too_old`; running the deck on it fails midway on an unsupported
+  method, so it is refused up front. One way to get a binary without a
+  host-wide install: `dpkg -x` the upstream `.deb` into a scratch directory and
+  export its `usr/lib/klayout` in `LD_LIBRARY_PATH`.
+
+**What is run.** The PDK's own `run_drc.py` with `--topcell=comparator
+--run_mode=deep --no_density --mp=1`: the main rule set plus the PDK's
+"maximal" extra set (which the PDK itself says is not fully verified). 862
+rule categories are emitted. Scope is this standalone cell only.
+
+**Report** (`pdk_drc_report.json`, deterministic, no timestamps or host
+paths): the GDS path and sha256 plus the layers actually drawn; the deck
+release, `.fetched-version`, tree sha256 and entry point; the KLayout version;
+the invocation; every violated rule with its description and its markers
+(one marker per lyrdb `<item>`, a list of all that item's values; counts are
+items, never flattened values); a `targeted` table giving, for each rule the section above listed
+as unchecked (Gat.c, Cnt.e/Cnt.f, the pSD, NWell and latch-up rules), whether
+the deck executed it and how many markers it produced; `skipped`;
+`not_covered`; and the negative controls.
+
+**Malformed deck output fails closed.** A lyrdb with a missing
+`<categories>`/`<items>` container, a blank or duplicate category, an item
+whose category is blank or undeclared, or an item with no usable values is
+rejected (exit 1, `FAIL: malformed deck report`) and the committed report is
+not written; it can never reduce to `clean`. An empty `<categories>`
+container is malformed too.
+
+**Incomplete deck runs fail closed (issue #253).** Every deck run (the
+committed stream and each negative control) must show that it completed with
+the pinned deck's rule inventory before any report is built, otherwise exit 1,
+`FAIL: incomplete deck run, nothing written`, and the existing report is left
+untouched (`--check` and `--no-controls` included):
+
+- *Exit status is the deck's verdict.* `run_drc.py` exits 0 when its merged
+  database has no violations and 1 when it has some, but 1 is also every one
+  of its error paths. So 0 is accepted only with zero markers and the deck's
+  "KLayout DRC Check Passed" line, 1 only with markers and its "KLayout DRC
+  Check Failed: Violations were detected" line; any other status, or a status
+  that disagrees with the database, is refused.
+- *Completion.* The merged `<stem>_comparator_full.lyrdb` and both rule-set
+  logs (`<stem>_comparator_main.log`, `..._sg13g2_maximal.log`) must exist and
+  each log must carry the deck's "completed in" line.
+- *Coverage.* The database must declare every category in
+  `REQUIRED_CATEGORIES` (`pdk_drc.py`): 101 from the main tables and 272 from
+  the maximal set. KLayout creates an `output()` category whether or not it
+  has markers, so these are present in every complete run. They were derived
+  statically from the pinned deck source: literal-named `output()` calls
+  whose enclosing blocks are only switches this invocation turns on (the main
+  table gates, `unless PRECHECK_DRC`, `RECOMMENDED`/`$recommendedRules`,
+  `CONNECTIVITY_RULES`, `$fillerRules`/`$latchUpRules`, and the maximal deck's
+  immediately invoked lambdas). Deliberately not required: categories whose
+  names are computed in loops/helpers (M2-M5, V2-V4, fillers, offgrid, angle,
+  forbidden, pin, Seal.b, Pad.fR, Slt.e1), the layout-dependent Seal.l (needs
+  an EdgeSeal boundary) and MIM.gR (needs MIM area), and everything behind
+  switches left off (density, antenna, precheck). Extra categories are fine.
+  A zero-marker run that passes all three checks is still `clean`;
+  violations keep the existing exit semantics (`--strict` exits 1).
+
+`test_pdk_drc.py` exercises these refusals against a fake `run_drc.py` (no
+PDK or KLayout needed). `layout/tests/pinned_deck_contract.py` re-derives
+`REQUIRED_CATEGORIES` from the source of a local checkout matching the pinned
+tree (a static check; it does not run the deck). CI has no PDK, so it is kept
+out of the CI discovery pattern (`test_*.py`) and runs by hand:
+`python3 -I layout/tests/pinned_deck_contract.py`. A missing or non-pinned
+deck fails that run (exit 1) rather than skipping. The checks have not yet been
+exercised by a real deck run: the host that added them has only KLayout
+0.28.16 (`klayout_too_old`). The committed `pdk_drc_report.json` predates them
+and is not rewritten; its 862 executed categories and all-executed `targeted`
+table are consistent with the contract.
+
+**Checked vs skipped.** "Executed" means the deck emitted a result category
+for the rule. A rule whose layers are not drawn here (pads, MiM, HBT, seal
+ring, top metals, ...) executes vacuously, so executed is not the same as
+exercised; compare against `drawn_layers`. Skipped: density (needs chip-level
+fill, so a result on a standalone cell would be meaningless), antenna, and the
+PDK pre-check set. Gat.c, Cnt.e, Cnt.f, NW.*, LU.* and the other pSD rules
+ran on drawn Activ/GatPoly/Cont/pSD/NWell and gave 0 markers.
+
+**Findings and repair (issue #184).** The first run (GDS sha256 `67e44380...`)
+found pSD.b (min pSD space 0.31 um, 10 markers) and pSD.i (min pSD enclosure of
+PFET gate 0.30 um, 52 markers). Cause: PMOS pSD used the 0.18 um Activ
+enclosure (`PSD_C`) on every island, too small for pSD.i and leaving 0.04 um
+implant gaps between default 0.40 um island gaps. The generator now encloses
+PMOS islands by `PSD_G = 0.30` um (taps keep `PSD_C`), so neighbouring island
+implants overlap and merge. Result on GDS `583e99c6...`: 0 markers, same pinned
+deck, both controls detected. Device inventory, LVS netlist and sizing are
+unchanged (`lvs_*` files byte-identical). Extracted parasitics may differ:
+`pex_report.json` and everything under `sim/comparator-pex/` still describe the
+previous GDS (`67e44380...`) and are not rewritten; re-extraction belongs to
+the PEX campaign (#61/#191). `layout/tests/klayout_test_implant_geometry.py` checks the committed GDS and
+that the old geometry is detected. It needs the klayout module, so it is kept
+out of the stdlib-only CI discovery (`test_*.py`); it runs in the
+KLayout-equipped `layout-reproducibility` CI job (issue #257), where an empty
+population, a skip or a failure fails the job, and on demand locally:
+`uvx --from klayout==0.30.12 python -I -m unittest discover -s layout/tests -p 'klayout_test_*.py'`.
+
+**Negative controls.** Two temp copies of the stream, each with one deliberate
+defect drawn clear of the cell (a 0.10 um Metal1 sliver; a GatPoly stripe with
+a 0.05 um endcap over a scratch Activ) must each trip the named rule (M1.a,
+Gat.c), which the committed stream does not trip. The committed GDS is hashed
+before and after and never written. A control that is not detected fails the
+run.
+
+`layout/tests/test_pdk_drc.py` (CI, stdlib only) guards the committed report
+against the committed GDS hash and the pinned deck identity, and tests the
+unavailable paths. The deck run itself is local-only, because CI has neither
+the PDK nor a KLayout executable.
+
+**Follow-ups.** Tool gap (no klt runner for
+a vendor Ruby deck, no `unavailable` convention):
+[2AMLogic/klayout-tools#3076](https://github.com/2AMLogic/klayout-tools/issues/3076).
+
+**Remaining physical-signoff gaps.** Not checked by anything here: foundry
+signoff (this is IHP's open deck), density/fill, seal ring, antenna, and
+latch-up beyond LU.* in the deck (no guard rings are drawn). Curated DRC
+margins in `common_sg13g2.py` remain unverified by anything but this run.
+
 ## What is drawn
 
 Every row is centred on x = 0. From bottom to top:
@@ -276,7 +423,8 @@ ratified row.
   - NWell enclosure and spacing;
   - latch-up tap distance.
 
-  None of these has been checked by the PDK's own deck, and there is no
+  Those were not checked by the curated deck; the supplemental PDK-deck run
+  below does exercise them (clean since issue #184). There is no
   density fill or seal ring.
 - **Connectivity.** Stage 4 is the committed LVS evidence (#60); see its
   limits above (power and body verdicts `unchecked`).

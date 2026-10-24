@@ -87,10 +87,10 @@ class Dut:
     description: str
     params: dict[str, float] = field(default_factory=dict)
     notes: tuple[str, ...] = ()
-
-    @property
-    def netlist_sha256(self) -> str:
-        return hashlib.sha256(self.netlist.read_bytes()).hexdigest()
+    # Issue #179: captured once by load(); never re-read from the live file.
+    netlist_bytes: bytes = field(default=b"", repr=False)
+    netlist_sha256: str = ""
+    config_sha256: str = ""
 
     @property
     def is_placeholder(self) -> bool:
@@ -106,6 +106,7 @@ class Dut:
             "dut_provenance": self.provenance,
             "dut_netlist": str(self.netlist.relative_to(REPO_ROOT)),
             "dut_netlist_sha256": self.netlist_sha256,
+            "dut_config_sha256": self.config_sha256,
             "dut_params": dict(sorted(self.params.items())),
         }
 
@@ -130,8 +131,9 @@ def load(path: str | Path | None = None) -> Dut:
     config_path = Path(path) if path is not None else DUT_CONFIG
     if not config_path.is_file():
         raise DutError(f"no DUT binding at {config_path}; see sim/dut/README.md")
+    cfg = config_path.read_bytes()
     try:
-        config = json.loads(config_path.read_text())
+        config = json.loads(cfg)
     except json.JSONDecodeError as exc:
         raise DutError(f"{config_path} is not valid JSON: {exc}") from exc
 
@@ -150,7 +152,8 @@ def load(path: str | Path | None = None) -> Dut:
     if not netlist.is_file():
         raise DutError(f"{config_path}: netlist {netlist} does not exist")
 
-    text = netlist.read_text()
+    data = netlist.read_bytes()
+    text = data.decode()
     declared = _declared_subckts(text)
     for name, pins in REQUIRED_SUBCKTS.items():
         if name not in declared:
@@ -186,4 +189,7 @@ def load(path: str | Path | None = None) -> Dut:
         description=str(config.get("description", "")),
         params=params,
         notes=tuple(config.get("notes") or ()),
+        netlist_bytes=data,
+        netlist_sha256=hashlib.sha256(data).hexdigest(),
+        config_sha256=hashlib.sha256(cfg).hexdigest(),
     )

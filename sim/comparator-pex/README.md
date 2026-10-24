@@ -50,6 +50,23 @@ text below it is kept as the record of the earlier attempt. The same
     -14.1 %, `apmax` -1.3 %; `bc1` -79.6 % (a tiny-magnitude current row).
   - Rows with no change beyond 0.1 %: supply, end-state, bias current
     (`i_stat` -0.08 %), common-mode levels.
+- Renderer semantics (issue #181): `make_delta_table.py` keeps klt's raw status and
+  `delta_pct` as measurement availability and adds a separate, explicitly mapped
+  interpretation: logic rows (`d*_first`/`d*_end`) as states against the bench's own
+  0.1/0.9 polarity checks (no percentage), `td_a`/`td_c` as absolute values against
+  DR-0002 Row 3 (1.5 ns at 50 mV, 2.0 ns at 0.1 mV) on PVT-grid corners; every
+  other key is ungraded. Tests: `tests/test_delta_table.py`. The 20261009 table
+  above is historical and unchanged.
+- Decision validity (issue #240): a delay only counts toward "met at every PVT grid
+  point" if the matching decision states are correct at the same canonical corner:
+  `td_a` needs `regeneration.da_first` low and `da_end` high (`v(dan)` at 18/55 ns),
+  `td_c` needs `dc_first`/`dc_end` (`v(dcn)`); `kickback.*` states are a different
+  bench and never count. A wrong, indeterminate or missing (absent row or null) state
+  gives "not established", with invalid-point and state-row counts in the summary and per-corner reasons in
+  `delay_decision_validity`; each delay row also carries `decision_validity`. The
+  numeric within/EXCEEDS verdict and raw values are unchanged, and EXCEEDS still
+  reports NOT MET. A delay measured after a flipped decision therefore cannot be
+  read as a compliant decision time. No bound changed; reports are not regenerated.
 - Not run: the 45-point PVT grids and the offset / noise Monte Carlo rows.
   `klt sim --backend batch` was re-probed and refused:
   `batch_no_capacity` ("no capacity in any of the 30 pools after 3

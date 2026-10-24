@@ -1,0 +1,27 @@
+== Reproduction (45-point PVT grid, N=60 per point, DR-0002 Row 1 statistic) ==
+record grid-mean 3sigma = 8.404 mV   (issue: 8.404)
+klt    grid-mean 3sigma = 9.511 mV   (issue: 9.511)
+ratio of grid means     = 1.1316  (+13.2 %)
+per-point ratio klt/record = 1.136 +/- 0.171 (SD over 45 points; issue: 1.136 +/- 0.171)
+naive SE (treats 45 ratios as independent) = 0.0254 -> shift/SE = 5.4 sigma
+
+== Draw structure across the 45 points ==
+per-draw matrices use 44 points; short record logs excluded: [('sf_mismatch_125c_1.32v', 59)]
+record: mean/min pairwise corr of the 60 per-draw offsets between points = 0.947 / 0.856
+klt   : mean/min pairwise corr of the 60 per-draw offsets between points = 0.085 / -0.309
+klt mismatch_seed values: 2700 total, 540 unique
+klt: 9 (temp,vdd) groups; the 60 mismatch seeds are IDENTICAL across the 5 process sections within a group: True
+      -> klt has 9 independent seed streams (not 45); points in a group share draws (common random numbers)
+klt: mean pairwise corr within a (temp,vdd) group = 0.983; across groups = -0.005
+record: all points share the single stream: mean pairwise corr = 0.947
+
+== Bootstrap SE of the grid-mean 3sigma (B=4000, seed 82) ==
+record (joint resample, shared draws across points): SE = 0.771 mV = 9.2 % of mean
+klt   (resample jointly within each of 9 seed groups): SE = 0.314 mV = 3.3 % of mean   <- used
+klt   (if all 44 points were independent; NOT the case): SE = 0.141 mV
+klt   (if all points shared ONE stream; not the case): SE = 0.269 mV  [for reference]
+
+difference of grid means = 1.106 mV; combined SE = 0.832 mV -> 1.33 sigma
+log-ratio 0.1237 (ratio 1.1316); SE(log) = 0.0993 -> 1.25 sigma
+analytic cross-check: rec 9.2 % (fully common) , klt 3.1 % (9 independent seed streams) -> 9.7 % ; shift/SE = 1.27 sigma
+two-sided p (normal approx) = 0.213

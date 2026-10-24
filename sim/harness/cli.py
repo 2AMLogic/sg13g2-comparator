@@ -12,16 +12,30 @@ models (``harness/pdk.py``'s ``missing_osdi()``) are present and refuses to
 simulate if they are not, pointing at ``sim/tools/build-osdi.sh`` -- gf180mcu
 has no OSDI concept at all, so gf180-comparator's ``--check-env`` has no
 equivalent step.
+
+STORED EVIDENCE (issue #318): an evidence-writing run no longer commits its
+bytes. The bundle (JSON twin, netlist snapshot, per-corner logs) is written
+to a git-ignored staging tree under ``sim/.work/.stage/``, stored through
+``klt artifact put`` (``harness/evidence_store.py``), and only the manifest
+``manifests/artifacts/<bench>-<rid>.manifest.json`` and the Markdown record
+reach the repo. The store is checked BEFORE simulating, and any store failure
+exits 10 with nothing committed (fail closed; the staged bytes are kept).
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
+import dataclasses
+import math
+import os
+import shutil
 import sys
 from pathlib import Path
 
 from . import corners as corners_mod
 from . import dut as dut_mod
+from . import evidence_store as store_mod
 from . import pdk as pdk_mod
 from . import report as report_mod
 from . import runner as runner_mod
@@ -30,6 +44,16 @@ from . import testbench as tb_mod
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SIM_DIR = REPO_ROOT / "sim"
 WORK_DIR = SIM_DIR / ".work"
+#: Staging tree for an evidence-writing run's bundle before it is stored.
+#: Under WORK_DIR, so git-ignored: these bytes are never committed.
+STAGE_DIR = WORK_DIR / ".stage"
+
+
+def _rel(path: Path) -> str:
+    try:
+        return path.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def _print_env() -> int:
@@ -73,6 +97,25 @@ def _check_env(allow_drift: bool) -> int:
         )
         return 1
     print(f"OSDI models: all {len(pdk_mod.REQUIRED_OSDI)} present in {pdk.osdi_dir}")
+    try:
+        ident = pdk_mod.osdi_identity(pdk.osdi_dir)
+    except pdk_mod.OsdiIdentityError as exc:
+        print(f"OSDI bytes : UNREADABLE ({exc})", file=sys.stderr)
+        return 1
+    build = ident["build_provenance"]
+    comp = build.get("compiler")
+    tag = comp.get("tag") if isinstance(comp, dict) else comp
+    print(f"OSDI bytes : inventory sha256 {ident['inventory_sha256'][:16]} (identity only); "
+          f"build provenance {build['status']}: {build.get('reason') or f'openvaf {tag}'}")
+    try:
+        sources = _model_sources(pdk)
+    except pdk_mod.ModelSourceIdentityError as exc:
+        print(f"SPICE srcs : UNREADABLE ({exc})", file=sys.stderr)
+        return 1
+    scope = sources["scope"]
+    print(f"SPICE srcs : inventory sha256 {sources['inventory_sha256'][:16]} over "
+          f"{len(sources['files'])} files in {scope['tree']} (identity only; "
+          + ("scope complete)" if scope["complete"] else "scope INCOMPLETE, see record)"))
 
     try:
         banner = runner_mod.ngspice_version()
@@ -107,6 +150,27 @@ def _check_env(allow_drift: bool) -> int:
     return 0 if ok else 2
 
 
+def _model_sources(pdk) -> dict:
+    """Issue #203: identity of the SPICE model tree every deck's ``.lib`` reads."""
+    return pdk_mod.model_source_identity(pdk.models_dir, roots=(pdk.mos_corner_lib,))
+
+
+def _freeze_inputs(tb, dut, workdir: Path) -> list:
+    """Issue #179: bind tb/dut to private copies of the bytes load() read."""
+    frozen = []
+    for obj, sub in ((tb, "tb"), (dut, "dut")):
+        path = workdir / "inputs" / sub / obj.netlist.name
+        path.parent.mkdir(parents=True)
+        path.write_bytes(obj.netlist_bytes)
+        changes = {"netlist": path}
+        if getattr(obj, "reverse_ladder", None):
+            rev = workdir / "inputs" / sub / obj.reverse_ladder_netlist.name
+            rev.write_bytes(obj.reverse_ladder_bytes)
+            changes["reverse_ladder_netlist"] = rev
+        frozen.append(dataclasses.replace(obj, **changes))
+    return frozen
+
+
 def _list() -> int:
     for directory in tb_mod.discover(SIM_DIR):
         tb = tb_mod.load(directory)
@@ -115,6 +179,17 @@ def _list() -> int:
         ) * len(corners_mod.supply_points(tb.nominal_supply_v, tb.supply_tolerance))
         print(f"{directory.name:28s} {grid:4d} points  {tb.description[:80]}")
     return 0
+
+
+def _cli_number(text: str) -> float:
+    """argparse ``type=`` for numeric overrides: textual numbers, finite only."""
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid number {text!r}") from None
+    if not math.isfinite(value):
+        raise argparse.ArgumentTypeError(f"must be finite, got {text!r}")
+    return value
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -127,8 +202,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--print-env", action="store_true", help="emit shell exports (sim/env.sh)")
     parser.add_argument("--list", action="store_true", help="list known experiments and exit")
     parser.add_argument("--corners", nargs="*", help="corner or corner-set names (default: manifest)")
-    parser.add_argument("--temps", nargs="*", type=float, help="temperatures in degC")
-    parser.add_argument("--supply-tolerance", type=float, help="fractional supply tolerance")
+    parser.add_argument("--temps", nargs="*", type=_cli_number, help="temperatures in degC")
+    parser.add_argument("--supply-tolerance", type=_cli_number, help="fractional supply tolerance")
     parser.add_argument("-j", "--jobs", type=int, default=1, help="concurrent ngspice processes")
     parser.add_argument("--num-threads", type=int, default=1,
                         help="ngspice internal threads per point (0 = ngspice default)")
@@ -155,7 +230,26 @@ def main(argv: list[str] | None = None) -> int:
     if not directory.is_dir():
         print(f"no experiment directory sim/{args.experiment}", file=sys.stderr)
         return 1
-    tb = tb_mod.load(directory)
+    try:
+        tb = tb_mod.load(directory)
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"invalid testbench manifest: {exc}", file=sys.stderr)
+        return 1
+
+    # Validate requested PVT coordinates before touching the PDK, simulator
+    # or evidence tree: an invalid grid must fail with no side effects.
+    try:
+        if args.temps is not None and not args.temps:
+            raise ValueError("--temps must not be empty")
+        temperatures = args.temps if args.temps is not None else list(tb.temperatures_c)
+        validate_temps = corners_mod.validate_temperatures(temperatures, "--temps")
+        tolerance = (
+            args.supply_tolerance if args.supply_tolerance is not None else tb.supply_tolerance
+        )
+        supplies = corners_mod.supply_points(tb.nominal_supply_v, tolerance)
+    except ValueError as exc:
+        print(f"invalid PVT grid: {exc}", file=sys.stderr)
+        return 1
 
     try:
         pdk = pdk_mod.find_pdk()
@@ -195,18 +289,30 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 3
+    # Issue #196: identify the model bytes the grid will load, before it runs.
+    try:
+        osdi_before = pdk_mod.osdi_identity(pdk.osdi_dir)
+    except pdk_mod.OsdiIdentityError as exc:
+        print(f"OSDI IDENTITY NOT CAPTURED -- refusing to simulate: {exc}", file=sys.stderr)
+        return 8
+    # Issue #203: and the runtime SPICE model-source bytes the decks' .lib reads.
+    try:
+        sources_before = _model_sources(pdk)
+    except pdk_mod.ModelSourceIdentityError as exc:
+        print(f"SPICE MODEL-SOURCE IDENTITY NOT CAPTURED -- refusing to simulate: {exc}",
+              file=sys.stderr)
+        return 8
 
     corner_names = args.corners if args.corners else list(tb.corners)
     corner_list = corners_mod.resolve_corners(corner_names)
     sabotaged = bool(args.sabotage_corners)
     if sabotaged:
         corner_list = corners_mod.sabotage(corner_list)
-    temperatures = args.temps if args.temps else list(tb.temperatures_c)
-    tolerance = (
-        args.supply_tolerance if args.supply_tolerance is not None else tb.supply_tolerance
-    )
-    supplies = corners_mod.supply_points(tb.nominal_supply_v, tolerance)
-    points = corners_mod.build_grid(corner_list, temperatures, supplies)
+    try:
+        points = corners_mod.build_grid(corner_list, validate_temps, supplies)
+    except ValueError as exc:  # includes CornerIdCollisionError
+        print(f"invalid PVT grid: {exc}", file=sys.stderr)
+        return 1
 
     write = not (args.no_write or sabotaged)
     # Captured BEFORE the run writes anything, so the flag describes the tree
@@ -226,12 +332,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  (git provenance unverified, commit recorded as "
               f"'{git_prov.commit}': {git_prov.error})", file=sys.stderr)
     dirty_at_start = list(git_prov.dirty_paths)
+    # Issue #318: an evidence-writing run must be storable before any
+    # simulation time is spent. No broker, no klt artifact verb, or a broker
+    # that is unreachable or refuses: refuse now. Never fall back to blobs.
+    stage_exp = STAGE_DIR / tb.experiment / "sim" / tb.experiment
+    if write:
+        try:
+            store_mod.preflight(REPO_ROOT)
+        except store_mod.StoreError as exc:
+            print(f"EVIDENCE STORE UNAVAILABLE -- refusing to simulate: {exc}. "
+                  "Evidence bytes go to the artifact store only (sim/README.md, "
+                  "\"Stored evidence\"); --no-write runs need no store.",
+                  file=sys.stderr)
+            return 10
     # Issue #110: exclusively reserve this run's identity (evidence log dir +
     # private scratch dir) before any deck or log is written. A collision is
     # retried with a fresh token; existing evidence is never touched.
     try:
         reservation = report_mod.reserve_run(
-            tb.experiment_dir, WORK_DIR / tb.experiment, write,
+            stage_exp if write else tb.experiment_dir, WORK_DIR / tb.experiment, write,
             commit=git_prov.commit,
         )
     except report_mod.ReservationFailed as exc:
@@ -240,6 +359,23 @@ def main(argv: list[str] | None = None) -> int:
     rid = reservation.rid
     workdir = reservation.workdir
     log_dir = reservation.log_dir
+    if write and (report_mod.occupied_members(tb.experiment_dir, rid)
+                  or store_mod.manifest_path(REPO_ROOT, tb.experiment, rid).exists()):
+        reservation.release_scratch()
+        with contextlib.suppress(OSError):
+            os.rmdir(log_dir)
+        print(f"RUN IDENTITY NOT RESERVED -- {rid} is already used in the repo; re-run",
+              file=sys.stderr)
+        return 5
+    logs_where = _rel(log_dir)
+    try:
+        run_tb, run_dut = _freeze_inputs(tb, dut, workdir)
+    except OSError as exc:
+        reservation.release_scratch()
+        with contextlib.suppress(OSError):
+            os.rmdir(log_dir)  # still empty: nothing was simulated
+        print(f"INPUT CAPTURE FAILED -- refusing to simulate: {exc}", file=sys.stderr)
+        return 7
 
     banner_bits = [
         f"experiment sim/{tb.experiment}",
@@ -265,7 +401,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         results = runner_mod.run_grid(
-            tb, pdk, dut, points, workdir,
+            run_tb, pdk, run_dut, points, workdir,
             jobs=max(1, args.jobs),
             timeout_s=args.timeout,
             on_result=_progress,
@@ -322,6 +458,30 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  {completed}/{len(results)} points completed -- "
           f"{'PASS' if passed else 'FAIL'}")
 
+    try:
+        osdi_after = pdk_mod.osdi_identity(pdk.osdi_dir)
+        changed = "" if osdi_after == osdi_before else "OSDI identity changed"
+    except pdk_mod.OsdiIdentityError as exc:
+        changed = f"OSDI model unreadable after the grid: {exc}"
+    if changed:
+        reservation.release_scratch()
+        print(f"OSDI MODELS NOT STABLE DURING THE RUN -- refusing to certify: {changed}"
+              f" (inventory before {osdi_before['inventory_sha256'][:16]}); no record "
+              f"written, logs kept in {logs_where}/", file=sys.stderr)
+        return 9
+    try:
+        changed = ("" if _model_sources(pdk) == sources_before
+                   else "SPICE model-source inventory changed")
+    except pdk_mod.ModelSourceIdentityError as exc:
+        changed = f"SPICE model source unreadable after the grid: {exc}"
+    if changed:
+        reservation.release_scratch()
+        print(f"SPICE MODEL SOURCES NOT STABLE DURING THE RUN -- refusing to certify: "
+              f"{changed} (inventory before {sources_before['inventory_sha256'][:16]}); no "
+              f"record written, logs kept in {logs_where}/",
+              file=sys.stderr)
+        return 9
+
     if sabotaged:
         # Under sabotage a FAIL is the desired outcome: it proves the per-axis
         # process-sensitivity checks would have caught a runner stuck on typical.
@@ -337,17 +497,41 @@ def main(argv: list[str] | None = None) -> int:
             "dirty": bool(dirty_at_start),
             "dirty_paths": dirty_at_start[:20],
             "pdk": pdk.provenance(),
+            "osdi": {**osdi_before, "rehashed_after_grid": "unchanged"},
+            "model_sources": {**sources_before, "rehashed_after_grid": "unchanged"},
             "toolchain": chain.as_dict(),
             **dut.provenance_record(),
         }
         try:
-            path = report_mod.write_record(tb, results, summaries, context, dut.netlist)
+            staged = report_mod.write_record(run_tb, results, summaries, context,
+                                             run_dut.netlist, experiment_dir=stage_exp)
         except report_mod.EvidenceCollision as exc:
             reservation.release_scratch()
             print(f"EVIDENCE NOT WRITTEN: {exc}", file=sys.stderr)
             return 5
-        print(f"  record: {path.relative_to(REPO_ROOT)}")
-        print(f"  logs:   sim/{tb.experiment}/corners/{rid}/")
+        bundle = report_mod.bundle_paths(stage_exp, rid)
+        prefix = f"sim/{tb.experiment}"
+        files = [(bundle["json"], f"{prefix}/records/{rid}.json"),
+                 (bundle["snapshot"], f"{prefix}/netlist-snapshots/{rid}.spice")]
+        files += store_mod.stage_files(bundle["logs"], f"{prefix}/corners/{rid}")
+        summary = report_mod.bundle_paths(tb.experiment_dir, rid)["record"]
+        try:
+            manifest = store_mod.store_files(
+                files, repo_root=REPO_ROOT, bench=tb.experiment, rid=rid,
+                summary_text=staged.read_text(encoding="utf-8"), summary_path=summary)
+        except store_mod.StoreError as exc:
+            reservation.release_scratch()
+            print(f"EVIDENCE NOT STORED -- nothing committed (fail closed): {exc}. "
+                  f"The staged bundle is kept, uncommitted, under {_rel(stage_exp)}/ "
+                  f"(record id {rid}).", file=sys.stderr)
+            return 10
+        for member in ("record", "json", "snapshot"):
+            with contextlib.suppress(OSError):
+                bundle[member].unlink()
+        shutil.rmtree(bundle["logs"], ignore_errors=True)
+        print(f"  record:   {summary.relative_to(REPO_ROOT)}")
+        print(f"  manifest: {manifest.relative_to(REPO_ROOT)} "
+              f"(JSON twin, snapshot and logs stored, not committed)")
     else:
         print("  (--no-write: no evidence record minted)")
     reservation.release_scratch()

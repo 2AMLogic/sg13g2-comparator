@@ -1,0 +1,203 @@
+{
+  "schema": "sg13g2-comparator.pdk-drc/1",
+  "status": "clean",
+  "scope": "standalone top cell `comparator` only (no seal ring, no pads, no fill, no hierarchy above it). Rules are 'executed' when the deck emitted a result category for them; a rule whose layers are not drawn here executed vacuously (see `drawn_layers`).",
+  "gds": {
+    "path": "layout/comparator/comparator.gds",
+    "sha256": "583e99c6ee32474e0209d3aeaeb406393050e2bce9de4674bf091ee6a9e9d80d",
+    "top": "comparator",
+    "drawn_layers": [
+      "1/0 Activ.drawing",
+      "5/0 GatPoly.drawing",
+      "6/0 Cont.drawing",
+      "7/0 nSD.drawing",
+      "8/0 Metal1.drawing",
+      "10/0 Metal2.drawing",
+      "14/0 pSD.drawing",
+      "19/0 Via1.drawing",
+      "29/0 Via2.drawing",
+      "30/0 Metal3.drawing",
+      "30/2 Metal3.pin",
+      "30/25 Metal3.text",
+      "31/0 NWell.drawing",
+      "63/0 TEXT.drawing"
+    ]
+  },
+  "deck": {
+    "source": "IHP-GmbH/IHP-Open-PDK",
+    "release_tag": "v0.3.0",
+    "fetched_version": "0.3.0",
+    "pinned_by": "sim/pdk.json",
+    "entrypoint": "libs.tech/klayout/tech/drc/run_drc.py",
+    "tree_sha256": "e4a00632d87db2c9b9eef40575f1fc05bf84b9abad659068ae06ac57f9bdcc94",
+    "rule_sets": [
+      "main",
+      "sg13g2_maximal (extra rules; PDK states these are not fully verified)"
+    ]
+  },
+  "tool": {
+    "klayout": "0.30.12"
+  },
+  "invocation": "run_drc.py --path=<gds> --topcell=comparator --run_mode=deep --no_density --mp=1 --density_thr=2",
+  "rules": {
+    "executed_count": 862,
+    "violated": [],
+    "violation_count": 0,
+    "targeted": [
+      {
+        "rule": "Gat.c",
+        "description": "Min. GatPoly extension over Activ (end cap) = 0.18",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "Cnt.e",
+        "description": "5.14. Cnt.e Min. Cont on GatPoly space to Activ is 0.14 um",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "Cnt.f",
+        "description": "Min. Cont on Activ space to GatPoly = 0.11",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "pSD.a",
+        "description": "Min. pSD width = 0.31",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "pSD.b",
+        "description": "Min. pSD space or notch (pSD regions separated by less than this value will be merged.) = 0.31",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "pSD.c",
+        "description": "Min. pSD enclosure of P+Activ in NWell = 0.18",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "pSD.c1",
+        "description": "5.10. pSD.c1 Min. pSD enclosure of P+Activ in PWell is 0.03 um",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "pSD.d",
+        "description": "Min. pSD space to unrelated N+Activ in PWell = 0.18",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "pSD.e",
+        "description": "Min. pSD overlap of Activ at one position when forming abutted substrate tie (These rules are for abutted ties: An electrical connection from P+Activ to NWell tie (or N+ Activ to P-sub tie) is made through the source/drain silicide. For a good electrical connection rule pSD.g is important together with rule pSD.e or pSD.f (see Fig. 5.10).) = 0.30",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "pSD.i",
+        "description": "Min. pSD enclosure of PFET gate not inside ThickGateOx = 0.30",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "NW.a",
+        "description": "Min. NWell width = 0.62",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "NW.b",
+        "description": "5.1.NW.b : Min. NWell space or notch (same net). NWell regions separated by less than this value will be merged. is 0.62 um",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "NW.b1",
+        "description": "5.1.NW.b1 : Min. PWell width between NWell regions (different net) is 1.8 um",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "NW.d",
+        "description": "Min. NWell space to external N+Activ not inside ThickGateOx = 0.31",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "NW.e",
+        "description": "Min. NWell enclosure of NWell tie surrounded entirely by NWell in N+Activ not inside ThickGateOx = 0.24",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "NW.f1",
+        "description": "5.1.NW.f1 : Min. NWell space to substrate tie in P+Activ inside ThickGateOx = 0.62 um",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "LU.a",
+        "description": "Max. space from any portion of P+Activ inside NWell to an nSD-NWell tie = 20.00",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "LU.b",
+        "description": "7.2. LU.b : Max. space from any portion of N+Activ inside PWell to an pSD-PWell tie is 20.0 um",
+        "executed": true,
+        "violations": 0
+      },
+      {
+        "rule": "LU.c",
+        "description": "Max. extension of an abutted NWell tie beyond Cont = 6.00",
+        "executed": true,
+        "violations": 0
+      }
+    ]
+  },
+  "skipped": [
+    {
+      "rule_set": "density",
+      "reason": "switched off (--no_density): needs chip-level fill; a standalone cell has none, so a density result would be meaningless here"
+    },
+    {
+      "rule_set": "antenna",
+      "reason": "not enabled (no --antenna)"
+    },
+    {
+      "rule_set": "precheck",
+      "reason": "not enabled (no --precheck_drc)"
+    },
+    {
+      "rule_set": "seal ring / pad / bump / top-metal / MiM / inductor / HBT / Schottky rules",
+      "reason": "executed vacuously: the layers are not drawn in this cell"
+    }
+  ],
+  "negative_controls": [
+    {
+      "mutation": "Metal1 sliver 0.10 um wide",
+      "expected_rule": "M1.a",
+      "observed_violations": 1,
+      "committed_violations_of_rule": 0,
+      "result": "fails_as_expected"
+    },
+    {
+      "mutation": "GatPoly endcap 0.05 um over a scratch Activ",
+      "expected_rule": "Gat.c",
+      "observed_violations": 1,
+      "committed_violations_of_rule": 0,
+      "result": "fails_as_expected"
+    }
+  ],
+  "not_covered": [
+    "latch-up and antenna beyond what the deck emitted above",
+    "density / fill and seal ring (chip-level)",
+    "LVS, ERC, extraction (separate flow stages)",
+    "foundry signoff: this is IHP's open deck, not a foundry-signed runset"
+  ]
+}
