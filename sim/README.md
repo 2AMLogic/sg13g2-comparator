@@ -82,7 +82,7 @@ compares the fourth decision's switching boundary after three +50 mV and after
 three -50 mV conditioning strobes (both histories in one netlist and one
 simulator invocation; deterministic 10 uV search over +/-50 mV; 45 PVT points;
 long-reset and short-reset controls), all on the batch fleet. Latest record:
-[`campaigns/20261010-08e31bed1/record.md`](comparator-memory/campaigns/20261010-08e31bed1/record.md).
+[`campaigns/20261010-08e31bed1.md`](comparator-memory/campaigns/20261010-08e31bed1.md) (evidence bytes in the artifact store; manifest `manifests/artifacts/comparator-memory-20261010-08e31bed1.manifest.json`).
 It is **characterization, not compliance**: no spec row is added or changed. It
 establishes that the two history-conditioned boundaries agree to within the
 10 uV brackets at every point; it does **not** establish absence of memory,
