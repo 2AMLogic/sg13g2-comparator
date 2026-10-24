@@ -77,6 +77,18 @@ point). It is **characterization**: DR-0002 ratifies the offset row at
 `dut_vcm` only and no whole-latch common-mode range, so nothing there is a
 compliance verdict.
 
+**Memory / hysteresis (issue #159).** [`comparator-memory/`](comparator-memory/)
+compares the fourth decision's switching boundary after three +50 mV and after
+three -50 mV conditioning strobes (both histories in one netlist and one
+simulator invocation; deterministic 10 uV search over +/-50 mV; 45 PVT points;
+long-reset and short-reset controls), all on the batch fleet. Latest record:
+[`campaigns/20261010-08e31bed1.md`](comparator-memory/campaigns/20261010-08e31bed1.md) (evidence bytes in the artifact store; manifest `manifests/artifacts/comparator-memory-20261010-08e31bed1.manifest.json`).
+It is **characterization, not compliance**: no spec row is added or changed. It
+establishes that the two history-conditioned boundaries agree to within the
+10 uV brackets at every point; it does **not** establish absence of memory,
+because the short-reset sensitivity control FAILED (the bench did not
+demonstrate it can resolve a deliberately induced shift).
+
 **Decision time across a common-mode band (issue #164).**
 [`comparator-decision-cm-band/`](comparator-decision-cm-band/README.md) reruns the
 issue #62 `regeneration` bench at `dut_vcm` - 50 mV, `dut_vcm` (reproduction
@@ -668,7 +680,7 @@ transitive inputs):
 |---|---|
 | signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
-| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh,tools/regen_reverse_control.py}`, `sim/comparator-{regeneration,kickback}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
+| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh,tools/regen_reverse_control.py}`, `sim/comparator-{regeneration,kickback,memory}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
 | netlist-regeneration | `design/`, `sim/harness/`, `sim/pdk.json` |
 | append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `sim/evidence-size-exceptions/`, `spec/decision-records/` (the size and manifest checks read blobs from the target commit, not the working tree) |
 

@@ -1,0 +1,22 @@
+{
+  "name": "comparator-memory",
+  "issue": 159,
+  "kind": "characterization",
+  "description": "History-dependent switching-boundary shift of the DR-0001 latch: the fourth decision's input threshold after three +50 mV conditioning strobes (history P) minus after three -50 mV strobes (history N), both histories in one netlist and one simulator invocation. CHARACTERIZATION, NOT COMPLIANCE: no specification row is added, changed or claimed.",
+  "not_a_harness_manifest": "Deliberately NOT named tb.json: sim/harness (run_corners.py) discovers tb.json, and this bench is driven by `python3 sim/run_memory.py` through klt sim on the batch fleet because the paired search needs one request per search round.",
+  "generator": "sim/kltsim/memory.py (compose_circuit / compose_body / compose_request)",
+  "reference_circuit": "memory.circuit.spice (nominal, round 1, uniform -50 mV bracket low end; drift-guarded by sim/kltsim/tests/test_memory.py)",
+  "dut": "sim/dut.json (comparator-dr0001, provenance schematic), inlined verbatim with its sha256 in every body",
+  "stimulus_reference": "sim/comparator-regeneration/testbench/tb_regeneration.spice clock: 10 ns high, 30 ns period (unchanged, not edited)",
+  "corners": {"process": ["mos_tt", "mos_ff", "mos_ss", "mos_fs", "mos_sf"], "supply_v": [1.08, 1.2, 1.32], "temperature_c": [-40, 27, 125], "mismatch": "off"},
+  "histories": {"P": "+50 mV x 3 strobes then probe", "N": "-50 mV x 3 strobes then the identical probe"},
+  "probe_range_mV": [-50, 50],
+  "final_bracket_limit_uV": 10,
+  "decision": "(V(dout)-V(doutb))/VDD sampled 9 ns after the fourth rising edge",
+  "classification": {"resolved_positive": ">= +0.8", "resolved_negative": "<= -0.8", "unresolved": "otherwise", "resolved_wrong_polarity": "resolved with sign opposing the nonzero probe"},
+  "controls": {
+    "long_reset": {"period_ns": 110, "reset_ns": 100, "criterion": "|shift| <= 20 uV"},
+    "short_reset": {"period_ns": 11, "reset_ns": 1, "criterion": "|shift| >= 40 uV and >= long-reset |shift| + 20 uV"}
+  },
+  "solver_options": ["reltol=1e-6", "vntol=1e-9", "abstol=1e-13"]
+}
