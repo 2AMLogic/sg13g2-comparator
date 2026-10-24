@@ -12,7 +12,7 @@
 - **Related**:
   [`0020-sparse-lint-population-evidence-size-exception.md`](0020-sparse-lint-population-evidence-size-exception.md)
   (previous `sim/` total raise; still stands)
-- **Supersedes**: none. **Superseded by**: none
+- **Supersedes**: none. **Superseded by**: [`evidence-size/323-retire-incremental-evidence-size-raises.md`](evidence-size/323-retire-incremental-evidence-size-raises.md) (the authorization below no longer applies)
 
 ## Context
 

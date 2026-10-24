@@ -13,7 +13,7 @@
 - **Related**:
   [`0026-cm-band-empty-reproduction-evidence-size-exception.md`](0026-cm-band-empty-reproduction-evidence-size-exception.md)
   (previous `sim/` total raise; still stands)
-- **Supersedes**: none. **Superseded by**: none
+- **Supersedes**: none. **Superseded by**: [`evidence-size/323-retire-incremental-evidence-size-raises.md`](evidence-size/323-retire-incremental-evidence-size-raises.md) (the authorization below no longer applies)
 - **Numbering**: DR-0024 remains double-booked by open, unmerged PRs (#249,
   #243), as DR-0026 already records; whichever merges first keeps it and the
   other is renumbered on rebase with its cumulative `sim` entry re-measured.

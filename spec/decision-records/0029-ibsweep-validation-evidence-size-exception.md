@@ -13,7 +13,7 @@
 - **Related**:
   [`0027-yield-index-rederivation-evidence-size-exception.md`](0027-yield-index-rederivation-evidence-size-exception.md)
   (previous `sim/` total raise; still stands)
-- **Supersedes**: none. **Superseded by**: none
+- **Supersedes**: none. **Superseded by**: [`evidence-size/323-retire-incremental-evidence-size-raises.md`](evidence-size/323-retire-incremental-evidence-size-raises.md) (the authorization below no longer applies)
 - **Numbering**: DR-0028 is taken by open PR #265, and DR-0024 remains
   double-booked by open, unmerged PRs (#249, #243). This record chains its
   cumulative `sim` entry on DR-0027, the latest merged raise. Whichever PR

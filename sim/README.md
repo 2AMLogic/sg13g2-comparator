@@ -595,8 +595,8 @@ external storage) is out of scope; this only measures and caps growth.
 
 **Before review.** Run `python3 scripts/check_evidence_size.py --tree HEAD` on
 the final commit; the PR states that SHA, exit status (0 ok, 1 violation, 2
-error) and size; re-run after any HEAD change. Failures follow Exceptions
-below; this grants none. No Python: say local validation is unavailable and
+error) and size; re-run after any HEAD change. A failure is fixed by
+storing the evidence; there is no exception route. No Python: say local validation is unavailable and
 cite the passing `append-only-evidence` CI for that commit (skipped is not
 success).
 
@@ -609,8 +609,8 @@ so the budget now governs what a run commits, which is a manifest under
 `main` with `exceptions` cleared
 (`spec/decision-records/evidence-size/318-manifest-store-rebaseline.md`); the
 old exception records stay as history. Ordinary source changes under `sim/`
-need no exception (the #276 case). A committed blob that pushes a new unit
-past the new-unit ceiling, or `sim/` past the total, fails. The checker still
+are not counted (the #276 case). A committed blob that pushes a new unit
+past the new-unit ceiling, or the evidence units past the total, fails. The checker still
 supports a `suspended` block (report-only, exit 0 on a breach) for an
 operator ruling; none is set.
 
@@ -633,32 +633,25 @@ unit may not exceed its recorded bytes (grandfathered at exactly that size).
 
 **Thresholds.** Allowance = 10% of baseline `sim/` bytes rounded up to the next
 MiB: ceil(10% x 567,379,629 B / 1,048,576) = 55 MiB = 57,671,680 B.
-* total ceiling = baseline `sim/` bytes + allowance = 625,051,309 B (the
-  budget file and any other `sim/` file count toward it);
+* total ceiling = baseline `sim/` bytes + allowance = 625,051,309 B, compared
+  against the sum of the evidence units only (issue #323): `*.py`, tests and
+  docs under `sim/` never count;
 * a unit not in the baseline (a new campaign) is capped at the same 57,671,680 B.
 The checker validates the derivation; changing the percentage or resetting the
 baseline is a reviewed change to `scripts/check_evidence_size.py` plus a
 decision record, not a quiet edit of the JSON. Regenerate numbers for a new baseline with
 `python3 scripts/check_evidence_size.py --tree <commit> --emit-budget <commit>`.
 
-**Exceptions.** No bypass flag or environment override exists. An entry names
-one exact path (`sim` for the total, or one evidence unit; no wildcards), the
-exact `additional_bytes`, a `reason`, and a tracked `spec/decision-records/`
-`*.md` with a fenced `json` block carrying the same path and bytes:
-
-```json
-{"kind": "evidence-size", "path": "sim/<bench>/campaigns/<id>", "additional_bytes": 12345678}
-```
-
-The bytes raise only that path's ceiling (baseline or new-unit) by exactly that
-amount. Bad or missing records, keys, wildcards, non-positive or non-integer bytes
-and duplicates fail validation. Overage output names this route.
-
-Entries may live one per file in
-`sim/evidence-size-exceptions/<issue>-<slug>.json` (issue #278), so open PRs
-never edit a shared line; the checker sums them with the budget's `exceptions`. `sim` may repeat (own record each);
-a unit path once. Name the record
-`spec/decision-records/evidence-size/<issue>-<slug>.md` (see `spec/README.md`).
+**Exceptions are retired (issue #323).** Raising the ceiling one decision
+record per PR is over
+(`spec/decision-records/evidence-size/323-retire-incremental-evidence-size-raises.md`).
+The checker fails if the budget's `exceptions` is non-empty, if
+`sim/evidence-size-exceptions/` exists, or if an `*evidence-size-exception*.md`
+record is not marked superseded by that record. No bypass flag or environment
+override exists. An overage is fixed by storing the evidence bytes (see
+"Stored evidence") and committing the manifest. End state: once the remaining
+committed evidence is migrated to the store (follow-on under
+2AMLogic/2am#5553), the cap and checker are removed.
 
 **Sparse CI checkouts.** Every job in `.github/workflows/ci.yml` checks out
 only its explicit, audited inputs (non-cone patterns, never a `filter:`).
