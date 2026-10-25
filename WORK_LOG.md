@@ -4,6 +4,8 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-25
 
+- **PR #265**: Validate timestep smoke evidence before computing noise convergence (#263)
+- **Issue #263** (closed): Validate timestep smoke evidence before computing noise convergence
 - **Issue #325** (closed): Remove scripts/diagnostics: completed #188 guard handoff package, unwired
 
 ### 2026-10-24
