@@ -2,6 +2,10 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-25
+
+- **Issue #325** (closed): Remove scripts/diagnostics: completed #188 guard handoff package, unwired
+
 ### 2026-10-24
 
 - **PR #324**: Retire per-PR evidence-size exceptions; count evidence bytes only

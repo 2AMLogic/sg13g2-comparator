@@ -6,7 +6,6 @@
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
-- **#324**: Retire per-PR evidence-size exceptions; count evidence bytes only
 
 ## Very Important
 
@@ -37,13 +36,12 @@ Issues currently being built (`loom:building`).
 - **#191**: PEX diagnostic: separate extracted device geometry from routing RC delay
 - **#263**: Validate timestep smoke evidence before computing noise convergence
 - **#308**: Remove dead _spec_meas left behind by closed #295
-- **#323**: Squash the 27 evidence-size exception records into one superseding record; replace the cap with the artifact store
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-_None._
+- **#171**: sim: memory/hysteresis characterization bench (paired-history switching boundary over PVT) (Closes #159)
 
 ## Approved (Awaiting Merge)
 
@@ -53,7 +51,6 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 - **#199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
 - **#218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
 - **#265**: Validate timestep smoke evidence before computing noise convergence (#263)
-- **#324**: Retire per-PR evidence-size exceptions; count evidence bytes only
 
 ## Proposed
 
@@ -70,7 +67,7 @@ Issues carrying `loom:curated`.
 
 ## Proposed (Architect / Hermit)
 
-- **#325**: Remove scripts/diagnostics: completed #188 guard handoff package, unwired *(hermit)*
+_None._
 
 ## Epics
 
@@ -80,14 +77,14 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 2 |
+| Operator merge-risk holds | 1 |
 | Very important | 0 |
 | Important | 0 |
 | Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 8 |
-| PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 5 |
+| In Progress (`loom:building`) | 7 |
+| PRs awaiting review | 1 |
+| Approved PRs awaiting merge | 4 |
 | Curated | 8 |
-| Architect / Hermit proposals | 1 |
+| Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
