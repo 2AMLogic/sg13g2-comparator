@@ -14,7 +14,7 @@
   (previous `sim/` total raise; still stands),
   [`0021-cm-decision-validation-evidence-size-exception.md`](0021-cm-decision-validation-evidence-size-exception.md),
   [`0011-cm-band-runner-tests-evidence-size-exception.md`](0011-cm-band-runner-tests-evidence-size-exception.md)
-- **Supersedes**: none. **Superseded by**: none
+- **Supersedes**: none. **Superseded by**: [`evidence-size/323-retire-incremental-evidence-size-raises.md`](evidence-size/323-retire-incremental-evidence-size-raises.md) (the authorization below no longer applies)
 - **Numbering**: DR-0024 is in use by open, unmerged PRs (#249, #243). If one
   of them merges first, the cumulative `sim` entry is re-measured on rebase.
   This record's own 30220 B does not change.

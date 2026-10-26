@@ -284,11 +284,12 @@ inconsistent inputs are refused and write nothing. The manifest pins the hash of
 `PYTHONPATH=sim python3 -m unittest kltsim.tests.test_characterization`
 (also run by the `kltsim` discover step in "What CI runs").
 
-## Derived report pairs (grading, noise-full, clock comparison)
+## Derived report pairs (grading, noise-full, comparison, ibsweep)
 
-`grade` (`grading.{json,md}`), `noise-full` (`noise_full.{json,md}`) and
-`run_clock_supply_sensitivity.py compare` (`comparison.{json,md}`) write
-append-only evidence through the one planned-byte writer
+`grade` (`grading.{json,md}`), `noise-full` (`noise_full.{json,md}`),
+`ibsweep` (`ibsweep.{json,md}`) and the `compare` subcommands of
+`run_clock_supply_sensitivity.py`, `run_offset_cm_band.py` and
+`run_decision_cm_band.py` (`comparison.{json,md}`) write append-only evidence through the one planned-byte writer
 `sim/kltsim/artifacts.py` (also used by `build` and `characterize.sh report`).
 Both members are composed in memory first, then:
 
@@ -308,7 +309,8 @@ A changed grader, renderer or analysis is not permission to edit a historical
 report. Publish it in a NEW namespace, leaving the original campaign inputs and
 reports untouched, e.g.
 `... grade --campaign ID --report-dir sim/<new-dir>` (likewise `compare --series
-ID --report-dir DIR`, `noise-full --campaign ID --report-dir DIR`). Inputs are
+ID --report-dir DIR`, `noise-full --campaign ID --report-dir DIR`, `ibsweep
+--campaign ID --report-dir DIR`). Inputs are
 always read from `--campaign`/`--series`; the new `grading`/`comparison` JSON
 and Markdown cite the original directory (`source_campaign_dir` /
 `source_series_dir`), and `noise_full.json` carries `campaign`. There is no
@@ -482,14 +484,21 @@ the broker admits can fetch what it names.
   `sim/<bench>/campaigns/<run-id>.md` (`--kind` picks another protected
   directory).
 - **Configuration** is the environment only, read by `klt`:
-  `KLT_ARTIFACT_BROKER` (broker base URL), `KLT_ARTIFACT_BUCKET` (bucket for
-  manifest `uri`s when the broker does not name it) and, optionally,
+  `KLT_ARTIFACT_BROKER` (broker base URL) and, optionally,
   `KLT_ARTIFACT_REPO`. There are no defaults, and none is written in this
-  repo. `klt` must include the `artifact` verb (klayout-tools `75ba0e5f674c`
-  or later, PR #4066). That client is separate from the signoff/layout build
-  pinned in `manifests/klt-pin.json`, which is unchanged.
+  repo. There is no bucket setting: a manifest `uri` is the logical
+  `artifact:<key>`, which only the broker resolves (operator ruling H1,
+  2AMLogic/2am#5553), so a public manifest names no storage location. The
+  writer and `check_artifact_manifests.py` refuse any other scheme. `klt`
+  must be klayout-tools `7e3561f` or later (PR #4070), the first revision that
+  writes `artifact:<key>`. `klt` reports no commit, so the writer checks the
+  behaviour: it hands `klt artifact verify` an offline probe manifest with a
+  legacy bucket-naming `uri` and requires `klt` to refuse it. That client is
+  separate from the signoff/layout build pinned in `manifests/klt-pin.json`,
+  which is unchanged.
 - **Fail closed.** If the broker is unset, unreachable or refuses, or `klt`
-  lacks the verb, `run_corners.py` refuses before simulating (exit 10). A
+  lacks the verb or is older than `7e3561f`, `run_corners.py` refuses before
+  simulating (exit 10). A
   put that fails after the grid also exits 10. In both cases nothing goes
   under `manifests/` or `sim/`, and the staged bytes stay in
   `sim/.work/.stage/`. There is no option to commit the bytes instead.
@@ -586,8 +595,8 @@ external storage) is out of scope; this only measures and caps growth.
 
 **Before review.** Run `python3 scripts/check_evidence_size.py --tree HEAD` on
 the final commit; the PR states that SHA, exit status (0 ok, 1 violation, 2
-error) and size; re-run after any HEAD change. Failures follow Exceptions
-below; this grants none. No Python: say local validation is unavailable and
+error) and size; re-run after any HEAD change. A failure is fixed by
+storing the evidence; there is no exception route. No Python: say local validation is unavailable and
 cite the passing `append-only-evidence` CI for that commit (skipped is not
 success).
 
@@ -600,8 +609,8 @@ so the budget now governs what a run commits, which is a manifest under
 `main` with `exceptions` cleared
 (`spec/decision-records/evidence-size/318-manifest-store-rebaseline.md`); the
 old exception records stay as history. Ordinary source changes under `sim/`
-need no exception (the #276 case). A committed blob that pushes a new unit
-past the new-unit ceiling, or `sim/` past the total, fails. The checker still
+are not counted (the #276 case). A committed blob that pushes a new unit
+past the new-unit ceiling, or the evidence units past the total, fails. The checker still
 supports a `suspended` block (report-only, exit 0 on a breach) for an
 operator ruling; none is set.
 
@@ -624,32 +633,25 @@ unit may not exceed its recorded bytes (grandfathered at exactly that size).
 
 **Thresholds.** Allowance = 10% of baseline `sim/` bytes rounded up to the next
 MiB: ceil(10% x 567,379,629 B / 1,048,576) = 55 MiB = 57,671,680 B.
-* total ceiling = baseline `sim/` bytes + allowance = 625,051,309 B (the
-  budget file and any other `sim/` file count toward it);
+* total ceiling = baseline `sim/` bytes + allowance = 625,051,309 B, compared
+  against the sum of the evidence units only (issue #323): `*.py`, tests and
+  docs under `sim/` never count;
 * a unit not in the baseline (a new campaign) is capped at the same 57,671,680 B.
 The checker validates the derivation; changing the percentage or resetting the
 baseline is a reviewed change to `scripts/check_evidence_size.py` plus a
 decision record, not a quiet edit of the JSON. Regenerate numbers for a new baseline with
 `python3 scripts/check_evidence_size.py --tree <commit> --emit-budget <commit>`.
 
-**Exceptions.** No bypass flag or environment override exists. An entry names
-one exact path (`sim` for the total, or one evidence unit; no wildcards), the
-exact `additional_bytes`, a `reason`, and a tracked `spec/decision-records/`
-`*.md` with a fenced `json` block carrying the same path and bytes:
-
-```json
-{"kind": "evidence-size", "path": "sim/<bench>/campaigns/<id>", "additional_bytes": 12345678}
-```
-
-The bytes raise only that path's ceiling (baseline or new-unit) by exactly that
-amount. Bad or missing records, keys, wildcards, non-positive or non-integer bytes
-and duplicates fail validation. Overage output names this route.
-
-Entries may live one per file in
-`sim/evidence-size-exceptions/<issue>-<slug>.json` (issue #278), so open PRs
-never edit a shared line; the checker sums them with the budget's `exceptions`. `sim` may repeat (own record each);
-a unit path once. Name the record
-`spec/decision-records/evidence-size/<issue>-<slug>.md` (see `spec/README.md`).
+**Exceptions are retired (issue #323).** Raising the ceiling one decision
+record per PR is over
+(`spec/decision-records/evidence-size/323-retire-incremental-evidence-size-raises.md`).
+The checker fails if the budget's `exceptions` is non-empty, if
+`sim/evidence-size-exceptions/` exists, or if an `*evidence-size-exception*.md`
+record is not marked superseded by that record. No bypass flag or environment
+override exists. An overage is fixed by storing the evidence bytes (see
+"Stored evidence") and committing the manifest. End state: once the remaining
+committed evidence is migrated to the store (follow-on under
+2AMLogic/2am#5553), the cap and checker are removed.
 
 **Sparse CI checkouts.** Every job in `.github/workflows/ci.yml` checks out
 only its explicit, audited inputs (non-cone patterns, never a `filter:`).

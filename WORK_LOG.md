@@ -2,8 +2,44 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-25
+
+- **PR #265**: Validate timestep smoke evidence before computing noise convergence (#263)
+- **Issue #263** (closed): Validate timestep smoke evidence before computing noise convergence
+- **Issue #325** (closed): Remove scripts/diagnostics: completed #188 guard handoff package, unwired
+
+### 2026-10-24
+
+- **PR #324**: Retire per-PR evidence-size exceptions; count evidence bytes only
+- **Issue #323** (closed): Squash the 27 evidence-size exception records into one superseding record; replace the cap with the artifact store
+
+### 2026-10-23
+
+- **PR #321**: Evidence manifests: artifact:<key> URIs, drop the bucket setting (klt 7e3561f+)
+- **Issue #320** (closed): Evidence manifests: use artifact:<key> URIs and drop the bucket setting (klt 7e3561f+)
+- **PR #319**: Store new sim evidence through the artifact store; commit manifests only (#318)
+- **Issue #318** (closed): Write sim evidence through the fleet artifact store; commit manifests; restore the size ceiling against manifests
+- **PR #303**: refactor: publish comparison and ibsweep reports through artifacts.publish
+- **Issue #302** (closed): Consolidate remaining comparison/ibsweep report writers onto artifacts.publish (parallel drift with #237)
+- **PR #270**: Validate CM decision timing dimensions and physical domains
+- **Issue #266** (closed): Validate CM decision timing dimensions and physical domains
+- **PR #268**: Reject invalid local PVT grid inputs before simulation
+- **Issue #264** (closed): Reject invalid local PVT grid inputs before simulation
+- **PR #248**: estimate: resolve reference offset/yield N from committed tree metadata (#247)
+- **Issue #247** (closed): Derive evidence-size estimate denominators from selected reference campaigns
+- **PR #238**: Validate clock-supply probes and reject ambiguous sample identities
+- **Issue #235** (closed): Validate clock-supply probes and reject ambiguous sample identities
+
+### 2026-10-22
+
+- **PR #276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
+- **Issue #274** (closed): Mirror gf180's supplemental reverse-polarity ladder fragment (bench-structure parity, gf180-comparator#158/#166)
+- **Issue #297** (closed): Remove scripts/diagnostics/: completed #188 guard-handoff repro, unrelated to the comparator
+
 ### 2026-10-21
 
+- **PR #317**: test: show captured git output when sparse-checkout sh() fails
+- **Issue #316** (closed): test flake: test_append_only_and_size_job_from_sparse_clone fails on append-only sim evidence
 - **PR #313**: ci: make sim evidence-size check report-only while suspended
 - **Issue #312** (closed): Suspend the sim/ evidence-size ceiling (report-only) until the fleet S3 evidence store lands
 

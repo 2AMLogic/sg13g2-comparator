@@ -23,7 +23,7 @@
   offset discrepancy, not settled here),
   [`0002-target-spec-ratification.md`](0002-target-spec-ratification.md)
   (Row 1, unchanged)
-- **Supersedes**: none. **Superseded by**: none
+- **Supersedes**: none. **Superseded by**: [`evidence-size/323-retire-incremental-evidence-size-raises.md`](evidence-size/323-retire-incremental-evidence-size-raises.md) (the authorization below no longer applies)
 
 ## Context
 

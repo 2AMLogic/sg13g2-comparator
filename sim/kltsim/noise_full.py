@@ -46,6 +46,7 @@ from __future__ import annotations
 import gzip
 import json
 import math
+import re
 from pathlib import Path
 from statistics import NormalDist
 
@@ -393,9 +394,7 @@ def analyse(campaign_dir: Path, dut: grade_mod.DutReference | None = None) -> di
         both_ok = [(a["sigma"], b["sigma"]) for a, b in zip(per_cfg["fe"], per_cfg["zero"])
                    if a["sigma"] is not None and b["sigma"] is not None]
         out["negative_control"]["points_compared_sigma"] = len(both_ok)
-    ts = timestep_convergence(campaign_dir / "smoke", od_x)
-    if ts["steps"]:
-        out["timestep"] = ts
+    out["timestep"] = timestep_convergence(campaign_dir / "smoke", ev, dut)
     both = out["configs"]["both"]
     if both.get("complete") and not both.get("rejected"):
         m = both["grid_mean"]
@@ -487,15 +486,39 @@ def render_markdown(result: dict) -> str:
               f"(identical populations would give about {nc['expected_abs_z_gt_2_if_identical']:.1f}), "
               f"|z| > 3 in {nc['abs_z_gt_3']}."]
     ts = result.get("timestep")
-    if ts:
+    if ts and not ts.get("available", True) and not ts.get("steps"):
+        L += ["", "## Timestep convergence", "", f"UNAVAILABLE: {ts.get('unavailable')}."]
+    elif ts:
         L += ["", "## Timestep convergence (tt / 1.20 V / 27 C, `both`, front end + internal)", "",
-              "| tran args | N | p(+od_x) | p(-od_x) | p(0) | sigma (mV) | +/- SE | move vs 20p (in SE) |",
-              "|---|---|---|---|---|---|---|---|"]
+              "Each rung is validated before any arithmetic (saved request/invocation/envelope "
+              "chain, nominal corner, `tn_full_both` body and DUT, sample identities, un-errored "
+              "trusted samples, binary hits, distinct draws). A rejected rung shows no statistic; "
+              "a comparison is made only when nothing but the solver step / max step differs "
+              "between the two rungs.", "",
+              "| rung | status | tran args | N | p(+od_x) | p(-od_x) | p(0) | sigma (mV) | +/- SE "
+              "| move vs 20p (in SE) |", "|---|---|---|---|---|---|---|---|---|---|"]
         for step, t in ts["steps"].items():
-            sg = f"{t['sigma']:.3f} | {t['sigma_se']:.3f}" if "sigma" in t else "- | -"
-            z = f"{t['z_vs_20p']:+.2f}" if "z_vs_20p" in t else "-"
-            L.append(f"| {t['tran_args']} | {t['n']} | {t['p_plus']:.3f} | {t['p_minus']:.3f} | "
-                     f"{t['p_zero']:.3f} | {sg} | {z} |")
+            if t["status"] == "validated":
+                sg = (f"{t['sigma']:.3f} | {t['sigma_se']:.3f}" if "sigma" in t else "- | -")
+                z = f"{t['z_vs_20p']:+.2f}" if "z_vs_20p" in t else "-"
+                L.append(f"| {step} | validated | {t['tran_args']} | {t['n']} | "
+                         f"{t['p_plus']:.3f} | {t['p_minus']:.3f} | {t['p_zero']:.3f} | {sg} | {z} |")
+            else:
+                L.append(f"| {step} | {t['status']} | {t.get('tran_args') or '-'} | "
+                         f"{t.get('n') if t.get('n') is not None else '-'} | - | - | - | - | - | - |")
+        for step, t in ts["steps"].items():
+            if t["status"] == "rejected":
+                L.append(f"\n- `{step}` REJECTED (statuses {t.get('statuses') or '-'}; no sigma, "
+                         "SE or comparison): " + "; ".join(t["problems"][:4])
+                         + ("; ..." if len(t["problems"]) > 4 else ""))
+            elif t["status"] == "missing":
+                L.append(f"\n- `{step}` UNAVAILABLE: {t.get('reason')}")
+            elif t.get("sigma_unavailable"):
+                L.append(f"\n- `{step}` sigma unavailable: {t['sigma_unavailable']}")
+        for step, why in ts.get("withheld", {}).items():
+            L.append(f"\n- comparison {step} vs {ts['baseline']} WITHHELD: {why}")
+        L += ["", f"Validated rungs: {', '.join(ts.get('validated_rungs') or []) or 'none'}; "
+              f"compared with {ts['baseline']}: {', '.join(ts.get('comparisons') or []) or 'none'}."]
     am = result["as_measured"]
     L += ["", "## As measured against the unchanged DR-0002 Row 2 bounds", ""]
     if am.get("incomplete"):
@@ -521,40 +544,338 @@ def render_markdown(result: dict) -> str:
     return "\n".join(L) + "\n"
 
 
-def _request_tran_args(path: Path) -> str | None:
-    if not path.is_file():
-        return None
-    return json.loads(path.read_text(encoding="utf-8")).get("analysis", {}).get("args")
+SMOKE_BENCH = "tn_full_both"
+#: The one corner the timestep smoke runs at (README "Timestep convergence").
+SMOKE_NOMINAL_CORNERS = {"process": ["mos_tt"], "supply_v": {"vsup": [1.2]},
+                         "temperature_c": [27.0]}
+SMOKE_NOMINAL_KEY = ("tt", 1.2, 27.0)
+SMOKE_BASE_ID = "mos_tt/1.200V/27C"
+SMOKE_BASELINE = "20p"
+SMOKE_TIMESTEPS = ("20p", "10p", "5p")
+#: ``provenance.deck.content_hash`` must be a sha256 digest in the same
+#: ``sha256:<64 lowercase hex>`` form the envelope writer emits; a missing or
+#: malformed deck hash cannot prove model-deck provenance, so rungs carrying
+#: one are rejected before any cross-rung comparison (issue #263 review).
+SMOKE_DECK_HASH_RE = re.compile(r"sha256:[0-9a-f]{64}")
 
 
-def timestep_convergence(smoke_dir: Path, od_x_mv: float,
-                         steps: tuple[str, ...] = ("20p", "10p", "5p")) -> dict:
-    """Max-timestep convergence at ONE corner from ``smoke/timestep-<step>``
-    envelopes (identical request, ``tran`` step and max step the only change,
-    N samples per rung). sigma is the two-rung probit slope with its delta-
-    method standard error; ``z_vs_20p`` is (sigma - sigma_20p)/sqrt(se^2 +
-    se_20p^2): the move expressed in units of its own statistical precision."""
-    out: dict = {"steps": {}}
-    for step in steps:
-        path = smoke_dir / f"timestep-{step}.envelope.json"
-        if not path.is_file():
+def _is_int(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _smoke_chain(smoke_dir: Path, tag: str, envelope_sha: str | None
+                 ) -> tuple[dict | None, list[str], dict]:
+    """Request/invocation chain of one smoke rung (the hashes only; request
+    semantics are checked separately because the smoke contract intentionally
+    differs from the campaign grid, N and tran arguments)."""
+    problems: list[str] = []
+    checked: dict = {}
+    _, inv = grade_mod._load_json_file(smoke_dir / f"{tag}.invocation.json", "invocation", tag,
+                                       problems)
+    req_raw, req = grade_mod._load_json_file(smoke_dir / f"{tag}.request.json", "request", tag,
+                                             problems)
+    if req_raw is not None:
+        checked["request_sha256"] = build_mod.sha256_bytes(req_raw)
+    if inv is not None:
+        for name, actual in (("request_sha256", checked.get("request_sha256")),
+                             ("envelope_sha256", envelope_sha)):
+            saved = inv.get(name)
+            if not isinstance(saved, str) or not grade_mod._HEX64.fullmatch(saved):
+                problems.append(f"{tag}: invocation {name} is missing or not a 64-char "
+                                f"lowercase hex sha256 ({saved!r})")
+            elif actual is not None and saved != actual:
+                problems.append(f"{tag}: {name} mismatch: invocation records {saved[:12]}..., "
+                                f"file bytes hash to {actual[:12]}...")
+            else:
+                checked[f"invocation_{name}"] = saved
+        if inv.get("tag") != tag:
+            problems.append(f"{tag}: invocation names tag {inv.get('tag')!r}")
+        if inv.get("exit_code") != 0:
+            problems.append(f"{tag}: invocation exit_code is {inv.get('exit_code')!r}, not 0")
+    return req, problems, checked
+
+
+def _smoke_request_problems(bench, tag: str, step: str, req: dict) -> tuple[list[str], int | None]:
+    """Smoke request contract: the bench's own request, at the nominal corner,
+    with only the solver step / max step free and N whatever the request
+    declares (it must be a positive integer, the same across rungs)."""
+    problems: list[str] = []
+    expected = grade_mod._expected_request(bench, f"{bench.name}.mos_tt")
+    mc, want_mc = req.get("monte_carlo"), expected.get("monte_carlo") or {}
+    n = None
+    if not isinstance(mc, dict) or not _is_int(mc.get("n")) or mc["n"] <= 0:
+        problems.append(f"{tag}: request monte_carlo {grade_mod._brief(mc)} does not declare a "
+                        "positive integer n")
+    else:
+        n = mc["n"]
+        for key in sorted((set(mc) | set(want_mc)) - {"n"}):
+            if mc.get(key) != want_mc.get(key):
+                problems.append(f"{tag}: request monte_carlo {key} {mc.get(key)!r} is not the "
+                                f"bench contract {want_mc.get(key)!r}")
+    analysis, want_an = req.get("analysis"), expected["analysis"]
+    args = analysis.get("args") if isinstance(analysis, dict) else None
+    tokens = args.split() if isinstance(args, str) else []
+    want_tokens = want_an["args"].split()
+    if not isinstance(analysis, dict) or analysis.get("kind") != want_an["kind"]:
+        problems.append(f"{tag}: request analysis kind is not {want_an['kind']!r}")
+    elif len(tokens) != len(want_tokens) or tokens[1:3] != want_tokens[1:3]:
+        problems.append(f"{tag}: request analysis args {args!r} differ from the bench contract "
+                        f"{want_an['args']!r} beyond the solver step / max step")
+    elif tokens[0] != step or tokens[3] != step:
+        problems.append(f"{tag}: request analysis args {args!r} do not set step and max step to "
+                        f"the rung's {step!r}")
+    patched = dict(req)
+    patched["analysis"] = want_an
+    patched["monte_carlo"] = want_mc
+    sem = grade_mod.check_request_semantics(bench, f"{bench.name}.mos_tt", patched,
+                                            corners=SMOKE_NOMINAL_CORNERS)
+    problems.extend(p.replace(f"{bench.name}.mos_tt", tag, 1) for p in sem
+                    if "request monte_carlo" not in p and "request analysis" not in p)
+    return problems, n
+
+
+def _smoke_population(env: dict, tag: str, n: int | None, ev: dict) -> tuple[list[str], dict]:
+    """Population checks on one rung's envelope; returns (problems, facts)."""
+    problems: list[str] = []
+    facts: dict = {}
+    corners = env.get("corners")
+    if not isinstance(corners, list) or not corners:
+        return [f"{tag}: envelope has no corners (empty population)"], facts
+    facts["n_corners"] = len(corners)
+    facts["statuses"] = {}
+    for c in corners:
+        key = str(c.get("status")) if isinstance(c, dict) else "malformed"
+        facts["statuses"][key] = facts["statuses"].get(key, 0) + 1
+    bad = [c for c in corners if not isinstance(c, dict)]
+    if bad:
+        return problems + [f"{tag}: {len(bad)} corner entr(ies) are not objects"], facts
+    if n is not None and len(corners) != n:
+        problems.append(f"{tag}: envelope holds {len(corners)} corners, the request declares N = {n}")
+    nomc = sum(1 for c in corners if not isinstance(c.get("monte_carlo"), dict))
+    if nomc:
+        problems.append(f"{tag}: {nomc} corner(s) carry no Monte-Carlo sample identity")
+    idents: dict[int, tuple] = {}
+    seen_idx: list[int] = []
+    for c in corners:
+        mc = c.get("monte_carlo")
+        if not isinstance(mc, dict):
             continue
-        env = json.loads(path.read_text(encoding="utf-8"))
-        corners = [c for c in env.get("corners") or [] if c.get("monte_carlo") is not None]
-        vals = [{m["name"]: m.get("value") for m in c.get("measurements") or []} for c in corners]
-        n = len(vals)
-        p = {k: sum(v[f"hit_{k}"] for v in vals) / n for k in ("plus", "minus", "zero")}
-        item = {"n": n, "statuses": dict.fromkeys({c["status"] for c in corners}, 0),
-                "p_plus": p["plus"], "p_minus": p["minus"], "p_zero": p["zero"],
-                "tran_args": _request_tran_args(smoke_dir / f"timestep-{step}.request.json")}
-        for c in corners:
-            item["statuses"][c["status"]] += 1
-        if 0 < p["plus"] < 1 and 0 < p["minus"] < 1:
-            item["sigma"], item["sigma_se"] = sigma_se(p["plus"], p["minus"], n, od_x_mv)
+        seeds = tuple(mc.get(k) for k in ("seed", "process_seed", "mismatch_seed"))
+        if not _is_int(mc.get("sample_index")) or not all(_is_int(v) for v in seeds):
+            problems.append(f"{tag}: corner {c.get('corner_id')!r} has a malformed sample identity")
+            continue
+        seen_idx.append(mc["sample_index"])
+        idents[mc["sample_index"]] = seeds
+        base, _, idx = str(c.get("corner_id")).rpartition("/mc")
+        if base != SMOKE_BASE_ID or idx != str(mc["sample_index"]):
+            problems.append(f"{tag}: corner_id {c.get('corner_id')!r} is not "
+                            f"{SMOKE_BASE_ID}/mc{mc['sample_index']} (wrong corner or sample)")
+        if grade_mod._corner_key(c) != SMOKE_NOMINAL_KEY:
+            problems.append(f"{tag}: corner {c.get('corner_id')!r} is not the nominal "
+                            f"{SMOKE_NOMINAL_KEY} corner")
+    if len(seen_idx) != len(set(seen_idx)):
+        problems.append(f"{tag}: {len(seen_idx) - len(set(seen_idx))} repeated sample_index "
+                        "value(s): ambiguous draw identity")
+    elif n is not None and sorted(seen_idx) != list(range(n)) and len(seen_idx) == len(corners):
+        problems.append(f"{tag}: sample_index values are not exactly 0..{n - 1}")
+    if len(set(idents.values())) != len(idents):
+        problems.append(f"{tag}: {len(idents) - len(set(idents.values()))} sample(s) repeat "
+                        "another sample's seeds: draws are not distinct")
+    facts["identity"] = [[i, *idents[i]] for i in sorted(idents)]
+    spec = grade_mod._bench_spec("transient_noise")
+    gates = [m.name for m in spec.measurements if m.role == "gate"] if spec else []
+    indep = tuple(ALL_BENCHES[SMOKE_BENCH].probes.get("independence") or ())
+    plus, minus, zero = ev["plus"], ev["minus"], ev["zero"]
+    untrusted: list[str] = []
+    hits: dict[str, list[float]] = {plus: [], minus: [], zero: []}
+    draws: list[tuple] = []
+    for c in corners:
+        # `transient_noise` carries the probe contract these circuits share
+        # (the alias selects the rules only, as in `_details`).
+        why = grade_mod._corner_problems(c, "transient_noise", gates)
+        if not why:
+            index, _ = grade_mod.measurement_index(c)
+            for name in hits:
+                value = grade_mod._finite_or_none((index.get(name) or {}).get("value"))
+                if value is None or value not in (0.0, 1.0):
+                    why = f"{name} = {(index.get(name) or {}).get('value')!r} is not a finite 0/1 hit"
+                    break
+                hits[name].append(value)
+        if why:
+            untrusted.append(f"{c.get('corner_id')}: {why}")
+        if indep:
+            draws.append(grade_mod._independence_draw(c, indep))
+    if untrusted:
+        problems.append(f"{tag}: {len(untrusted)} sample(s) untrusted (first: {untrusted[0]})")
+    if indep:
+        missing = sum(1 for d in draws if any(v is None for v in d))
+        if missing:
+            problems.append(f"{tag}: {missing} sample(s) lack the raw-noise independence probe")
+        elif len(draws) != len(set(draws)):
+            problems.append(f"{tag}: {len(draws) - len(set(draws))} sample(s) repeat another "
+                            "sample's raw noise draw: trials are not independent")
+    if not problems:
+        facts["p"] = {k: sum(v) / len(v) for k, v in zip(("plus", "minus", "zero"), hits.values())}
+    return problems, facts
+
+
+def _smoke_rung(smoke_dir: Path, step: str, bench, ev: dict, dut: grade_mod.DutReference,
+                body_text: str | None, body_problems: list[str]) -> tuple[dict, dict | None]:
+    """(rung report, comparability signature or None) for one timestep rung."""
+    tag = f"timestep-{step}"
+    req_path = smoke_dir / f"{tag}.request.json"
+    inv_path = smoke_dir / f"{tag}.invocation.json"
+    try:
+        raw = read_envelope_bytes(smoke_dir / f"{tag}.envelope.json")
+    except (OSError, EOFError, gzip.BadGzipFile) as exc:
+        raw = None
+        unreadable = f"{tag}: envelope cannot be read ({exc})"
+    else:
+        unreadable = None
+    if raw is None and unreadable is None and not req_path.is_file() and not inv_path.is_file():
+        return {"status": "missing", "problems": [], "n": None, "tran_args": None,
+                "statuses": {}, "reason": f"no smoke evidence for {tag} in the campaign"}, None
+    item: dict = {"status": "rejected", "problems": [], "n": None, "tran_args": None,
+                  "statuses": {}}
+    problems: list[str] = item["problems"]
+    sha = build_mod.sha256_bytes(raw) if raw is not None else None
+    req, chain, checked = _smoke_chain(smoke_dir, tag, sha)
+    problems.extend(chain)
+    if unreadable:
+        problems.append(unreadable)
+    elif raw is None:
+        problems.append(f"{tag}: envelope {tag}.envelope.json (or .gz) is missing")
+    env = None
+    if raw is not None:
+        try:
+            env = json.loads(raw)
+        except (ValueError, UnicodeDecodeError) as exc:
+            problems.append(f"{tag}: envelope is not valid JSON ({exc})")
+        else:
+            if not isinstance(env, dict):
+                problems.append(f"{tag}: envelope is not a JSON object")
+                env = None
+    n = None
+    if req is not None:
+        args = (req.get("analysis") or {}).get("args") if isinstance(req.get("analysis"), dict) else None
+        item["tran_args"] = args if isinstance(args, str) else None
+        more, n = _smoke_request_problems(bench, tag, step, req)
+        problems.extend(more)
+    item["n"] = n
+    problems.extend(body_problems)
+    facts: dict = {}
+    if env is not None:
+        pop, facts = _smoke_population(env, tag, n, ev)
+        problems.extend(pop)
+        item["statuses"] = facts.get("statuses", {})
+        item.setdefault("n_corners", facts.get("n_corners"))
+        if body_text is not None:
+            problems.extend(f"{tag}: {p}" for p in grade_mod.check_dut(
+                grade_mod.BenchEvidence(SMOKE_BENCH, [(tag, env)], body_text, {tag: sha}), dut))
+        deck = (env.get("provenance") or {}).get("deck")
+        deck_hash = deck.get("content_hash") if isinstance(deck, dict) else None
+        if not (isinstance(deck_hash, str) and SMOKE_DECK_HASH_RE.fullmatch(deck_hash)):
+            problems.append(f"{tag}: model deck content_hash is missing or malformed "
+                            f"({deck_hash!r}; expected sha256:<64 lowercase hex>): "
+                            "model-deck provenance cannot be established, so this rung "
+                            "is not comparable")
+    if problems or env is None or "p" not in facts:
+        return item, None
+    p = facts["p"]
+    item.update({"status": "validated", "p_plus": p["plus"], "p_minus": p["minus"],
+                 "p_zero": p["zero"]})
+    guard = ev.get("zero_guard") or {}
+    od_x = float(ev["od_x_mv"])
+    if not (float(guard.get("min", 0.0)) <= p["zero"] <= float(guard.get("max", 1.0))):
+        item["sigma_unavailable"] = (f"zero-overdrive rung fraction {p['zero']} outside "
+                                     f"[{guard.get('min')}, {guard.get('max')}]: noise not "
+                                     "demonstrably injected")
+    elif not (0 < p["plus"] < 1 and 0 < p["minus"] < 1) or p["plus"] <= p["minus"]:
+        item["sigma_unavailable"] = (f"rungs saturated or unordered (p+ = {p['plus']}, "
+                                     f"p- = {p['minus']}): probit slope undefined")
+    else:
+        item["sigma"], item["sigma_se"] = sigma_se(p["plus"], p["minus"], n, od_x)
+    request_core = {k: v for k, v in req.items() if k != "_comment"}
+    request_core["analysis"] = {k: v for k, v in request_core["analysis"].items() if k != "args"}
+    prov = env.get("provenance") or {}
+    signature = {
+        "request (other than solver step/max step)": request_core,
+        "N": n,
+        "sample identities": facts["identity"],
+        "input content hash": (prov.get("input") or {}).get("content_hash"),
+        "model deck content hash": (prov.get("deck") or {}).get("content_hash"),
+        "body sha256": build_mod.sha256_bytes(body_text.encode("utf-8")),
+    }
+    item["provenance"] = {**checked, "envelope_sha256": sha}
+    return item, signature
+
+
+def timestep_convergence(smoke_dir: Path, ev: dict, dut: grade_mod.DutReference,
+                         steps: tuple[str, ...] = SMOKE_TIMESTEPS) -> dict:
+    """Max-timestep convergence at ONE corner from ``smoke/timestep-<step>``.
+
+    Issue #263: every rung is validated BEFORE any arithmetic -- saved
+    request/invocation/envelope chain, smoke request contract (nominal
+    corner, the ``tn_full_both`` body, solver step / max step the only free
+    request field, N as declared by the request), body configuration and DUT,
+    a well-formed model-deck content hash, explicit sample identities,
+    trusted un-errored samples, finite binary hits and distinct raw-noise
+    draws. An invalid rung keeps its diagnostics and contributes no sigma,
+    SE or comparison. A rung is compared with the baseline only when both
+    are valid AND nothing but the solver step / max step differs between
+    their requests, populations and inputs.
+    ``z_vs_20p`` = (sigma - sigma_20p)/sqrt(se^2 + se_20p^2).
+    """
+    out: dict = {"steps": {}, "available": False, "baseline": steps[0] if steps else None,
+                 "comparisons": [], "withheld": {}}
+    present = [s for s in steps if any(
+        (smoke_dir / f"timestep-{s}.{ext}").is_file() or
+        (smoke_dir / f"timestep-{s}.{ext}.gz").is_file()
+        for ext in ("request.json", "invocation.json", "envelope.json"))]
+    if not present:
+        out["unavailable"] = ("no timestep smoke evidence (smoke/timestep-*) in this campaign; "
+                              "timestep convergence is not assessed")
+        return out
+    out["available"] = True
+    bench = ALL_BENCHES[SMOKE_BENCH]
+    body_path = smoke_dir / f"{bench.name}.body.spice"
+    body_text = body_path.read_text(encoding="utf-8") if body_path.is_file() else None
+    body_problems: list[str] = []
+    if body_text is None:
+        body_problems.append(f"{bench.name}.body.spice: smoke body is missing")
+    else:
+        body_problems.extend(_config_identity_problems(bench, body_text, bench.name))
+    signatures: dict[str, dict] = {}
+    for step in steps:
+        item, sig = _smoke_rung(smoke_dir, step, bench, ev, dut, body_text, body_problems)
+        if item["status"] == "missing":
+            out["steps"][step] = item
+            continue
         out["steps"][step] = item
-    base = out["steps"].get("20p", {})
-    for step, item in out["steps"].items():
-        if "sigma" in item and "sigma" in base and step != "20p":
-            item["z_vs_20p"] = (item["sigma"] - base["sigma"]) / math.hypot(
-                item["sigma_se"], base["sigma_se"])
+        if sig is not None:
+            signatures[step] = sig
+    out["validated_rungs"] = [s for s, t in out["steps"].items() if t["status"] == "validated"]
+    out["rejected_rungs"] = [s for s, t in out["steps"].items() if t["status"] == "rejected"]
+    out["missing_rungs"] = [s for s, t in out["steps"].items() if t["status"] == "missing"]
+    base = out["baseline"]
+    for step in steps:
+        if step == base:
+            continue
+        item = out["steps"][step]
+        if item["status"] != "validated":
+            out["withheld"][step] = f"rung {step} is {item['status']}"
+        elif out["steps"][base]["status"] != "validated":
+            out["withheld"][step] = f"baseline rung {base} is {out['steps'][base]['status']}"
+        else:
+            diff = sorted(k for k in signatures[base] if signatures[base][k] != signatures[step][k])
+            if diff:
+                out["withheld"][step] = ("cross-rung configuration differs beyond solver step / "
+                                         "max step: " + ", ".join(diff))
+            elif "sigma" not in item or "sigma" not in out["steps"][base]:
+                out["withheld"][step] = "sigma unavailable for one of the rungs"
+            else:
+                b = out["steps"][base]
+                item["z_vs_20p"] = (item["sigma"] - b["sigma"]) / math.hypot(
+                    item["sigma_se"], b["sigma_se"])
+                out["comparisons"].append(step)
     return out
