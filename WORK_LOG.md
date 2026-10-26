@@ -2,6 +2,11 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-26
+
+- **PR #199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
+- **Issue #191** (closed): PEX diagnostic: separate extracted device geometry from routing RC delay
+
 ### 2026-10-25
 
 - **PR #265**: Validate timestep smoke evidence before computing noise convergence (#263)
