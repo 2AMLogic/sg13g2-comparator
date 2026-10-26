@@ -1,0 +1,110 @@
+{
+  "kind": "diagnostic-attribution",
+  "issue": 191,
+  "compliance": "NOT compliance evidence; original full PEX (layout/comparator/pex_report.json) remains the item-7 artifact",
+  "statistical_basis": "none: deterministic single-corner transient; no MC, no seeds, no sigma",
+  "corner": "tt/1.200V/27C",
+  "inputs": {
+    "extracted_netlist": {
+      "path": null,
+      "scope": "external"
+    },
+    "device_only_envelope_netlist_closure": [
+      {
+        "path": "sim/comparator-pex/dut/tb_regeneration.devonly.sp",
+        "scope": "repo",
+        "sha256": "f184a266457e14364168b70a4e3a24dfff10723615a7b247df1bf49d956f5fb1"
+      },
+      {
+        "path": "sim/comparator-pex/dut/comparator.devonly.sp",
+        "scope": "repo",
+        "sha256": "8db6120b6df1a760b3da808595ab019ef0eb083f94cf6a1e5ff597e0c6f2adee"
+      }
+    ],
+    "klt_sim_version_note": "device-only leg via klt sim; schematic and full PEX legs re-run via klt pex with the committed request on the same klt, and reproduce the 20261009 values exactly"
+  },
+  "extraction_scope": "lumped model: one series R per net terminal, one ground C per net, vertical-overlap coupling only; no lateral coupling, no distributed RC, quasi-static. The device-only leg keeps all 64 fingers (model, W, L, AS, AD, PS, PD verbatim) and removes 252 terminal R (collapsed to parent nets), 16 ground C and 52 coupling C. The bias mirror XMB is outside the layout and identical on all legs.",
+  "rows": {
+    "vsup_v": {
+      "schematic": 1.2,
+      "device_only": 1.2,
+      "full_pex": 1.2
+    },
+    "td_a": {
+      "schematic": 7.09689e-10,
+      "device_only": 1.53575e-09,
+      "full_pex": 2.03961e-09
+    },
+    "td_b": {
+      "schematic": 9.63272e-10,
+      "device_only": 2.00535e-09,
+      "full_pex": 2.68174e-09
+    },
+    "td_c": {
+      "schematic": 1.10599e-09,
+      "device_only": 2.22961e-09,
+      "full_pex": null
+    },
+    "da_first": {
+      "schematic": 3.32417e-06,
+      "device_only": 2.30842e-08,
+      "full_pex": 3.09229e-06
+    },
+    "db_first": {
+      "schematic": 3.3668e-06,
+      "device_only": 2.29475e-08,
+      "full_pex": 3.69232e-06
+    },
+    "dc_first": {
+      "schematic": 3.31935e-06,
+      "device_only": 3.80598e-06,
+      "full_pex": 0.999993
+    },
+    "da_end": {
+      "schematic": 1.0,
+      "device_only": 1.0,
+      "full_pex": 1.0
+    },
+    "db_end": {
+      "schematic": 1.0,
+      "device_only": 1.0,
+      "full_pex": 1.0
+    },
+    "dc_end": {
+      "schematic": 1.0,
+      "device_only": 1.0,
+      "full_pex": 1.0
+    },
+    "i_stat": {
+      "schematic": -2.02726e-05,
+      "device_only": -2.02703e-05,
+      "full_pex": -2.02878e-05
+    },
+    "q_dec": {
+      "schematic": -1.97023e-13,
+      "device_only": -1.97955e-13,
+      "full_pex": -2.20685e-13
+    }
+  },
+  "missing_measurement_reasons": {
+    "td_c": "full_pex: measurement produced no value (td_c waits for a rising transition of dcn that never occurs; dc_first already high)"
+  },
+  "pvt": {
+    "request": "requests/regeneration.devonly.pvt.json (+ stage_model_inputs, throwaway copy)",
+    "backend": "batch",
+    "status": "error",
+    "corners": 45,
+    "passed": 0,
+    "failed": 0,
+    "errored": 45,
+    "job_id": "klt-sim-5e70ae964e3a",
+    "runner_klt_version": "0.5.0",
+    "cause": "batch_job_failed on every corner: batch_runner_version_mismatch (runner klt 0.5.0, client 0.7.0+g39f6da54ae4c)",
+    "local_fallback": "none launched (host rule)",
+    "envelope": "devonly-pvt-batch.20261011.json (all 45 points retained, all errored)"
+  },
+  "conditional_increments_td_a_s": {
+    "schematic_to_device_only": 8.260609999999999e-10,
+    "device_only_to_full_pex": 5.038600000000002e-10
+  }
+}
