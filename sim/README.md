@@ -84,6 +84,15 @@ gate) and `dut_vcm` + 50 mV as three 45-point `klt sim` campaigns on the batch
 fleet, graded against the unchanged DR-0002 Row 3 bounds. Evidence for the
 DR-0004 candidate CM-range row; no row is ratified or edited by it.
 
+**Kickback residue across a common-mode band (issue #165).**
+[`comparator-kickback-cm-band/`](comparator-kickback-cm-band/README.md) runs the
+issue #62 kickback bench at `dut_vcm` - 50 mV, `dut_vcm` (bit-identical
+reproduction gate against `20261009-d73a9ac`) and `dut_vcm` + 50 mV as three
+45-point `klt sim` campaigns on the batch fleet. Evidence for the candidate
+DR-0004 CM row; the Row 4 residue bound is applied unchanged and Q_kick is
+reported, not graded. Campaign directories are sparse-checkout units like the
+other `campaigns/` trees.
+
 **Clock-edge, strobe-width and supply-disturbance sensitivity (issue #173).**
 [`comparator-clock-supply-sensitivity/`](comparator-clock-supply-sensitivity/README.md)
 characterizes the whole latch against 500 ps / 2 ns clock edges, 5 / 15 ns
