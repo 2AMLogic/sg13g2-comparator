@@ -2,8 +2,13 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-27
+
+- **PR #218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
+
 ### 2026-10-26
 
+- **Issue #322** (closed): DR-0031 is stale after #318: evidence-size exception no longer in force
 - **PR #199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
 - **Issue #191** (closed): PEX diagnostic: separate extracted device geometry from routing RC delay
 
