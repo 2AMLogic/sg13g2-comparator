@@ -221,9 +221,11 @@ class SelectionAndSource(unittest.TestCase):
         derived = yr.derive_inputs(yr.REPO_ROOT / yr.SOURCE_CAMPAIGN)
         raw = {k: (out / f"{k}.yield.json").read_bytes() for k in ("offset", "noise")}
         reports = {k: json.loads(v) for k, v in raw.items()}
-        tool = committed["tool"]
+        # Append-only evidence re-derives from the provenance it recorded, not
+        # the live pin, so a pin bump cannot break the reproduction.
+        version, pin, command = yr._recorded_provenance(committed)
         index = yr.build_index(cid, yr.SOURCE_CAMPAIGN, derived, reports, raw,
-                               tool["klt_version_reported"], yr.load_pin(), tool["command"])
+                               version, pin, command)
         self.assertEqual(yr.dumps(index), (out / "index.json").read_text())
         self.assertNotIn("declared", index)
 

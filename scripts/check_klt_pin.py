@@ -6,16 +6,19 @@
 against (`klayout_version`). This script asserts that every machine-read
 copy of those values agrees with it:
 
-  - `.github/workflows/ci.yml`: every `klayout-tools@<sha>` install line
-    (at least two: the signoff and layout jobs) and every `klayout==<ver>`
+  - `.github/workflows/ci.yml`: every klt install line (at least two: the
+    signoff and layout jobs) -- `klayout-tools==<klt_version>` for a release
+    pin, `klayout-tools@<klt_commit>` for a git (dev-build) pin and every `klayout==<ver>`
     pin (at least one);
-  - `layout/run_flow.sh`: `KLT_PIN="..."` and `KLAYOUT_PIN="..."`;
+  - `layout/run_flow.sh`: `KLT_PIN="..."` (version or commit, per the form) and `KLAYOUT_PIN="..."`;
   - `manifests/t1-signoff-report.json`: `build.git_commit`, `build.version`;
   - `layout/comparator/{drc,lvs,erc}_report.json`: `provenance.klt_version`
     and `provenance.klayout_version`.
 
-It also asserts the pin file is self-consistent: `klt_version` must end in
-`+g<klt_commit[:12]>`.
+It also asserts the pin file is self-consistent. Two forms are accepted: a
+release pin (`klt_version` is a bare `X.Y.Z`, PyPI `klayout-tools==X.Y.Z`;
+`klt_commit` is the release tag's commit, provenance only) and a git pin
+(`klt_version` ends in `+g<klt_commit[:12]>`).
 
 `layout/comparator/pex_report.json` is deliberately NOT checked: it was
 produced by a different (newer) klt/KLayout build on purpose. Prose mentions
@@ -48,7 +51,9 @@ LAYOUT_REPORTS = (
     "layout/comparator/erc_report.json",
 )
 
-CI_KLT_RE = re.compile(r"klayout-tools@([0-9A-Za-z._-]+)")
+CI_KLT_GIT_RE = re.compile(r"klayout-tools@([0-9A-Za-z._-]+)")
+CI_KLT_REL_RE = re.compile(r"klayout-tools==([0-9A-Za-z._+-]+)")
+RELEASE_VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
 CI_KLAYOUT_RE = re.compile(r"\bklayout==([0-9A-Za-z._+-]+)")
 CI_KLT_MIN = 2  # signoff-manifest-parity + layout-reproducibility
 CI_KLAYOUT_MIN = 1  # layout-reproducibility
@@ -114,12 +119,22 @@ class Checker:
         if not re.fullmatch(r"[0-9a-f]{40}", commit):
             self.fail(f"{PIN_FILE}:klt_commit = {commit!r} is not a full 40-hex sha")
         suffix = "+g" + commit[:12]
-        if not pin["klt_version"].endswith(suffix):
+        if "+g" in pin["klt_version"]:
+            if not pin["klt_version"].endswith(suffix):
+                self.fail(
+                    f"{PIN_FILE}:klt_version = {pin['klt_version']!r} does not end in "
+                    f"{suffix!r} (the 12-char prefix of {PIN_FILE}:klt_commit)"
+                )
+        elif not RELEASE_VERSION_RE.fullmatch(pin["klt_version"]):
             self.fail(
-                f"{PIN_FILE}:klt_version = {pin['klt_version']!r} does not end in "
-                f"{suffix!r} (the 12-char prefix of {PIN_FILE}:klt_commit)"
+                f"{PIN_FILE}:klt_version = {pin['klt_version']!r} is neither a release "
+                f"version (X.Y.Z) nor a git build (...+g<sha12>)"
             )
         return pin
+
+    @staticmethod
+    def is_release(pin) -> bool:
+        return "+g" not in pin["klt_version"]
 
     # -- copies -------------------------------------------------------------
 
@@ -140,9 +155,18 @@ class Checker:
         text = self.read_text(CI_YML)
         if text is None:
             return
-        self.check_regex_copies(CI_YML, text, CI_KLT_RE, "klt_commit",
-                                pin["klt_commit"], CI_KLT_MIN,
-                                "klayout-tools@<sha>")
+        if self.is_release(pin):
+            self.check_regex_copies(CI_YML, text, CI_KLT_REL_RE, "klt_version",
+                                    pin["klt_version"], CI_KLT_MIN,
+                                    "klayout-tools==<version>")
+            for lineno, line in enumerate(text.splitlines(), 1):
+                if CI_KLT_GIT_RE.search(line):
+                    self.fail(f"{CI_YML}:{lineno}: git-form klayout-tools@<sha> "
+                              f"install but {PIN_FILE} pins release {pin['klt_version']!r}")
+        else:
+            self.check_regex_copies(CI_YML, text, CI_KLT_GIT_RE, "klt_commit",
+                                    pin["klt_commit"], CI_KLT_MIN,
+                                    "klayout-tools@<sha>")
         self.check_regex_copies(CI_YML, text, CI_KLAYOUT_RE, "klayout_version",
                                 pin["klayout_version"], CI_KLAYOUT_MIN,
                                 "klayout==<version>")
@@ -151,7 +175,8 @@ class Checker:
         text = self.read_text(RUN_FLOW)
         if text is None:
             return
-        for var, key in (("KLT_PIN", "klt_commit"), ("KLAYOUT_PIN", "klayout_version")):
+        klt_key = "klt_version" if self.is_release(pin) else "klt_commit"
+        for var, key in (("KLT_PIN", klt_key), ("KLAYOUT_PIN", "klayout_version")):
             rx = re.compile(rf"^\s*{var}=(['\"]?)([^'\"\s#]*)\1", re.M)
             hits = [(text.count("\n", 0, m.start()) + 1, m.group(2))
                     for m in rx.finditer(text)]

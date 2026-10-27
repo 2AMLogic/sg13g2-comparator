@@ -29,7 +29,7 @@ layout/run_flow.sh --check    # leave the committed file alone; prove it reprodu
 
 **Prerequisites.** You need [uv](https://docs.astral.sh/uv/) (`uvx`) and
 network access to fetch the pinned tools into uv's isolated cache. The pins
-are `2AMLogic/klayout-tools` @ `3a75c3ae705b7ad3803625255de93bcd982e70c6`
+are `klayout-tools==0.8.0` (PyPI; `2AMLogic/klayout-tools` tag `v0.8.0`)
 (the same pin `manifests/README.md` and CI use) and `klayout==0.30.12` (the
 KLayout that klt build was tested against). Nothing is installed host-wide.
 No PDK install is read: every layer number and rule value is a constant in

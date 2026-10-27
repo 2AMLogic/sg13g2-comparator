@@ -221,9 +221,9 @@ Item 3 cites `layout/comparator/drc_report.json`, the `klt drc --deck sg13g2
 #59), pinned by `content_hash`
 `sha256:583e99c6ee32474e0209d3aeaeb406393050e2bce9de4674bf091ee6a9e9d80d`
 (the GDS's own hash, recorded as `provenance.input.content_hash`). It reads
-`status: clean`, `violation_count: 0`, `rules_checked` 21, against deck
-`sha256:894326a4e37fb24fef2f7ffc6ae1da55a0e262b0f0bc1c09adc4862909278fda`
-(klt `0.6.0+g3a75c3ae705b`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
+`status: clean`, `violation_count: 0`, `rules_checked` 38, against deck
+`sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`
+(klt `0.8.0`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
 regenerates it; `--check` requires it fresh (`klt drc --check`). `klt signoff`
 grades item 3 on `status: clean` alone and does not enforce disclosure, so the
 three `coverage` fields of the envelope are quoted verbatim here. This is
@@ -231,19 +231,21 @@ klt's *curated* deck, **not** the foundry's own DRC deck: "clean" means clean
 inside this scope only.
 
 `coverage.layers_in_stream_without_rules` (drawn in the stream, no rule in the
-deck: nSD, pSD, NWell, Metal3 pin, Metal3 text, and the text layer):
+deck: Metal3 pin, Metal3 text, and the text layer; the klt 0.8.0 deck adds
+nSD, pSD and NWell rules, so those are no longer listed):
 
 ```
-7/0, 14/0, 30/2, 30/25, 31/0, 63/0
+30/2, 30/25, 63/0
 ```
 
-`coverage.rules_skipped` (22; every one has reason `no_applicable_geometry`
-in `coverage.inapplicable`: this layout draws no Metal4/5, TopMetal or
+`coverage.rules_skipped` (24; every one has reason `no_applicable_geometry`
+in `coverage.inapplicable`: this layout draws no Metal4/5, TopMetal, MIM or
 Via3/4/TopVia, and the deck's Metal3 enclosure of Via3 has no Via3 to act on):
 
 ```
 metal3.enclosing.via3.1, metal4.enclosing.via4.1, metal4.space.1,
-metal4.width.1, metal5.enclosing.topvia1.1, metal5.space.1, metal5.width.1,
+metal4.width.1, metal5.enclosing.mim.1, metal5.enclosing.topvia1.1,
+metal5.space.1, metal5.width.1, mim.enclosing.topvia1.1,
 topmetal1.enclosing.topvia1.1, topmetal1.enclosing.topvia2.1,
 topmetal1.space.1, topmetal1.width.1, topmetal2.enclosing.topvia2.1,
 topmetal2.space.1, topmetal2.width.1, topvia1.space.1, topvia1.width.1,
@@ -254,10 +256,13 @@ via4.width.1
 `coverage.deck_scope` (chapters of the foundry DRM the deck transcribes):
 
 ```
-Act, Cnt, Gat, M1, M2, M3, M4, M5, TM1, TM2, TV1, TV2, V1, V2, V3, V4
+Act, Cnt, Gat, M1, M2, M3, M4, M5, MIM, NW, TM1, TM2, TV1, TV2, V1, V2, V3,
+V4, pSD
 ```
 
-Consequences stated plainly: NWell and nSD/pSD geometry, Gat.c endcap,
+Consequences stated plainly (the klt 0.8.0 deck now carries NWell, nSD and pSD
+rules, so those layers are no longer listed as uncovered; their coverage was
+not otherwise re-audited here): Gat.c endcap,
 Cnt.e/Cnt.f, latch-up tap distance, density and seal ring are **not checked**
 by this evidence (see `layout/README.md`, "What this layout is, and is not").
 Also, `layout/comparator/drc_report.json` records its input as the
@@ -280,7 +285,7 @@ not of the GDS or the schematic. The tool does not bind it to either, so
 changed GDS, schematic subcircuit or request; see `layout/README.md`, stage 4.
 
 The envelope reads `status: match` (engine `klayout` 0.30.12, klt
-`0.6.0+g3a75c3ae705b`), 24/24 devices, 18/18 nets, 8/8 pins including
+`0.8.0`), 24/24 devices, 18/18 nets, 8/8 pins including
 `vdd`/`vss` and the independent `vbias`, 0 mismatches, 0 warnings.
 `power_connectivity.status` is `unchecked`, which `klt signoff` accepts: with
 `reference.form: subckt-call` the supply pins take part in the ordinary
@@ -404,18 +409,18 @@ source campaign are never edited.
 
 ## Regeneration and freshness
 
-The report is frozen at the pinned `klt` build — `2AMLogic/klayout-tools` @
-`3a75c3ae705b7ad3803625255de93bcd982e70c6` (the same pin the fleet's other
-committed manifest, `gf180-usb2-phy`, freezes against). A released `klt`
-older than 2026-09-17 does **not** know item 11 and renders a ten-item
-report; the pinned build renders all eleven. If the pinned build moves,
-the manifest, the freeze, and the pin move in one change.
+The report is frozen at the pinned `klt` release — `2AMLogic/klayout-tools`
+`v0.8.0` (commit `c572046be644e0407f693f2410f3abb799d68a3a`, PyPI
+`klayout-tools==0.8.0`). A `klt` older than 2026-09-17 does **not** know item
+11 and renders a ten-item report; the pinned build renders all eleven. If the
+pinned build moves, the manifest, the freeze, and the pin move in one change.
 
 [`klt-pin.json`](klt-pin.json) is the single source of truth for the pin
 (`klt_commit`, `klt_version`, `klayout_version`). CI runs
 `python3 scripts/check_klt_pin.py` (stdlib only) in the signoff job, which
 fails if any machine-read copy disagrees with it: both `ci.yml` install
-lines and its `klayout==` pin, `layout/run_flow.sh` `KLT_PIN`/`KLAYOUT_PIN`,
+lines (`klayout-tools==<klt_version>`; the git form `@<sha>` is still
+accepted for a dev-build pin) and its `klayout==` pin, `layout/run_flow.sh` `KLT_PIN`/`KLAYOUT_PIN`,
 this report's `build.git_commit`/`build.version`, and the `provenance`
 block of the DRC, LVS and ERC reports under `layout/comparator/`.
 `pex_report.json` is deliberately on a different build and is not checked.

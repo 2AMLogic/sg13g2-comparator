@@ -1,7 +1,10 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "engine": "klayout",
-  "layout": "lvs_extracted.spice",
+  "layout": {
+    "path": "layout/comparator/lvs_extracted.spice",
+    "scope": "repo"
+  },
   "reference": "lvs_reference.spice",
   "top": "COMPARATOR",
   "reference_top": "COMPARATOR",
@@ -22,6 +25,8 @@
     "compare_parameters": null,
     "power_connectivity": null,
     "anchor_top_level_pins": null,
+    "strict_top_level_pin_count": false,
+    "compare_mos_flavour": false,
     "supply_nets": [
       "GND",
       "VCC",
@@ -29,9 +34,11 @@
       "VGND",
       "VPWR",
       "VSS"
-    ]
+    ],
+    "finfet_bulk": null
   },
   "hints_applied": null,
+  "constant_nets_applied": null,
   "status": "match",
   "power_connectivity": {
     "status": "unchecked",
@@ -84,7 +91,7 @@
     "extracted_netlist": null
   },
   "provenance": {
-    "klt_version": "0.6.0+g3a75c3ae705b",
+    "klt_version": "0.8.0",
     "klayout_version": "0.30.12",
     "pdk": null,
     "deck": null,
