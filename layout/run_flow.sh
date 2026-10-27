@@ -65,7 +65,7 @@ GDS="${CELL_DIR}/comparator.gds"
 TOP="comparator"
 PORTS="vinp,vinn,clk,vbias,dout,doutb,vdd,vss"
 
-KLT_PIN="3a75c3ae705b7ad3803625255de93bcd982e70c6"
+KLT_PIN="0.8.0"  # PyPI release klayout-tools==${KLT_PIN}
 KLAYOUT_PIN="0.30.12"  # the KLayout this klt build was tested against
 
 MODE="run"
@@ -87,7 +87,7 @@ else
     echo "uvx not found: install uv, or set KLT_NATIVE=1 with the pinned klt on PATH" >&2
     exit 1
   }
-  SRC="klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@${KLT_PIN}"
+  SRC="klayout-tools==${KLT_PIN}"
   PY=(uvx --quiet --with "klayout==${KLAYOUT_PIN}" --from "${SRC}" python)
   KLT=(uvx --quiet --with "klayout==${KLAYOUT_PIN}" --from "${SRC}" klt)
 fi
@@ -198,7 +198,9 @@ if c["nets"]["layout"] != c["nets"]["matched"] or c["nets"]["reference"] != c["n
 nc = {(x["layout"], x["reference"]) for x in d["net_correspondence"] if x["pin"]}
 want = {(p.upper(), p.upper()) for p in "vinp vinn clk vbias dout doutb vdd vss".split()}
 if nc != want: bad.append(f"pin correspondence {sorted(nc)}")
-if d["layout"].startswith("/") or d["reference"].startswith("/") or "/home/" in raw:
+# klt >= 0.8.0 echoes layout/reference as {"path", "scope"}; older builds as a string.
+def _path(v): return v["path"] if isinstance(v, dict) else v
+if _path(d["layout"]).startswith("/") or _path(d["reference"]).startswith("/") or "/home/" in raw:
     bad.append("host-absolute path in envelope")
 if bad:
     print("  FAIL: " + "; ".join(bad), file=sys.stderr); sys.exit(1)
@@ -292,8 +294,9 @@ c = d["coverage"]
 print(f"  status: {d['status']}  violations: {d['violation_count']}  deck: {d['provenance']['deck']['content_hash'][:23]}...")
 print(f"  rules checked: {len(c['rules_checked'])}  skipped: {len(c['rules_skipped'])}")
 print(f"  layers in stream without rules: {', '.join(c['layers_in_stream_without_rules'])}")
-if d["file"].startswith("/"):
-    print(f"  FAIL: envelope embeds a host-absolute path: {d['file']}", file=sys.stderr); sys.exit(1)
+f = d["file"]["path"] if isinstance(d["file"], dict) else d["file"]  # dict since klt 0.8.0
+if f.startswith("/"):
+    print(f"  FAIL: envelope embeds a host-absolute path: {f}", file=sys.stderr); sys.exit(1)
 sys.exit(0 if d["status"] == "clean" else 1)
 PY
 

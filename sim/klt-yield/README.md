@@ -127,7 +127,9 @@ job, which needs the native engine (see above).
 
 The engine defaults to the pinned build,
 `uvx --from 'klayout-tools[yield] @ git+https://github.com/2AMLogic/klayout-tools@<manifests/klt-pin.json commit>' klt`.
-The `yield` extra is required (`klt yield` needs the `klt_yield_native` Rust
+For a release pin (`klt_version` without `+g<sha>`, e.g. `0.8.0`) the command is
+`uvx --from 'klayout-tools[yield]==<klt_version>' klt` and the PyPI wheel carries
+the native extension. The `yield` extra is required (`klt yield` needs the `klt_yield_native` Rust
 extension; the pinned git form builds it from source and needs a Rust
 toolchain). Override with `--klt` or `$KLT_YIELD_CMD`. Before relying on any
 output the workflow checks the reported version against `manifests/klt-pin.json`

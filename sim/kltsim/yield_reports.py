@@ -107,7 +107,10 @@ def default_klt_command(pin: dict) -> list[str]:
     """The documented pinned invocation: the git-pinned build plus the
     `yield` extra (the prebuilt wheel does not cover the pinned commit, so
     the native extension is built from source and needs a Rust toolchain)."""
-    spec = f"klayout-tools[yield] @ git+https://github.com/{pin['klt_repo']}@{pin['klt_commit']}"
+    if "+g" in pin["klt_version"]:
+        spec = f"klayout-tools[yield] @ git+https://github.com/{pin['klt_repo']}@{pin['klt_commit']}"
+    else:  # release pin: the PyPI wheel carries the native yield engine
+        spec = f"klayout-tools[yield]=={pin['klt_version']}"
     return ["uvx", "--from", spec, "klt"]
 
 
