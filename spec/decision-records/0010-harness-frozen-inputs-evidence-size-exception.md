@@ -26,7 +26,7 @@
   [`0007-repeated-measurement-harness-evidence-size-exception.md`](0007-repeated-measurement-harness-evidence-size-exception.md),
   [`0006-offset-significance-evidence-size-exception.md`](0006-offset-significance-evidence-size-exception.md),
   [`0005-offset-n200-evidence-size-exception.md`](0005-offset-n200-evidence-size-exception.md)
-- **Supersedes**: none. **Superseded by**: none
+- **Supersedes**: none. **Superseded by**: [`evidence-size/323-retire-incremental-evidence-size-raises.md`](evidence-size/323-retire-incremental-evidence-size-raises.md) (the authorization below no longer applies)
 
 ## Context
 

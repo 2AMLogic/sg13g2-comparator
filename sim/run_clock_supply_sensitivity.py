@@ -18,12 +18,9 @@ sim/comparator-clock-supply-sensitivity/README.md. Run from the repository root.
 from __future__ import annotations
 
 import argparse
-import json
 import shutil
-import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -73,15 +70,8 @@ def cmd_run(args) -> int:
             if (out_dir / f"{tag}.envelope.json").exists():
                 print(f"{tag}: envelope present, skipped", file=sys.stderr)
                 continue
-            code = 1
-            for attempt in range(1, args.retry_refused + 2):
-                code = kcli._submit(request, out_dir, tag, args, extra={"condition": c.metadata(), "kind": kind})
-                if code == 0 or not kcli._last_attempt_refused_at_cap(out_dir):
-                    break
-                if attempt <= args.retry_refused:
-                    print(f"{tag}: fleet at its instance cap; retry {attempt}/{args.retry_refused} "
-                          f"in {args.retry_wait}s", file=sys.stderr)
-                    time.sleep(args.retry_wait)
+            code = kcli._submit_with_retry(request, out_dir, tag, args,
+                                           extra={"condition": c.metadata(), "kind": kind})
             rc = max(rc, code)
     return rc
 
@@ -98,24 +88,7 @@ def cmd_smoke(args) -> int:
     req["corners"]["temperature_c"] = [args.temperature]
     if "monte_carlo" in req:
         req["monte_carlo"]["n"] = 1
-    request = work / "request.json"
-    request.write_text(json.dumps(req, indent=2) + "\n", encoding="utf-8")
-    cmd = [args.klt, "sim", str(request), "--backend", "local", "--format", "json",
-           "-o", str(work / "artifacts")]
-    print("$ " + " ".join(cmd), file=sys.stderr)
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    (work / "envelope.json").write_text(proc.stdout, encoding="utf-8")
-    print(f"klt sim exit {proc.returncode}; work dir {work}", file=sys.stderr)
-    if proc.stderr.strip():
-        print(proc.stderr.strip()[-2000:], file=sys.stderr)
-    try:
-        env = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return 1
-    for corner in env.get("corners", []):
-        print(corner["corner_id"], corner["status"],
-              {m["name"]: m["value"] for m in corner["measurements"]})
-    return 0
+    return kcli.run_local_smoke(req, work, args.klt)
 
 
 def cmd_compare(args) -> int:
@@ -128,7 +101,7 @@ def cmd_compare(args) -> int:
         md = kcli._cite_note(md, "series", series)
     rc = artifacts_mod.publish(
         "compare",
-        [(report_dir / "comparison.json", (json.dumps(result, indent=2) + "\n").encode("utf-8")),
+        [(report_dir / "comparison.json", rep.dumps_report(result).encode("utf-8")),
          (report_dir / "comparison.md", md.encode("utf-8"))],
         check_only=args.check, namespace_hint=kcli._NAMESPACE_HINT.replace("--campaign/--series", "--series"),
         require_dir=report_dir)

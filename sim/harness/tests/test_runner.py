@@ -659,7 +659,8 @@ class FrozenInputsTest(unittest.TestCase):
             path.write_text(text)
         self.decks = []
 
-    def run_cli(self, mutate=False, osdi_edit=None, models_edit=None):
+    def run_cli(self, mutate=False, osdi_edit=None, models_edit=None,
+                preflight_exc=None, put_exc=None):
         osdi = self.root / "osdi"
         osdi.mkdir(exist_ok=True)
         for name in cli.pdk_mod.REQUIRED_OSDI:
@@ -688,8 +689,31 @@ class FrozenInputsTest(unittest.TestCase):
                 ("variant", "release_version", "discovered_via"), "x"))
         chain = types.SimpleNamespace(drift=[], as_dict=lambda: {
             "observed": {"ngspice": "n", "python": "3"}, "drift": []})
+        def fake_put(files, repo_root):
+            # Issue #318: an in-memory artifact store; bytes land under
+            # self.store (outside sim/), never in the repo tree.
+            if put_exc is not None:
+                raise put_exc
+            entries = []
+            for path, name in files:
+                data = path.read_bytes()
+                dest = self.store / name
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data)
+                sha = hashlib.sha256(data).hexdigest()
+                entries.append({"sha256": sha, "size": len(data), "kind": "evidence",
+                                "producer": {"tool": "klt", "version": "t",
+                                             "loom.repo": "o/r", "commit": None},
+                                "uri": f"artifact:evidence/o__r/{sha[:2]}/{sha}",
+                                "name": name})
+            return {"schema_version": 1, "entries": entries}, []
+
+        self.store = self.root / "store"
         with mock.patch.multiple(cli, REPO_ROOT=self.root, SIM_DIR=self.sim,
-                                 WORK_DIR=self.sim / ".work"), \
+                                 WORK_DIR=self.sim / ".work",
+                                 STAGE_DIR=self.sim / ".work/.stage"), \
+             mock.patch.object(cli.store_mod, "preflight", side_effect=preflight_exc), \
+             mock.patch.object(cli.store_mod, "put_files", side_effect=fake_put), \
              mock.patch.multiple(dut_mod, REPO_ROOT=self.root, SIM_DIR=self.sim), \
              mock.patch.object(cli.pdk_mod, "find_pdk", return_value=pdk), \
              mock.patch("harness.runner.ngspice_version", return_value="n"), \
@@ -705,9 +729,23 @@ class FrozenInputsTest(unittest.TestCase):
         rc, _ = self.run_cli(mutate)
         self.assertEqual(rc, 0)
         sha = [hashlib.sha256(t.encode()).hexdigest() for t in self.live.values()]
-        (path,) = (self.sim / "exp/records").glob("*.json")
+        # Issue #318: the JSON twin, snapshot and logs are stored, not
+        # committed; the repo keeps the Markdown record and the manifest.
+        self.assertEqual(list((self.sim / "exp/records").glob("*.json")), [])
+        self.assertFalse((self.sim / "exp/corners").exists())
+        self.assertFalse((self.sim / "exp/netlist-snapshots").exists())
+        (path,) = (self.store / "sim/exp/records").glob("*.json")
         rec = json.loads(path.read_text())
         ctx, tb = rec["context"], rec["testbench"]
+        (manifest,) = (self.root / "manifests/artifacts").iterdir()
+        self.assertEqual(manifest.name, f"exp-{rec['record_id']}.manifest.json")
+        names = {e["name"] for e in json.loads(manifest.read_text())["entries"]}
+        self.assertEqual(len(names), 4)  # JSON twin, snapshot, two corner logs
+        self.assertIn(f"sim/exp/records/{rec['record_id']}.json", names)
+        self.assertEqual(list((self.sim / ".work/.stage/exp/sim/exp/corners").iterdir()), [])
+        md_path = self.sim / f"exp/records/{rec['record_id']}.md"
+        self.assertIn("## Stored evidence", md_path.read_text())
+        path = md_path.with_suffix(".json")  # .md lookups below
         self.assertEqual([ctx["dut_netlist_sha256"], ctx["dut_config_sha256"],
                           tb["netlist_sha256"], tb["manifest_sha256"]], sha)
         self.assertEqual(ctx["dut_netlist"], "sim/d.spice")
@@ -726,7 +764,7 @@ class FrozenInputsTest(unittest.TestCase):
                       f"`{ctx['model_sources']['inventory_sha256'][:16]}`", md)
         self.assertIn("not PDK authenticity", md)
         self.assertNotIn("INCOMPLETE", md)
-        snap = (self.sim / f"exp/netlist-snapshots/{rec['record_id']}.spice").read_text()
+        snap = (self.store / f"sim/exp/netlist-snapshots/{rec['record_id']}.spice").read_text()
         self.assertIn(_DUT_NET + "\n* -", snap)
         self.assertTrue(snap.endswith("FRAGMENT ----------------\n* tb\n"))
         self.assertEqual(len(self.decks), 2)
@@ -759,11 +797,12 @@ class FrozenInputsTest(unittest.TestCase):
         """Issue #196: no record, logs kept, explicit non-zero exit."""
         for edit in (lambda p: p.write_bytes(b"rebuilt"), lambda p: p.unlink(missing_ok=True)):
             with self.subTest(edit=edit):
-                shutil.rmtree(self.sim / "exp/corners", ignore_errors=True)
+                shutil.rmtree(self.sim / ".work/.stage", ignore_errors=True)
                 rc, _ = self.run_cli(osdi_edit=edit)
                 self.assertEqual(rc, 9)
                 self.assertFalse((self.sim / "exp/records").exists())
-                (logs,) = (self.sim / "exp/corners").iterdir()
+                self.assertFalse((self.root / "manifests").exists())
+                (logs,) = (self.sim / ".work/.stage/exp/sim/exp/corners").iterdir()
                 self.assertEqual(len(list(logs.glob("*.log"))), 2)
                 self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
 
@@ -773,12 +812,12 @@ class FrozenInputsTest(unittest.TestCase):
                      lambda p: p.unlink(missing_ok=True),
                      lambda p: (p.parent / "new.lib").write_text("* added\n")):
             with self.subTest(edit=edit):
-                shutil.rmtree(self.sim / "exp/corners", ignore_errors=True)
+                shutil.rmtree(self.sim / ".work/.stage", ignore_errors=True)
                 shutil.rmtree(self.root / "pdk", ignore_errors=True)
                 rc, _ = self.run_cli(models_edit=edit)
                 self.assertEqual(rc, 9)
                 self.assertFalse((self.sim / "exp/records").exists())
-                (logs,) = (self.sim / "exp/corners").iterdir()
+                (logs,) = (self.sim / ".work/.stage/exp/sim/exp/corners").iterdir()
                 self.assertEqual(len(list(logs.glob("*.log"))), 2)
                 self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
 
@@ -799,13 +838,38 @@ class FrozenInputsTest(unittest.TestCase):
         (models / "x.lib").symlink_to(ext)
         rc, _ = self.run_cli()
         self.assertEqual(rc, 0)
-        (path,) = (self.sim / "exp/records").glob("*.json")
+        (path,) = (self.store / "sim/exp/records").glob("*.json")
         scope = json.loads(path.read_text())["context"]["model_sources"]["scope"]
+        path = self.sim / "exp/records" / path.name
         self.assertFalse(scope["complete"])
         self.assertEqual(scope["outside_tree_links"], ["x.lib"])
         self.assertIn("Inventory scope INCOMPLETE** — model loading may read bytes this "
                       "hash does not cover: link `x.lib` leaves the tree",
                       path.with_suffix(".md").read_text())
+
+    def test_store_unavailable_refuses_to_simulate(self):
+        """Issue #318: no broker / no klt verb -> exit 10 before any point runs."""
+        rc, run = self.run_cli(preflight_exc=cli.store_mod.StoreError("no broker"))
+        self.assertEqual(rc, 10)
+        run.assert_not_called()
+        self.assertFalse((self.sim / "exp/records").exists())
+        self.assertFalse((self.sim / "exp/corners").exists())
+        self.assertFalse((self.root / "manifests").exists())
+
+    def test_store_failure_after_grid_commits_nothing(self):
+        """Issue #318: a put that fails (broker unreachable mid-run) is fail
+        closed: no manifest, no record, no blob under sim/; staged bytes kept."""
+        rc, run = self.run_cli(put_exc=cli.store_mod.StoreError("broker_unreachable"))
+        self.assertEqual(rc, 10)
+        self.assertEqual(run.call_count, 2)
+        self.assertFalse((self.sim / "exp/records").exists())
+        self.assertFalse((self.sim / "exp/corners").exists())
+        self.assertFalse((self.sim / "exp/netlist-snapshots").exists())
+        self.assertFalse((self.root / "manifests").exists())
+        stage = self.sim / ".work/.stage/exp/sim/exp"
+        self.assertEqual(len(list((stage / "records").glob("*.json"))), 1)
+        self.assertEqual(len(list((stage / "corners").glob("*/*.log"))), 2)
+        self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
 
     def test_unreadable_osdi_before_grid_refuses_to_simulate(self):
         with mock.patch.object(cli.pdk_mod, "osdi_identity",

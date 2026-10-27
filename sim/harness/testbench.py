@@ -42,6 +42,9 @@ from .corners import (
     DEFAULT_NOMINAL_SUPPLY_V,
     DEFAULT_SUPPLY_TOLERANCE,
     DEFAULT_TEMPERATURES_C,
+    supply_points,
+    validate_supply_params,
+    validate_temperatures,
 )
 
 MANIFEST_NAME = "tb.json"
@@ -97,6 +100,22 @@ class Testbench:
     netlist_bytes: bytes = field(default=b"", repr=False)
     netlist_sha256: str = ""
     manifest_sha256: str = ""
+    #: Supplemental reverse-polarity ladder (gf180-comparator#158/#166 twin):
+    #: ``{"netlist": <fragment>, "analyses": [<.meas cards>]}``. A second
+    #: netlist fragment and `.meas` cards the harness appends to the SAME
+    #: transient. DELIBERATELY outside `analyses` and the main netlist: those
+    #: are hashed consumed fields that layout/pex pins and re-grades committed
+    #: evidence from, so a supplemental bench extension must not change them.
+    #: Reported, never scored.
+    reverse_ladder: dict = field(default_factory=dict)
+    reverse_ladder_netlist: Path | None = None
+    reverse_ladder_bytes: bytes = field(default=b"", repr=False)
+    reverse_ladder_sha256: str = ""
+
+    @property
+    def reverse_ladder_path(self) -> Path | None:
+        """The declared reverse-ladder fragment, or None when undeclared."""
+        return self.reverse_ladder_netlist
 
     @property
     def experiment(self) -> str:
@@ -109,7 +128,7 @@ class Testbench:
         return self.directory.parent
 
     def provenance(self) -> dict:
-        return {
+        prov = {
             "name": self.name,
             "description": self.description,
             "claim": self.claim,
@@ -121,6 +140,10 @@ class Testbench:
             "nominal_supply_v": self.nominal_supply_v,
             "supply_tolerance": self.supply_tolerance,
         }
+        if self.reverse_ladder:
+            prov["reverse_ladder_netlist"] = self.reverse_ladder_netlist.name
+            prov["reverse_ladder_netlist_sha256"] = self.reverse_ladder_sha256
+        return prov
 
 
 def _require(manifest: dict, key: str, path: Path):
@@ -275,6 +298,37 @@ def load(directory: str | Path) -> Testbench:
 
     _validate_monte_carlo_seed(evidence, manifest.get("analyses", ("op",)), manifest_path)
 
+    try:
+        nominal_supply_v, supply_tolerance = validate_supply_params(
+            manifest.get("nominal_supply_v", DEFAULT_NOMINAL_SUPPLY_V),
+            manifest.get("supply_tolerance", DEFAULT_SUPPLY_TOLERANCE),
+        )
+        temperatures_c = tuple(
+            validate_temperatures(manifest.get("temperatures_c", DEFAULT_TEMPERATURES_C))
+        )
+        supply_points(nominal_supply_v, supply_tolerance)
+    except ValueError as exc:
+        raise ValueError(f"{manifest_path}: {exc}") from None
+
+    reverse = dict(manifest.get("reverse_ladder") or {})
+    rev_path = None
+    rev_data = b""
+    if reverse:
+        if not isinstance(reverse.get("netlist"), str) or not isinstance(
+                reverse.get("analyses"), list) or not reverse["analyses"] or not all(
+                    isinstance(a, str) and a.strip() for a in reverse["analyses"]):
+            raise ValueError(
+                f"{manifest_path}: reverse_ladder must declare a non-empty "
+                "`analyses` list of `.meas` card strings and the supplemental "
+                "`netlist` fragment they run against"
+            )
+        rev_path = directory / reverse["netlist"]
+        if not rev_path.is_file():
+            raise FileNotFoundError(
+                f"{manifest_path}: reverse_ladder names {rev_path}, which does not exist"
+            )
+        rev_data = rev_path.read_bytes()
+
     data = netlist.read_bytes()
     tb = Testbench(
         directory=directory,
@@ -282,11 +336,9 @@ def load(directory: str | Path) -> Testbench:
         netlist=netlist,
         description=manifest.get("description", ""),
         claim=manifest.get("claim", ""),
-        nominal_supply_v=float(manifest.get("nominal_supply_v", DEFAULT_NOMINAL_SUPPLY_V)),
-        supply_tolerance=float(manifest.get("supply_tolerance", DEFAULT_SUPPLY_TOLERANCE)),
-        temperatures_c=tuple(
-            float(t) for t in manifest.get("temperatures_c", DEFAULT_TEMPERATURES_C)
-        ),
+        nominal_supply_v=nominal_supply_v,
+        supply_tolerance=supply_tolerance,
+        temperatures_c=temperatures_c,
         corners=tuple(manifest.get("corners", (DEFAULT_CORNER_SET,))),
         analyses=tuple(manifest.get("analyses", ("op",))),
         measure=measure,
@@ -298,10 +350,16 @@ def load(directory: str | Path) -> Testbench:
         netlist_bytes=data,
         netlist_sha256=hashlib.sha256(data).hexdigest(),
         manifest_sha256=hashlib.sha256(raw).hexdigest(),
+        reverse_ladder=reverse,
+        reverse_ladder_netlist=rev_path,
+        reverse_ladder_bytes=rev_data,
+        reverse_ladder_sha256=hashlib.sha256(rev_data).hexdigest() if reverse else "",
     )
     if tb.internal_noise:
         internal_noise_mod.validate_block(tb.internal_noise)
     validate_netlist(tb)
+    if reverse:
+        _validate_fragment(rev_path, rev_data)
     return tb
 
 
@@ -312,8 +370,13 @@ def validate_netlist(tb: Testbench) -> None:
     ``.end`` or a hardcoded ``.temp 27`` that silently pins every corner to
     room temperature.
     """
+    _validate_fragment(tb.netlist, tb.netlist_bytes)
+
+
+def _validate_fragment(path: Path, data: bytes) -> None:
+    """Forbidden-directive scan of one fragment (main or reverse-ladder)."""
     problems: list[str] = []
-    for lineno, raw in enumerate(tb.netlist_bytes.decode().splitlines(), start=1):
+    for lineno, raw in enumerate(data.decode().splitlines(), start=1):
         line = raw.strip().lower()
         if not line.startswith("."):
             continue
@@ -322,7 +385,7 @@ def validate_netlist(tb: Testbench) -> None:
             problems.append(f"  line {lineno}: {raw.strip()}")
     if problems:
         raise ValueError(
-            f"{tb.netlist}: netlist fragments must not contain "
+            f"{path}: netlist fragments must not contain "
             f"{', '.join(FORBIDDEN_DIRECTIVES)} -- the harness supplies the models, "
             "corner libs, temperature, the DUT netlist and the control block:\n"
             + "\n".join(problems)
