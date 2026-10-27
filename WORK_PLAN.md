@@ -29,16 +29,14 @@ _None._
 
 Issues currently being built (`loom:building`).
 
-- **#159**: Memory / hysteresis characterization bench: does the previous decision bias the next?
 - **#160**: Draft decision record: input common-mode range row for the ratified spec
-- **#165**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (evidence for DR-0004 CM-range row)
 - **#308**: Remove dead _spec_meas left behind by closed #295
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#171**: sim: memory/hysteresis characterization bench (paired-history switching boundary over PVT) (Closes #159)
+_None._
 
 ## Approved (Awaiting Merge)
 
@@ -52,9 +50,7 @@ Issues carrying `loom:curated`.
 
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
 - **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise) *(curated)*
-- **#159**: Memory / hysteresis characterization bench: does the previous decision bias the next? *(curated)*
 - **#160**: Draft decision record: input common-mode range row for the ratified spec *(curated)*
-- **#165**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (evidence for DR-0004 CM-range row) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -72,10 +68,10 @@ _None._
 | Very important | 0 |
 | Important | 0 |
 | Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 4 |
-| PRs awaiting review | 1 |
+| In Progress (`loom:building`) | 2 |
+| PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 1 |
-| Curated | 5 |
+| Curated | 3 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->

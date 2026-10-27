@@ -4,6 +4,10 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-10-27
 
+- **PR #212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
+- **PR #171**: sim: memory/hysteresis characterization bench (paired-history switching boundary over PVT) (Closes #159)
+- **Issue #165** (closed): sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (evidence for DR-0004 CM-range row)
+- **Issue #159** (closed): Memory / hysteresis characterization bench: does the previous decision bias the next?
 - **PR #218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
 
 ### 2026-10-26
