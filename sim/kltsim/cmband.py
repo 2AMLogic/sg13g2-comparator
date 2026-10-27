@@ -63,6 +63,7 @@ for both sides' full identity sets and reports a complete-reproduction
 from __future__ import annotations
 
 import dataclasses
+import gzip
 import hashlib
 import json
 import math
@@ -247,6 +248,153 @@ def write_condition_inputs(cond: Condition, out_dir: Path, *,
 
 def part_tags() -> list[str]:
     return [f"{BENCH_NAME}.{section}" for section in OFFSET_MC.process_sections]
+
+
+# --------------------------------------------------------------------------- #
+# issue #89: the max-step supplementary campaign
+# --------------------------------------------------------------------------- #
+
+#: The parent campaign (issue #79) rejected exactly two ``vcm-m050``
+#: populations -- one Monte-Carlo draw each where ngspice's transient
+#: aborted with "Timestep too small" (node ``ibn``) -- rather than repair,
+#: drop or substitute them. The supplementary campaign below re-runs BOTH
+#: points at ALL THREE conditions under one documented tighter transient
+#: max step, as a separately labelled series whose results are reported
+#: beside the parent's and never merged into its 43/45 population.
+SUPPLEMENT_ISSUE = 89
+SUPPLEMENT_PARENT = "20261009-5185f52"
+#: The one changed simulation setting, taken from the parent campaign's
+#: committed abort probe
+#: (``controls/abort-probe.vcm-m050.tt_-40c_1.32v.mc12/maxstep-20p.*``):
+#: with ``tran 100p 990n 0 20p`` the aborting mc12 draw completes. 20 ps is
+#: the coarsest setting that probe verified, 5x finer than the bench's own
+#: 100 ps step, and the ONLY supplementary knob that moves: measurements,
+#: limits, monte_carlo, corner axes, corner order, timeout and artifact
+#: retention stay the parent's, so any vos change is attributable to the
+#: step alone.
+SUPPLEMENT_MAX_STEP = "20p"
+SUPPLEMENT_ANALYSIS_ARGS = f"100p 990n 0 {SUPPLEMENT_MAX_STEP}"
+#: The two rejected grid points: (process section, supply V, temperature C).
+SUPPLEMENT_POINTS = (
+    ("mos_tt_mismatch", SUPPLIES_V[2], TEMPERATURES_C[0]),
+    ("mos_sf_mismatch", SUPPLIES_V[1], TEMPERATURES_C[0]),
+)
+
+
+def _supplement_point(section: str) -> tuple[float, float]:
+    for sec, supply, temp in SUPPLEMENT_POINTS:
+        if sec == section:
+            return supply, temp
+    raise CmBandError(f"{section!r} is not a supplementary point; known: "
+                      f"{[s for s, _, _ in SUPPLEMENT_POINTS]}")
+
+
+def supplement_sections() -> list[str]:
+    return [section for section, _, _ in SUPPLEMENT_POINTS]
+
+
+def supplement_grid(section: str) -> list[tuple[float, float]]:
+    """The (supply, temperature) points the section's supplementary request
+    enumerates: the issue #62 grid's odometer prefix -- supply outer,
+    temperature inner, exactly ``_expand_corners``' order -- up to and
+    including the target point."""
+    supply, temp = _supplement_point(section)
+    return [(s, t) for s in SUPPLIES_V for t in TEMPERATURES_C
+            if (s, t) <= (supply, temp)]
+
+
+def supplement_excludes(section: str) -> list[dict]:
+    """``request.exclude`` entries dropping exactly the grid points AFTER
+    the section's target in odometer order.
+
+    klt derives a sample's seed from its corner's index in the request's own
+    enumeration, and exclusion removes a point from that enumeration, so a
+    point dropped from BEFORE the target would shift the target's
+    corner_index and change every seed. Dropping only the tail keeps every
+    retained point at its parent-campaign corner_index -- sample k keeps the
+    parent's mismatch draw -- and the retained corner list is a prefix of
+    the parent's (same request split, same corner order). The padding
+    points before the target are the price of that seed contract; their
+    populations are reported as additional max-step sensitivity evidence,
+    never merged anywhere."""
+    supply, temp = _supplement_point(section)
+    return [{"supply_v": {"vsup": s}, "temperature_c": t}
+            for s in SUPPLIES_V for t in TEMPERATURES_C if (s, t) > (supply, temp)]
+
+
+def supplement_metadata(section: str) -> dict:
+    supply, temp = _supplement_point(section)
+    return {
+        "issue": SUPPLEMENT_ISSUE,
+        "kind": "max-step-supplement",
+        "parent_campaign": SUPPLEMENT_PARENT,
+        "target": {"process": section, "supply_v": supply, "temperature_c": temp},
+        "max_step": SUPPLEMENT_MAX_STEP,
+        "analysis_args": SUPPLEMENT_ANALYSIS_ARGS,
+        "retained_points": [{"supply_v": s, "temperature_c": t}
+                            for s, t in supplement_grid(section)],
+        "pairing": "the retained corner list is a prefix of the parent campaign's "
+                   "grid, so every retained point keeps its parent corner_index and "
+                   "sample k is the parent's mismatch draw; verified against the "
+                   "parent envelopes in supplement-report",
+    }
+
+
+def compose_supplement_request(cond: Condition, body_name: str, section: str,
+                               backend: str = "batch") -> dict:
+    """The parent's per-process request with the max step tightened and the
+    post-target grid excluded; nothing else changes."""
+    req = compose_cm_request(cond, body_name, section, backend)
+    req["analysis"] = dict(req["analysis"], args=SUPPLEMENT_ANALYSIS_ARGS)
+    req["exclude"] = supplement_excludes(section)
+    supply, temp = _supplement_point(section)
+    req["_comment"] = [
+        f"sg13g2-comparator -- klt sim request, CM-band max-step supplement, condition "
+        f"`{cond.name}` point `{section}` (issue #{SUPPLEMENT_ISSUE}).",
+        "GENERATED by `python3 sim/run_offset_cm_band.py supplement-build`; the "
+        "committed copy is byte-for-byte what was submitted.",
+        f"SUPPLEMENT to campaign `{SUPPLEMENT_PARENT}` (issue #79): re-runs that "
+        f"campaign's rejected `{section}` population under one documented tighter "
+        "max step, at all three conditions. Reported beside the parent's results "
+        "and never merged into its populations.",
+        f"Analysis args `{SUPPLEMENT_ANALYSIS_ARGS}` differ from the parent's "
+        "`100p 990n` by the max step only; measurements, limits, monte_carlo, "
+        "timeout and artifact retention are the parent's, unchanged.",
+        "`exclude` drops only grid points AFTER the target in the request's "
+        "odometer corner order, so every retained point keeps its parent-campaign "
+        "corner_index and sample k keeps the parent's mismatch draw (klt's seed "
+        "contract derives the seed from (base seed, corner_index, sample_index)).",
+        "Measurements, limits, analysis kind and monte_carlo are the issue #62 "
+        "offset_mc bench's, unchanged.",
+    ]
+    req["_supplement"] = supplement_metadata(section)
+    return req
+
+
+def plan_supplement_inputs(cond: Condition, out_dir: Path, *,
+                           osdi_dir: str = build_mod.BATCH_OSDI_DIR,
+                           backend: str = "batch") -> list[tuple[Path, bytes]]:
+    """Every (destination, bytes) pair of the condition's supplementary
+    campaign inputs, body first -- for ``commit_inputs``' append-only write."""
+    planned: list[tuple[Path, bytes]] = [(
+        out_dir / BODY_NAME,
+        compose_cm_body(cond, osdi_dir).encode("utf-8"))]
+    for section in supplement_sections():
+        req = compose_supplement_request(cond, BODY_NAME, section, backend)
+        planned.append((out_dir / f"{BENCH_NAME}.{section}.request.json",
+                        (json.dumps(req, indent=2) + "\n").encode("utf-8")))
+    return planned
+
+
+def write_supplement_inputs(cond: Condition, out_dir: Path, *,
+                            osdi_dir: str = build_mod.BATCH_OSDI_DIR,
+                            backend: str = "batch") -> tuple[list[Path], set[Path]]:
+    """Write the condition's supplementary inputs append-only: a conflicting
+    rebuild is refused before anything is touched (``commit_inputs``)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    planned = plan_supplement_inputs(cond, out_dir, osdi_dir=osdi_dir, backend=backend)
+    created = build_mod.commit_inputs(planned)
+    return [path for path, _ in planned], created
 
 
 # --------------------------------------------------------------------------- #
@@ -898,6 +1046,224 @@ def _controls(controls_dir: Path, loaded: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# issue #89 supplement report
+# --------------------------------------------------------------------------- #
+
+
+def _grid_key(section: str, supply: float, temp: float) -> tuple:
+    return (grade_mod._process_name(section), round(float(supply), 6), float(temp))
+
+
+def _envelope_bytes(path: Path) -> bytes:
+    """The envelope's bytes, from ``path`` or its byte-exact ``gzip -9n`` copy
+    ``path.gz`` (how a no-data failed attempt's bulky envelopes are committed;
+    the hash of these bytes still matches the invocation's envelope_sha256)."""
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        gz = path.with_name(path.name + ".gz")
+        if not gz.is_file():
+            raise
+        return gzip.decompress(gz.read_bytes())
+
+
+def _supplement_envelope(path: Path) -> tuple[dict | None, str | None]:
+    """Load one supplementary envelope; (None, reason) when missing/malformed."""
+    try:
+        raw = _envelope_bytes(path)
+    except FileNotFoundError:
+        return None, "envelope not found (part not run)"
+    except (OSError, EOFError) as exc:
+        return None, f"unreadable: {exc}"
+    try:
+        return json.loads(raw), None
+    except json.JSONDecodeError as exc:
+        return None, f"malformed JSON: {exc}"
+
+
+def _pair_check(sup: list[dict] | None, par: list[dict] | None) -> dict:
+    """Seed-pairing of a supplementary population against the parent's
+    samples at the same grid point (structural, from the envelopes)."""
+    if not sup or not par:
+        return {"n_compared": 0, "seed_mismatches": None, "seeds_paired": None}
+    b = {s["sample_index"]: s for s in par}
+    n = mism = 0
+    for s in sup:
+        t = b.get(s["sample_index"])
+        if t is None:
+            continue
+        n += 1
+        if s["seed"] != t["seed"]:
+            mism += 1
+    return {"n_compared": n, "seed_mismatches": mism, "seeds_paired": n > 0 and mism == 0}
+
+
+def _sensitivity(sup: list[dict] | None, par: list[dict] | None) -> dict:
+    """Paired max-step sensitivity of one population: per-draw vos deltas of
+    the tighter-step re-run against the parent's same-draw values."""
+    out = {"n_pairs": 0, "n_both_valid": 0, "n_identical": 0, "delta_mean_mv": None,
+           "delta_sd_mv": None, "max_abs_delta_mv": None}
+    if not sup or not par:
+        return out
+    b = {s["sample_index"]: s for s in par}
+    deltas = []
+    for s in sup:
+        t = b.get(s["sample_index"])
+        if t is None or s["vos_mv"] is None or t["vos_mv"] is None \
+                or s["problem"] or t["problem"]:
+            continue
+        out["n_pairs"] += 1
+        deltas.append(s["vos_mv"] - t["vos_mv"])
+    out["n_both_valid"] = len(deltas)
+    out["n_identical"] = sum(1 for d in deltas if d == 0.0)
+    if deltas:
+        dm = sum(deltas) / len(deltas)
+        out["delta_mean_mv"] = dm
+        out["delta_sd_mv"] = (math.sqrt(sum((d - dm) ** 2 for d in deltas) / (len(deltas) - 1))
+                              if len(deltas) > 1 else 0.0)
+        out["max_abs_delta_mv"] = max(abs(d) for d in deltas)
+    return out
+
+
+def compare_supplement(series_dir: Path, *,
+                       parent_campaign: str = SUPPLEMENT_PARENT) -> dict:
+    """The focused issue #89 report: six target populations (two PVT points
+    x three conditions) under the tighter max step, each checked against its
+    parent-campaign seeds, plus the same-draw max-step sensitivity of every
+    retained population. Supplementary results only -- never merged into the
+    parent's populations."""
+    parent_dir = SERIES_DIR / parent_campaign
+    missing: list[str] = []
+    sources: dict[str, dict] = {}
+    populations: list[dict] = []
+    sensitivity: list[dict] = []
+    for cond in CONDITIONS:
+        loaded: dict[tuple, list[dict]] = {}
+        parent_loaded: dict[tuple, list[dict]] = {}
+        for section in supplement_sections():
+            tag = f"{BENCH_NAME}.{section}"
+            sup_path = series_dir / cond.name / f"{tag}.envelope.json"
+            env, problem = _supplement_envelope(sup_path)
+            if env is not None:
+                sha = hashlib.sha256(_envelope_bytes(sup_path)).hexdigest()
+                sources[f"{cond.name}/{tag}"] = {
+                    "status": env.get("status"),
+                    "job_id": ((env.get("environment") or {}).get("remote") or {}).get("job_id"),
+                    "klt_version": (env.get("provenance") or {}).get("klt_version"),
+                    "envelope_sha256": sha,
+                }
+                loaded.update(load_points([env], vcm_v=cond.vcm_v()))
+            else:
+                missing.append(f"{cond.name}/{tag}: {problem}")
+            par_path = parent_dir / cond.name / f"{tag}.envelope.json"
+            par_env, par_problem = _supplement_envelope(par_path)
+            if par_env is not None:
+                parent_loaded.update(load_points([par_env], vcm_v=cond.vcm_v()))
+            else:
+                missing.append(f"parent {cond.name}/{tag}: {par_problem}")
+
+            supply, temp = _supplement_point(section)
+            key = _grid_key(section, supply, temp)
+            sup_s, par_s = loaded.get(key), parent_loaded.get(key)
+            st = point_stats(sup_s) if sup_s else {
+                "n": 0, "clipped": 0, "untrusted": 0, "three_sigma_mv": None,
+                "rejected": "grid point not in any envelope"}
+            populations.append({
+                "condition": cond.name, "section": section, "point": _label(key),
+                "target": True, "stats": st,
+                # draws that produced a trusted, in-window vos (not the
+                # requested count): 0 for a batch job that never ran
+                "n_valid": sum(1 for d in (sup_s or []) if d["vos_mv"] is not None
+                               and not d["problem"] and not d["clipped"]),
+                "parent_status": (point_stats(par_s)["rejected"] if par_s else
+                                  "parent population not loadable"),
+                "pairing_vs_parent": _pair_check(sup_s, par_s),
+                "draws": sup_s or [],
+            })
+            for s, t in supplement_grid(section):
+                k = _grid_key(section, s, t)
+                sup_g, par_g = loaded.get(k), parent_loaded.get(k)
+                if not sup_g or not par_g:
+                    continue
+                st_s, st_p = point_stats(sup_g), point_stats(par_g)
+                sensitivity.append({
+                    "condition": cond.name, "point": _label(k),
+                    "target": (s, t) == (supply, temp),
+                    "sensitivity": _sensitivity(sup_g, par_g),
+                    "supp_3sigma_mv": st_s.get("three_sigma_mv"),
+                    "parent_3sigma_mv": st_p.get("three_sigma_mv"),
+                    "supp_rejected": st_s.get("rejected"),
+                    "parent_rejected": st_p.get("rejected"),
+                    "pairing_vs_parent": _pair_check(sup_g, par_g),
+                })
+
+    targets = [p for p in populations if p["target"]]
+    incomplete = [{"population": f"{p['condition']} `{p['point']}`",
+                   "reason": p["stats"].get("rejected")} for p in targets
+                  if p["stats"].get("rejected")]
+    unpaired = [s for s in sensitivity if s["pairing_vs_parent"]["seeds_paired"] is not True]
+    paired_sens = [s for s in sensitivity if s["pairing_vs_parent"]["seeds_paired"]]
+    max_delta = max((s["sensitivity"]["max_abs_delta_mv"] for s in paired_sens
+                     if s["sensitivity"]["max_abs_delta_mv"] is not None), default=None)
+    n_identical = sum(s["sensitivity"]["n_identical"] for s in paired_sens)
+    n_valid = sum(s["sensitivity"]["n_both_valid"] for s in paired_sens)
+    if missing:
+        cause = ("the report is incomplete (missing/malformed envelopes above), so "
+                 "no cause conclusion is drawn")
+    elif incomplete and all("batch_job_failed" in str(i["reason"]) for i in incomplete):
+        cause = ("the batch jobs themselves failed before any simulation result was "
+                 "produced (batch_job_failed; see the envelopes' environment.remote), so "
+                 "this run says nothing about the max step, a bench artifact, or a "
+                 "convergence weakness; the question remains open until a successful "
+                 "re-submission")
+    elif incomplete:
+        cause = ("the tighter max step did not clear every draw at the two target "
+                 "points (see the failures reported as-is above); whether the aborts "
+                 "reflect a bench artifact or a low-CM/cold convergence weakness of "
+                 "the circuit is not distinguished by this evidence and remains open")
+    else:
+        step_word = ("bit-identically everywhere" if n_identical == n_valid and n_valid
+                     else "see the per-point deltas above")
+        max_word = f"{max_delta:.6g}" if max_delta is not None else "n/a"
+        cause = ("the tighter max step alone resolves both aborts, and re-running "
+                 f"{n_valid} parent draws at the retained points moves vos by at most "
+                 f"{max_word} mV ({step_word}); "
+                 "that is consistent with the aborts being a numerical time-step "
+                 "artifact of the parent's `tran 100p 990n` setting at these points, "
+                 "but the data does not distinguish a bench artifact from a genuine "
+                 "low-common-mode/cold convergence weakness, so the cause remains open")
+    return {
+        "issue": SUPPLEMENT_ISSUE,
+        "series": series_dir.name,
+        "parent": parent_campaign,
+        "scope": ("SUPPLEMENTARY CHARACTERIZATION (issue #89): a separately labelled "
+                  "re-run of the parent campaign's two rejected vcm-m050 populations "
+                  "under one documented tighter max step, at all three conditions. "
+                  "Reported beside the parent's results and never merged into its "
+                  "populations; no spec verdict."),
+        "basis": {"n_per_point": OFFSET_MC_N, "seed": OFFSET_MC.monte_carlo["seed"],
+                  "max_step": SUPPLEMENT_MAX_STEP, "analysis_args": SUPPLEMENT_ANALYSIS_ARGS,
+                  "statistic": "3*sqrt(pop_var - step^2/12)", "step_mv": STEP_MV},
+        "missing_envelopes": missing,
+        "sources": sources,
+        "populations": populations,
+        "sensitivity": sensitivity,
+        "conclusion": {
+            "targets_expected": len(SUPPLEMENT_POINTS) * len(CONDITIONS),
+            "targets_complete": [
+                {"population": f"{p['condition']} `{p['point']}`",
+                 "valid": not p["stats"].get("rejected"), "n": p["stats"]["n"],
+                 "rejected": p["stats"].get("rejected")} for p in targets],
+            "incomplete": incomplete,
+            "pairing_all_matched": not unpaired,
+            "pairs_compared": n_valid, "pairs_identical": n_identical,
+            "max_abs_delta_mv": max_delta,
+            "cause": cause,
+        },
+    }
+
+
+# --------------------------------------------------------------------------- #
 # rendering
 # --------------------------------------------------------------------------- #
 
@@ -1059,4 +1425,96 @@ def render_markdown(result: dict) -> str:
         for e in result["conditions"][c]["envelopes"]:
             out.append(f"- `{c}/{e['tag']}`: status `{e['status']}`, job `{e['job_id']}`, "
                        f"klt {e['klt_version']}, sha256 `{e['envelope_sha256'][:16]}…`")
+    return "\n".join(out) + "\n"
+
+
+def render_supplement_markdown(result: dict) -> str:
+    b = result["basis"]
+    out = [
+        f"# CM-band offset max-step supplement — series `{result['series']}`",
+        "",
+        "GENERATED by `python3 sim/run_offset_cm_band.py supplement-report` from the",
+        "committed envelopes; do not edit.",
+        "",
+        "## Scope",
+        "",
+        f"**Supplementary characterization (issue #{result['issue']}).** {result['scope']}",
+        f"Parent campaign: `{result['parent']}` (issue #79).",
+        "",
+        "## Basis",
+        "",
+        "- Same bench, same measurements, same limits, same monte_carlo basis as the",
+        f"  parent: N = {b['n_per_point']} draws per PVT point, klt base seed {b['seed']},",
+        f"  statistic {b['statistic']} (step = {b['step_mv']:g} mV).",
+        f"- The one changed setting: `analysis.args = \"{b['analysis_args']}\"` — a max",
+        f"  step of {b['max_step']}, the coarsest value the parent campaign's committed",
+        "  abort probe verified (the aborting mc12 draw completes under it).",
+        "- Seed pairing: each request excludes only the grid points AFTER its target",
+        "  in the request's odometer corner order, so every retained point keeps its",
+        "  parent-campaign corner_index and sample k is the parent's mismatch draw.",
+        "  Checked against the parent envelopes below (`request seeds = parent`). This is",
+        "  a structural, request-level check of the seeds klt assigned to each requested",
+        "  draw; it holds even for draws that produced no data and says nothing about",
+        "  whether a draw ran (see `N valid` and `pairs`).",
+        "- The retained points before each target are padding required by that seed",
+        "  contract; their populations are reported as additional max-step sensitivity",
+        "  evidence, never merged anywhere.",
+    ]
+    if result["missing_envelopes"]:
+        out += ["", "## Missing or malformed envelopes", ""]
+        out += [f"- `{m}`" for m in result["missing_envelopes"]]
+        out += ["", "The report is incomplete; conclusions below are drawn only from the",
+                "populations that loaded."]
+    out += ["", "## The six target populations", "",
+            "2 PVT points x 3 conditions, tighter max step, same draws as the parent:",
+            "",
+            "| condition | point | N valid / requested | 3σ (mV) | request seeds = parent (draws compared) | parent status |",
+            "|---|---|---|---|---|---|"]
+    for p in result["populations"]:
+        st = p["stats"]
+        pair = p["pairing_vs_parent"]
+        seeds = "—" if pair["seeds_paired"] is None else (
+            f"{'yes' if pair['seeds_paired'] else '**NO**'} ({pair['n_compared']})")
+        cell = "REJECTED: " + str(st["rejected"]) if st.get("rejected") \
+            else _f(st.get("three_sigma_mv"))
+        par = p["parent_status"] or "valid population (see sensitivity below)"
+        out.append(f"| `{p['condition']}` | `{p['point']}` | {p['n_valid']}/{b['n_per_point']} | "
+                   f"{cell} | {seeds} | {par} |")
+    out += ["", "## Max-step sensitivity vs the parent campaign", "",
+            "Every retained population re-paired draw for draw against its parent value",
+            "(same seed, same condition): does the step change alone move vos? Δmean is",
+            "the paired mean of (tighter-step vos − parent vos); identical counts",
+            "bit-equal pairs.", "",
+            "| condition | point | target | pairs | identical | Δmean ± sd (mV) | max abs Δ (mV) | 3σ supp vs parent (mV) | request seeds = parent |",
+            "|---|---|---|---|---|---|---|---|---|"]
+    for s in result["sensitivity"]:
+        d = s["sensitivity"]
+        pair = s["pairing_vs_parent"]
+        seeds = "—" if pair["seeds_paired"] is None else (
+            "yes" if pair["seeds_paired"] else "**NO**")
+        delta = (f"{d['delta_mean_mv']:+.4f} ± {d['delta_sd_mv']:.4f}"
+                 if d["delta_mean_mv"] is not None else "—")
+        maxd = _f(d["max_abs_delta_mv"], 6)
+        sig = (f"{_f(s['supp_3sigma_mv'])} vs {_f(s['parent_3sigma_mv'])}"
+               if s["supp_3sigma_mv"] is not None or s["parent_3sigma_mv"] is not None
+               else "—")
+        out.append(f"| `{s['condition']}` | `{s['point']}` | {'**yes**' if s['target'] else 'padding'} | "
+                   f"{d['n_both_valid']} | {d['n_identical']} | {delta} | {maxd} | {sig} | {seeds} |")
+    c = result["conclusion"]
+    out += ["", "## Conclusion", "",
+            f"- Targets complete: {sum(1 for t in c['targets_complete'] if t['valid'])}"
+            f"/{c['targets_expected']} populations valid at N = {b['n_per_point']}."
+            + ("" if not c["incomplete"] else " Failures, reported as-is: "
+               + "; ".join(f"{i['population']}: {i['reason']}" for i in c["incomplete"]) + "."),
+            f"- Seed assignment (structural, request-level): every compared population's"
+            f" requested draw seeds match the parent's"
+            f" ({'yes' if c['pairing_all_matched'] else '**NO**'}).",
+            f"- Sensitivity: {c['pairs_identical']}/{c['pairs_compared']} re-run draws are"
+            f" bit-identical to the parent's; max |Δvos| = {_f(c['max_abs_delta_mv'], 6)} mV.",
+            f"- Cause: {c['cause']}.",
+            "",
+            "## Envelopes", ""]
+    for tag, e in sorted(result["sources"].items()):
+        out.append(f"- `{tag}`: status `{e['status']}`, job `{e['job_id']}`, "
+                   f"klt {e['klt_version']}, sha256 `{e['envelope_sha256'][:16]}…`")
     return "\n".join(out) + "\n"

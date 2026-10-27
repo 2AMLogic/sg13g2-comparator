@@ -2,6 +2,22 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-26
+
+- **PR #199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
+- **Issue #191** (closed): PEX diagnostic: separate extracted device geometry from routing RC delay
+
+### 2026-10-25
+
+- **PR #265**: Validate timestep smoke evidence before computing noise convergence (#263)
+- **Issue #263** (closed): Validate timestep smoke evidence before computing noise convergence
+- **Issue #325** (closed): Remove scripts/diagnostics: completed #188 guard handoff package, unwired
+
+### 2026-10-24
+
+- **PR #324**: Retire per-PR evidence-size exceptions; count evidence bytes only
+- **Issue #323** (closed): Squash the 27 evidence-size exception records into one superseding record; replace the cap with the artifact store
+
 ### 2026-10-23
 
 - **PR #321**: Evidence manifests: artifact:<key> URIs, drop the bucket setting (klt 7e3561f+)

@@ -154,6 +154,18 @@ the existing deck's comments warn about for timestep-sensitive TRNOISE.
 | 10 ps | 1.116 | 0.102 | -1.2 SE |
 | 5 ps | 1.414 | 0.154 | +0.4 SE |
 
+Issue #263: `noise_full.timestep_convergence()` validates every rung before
+computing a statistic (saved request/invocation/envelope hashes, nominal
+corner, `tn_full_both` body and DUT, a well-formed `sha256:<64 hex>`
+`provenance.deck.content_hash` so the model deck is proven, explicit sample
+identities, no errored or untrusted samples, finite 0/1 hits, distinct
+raw-noise draws, N as declared by the request). A rejected rung keeps its
+diagnostics but has no sigma, SE or comparison; a comparison against the
+20 ps rung is made only when nothing but the solver step / max step differs
+between the two rungs, and absent smoke evidence is reported as unavailable.
+Re-running the validator on this campaign reproduces the table above; the
+historical report is not regenerated.
+
 No monotonic trend and no move beyond 1.2 standard errors. This is a
 convergence check at the stated precision (about 10 %), not a proof of
 convergence below it: a drift of less than about 10 % per halving of the step
