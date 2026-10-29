@@ -191,6 +191,23 @@ def extract_geometry(body_text: str) -> dict:
     return {}
 
 
+PARAM_MARKER = "*   OVERRIDE (issue #80 sweep; sim/dut.json untouched):"
+
+
+def extract_param_overrides(body_text: str) -> dict:
+    """The ``sim/dut.json`` param overrides a body declares (``{}`` when none),
+    as ``{"dut_ib": "1.5e-05"}`` (values kept verbatim)."""
+    for line in body_text.split("\n"):
+        if line.startswith(PARAM_MARKER):
+            out = {}
+            for item in line[len(PARAM_MARKER):].split(","):
+                key, sep, value = item.strip().partition("=")
+                if sep:
+                    out[key] = value.strip("'\"")
+            return out
+    return {}
+
+
 def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
                  param_overrides: dict | None = None,
                  geometry_overrides: dict | None = None) -> str:
