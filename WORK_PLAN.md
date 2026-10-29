@@ -30,7 +30,7 @@ _None._
 Issues currently being built (`loom:building`).
 
 - **#160**: Draft decision record: input common-mode range row for the ratified spec
-- **#308**: Remove dead _spec_meas left behind by closed #295
+- **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise)
 
 ## PRs Awaiting Review
 
