@@ -275,6 +275,10 @@ request completed with 12/12 measurements: `reports/batch-probe.regeneration.nom
 The full PVT `klt pex` submit had not completed when the client wait cap expired; no PVT, Monte
 Carlo or item-7 citation result exists yet, and item 7 is unchanged.
 
+The 45-unit extracted job `klt-sim-c4adab23fc10` never reported past `elapsed_seconds: 14` (status frozen at
+03:23:27Z) and `--attach` returned nothing within 280 s: `reports/batch-pvt-attach.regeneration.20261030-c.md`.
+Still no PVT result; `klt pex` cannot shard a grid.
+
 ## Upstream (`2AMLogic/klayout-tools`) friction
 
 Already filed, and hit here: #2570 (no ihp-sg13g2 batch AMI), #2851 and #2948
