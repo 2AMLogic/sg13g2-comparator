@@ -269,7 +269,7 @@ On a host whose ngspice loads OSDI v0.4 the same command yields real
 ## Update 2026-10-30: batch probe passes; PVT/MC grids still open (issue #61)
 
 `make_requests.py` now emits the supply as a `corners.params` axis (current klt rejects
-`vdd_val` under `supply_v`) with `options.stage_model_inputs: true` and `timeout_s` 3480, and the
+`vdd_val` under `supply_v`) with `options.stage_model_inputs: true` and `timeout_s` 600 (was 3480; see `reports/batch-pvt-sizing.regeneration.20261030-b.md`), and the
 four `requests/*.json` were regenerated. A one-corner batch probe of the regenerated nominal
 request completed with 12/12 measurements: `reports/batch-probe.regeneration.nominal.20261030.md`.
 The full PVT `klt pex` submit had not completed when the client wait cap expired; no PVT, Monte

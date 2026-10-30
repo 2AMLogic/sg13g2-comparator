@@ -8,7 +8,7 @@ Measurement cards are the original `meas tran` analyses, verbatim; the derived
 `measure` expressions (tau, kick_*_mv, ...) are recomputed from the reported raw
 values in the delta table, because klt pex diffs reported measurement names.
 The supply is a `corners.params` axis (`vdd_val` is a `.param`, not a source, so
-current klt rejects it under `supply_v`); `timeout_s` fits the fleet's job ceiling.
+current klt rejects it under `supply_v`); `timeout_s` (600, ~3x the measured 173 s/unit) lets the client split the grid under the fleet's 3600 s whole-job ceiling.
 
     python3 sim/comparator-pex/make_requests.py [--check]
 
@@ -54,7 +54,7 @@ def request(name: str, grid: bool) -> dict:
         "corners": corners,
         "analysis": {"kind": "tran", "args": tran},
         "measurements": meas,
-        "options": {"osdi_preload": OSDI, "timeout_s": 3480, "keep_artifacts": False,
+        "options": {"osdi_preload": OSDI, "timeout_s": 600, "keep_artifacts": False,
                     "stage_model_inputs": True},
     }
 
