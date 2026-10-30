@@ -31,7 +31,6 @@ import json
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -157,17 +156,7 @@ def replay(series: str, arm: str, upto: int | None = None):
     return searches, done
 
 
-def submit(request_path: Path, rdir: Path, tag: str, args, extra: dict) -> int:
-    code = 1
-    for attempt in range(1, args.retry_refused + 2):
-        code = kcli._submit(request_path, rdir, tag, args, extra=extra)
-        if code == 0 or not kcli._last_attempt_refused_at_cap(rdir):
-            break
-        if attempt <= args.retry_refused:
-            print(f"{tag}: fleet at its instance cap; retry {attempt}/{args.retry_refused} "
-                  f"in {args.retry_wait}s", file=sys.stderr)
-            time.sleep(args.retry_wait)
-    return code
+submit = kcli._submit_with_retry
 
 
 def run_round(series: str, arms: list[str], k: int, args) -> int:
