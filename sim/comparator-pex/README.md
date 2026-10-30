@@ -279,6 +279,10 @@ The 45-unit extracted job `klt-sim-c4adab23fc10` never reported past `elapsed_se
 03:23:27Z) and `--attach` returned nothing within 280 s: `reports/batch-pvt-attach.regeneration.20261030-c.md`.
 Still no PVT result; `klt pex` cannot shard a grid.
 
+That job later finished `failed` (exit 4): 5 of 45 units passed (all `sf/novdd`, about 424 s each) and 40 were
+killed at the 600 s `timeout_s`, so 600 s is too tight for the extracted netlist (sized from a 173 s schematic
+sample). No delta table or item-7 verdict: `reports/batch-pvt-outcome.regeneration.20261030-d.md`.
+
 ## Upstream (`2AMLogic/klayout-tools`) friction
 
 Already filed, and hit here: #2570 (no ihp-sg13g2 batch AMI), #2851 and #2948
