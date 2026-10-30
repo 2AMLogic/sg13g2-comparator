@@ -29,7 +29,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -58,19 +57,6 @@ def cmd_build(args) -> int:
         for p in paths:
             print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
     return 0
-
-
-def _submit_with_retry(request: Path, out_dir: Path, tag: str, args, extra: dict) -> int:
-    code = 1
-    for attempt in range(1, args.retry_refused + 2):
-        code = kcli._submit(request, out_dir, tag, args, extra=extra)
-        if code == 0 or not kcli._last_attempt_refused_at_cap(out_dir):
-            break
-        if attempt <= args.retry_refused:
-            print(f"{tag}: fleet at its instance cap; retry {attempt}/{args.retry_refused} "
-                  f"in {args.retry_wait}s", file=sys.stderr)
-            time.sleep(args.retry_wait)
-    return code
 
 
 def _graded_attempts(out_dir: Path, tag: str) -> int:
@@ -102,7 +88,7 @@ def cmd_run(args) -> int:
         print(f"{kb.TAG}: attempts.jsonl already records a graded run but no envelope was "
               "saved; refusing to resubmit (investigate; do not overwrite evidence)", file=sys.stderr)
         return 1
-    return _submit_with_retry(request, out_dir, kb.TAG, args, _extra(cond))
+    return kcli._submit_with_retry(request, out_dir, kb.TAG, args, _extra(cond))
 
 
 def cmd_smoke(args) -> int:
