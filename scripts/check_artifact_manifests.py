@@ -47,15 +47,18 @@ Stdlib only; ``check`` needs ``git`` on PATH.
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import http.client
 import json
 import os
 import posixpath
 import re
-import subprocess
 import sys
 from urllib.parse import urlsplit
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from git_plumbing import git as _git, resolve_tree  # noqa: E402
 
 MANIFEST_DIR = "manifests/artifacts/"
 MANIFEST_RE = re.compile(r"^manifests/artifacts/[A-Za-z0-9][A-Za-z0-9._-]*\.manifest\.json$")
@@ -187,17 +190,7 @@ def manifest_problems(manifest) -> list[str]:
 # --------------------------------------------------------------------------
 
 
-def git(repo: str, *args: str) -> bytes:
-    try:
-        p = subprocess.run(["git", "-C", repo, *args], stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE, check=False,
-                           env={**os.environ, "GIT_NO_LAZY_FETCH": "1"})
-    except OSError as exc:
-        raise ToolError(f"cannot run git: {exc}") from exc
-    if p.returncode != 0:
-        raise ToolError(f"git {' '.join(args)} failed: "
-                        f"{p.stderr.decode('utf-8', 'replace').strip()}")
-    return p.stdout
+git = functools.partial(_git, error=ToolError)
 
 
 def tracked_paths(repo: str, tree: str) -> dict[str, tuple[str, str]]:
@@ -213,12 +206,7 @@ def tracked_paths(repo: str, tree: str) -> dict[str, tuple[str, str]]:
 
 
 def check(repo: str, rev: str) -> int:
-    if rev.startswith("-"):
-        raise ToolError(f"invalid revision {rev!r}")
-    tree = git(repo, "rev-parse", "--verify", "--quiet", "--end-of-options",
-               f"{rev}^{{tree}}").decode().strip()
-    if not tree:
-        raise ToolError(f"revision {rev!r} is unavailable")
+    tree = resolve_tree(repo, rev, ToolError)
     paths = tracked_paths(repo, tree)
     errors: list[str] = []
     manifests = 0
