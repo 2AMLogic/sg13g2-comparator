@@ -283,6 +283,10 @@ That job later finished `failed` (exit 4): 5 of 45 units passed (all `sf/novdd`,
 killed at the 600 s `timeout_s`, so 600 s is too tight for the extracted netlist (sized from a 173 s schematic
 sample). No delta table or item-7 verdict: `reports/batch-pvt-outcome.regeneration.20261030-d.md`.
 
+A 3-unit extracted-side batch sample (tt / 27 C) finished in 230 s but errored on all 3 units: `td_c` reported "out of
+interval" on the extracted netlist while the schematic side passed: `reports/batch-extracted-sample.regeneration.20261030-e.md`.
+That is a post-layout finding to diagnose before the full grid is re-run; item 7 is unchanged.
+
 ## Upstream (`2AMLogic/klayout-tools`) friction
 
 Already filed, and hit here: #2570 (no ihp-sg13g2 batch AMI), #2851 and #2948
