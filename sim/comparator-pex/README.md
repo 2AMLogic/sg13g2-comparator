@@ -266,6 +266,15 @@ klt pex layout/comparator/comparator.gds \
 On a host whose ngspice loads OSDI v0.4 the same command yields real
 `delta[]` rows. On this host it reproduces the `error` envelope above.
 
+## Update 2026-10-30: batch probe passes; PVT/MC grids still open (issue #61)
+
+`make_requests.py` now emits the supply as a `corners.params` axis (current klt rejects
+`vdd_val` under `supply_v`) with `options.stage_model_inputs: true` and `timeout_s` 3480, and the
+four `requests/*.json` were regenerated. A one-corner batch probe of the regenerated nominal
+request completed with 12/12 measurements: `reports/batch-probe.regeneration.nominal.20261030.md`.
+The full PVT `klt pex` submit had not completed when the client wait cap expired; no PVT, Monte
+Carlo or item-7 citation result exists yet, and item 7 is unchanged.
+
 ## Upstream (`2AMLogic/klayout-tools`) friction
 
 Already filed, and hit here: #2570 (no ihp-sg13g2 batch AMI), #2851 and #2948

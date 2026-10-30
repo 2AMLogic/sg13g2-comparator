@@ -7,6 +7,8 @@ requests/<row>.pvt.json      the 45-point PVT grid of the schematic benches
 Measurement cards are the original `meas tran` analyses, verbatim; the derived
 `measure` expressions (tau, kick_*_mv, ...) are recomputed from the reported raw
 values in the delta table, because klt pex diffs reported measurement names.
+The supply is a `corners.params` axis (`vdd_val` is a `.param`, not a source, so
+current klt rejects it under `supply_v`); `timeout_s` fits the fleet's job ceiling.
 
     python3 sim/comparator-pex/make_requests.py [--check]
 
@@ -38,12 +40,12 @@ def request(name: str, grid: bool) -> dict:
     if grid:
         corners = {
             "process": [{"name": s, "sections": [f"mos_{s}"]} for s in SECTIONS],
-            "supply_v": {"vdd_val": [round(1.2 * (1 + k), 6) for k in (-0.1, 0.0, 0.1)]},
+            "params": {"vdd_val": [round(1.2 * (1 + k), 6) for k in (-0.1, 0.0, 0.1)]},
             "temperature_c": [-40, 27, 125],
         }
     else:
         corners = {"process": [{"name": "tt", "sections": ["mos_tt"]}],
-                   "supply_v": {"vdd_val": [1.2]}, "temperature_c": [27]}
+                   "params": {"vdd_val": [1.2]}, "temperature_c": [27]}
     return {
         "engine": "ngspice",
         "netlist": f"../dut/tb_{name}.sp",
@@ -52,7 +54,8 @@ def request(name: str, grid: bool) -> dict:
         "corners": corners,
         "analysis": {"kind": "tran", "args": tran},
         "measurements": meas,
-        "options": {"osdi_preload": OSDI, "timeout_s": 3600, "keep_artifacts": False},
+        "options": {"osdi_preload": OSDI, "timeout_s": 3480, "keep_artifacts": False,
+                    "stage_model_inputs": True},
     }
 
 
