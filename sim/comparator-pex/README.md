@@ -336,3 +336,10 @@ The remaining 43 offset points and the noise grid are still not run; item 7 stay
 too small` (envelope `status: error`, kept as a finding). Extracted static threshold about -1.3 mV (schematic about
 -0.1 mV; nominal point about -0.7 mV); sigmas not distinguishable at this N. One-point result, no DR-0002 verdict; the
 remaining noise and offset grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (latest): offset Monte Carlo at ff / -40 C / 1.32 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-ff-40c-n60.20261031.md`: 57 of 60 samples compared; one 3-sample shard never started on the
+fleet (`batch_poll_timeout`, envelope `status: error`, kept as a finding). Sigma of `vos_mv` is 2.86 mV schematic and
+3.34 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002 verdict). The
+remaining 42 offset points and the noise grid are still not run; item 7 stays `unmet`.
