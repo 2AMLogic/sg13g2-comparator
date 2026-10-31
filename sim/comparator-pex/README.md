@@ -343,3 +343,10 @@ remaining noise and offset grid points are not run; item 7 stays `unmet`.
 fleet (`batch_poll_timeout`, envelope `status: error`, kept as a finding). Sigma of `vos_mv` is 2.86 mV schematic and
 3.34 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002 verdict). The
 remaining 42 offset points and the noise grid are still not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (final): transient-noise Monte Carlo at ff / -40 C / 1.32 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-ff-40c-n80.20261031.md`: 80 of 80 trials compared, envelope `status: pass`. Extracted static
+threshold about -0.5 mV (schematic about -0.1 mV); sigmas not distinguishable at this N. The noise Monte Carlo now has
+the same three PVT points (tt, ss, ff) as the offset Monte Carlo. One-point results, no DR-0002 verdict; the remaining
+grid points are not run; item 7 stays `unmet`.
