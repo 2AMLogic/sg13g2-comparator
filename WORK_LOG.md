@@ -2,6 +2,21 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-30
+
+- **PR #353**: refactor(sim): reuse kcli._submit_with_retry in kickback and memory runners
+- **PR #352**: sim(pex): record 3-unit extracted batch sample with td_c post-layout error
+- **PR #350**: sim(pex): record failed 45-unit extracted regeneration batch job
+- **PR #349**: refactor(scripts): share git()/resolve_tree() across evidence checkers
+- **PR #348**: refactor(sim): share CM-band source-line rewrite across bench modules
+- **PR #347**: sim(pex): record stalled 45-unit extracted regeneration batch job
+- **PR #345**: sim(pex): size regeneration request timeout from measured unit runtime
+- **PR #343**: docs(sim): record failed full regeneration PVT batch job and refused split
+- **PR #342**: fix(sim): emit pex PVT supply as corners.params and record passing batch probe
+- **Issue #351** (closed): Dedupe _submit_with_retry: remove two copies of kcli._submit_with_retry
+- **Issue #346** (closed): Simplify: dedupe git()/resolve_tree() across three CI check scripts
+- **Issue #344** (closed): Consolidate duplicated CM-band apply_transform across cmband, cmdecision, kickback_cmband
+
 ### 2026-10-27
 
 - **PR #338**: build: pin klayout-tools to release 0.8.0 and accept release pins in the drift guard
