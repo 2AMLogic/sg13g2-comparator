@@ -357,3 +357,10 @@ grid points are not run; item 7 stays `unmet`.
 (`Broken pipe` at collect), so there is no comparison and no extracted sigma at the skew corner; the schematic side
 produced 57 of 60 values. Recorded as a failed run, not a result. Item 7 stays `unmet`; the skew-corner offset evidence
 is still missing.
+
+## Update 2026-10-31 (re-run): offset Monte Carlo at sf / 27 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-sf-27c-n60.20261031-b.md`: re-run of the earlier failed sf attempt, now complete (60 of 60
+samples compared, envelope `status: pass`). Sigma of `vos_mv` is 2.99 mV schematic and 3.41 mV extracted (single-point MC
+sigma, quantized at 3 mV; no difference established; no DR-0002 verdict). The remaining 41 offset points and `fs`, and the
+noise grid, are still not run; item 7 stays `unmet`.
