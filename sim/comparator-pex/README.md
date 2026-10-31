@@ -371,3 +371,11 @@ noise grid, are still not run; item 7 stays `unmet`.
 threshold about -0.5 mV (schematic about -0.25 mV); sigmas not distinguishable at this N. The noise Monte Carlo now has
 tt, ss, ff and sf points. One-point results, no DR-0002 verdict; the remaining grid points are not run; item 7 stays
 `unmet`.
+
+## Update 2026-10-31 (fs offset): offset Monte Carlo at fs / 27 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-fs-27c-n60.20261031.md`: 57 of 60 samples compared; one 3-sample extracted shard was lost when
+the client's `--attach` was interrupted by my own wait cap (envelope `status: error`, kept as a finding). Sigma of
+`vos_mv` is 3.02 mV schematic and 3.23 mV extracted (single-point MC sigma, quantized at 3 mV; no difference
+established; no DR-0002 verdict). The offset Monte Carlo now has tt, ss, ff, sf and fs points. The remaining grid
+points and `fs` noise are not run; item 7 stays `unmet`.
