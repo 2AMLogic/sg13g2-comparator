@@ -379,3 +379,11 @@ the client's `--attach` was interrupted by my own wait cap (envelope `status: er
 `vos_mv` is 3.02 mV schematic and 3.23 mV extracted (single-point MC sigma, quantized at 3 mV; no difference
 established; no DR-0002 verdict). The offset Monte Carlo now has tt, ss, ff, sf and fs points. The remaining grid
 points and `fs` noise are not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (fs noise): transient-noise Monte Carlo at fs / 27 C / 1.20 V, 77 of 80 trials (issue #61)
+
+`reports/batch-mc-noise-fs-27c-n80.20261031.md`: 77 of 80 trials compared; one 3-trial extracted shard was lost when the
+client's `--attach` was interrupted by my own wait cap (envelope `status: error`, kept as a finding). Extracted static
+threshold about -0.4 mV (schematic about -0.25 mV); sigmas not distinguishable at this N. The noise Monte Carlo now has
+tt, ss, ff, sf and fs points. One-point results, no DR-0002 verdict; the remaining grid points are not run; item 7 stays
+`unmet`.
