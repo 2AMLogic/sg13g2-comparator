@@ -29,6 +29,9 @@ REPO = Path(__file__).resolve().parents[3]
 PEX = "sim/comparator-pex"
 GENERATORS = ("make_reference.py", "make_testbenches.py", "make_requests.py")
 BENCHES = ("regeneration", "kickback")
+# Monte-Carlo rows (issue #61): bench directory -> (netlist fragment, dut/ stem)
+MC_BENCHES = {"offset-transient-mc": ("tb_offset_transient_mc.spice", "offset_mc"),
+              "transient-noise": ("tb_transient_noise.spice", "noise")}
 
 # Everything the generators read or check, relative to the repository root.
 SOURCES = [
@@ -36,11 +39,15 @@ SOURCES = [
     "sim/dut.json",
     *(f"sim/comparator-{b}/testbench/tb.json" for b in BENCHES),
     *(f"sim/comparator-{b}/testbench/tb_{b}.spice" for b in BENCHES),
+    *(f"sim/comparator-{b}/testbench/{n}" for b, (n, _) in MC_BENCHES.items()),
+    *(f"sim/comparator-{b}/testbench/tb.json" for b in MC_BENCHES),
 ]
 OUTPUTS = [
     f"{PEX}/dut/comparator.schematic.sp",
     *(f"{PEX}/dut/tb_{b}.sp" for b in BENCHES),
     *(f"{PEX}/requests/{b}.{v}.json" for b in BENCHES for v in ("nominal", "pvt")),
+    *(f"{PEX}/dut/tb_{st}.sp" for _, st in MC_BENCHES.values()),
+    *(f"{PEX}/requests/{st}.mc{v}.json" for _, st in MC_BENCHES.values() for v in ("", ".probe")),
 ]
 
 
@@ -126,6 +133,33 @@ class FreshnessTests(unittest.TestCase):
         self.assert_stale("make_requests.py",
                           f"{PEX}/requests/regeneration.nominal.json",
                           f"{PEX}/requests/regeneration.pvt.json")
+
+    def test_mc_requests_follow_the_schematic_bench(self):
+        tb = self.root / "sim/comparator-offset-transient-mc/testbench/tb.json"
+        data = json.loads(tb.read_text())
+        i = next(i for i, a in enumerate(data["analyses"]) if a.strip().startswith("tran "))
+        data["analyses"][i] += "0"
+        tb.write_text(json.dumps(data, indent=2) + "\n")
+        self.assert_stale("make_requests.py",
+                          f"{PEX}/requests/offset_mc.mc.json",
+                          f"{PEX}/requests/offset_mc.mc.probe.json")
+        res = self.run_gen("make_requests.py", "--check")
+        self.assertNotIn("noise.mc", res.stderr)
+
+    def test_offset_body_carries_every_level_read(self):
+        # The 33 `dlevK` reads feed the request's `lowcount`; without them it
+        # errors on both legs (the first 2026-10-31 probe).
+        body = (REPO / PEX / "dut/tb_offset_mc.sp").read_text()
+        req = json.loads((REPO / PEX / "requests/offset_mc.mc.json").read_text())
+        low = next(m for m in req["measurements"] if m["name"] == "lowcount")["spice"]
+        for k in range(33):
+            self.assertIn(f".meas tran dlev{k} ", body)
+            self.assertIn(f"dlev{k}", low)
+
+    def test_mc_request_declares_n_seed_and_mismatch(self):
+        for stem, n in (("offset_mc", 60), ("noise", 80)):
+            req = json.loads((REPO / PEX / f"requests/{stem}.mc.json").read_text())
+            self.assertEqual(req["monte_carlo"], {"n": n, "seed": 20260916, "vary": "mismatch"})
 
     def test_hand_edited_pvt_request_is_stale(self):
         self.edit(f"{PEX}/requests/regeneration.pvt.json", "125", "85")

@@ -182,8 +182,8 @@ submit would only repeat it 45 times. Offset sigma and noise additionally need
 |---|---|---|
 | Decision time vs overdrive / metastability | `comparator-regeneration` | not run (request: `requests/regeneration.{nominal,pvt}.json`) |
 | Kickback | `comparator-kickback` | not run (`requests/kickback.{nominal,pvt}.json`) |
-| Offset sigma (whole latch) | `comparator-offset-transient-mc` | not run, not expressed as a request (needs MC, batch) |
-| Input-referred noise (transient) | `comparator-transient-noise` | not run, not expressed as a request (needs MC, batch) |
+| Offset sigma (whole latch) | `comparator-offset-transient-mc` | request `requests/offset_mc.mc.json` (N=60/pt) and 3-sample probe: `reports/batch-mc-probe.20261031.md`; full grid not run |
+| Input-referred noise (transient) | `comparator-transient-noise` | request `requests/noise.mc.json` (N=80/pt) and 3-sample probe: same report; full grid not run |
 
 `comparator-offset-mc` and `comparator-preamp-noise` are not in scope: they
 instantiate `comparator_dut_analog`, the loop-broken sub-model, which has no
@@ -286,6 +286,12 @@ sample). No delta table or item-7 verdict: `reports/batch-pvt-outcome.regenerati
 A 3-unit extracted-side batch sample (tt / 27 C) finished in 230 s but errored on all 3 units: `td_c` reported "out of
 interval" on the extracted netlist while the schematic side passed: `reports/batch-extracted-sample.regeneration.20261030-e.md`.
 That is a post-layout finding to diagnose before the full grid is re-run; item 7 is unchanged.
+
+## Update 2026-10-31: whole-latch MC requests expressed and probed (issue #61)
+
+The offset and transient-noise Monte Carlo rows are now `klt sim` requests (`requests/{offset_mc,noise}.mc.json`,
+generated with their bodies `dut/tb_{offset_mc,noise}.sp`). A 3-sample extracted probe of each ran on the batch
+fleet end to end: `reports/batch-mc-probe.20261031.md`. The full grids, and so any sigma, are not run.
 
 ## Upstream (`2AMLogic/klayout-tools`) friction
 
