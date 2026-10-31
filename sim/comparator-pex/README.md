@@ -364,3 +364,10 @@ is still missing.
 samples compared, envelope `status: pass`). Sigma of `vos_mv` is 2.99 mV schematic and 3.41 mV extracted (single-point MC
 sigma, quantized at 3 mV; no difference established; no DR-0002 verdict). The remaining 41 offset points and `fs`, and the
 noise grid, are still not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (sf noise): transient-noise Monte Carlo at sf / 27 C / 1.20 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-sf-27c-n80.20261031.md`: 80 of 80 trials compared, envelope `status: pass`. Extracted static
+threshold about -0.5 mV (schematic about -0.25 mV); sigmas not distinguishable at this N. The noise Monte Carlo now has
+tt, ss, ff and sf points. One-point results, no DR-0002 verdict; the remaining grid points are not run; item 7 stays
+`unmet`.
