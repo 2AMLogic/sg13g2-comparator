@@ -387,3 +387,10 @@ client's `--attach` was interrupted by my own wait cap (envelope `status: error`
 threshold about -0.4 mV (schematic about -0.25 mV); sigmas not distinguishable at this N. The noise Monte Carlo now has
 tt, ss, ff, sf and fs points. One-point results, no DR-0002 verdict; the remaining grid points are not run; item 7 stays
 `unmet`.
+
+## Update 2026-10-31 (1.32 V offset): offset Monte Carlo at tt / 27 C / 1.32 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-132v-n60.20261031.md`: 60 of 60 samples compared, envelope `status: pass` (the point whose
+submit failed on the shared vCPU quota in the previous pass). Sigma of `vos_mv` is 2.93 mV schematic and 3.40 mV
+extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002 verdict). The remaining grid
+points are not run; item 7 stays `unmet`.
