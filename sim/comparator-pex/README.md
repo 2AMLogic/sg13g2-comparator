@@ -312,3 +312,9 @@ a single-corner local `klt pex`; a fleet runner image with klt >= 0.7 and
 in `manifests/sg13g2-comparator.json` and re-render
 `manifests/t1-signoff-report.json`. The committed report is `status: error`
 and must not be cited.
+
+## Update 2026-10-31: offset Monte Carlo at the nominal point, N = 60 (issue #61)
+
+`reports/batch-mc-offset-nominal-n60.20261031.md`: whole-latch offset, tt / 27 C / 1.20 V, seed 20260916, via sharded
+batch. Sigma of `vos_mv` is 3.03 mV schematic and 3.41 mV extracted (single-point MC sigma, quantized at 3 mV; no
+DR-0002 verdict). The 45-point offset grid and the noise Monte Carlo are still not run; item 7 stays `unmet`.
