@@ -50,13 +50,12 @@ import dataclasses
 import hashlib
 import json
 import re
-from dataclasses import dataclass
 from pathlib import Path
 
 from . import build as build_mod
 from . import cmband
 from . import grade as grade_mod
-from .benches import KICKBACK, Meas, PROCESSES, SUPPLIES_V, TEMPERATURES_C
+from .benches import KICKBACK, PROCESSES, SUPPLIES_V, TEMPERATURES_C
 
 EXPERIMENT_DIR = build_mod.SIM_DIR / "comparator-kickback-cm-band"
 SERIES_DIR = EXPERIMENT_DIR / "campaigns"
@@ -81,37 +80,18 @@ GATES = ("dout_1k_end", "dout_float_small_end", "dout_float_big_end")
 REPORTED = ("kick_sigdep_uv", "qkick_p_fc", "qkick_n_fc", "qkick_fc", "kick_1k_peak_mv",
             "kick_cm_uv")
 
-VCM_PROBE = Meas("vcm_meas", ".meas tran vcm_meas find v(cm) at=5n", "V", role="probe")
-VCM_TOL_V = 1e-6
+VCM_PROBE = cmband.VCM_PROBE
+VCM_TOL_V = cmband.VCM_TOL_V
 
 
 class KickbackCmBandError(RuntimeError):
     pass
 
 
-@dataclass(frozen=True)
-class Condition:
-    name: str
-    delta_v: float
-
-    def vcm_v(self) -> float:
-        base = float((build_mod.load_dut_binding().get("params") or {})["dut_vcm"])
-        return round(base + self.delta_v, 9)
-
-
-CONDITIONS = (
-    Condition("vcm-m050", -0.05),
-    Condition("vcm-nom", 0.0),
-    Condition("vcm-p050", 0.05),
-)
-NOMINAL = "vcm-nom"
-
-
-def condition(name: str) -> Condition:
-    for cond in CONDITIONS:
-        if cond.name == name:
-            return cond
-    raise KickbackCmBandError(f"unknown condition {name!r}; known: {[c.name for c in CONDITIONS]}")
+Condition = cmband.Condition
+CONDITIONS = cmband.CONDITIONS
+NOMINAL = cmband.NOMINAL
+condition = cmband.condition
 
 
 def expected_keys() -> list[tuple[str, float, float]]:
