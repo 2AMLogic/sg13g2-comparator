@@ -329,3 +329,10 @@ DR-0002 verdict). The 45-point offset grid and the noise Monte Carlo are still n
 `reports/batch-mc-offset-ss125-n60.20261031.md`: sigma of `vos_mv` is 3.42 mV schematic and 3.75 mV extracted at the
 slow/hot/low-supply point (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002 verdict).
 The remaining 43 offset points and the noise grid are still not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (later still): transient-noise Monte Carlo at ss / 125 C / 1.08 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-ss125-n80.20261031.md`: 77 of 80 trials compared; 3 extracted trials aborted with `timestep
+too small` (envelope `status: error`, kept as a finding). Extracted static threshold about -1.3 mV (schematic about
+-0.1 mV; nominal point about -0.7 mV); sigmas not distinguishable at this N. One-point result, no DR-0002 verdict; the
+remaining noise and offset grid points are not run; item 7 stays `unmet`.
