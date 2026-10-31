@@ -183,7 +183,7 @@ submit would only repeat it 45 times. Offset sigma and noise additionally need
 | Decision time vs overdrive / metastability | `comparator-regeneration` | not run (request: `requests/regeneration.{nominal,pvt}.json`) |
 | Kickback | `comparator-kickback` | not run (`requests/kickback.{nominal,pvt}.json`) |
 | Offset sigma (whole latch) | `comparator-offset-transient-mc` | request `requests/offset_mc.mc.json` (N=60/pt) and 3-sample probe: `reports/batch-mc-probe.20261031.md`; full grid not run |
-| Input-referred noise (transient) | `comparator-transient-noise` | request `requests/noise.mc.json` (N=80/pt) and 3-sample probe: same report; full grid not run |
+| Input-referred noise (transient) | `comparator-transient-noise` | request `requests/noise.mc.json` (N=80/pt); 3-sample probe: `reports/batch-mc-probe.20261031.md`; one-point N=80 extracted run at tt/27C/1.20V: `reports/batch-mc-noise-nominal-n80.20261031.md`; 45-point grid not run |
 
 `comparator-offset-mc` and `comparator-preamp-noise` are not in scope: they
 instantiate `comparator_dut_analog`, the loop-broken sub-model, which has no
@@ -292,6 +292,11 @@ That is a post-layout finding to diagnose before the full grid is re-run; item 7
 The offset and transient-noise Monte Carlo rows are now `klt sim` requests (`requests/{offset_mc,noise}.mc.json`,
 generated with their bodies `dut/tb_{offset_mc,noise}.sp`). A 3-sample extracted probe of each ran on the batch
 fleet end to end: `reports/batch-mc-probe.20261031.md`. The full grids, and so any sigma, are not run.
+
+The extracted transient-noise row was then run at one point (tt / 27 C / 1.20 V, N = 80 trials per rung, via sharded
+batch): `reports/batch-mc-noise-nominal-n80.20261031.md`. It shows a static extracted threshold of about -0.7 mV
+(schematic about -0.1 mV) and no resolvable sigma difference at this N. The 45-point grid and any DR-0002 noise
+verdict are not run.
 
 ## Upstream (`2AMLogic/klayout-tools`) friction
 
