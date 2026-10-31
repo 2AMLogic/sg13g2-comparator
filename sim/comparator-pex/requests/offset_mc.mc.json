@@ -1,0 +1,92 @@
+{
+  "engine": "ngspice",
+  "netlist": "../dut/tb_offset_mc.sp",
+  "netlist_source": "schematic",
+  "models": {
+    "pdk": "ihp-sg13g2",
+    "lib": "libs.tech/ngspice/models/cornerMOSlv.lib"
+  },
+  "corners": {
+    "process": [
+      {
+        "name": "tt",
+        "sections": [
+          "mos_tt_mismatch"
+        ]
+      },
+      {
+        "name": "ff",
+        "sections": [
+          "mos_ff_mismatch"
+        ]
+      },
+      {
+        "name": "ss",
+        "sections": [
+          "mos_ss_mismatch"
+        ]
+      },
+      {
+        "name": "fs",
+        "sections": [
+          "mos_fs_mismatch"
+        ]
+      },
+      {
+        "name": "sf",
+        "sections": [
+          "mos_sf_mismatch"
+        ]
+      }
+    ],
+    "params": {
+      "vdd_val": [
+        1.08,
+        1.2,
+        1.32
+      ]
+    },
+    "temperature_c": [
+      -40,
+      27,
+      125
+    ]
+  },
+  "analysis": {
+    "kind": "tran",
+    "args": "100p 990.0000n"
+  },
+  "measurements": [
+    {
+      "name": "lowcount",
+      "spice": ".meas tran lowcount param='33-(dlev0+dlev1+dlev2+dlev3+dlev4+dlev5+dlev6+dlev7+dlev8+dlev9+dlev10+dlev11+dlev12+dlev13+dlev14+dlev15+dlev16+dlev17+dlev18+dlev19+dlev20+dlev21+dlev22+dlev23+dlev24+dlev25+dlev26+dlev27+dlev28+dlev29+dlev30+dlev31+dlev32)'",
+      "unit": "levels"
+    },
+    {
+      "name": "vos_mv",
+      "spice": ".meas tran vos_mv param='(-0.048+(lowcount-0.5)*0.003)*1e3'",
+      "unit": "mV"
+    },
+    {
+      "name": "vbias_mv",
+      "spice": ".meas tran vbias_mv find par('v(ibn)*1e3') at=5n",
+      "unit": "mV"
+    }
+  ],
+  "options": {
+    "osdi_preload": [
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/psp103.osdi",
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/psp103_nqs.osdi",
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/r3_cmc.osdi",
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/mosvar.osdi"
+    ],
+    "timeout_s": 900,
+    "keep_artifacts": false,
+    "stage_model_inputs": true
+  },
+  "monte_carlo": {
+    "n": 60,
+    "seed": 20260916,
+    "vary": "mismatch"
+  }
+}
