@@ -350,3 +350,10 @@ remaining 42 offset points and the noise grid are still not run; item 7 stays `u
 threshold about -0.5 mV (schematic about -0.1 mV); sigmas not distinguishable at this N. The noise Monte Carlo now has
 the same three PVT points (tt, ss, ff) as the offset Monte Carlo. One-point results, no DR-0002 verdict; the remaining
 grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (failed attempt): offset Monte Carlo at sf / 27 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-sf-27c-n60.20261031.md`: the extracted side of all 60 samples came back `lost_shard`
+(`Broken pipe` at collect), so there is no comparison and no extracted sigma at the skew corner; the schematic side
+produced 57 of 60 values. Recorded as a failed run, not a result. Item 7 stays `unmet`; the skew-corner offset evidence
+is still missing.
