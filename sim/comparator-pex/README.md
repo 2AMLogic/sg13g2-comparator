@@ -323,3 +323,9 @@ and must not be cited.
 `reports/batch-mc-offset-nominal-n60.20261031.md`: whole-latch offset, tt / 27 C / 1.20 V, seed 20260916, via sharded
 batch. Sigma of `vos_mv` is 3.03 mV schematic and 3.41 mV extracted (single-point MC sigma, quantized at 3 mV; no
 DR-0002 verdict). The 45-point offset grid and the noise Monte Carlo are still not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (later): offset Monte Carlo at ss / 125 C / 1.08 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-ss125-n60.20261031.md`: sigma of `vos_mv` is 3.42 mV schematic and 3.75 mV extracted at the
+slow/hot/low-supply point (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002 verdict).
+The remaining 43 offset points and the noise grid are still not run; item 7 stays `unmet`.
