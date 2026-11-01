@@ -133,7 +133,7 @@ def build():
 
 
 def render_md(r, stem):
-    L = [f"# Extracted whole-latch Monte Carlo roll-up, per point (issue #61)", "",
+    L = ["# Extracted whole-latch Monte Carlo roll-up, per point (issue #61)", "",
          "Derived only from the committed per-point reports named in the last column; nothing was simulated for this "
          "file and nothing ran locally. Regenerate with `python3 sim/comparator-pex/make_mc_rollup.py --check "
          f"sim/comparator-pex/reports/{stem}`.", "",
