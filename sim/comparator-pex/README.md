@@ -409,3 +409,11 @@ established; no DR-0002 verdict). The remaining grid points are not run; item 7 
 (`klt-sim-49b69a062f46`) never started on the fleet (`batch_poll_timeout` after 1800 s; envelope `status: error`, kept as
 a finding). Sigma 3.29 mV schematic and 3.50 mV extracted (single-point MC sigma, quantized at 3 mV; no difference
 established; no DR-0002 verdict). The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (1.08 V noise): transient-noise Monte Carlo at tt / 27 C / 1.08 V, 78 of 80 trials (issue #61)
+
+`reports/batch-mc-noise-tt-108v-n80.20261101.md`: 78 of 80 trials compared; one 2-trial schematic shard
+(`klt-sim-b46075ede4e5`) never started on the fleet (`batch_poll_timeout` after 1800 s; envelope `status: error`, kept as
+a finding). Probit-fit sigma is 0.89 mV schematic and 0.88 mV extracted, static threshold about -0.06 mV schematic and
+-0.59 mV extracted (single-point result; no difference established; no DR-0002 verdict). The remaining grid points are
+not run; item 7 stays `unmet`.
