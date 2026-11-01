@@ -6,7 +6,7 @@ from pathlib import Path
 
 PEX = Path(__file__).resolve().parents[1]
 # Latest roll-up. Older stems are append-only history; they were fresh when written and are not re-checked.
-STEM = PEX / "reports" / "mc-rollup.20261101-b"
+STEM = PEX / "reports" / "mc-rollup.20261101-c"
 
 
 class McRollup(unittest.TestCase):
