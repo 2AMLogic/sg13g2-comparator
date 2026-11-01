@@ -432,3 +432,10 @@ report). The remaining grid points are not run; item 7 stays `unmet`.
 a finding). Probit-fit sigma is 0.96 mV schematic and 1.38 mV extracted (the extracted `d_plus` rung is 77/77 and was
 clamped, so no difference is established), static threshold about -0.16 mV schematic and -1.20 mV extracted
 (single-point result; no DR-0002 verdict). The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (-40 C offset): offset Monte Carlo at tt / -40 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-m40c-n60.20261101.md`: all 60 samples compared, envelope `status: pass`. Sigma 3.03 mV
+schematic and 3.37 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
+verdict). The first submit was cut off by my own command timeout and was resubmitted (disclosed in the report). The
+remaining grid points are not run; item 7 stays `unmet`.
