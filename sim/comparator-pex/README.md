@@ -488,3 +488,20 @@ grid, with schematic and extracted sigma, compared counts and the quoted, unchan
 sigma, so the roll-up is not a grid result and not a DR-0002 verdict; two noise points (ff/125C/1.32V, tt/125C/1.20V)
 have extracted fits above 1.0 mV, as findings. Item 7 stays `unmet`: `klt signoff` accepts only a `klt pex` report, and
 the committed one is the single-corner run, so the manifest citation and signoff report are unchanged.
+
+## Update 2026-11-01 (ss / 27 C offset and noise): Monte Carlo at ss / 27 C / 1.08 V (issue #61)
+
+`reports/batch-mc-offset-ss-27c-108v-n60.20261101.md`: all 60 samples compared, envelope `status: pass`. Sigma 3.23 mV
+schematic and 3.36 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
+verdict).
+
+`reports/batch-mc-noise-ss-27c-108v-n80.20261101.md`: 76 of 80 trials compared; four extracted trials (`mc13`, `mc46`,
+`mc53`, `mc76`) have no value because ngspice aborted with `timestep_too_small` (the documented `trnoise()` limitation),
+kept as a finding, not re-run. Probit-fit sigma is 1.03 mV schematic and 0.51 mV extracted (no rung clamped); the
+schematic fit is slightly above the quoted 1.0 mV Target, as a one-point restatement and not a Row 2 verdict. Nine
+extracted trials are unresolved at the 5 ns sample. Several earlier submit attempts were cut off by my own session limits
+and their jobs were not collected (disclosed in both reports).
+
+`reports/mc-rollup.20261101-b.{md,json}` regenerates the per-point roll-up (12 offset and 12 noise points of the 45-point
+grid); `mc-rollup.20261101.*` is kept unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The
+remaining grid points are not run; item 7 stays `unmet`.
