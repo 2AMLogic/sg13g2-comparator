@@ -515,3 +515,12 @@ raw values differ), disclosed in the report. `reports/mc-rollup.20261101-c.{md,j
 (13 offset and 10 noise points of the 45-point grid, counted from the committed reports); `mc-rollup.20261101-b.*` is kept
 unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7
 stays `unmet`.
+
+## Update 2026-11-01 (ff / 27 C noise): transient-noise Monte Carlo at ff / 27 C / 1.32 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-ff-27c-132v-n80.20261101.md`: all 80 trials compared on both sides, envelope `status: pass`
+(240 rows, 0 failed, 0 errored). Probit-fit sigma is 0.81 mV schematic and 0.91 mV extracted (no rung clamped, so no
+difference is established), static threshold about -0.06 mV schematic and -0.24 mV extracted (single-point result; no
+DR-0002 verdict). `reports/mc-rollup.20261101-d.{md,json}` regenerates the per-point roll-up from the committed reports;
+`mc-rollup.20261101-c.*` is kept unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The remaining
+grid points are not run; item 7 stays `unmet`.
