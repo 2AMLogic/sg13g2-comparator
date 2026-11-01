@@ -505,3 +505,13 @@ and their jobs were not collected (disclosed in both reports).
 `reports/mc-rollup.20261101-b.{md,json}` regenerates the per-point roll-up (12 offset and 12 noise points of the 45-point
 grid); `mc-rollup.20261101.*` is kept unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The
 remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (ff / 27 C offset): offset Monte Carlo at ff / 27 C / 1.32 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-ff-27c-132v-n60.20261101.md`: all 60 samples compared, envelope `status: pass`. Sigma 2.93 mV
+schematic and 3.40 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
+verdict). The quantized values equal those of the tt / 27 C / 1.32 V point sample for sample (same seed, 3 mV staircase;
+raw values differ), disclosed in the report. `reports/mc-rollup.20261101-c.{md,json}` regenerates the per-point roll-up
+(13 offset and 10 noise points of the 45-point grid, counted from the committed reports); `mc-rollup.20261101-b.*` is kept
+unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7
+stays `unmet`.
