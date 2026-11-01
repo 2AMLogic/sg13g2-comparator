@@ -424,3 +424,11 @@ not run; item 7 stays `unmet`.
 schematic and 3.45 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
 verdict). A first run of this point lost its data to my own output handling and was resubmitted (disclosed in the
 report). The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (125 C noise): transient-noise Monte Carlo at tt / 125 C / 1.20 V, 77 of 80 trials (issue #61)
+
+`reports/batch-mc-noise-tt-125c-n80.20261101.md`: 77 of 80 trials compared; one 3-trial extracted shard
+(`klt-sim-afa888b806e0`) never started on the fleet (`batch_poll_timeout` after 1800 s; envelope `status: error`, kept as
+a finding). Probit-fit sigma is 0.96 mV schematic and 1.38 mV extracted (the extracted `d_plus` rung is 77/77 and was
+clamped, so no difference is established), static threshold about -0.16 mV schematic and -1.20 mV extracted
+(single-point result; no DR-0002 verdict). The remaining grid points are not run; item 7 stays `unmet`.
