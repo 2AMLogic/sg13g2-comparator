@@ -2,6 +2,26 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-10-31
+
+- **PR #371**: sim(pex): record extracted whole-latch offset MC, N=60 at tt/27C/1.32V via sharded batch
+- **PR #370**: sim(pex): record extracted whole-latch transient-noise MC at fs/27C/1.20V, 77 of 80 trials (Part of #61)
+- **PR #369**: sim(pex): record extracted whole-latch offset MC at fs/27C/1.20V, 57 of 60 compared (Part of #61)
+- **PR #368**: sim(pex): record extracted whole-latch transient-noise MC, N=80 at sf/27C/1.20V
+- **PR #367**: sim(pex): record extracted whole-latch offset MC, N=60 at sf/27C/1.20V via sharded batch
+- **PR #366**: sim(pex): record failed extracted offset MC attempt at sf/27C/1.20V (extracted side lost)
+- **PR #365**: sim(pex): record extracted whole-latch noise MC, N=80 at ff/-40C/1.32V via sharded batch
+- **PR #364**: sim(pex): record extracted offset MC at ff/-40C/1.32V, 57 of 60 samples (Part of #61)
+- **PR #363**: sim(pex): record extracted whole-latch transient-noise MC, N=80 at ss/125C/1.08V via sharded batch
+- **PR #362**: sim(pex): record extracted whole-latch offset MC, N=60 at ss/125C/1.08V via sharded batch
+- **PR #361**: sim(pex): record extracted whole-latch transient-noise MC, N=80 at tt/27C/1.20V via batch
+- **PR #360**: refactor(sim): reuse cmband's CM-band Condition grid in kickback_cmband
+- **PR #359**: sim(pex): record extracted whole-latch offset MC at nominal point, N=60 via batch
+- **PR #358**: sim(pex): express whole-latch MC requests and probe them on the batch fleet
+- **PR #357**: sim(pex): record extracted 45-corner kickback grid via sharded batch
+- **PR #355**: sim(pex): record sharded 45-corner extracted regeneration grid, 42 of 45 corners
+- **Issue #356** (closed): Remove duplicated CM-band Condition table from kickback_cmband: reuse cmband's
+
 ### 2026-10-30
 
 - **PR #353**: refactor(sim): reuse kcli._submit_with_retry in kickback and memory runners
