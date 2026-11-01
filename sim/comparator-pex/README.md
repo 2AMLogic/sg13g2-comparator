@@ -394,3 +394,11 @@ tt, ss, ff, sf and fs points. One-point results, no DR-0002 verdict; the remaini
 submit failed on the shared vCPU quota in the previous pass). Sigma of `vos_mv` is 2.93 mV schematic and 3.40 mV
 extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002 verdict). The remaining grid
 points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (1.32 V noise): transient-noise Monte Carlo at tt / 27 C / 1.32 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-tt-132v-n80.20261101.md`: 77 of 80 trials compared; one 3-trial schematic shard
+(`klt-sim-edeeec291ff4`) never started on the fleet (`batch_poll_timeout` after 1800 s; envelope `status: error`, kept as
+a finding), after an earlier submit was cut off by a daemon restart. Probit-fit sigma is 0.92 mV schematic and 0.72 mV
+extracted, static threshold about -0.03 mV schematic and -0.47 mV extracted (single-point result; no difference
+established; no DR-0002 verdict). The remaining grid points are not run; item 7 stays `unmet`.
