@@ -447,3 +447,10 @@ remaining grid points are not run; item 7 stays `unmet`.
 threshold about +0.05 mV schematic and -0.33 mV extracted (single-point result; no DR-0002 verdict). The first submit was
 cut off by my own command timeout and was resubmitted (disclosed in the report). The remaining grid points are not run;
 item 7 stays `unmet`.
+
+## Update 2026-11-01 (ff / 125 C offset): offset Monte Carlo at ff / 125 C / 1.32 V, 45 of 60 samples (issue #61)
+
+`reports/batch-mc-offset-ff-125c-132v-n60.20261101.md`: 45 of 60 samples compared; five 3-sample extracted shards were
+`interrupted` on the fleet and lost when my 1500 s attach cap ended (envelope `status: error`, kept as a finding, not
+resumed). Sigma on the 45 paired samples is 3.11 mV schematic and 3.42 mV extracted (single-point MC sigma, quantized at
+3 mV; no difference established; no DR-0002 verdict). The remaining grid points are not run; item 7 stays `unmet`.
