@@ -439,3 +439,11 @@ clamped, so no difference is established), static threshold about -0.16 mV schem
 schematic and 3.37 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
 verdict). The first submit was cut off by my own command timeout and was resubmitted (disclosed in the report). The
 remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (-40 C noise): transient-noise Monte Carlo at tt / -40 C / 1.20 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-tt-m40c-n80.20261101.md`: all 80 trials compared, envelope `status: pass`. Probit-fit sigma is
+0.78 mV schematic and 0.70 mV extracted (extracted `d_plus` rung 80/80, clamped, so no difference is established), static
+threshold about +0.05 mV schematic and -0.33 mV extracted (single-point result; no DR-0002 verdict). The first submit was
+cut off by my own command timeout and was resubmitted (disclosed in the report). The remaining grid points are not run;
+item 7 stays `unmet`.
