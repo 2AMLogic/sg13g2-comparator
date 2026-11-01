@@ -463,3 +463,9 @@ re-run). Probit-fit sigma is 0.79 mV schematic and 1.19 mV extracted (extracted 
 sigma difference is established), static threshold about 0.0 mV schematic and -0.71 mV extracted; the extracted
 `d_minus` rung (33/77 vs 11/77) is visibly higher. Single-point result; no DR-0002 verdict. The remaining grid points
 are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (ss / -40 C offset): offset Monte Carlo at ss / -40 C / 1.08 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-ss-m40c-108v-n60.20261101.md`: all 60 samples compared, envelope `status: pass`. Sigma 3.29 mV
+schematic and 3.36 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
+verdict). The remaining grid points are not run; item 7 stays `unmet`.
