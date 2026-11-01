@@ -469,3 +469,12 @@ are not run; item 7 stays `unmet`.
 `reports/batch-mc-offset-ss-m40c-108v-n60.20261101.md`: all 60 samples compared, envelope `status: pass`. Sigma 3.29 mV
 schematic and 3.36 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
 verdict). The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (ss / -40 C noise): transient-noise Monte Carlo at ss / -40 C / 1.08 V, 80 of 80 trials (issue #61)
+
+`reports/batch-mc-noise-ss-m40c-108v-n80.20261101.md`: all 80 trials compared, envelope `status: pass`. The extracted
+latch decides LOW in all `d_zero` and `d_minus` trials and in 65 of 80 `d_plus` trials (schematic: 40, 13 and 69 of 80
+HIGH); 20 extracted `d_plus` outputs are unresolved at the 5 ns sample. Two rungs are clamped, so the probit fit (sigma
+0.97 mV schematic, 0.62 mV extracted; theta -0.02 mV vs +1.55 mV) is rough. Single-point result; no DR-0002 verdict. The
+noise Monte Carlo point list is now complete with the offset list; item 7 stays `unmet` until the DR-0002 rows, the
+citation, hash and regenerated signoff report are done.
