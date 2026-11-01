@@ -454,3 +454,12 @@ item 7 stays `unmet`.
 `interrupted` on the fleet and lost when my 1500 s attach cap ended (envelope `status: error`, kept as a finding, not
 resumed). Sigma on the 45 paired samples is 3.11 mV schematic and 3.42 mV extracted (single-point MC sigma, quantized at
 3 mV; no difference established; no DR-0002 verdict). The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (ff / 125 C noise): transient-noise Monte Carlo at ff / 125 C / 1.32 V, 77 of 80 trials (issue #61)
+
+`reports/batch-mc-noise-ff-125c-132v-n80.20261101.md`: 77 of 80 trials compared; three extracted trials (`mc39`, `mc50`,
+`mc53`) have no value because three batch jobs reported `failed` (envelope `status: error`, kept as a finding, not
+re-run). Probit-fit sigma is 0.79 mV schematic and 1.19 mV extracted (extracted `d_plus` rung 77/77, clamped, so no
+sigma difference is established), static threshold about 0.0 mV schematic and -0.71 mV extracted; the extracted
+`d_minus` rung (33/77 vs 11/77) is visibly higher. Single-point result; no DR-0002 verdict. The remaining grid points
+are not run; item 7 stays `unmet`.
