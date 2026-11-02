@@ -2,6 +2,10 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-02
+
+- **PR #392**: sim(pex): record extracted offset MC at fs/125C/1.20V, 60 of 60 samples via batch
+
 ### 2026-11-01
 
 - **PR #389**: sim(pex): record extracted whole-latch noise MC, 80 of 80 trials at ff/27C/1.32V via batch
