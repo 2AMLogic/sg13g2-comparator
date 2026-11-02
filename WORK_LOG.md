@@ -4,6 +4,14 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-11-01
 
+- **PR #389**: sim(pex): record extracted whole-latch noise MC, 80 of 80 trials at ff/27C/1.32V via batch
+- **PR #388**: sim(pex): record extracted whole-latch offset MC at ff/27C/1.32V (60/60) via batch
+- **PR #387**: sim(pex): extracted whole-latch MC at ss/27C/1.08V (offset 60/60, noise 76/80) via batch
+- **PR #386**: sim(pex): add per-point roll-up of recorded extracted Monte Carlo results
+- **PR #385**: sim(pex): record extracted whole-latch noise MC at ss/-40C/1.08V, 80 of 80 trials via batch
+- **PR #384**: sim(pex): record extracted whole-latch offset MC, 60 of 60 samples at ss/-40C/1.08V via batch
+- **PR #383**: sim(pex): record extracted whole-latch noise MC at ff/125C/1.32V, 77 of 80 trials
+- **PR #382**: sim(pex): record extracted offset MC at ff/125C/1.32V, 45 of 60 samples via batch
 - **PR #380**: sim(pex): record extracted whole-latch noise MC at tt/-40C/1.20V, 80 of 80 trials via batch
 - **PR #379**: sim(pex): record extracted whole-latch offset MC at tt/-40C/1.20V, 60 of 60 samples
 - **PR #378**: sim(pex): record extracted whole-latch noise MC at tt/125C/1.20V, 77 of 80 trials via batch
