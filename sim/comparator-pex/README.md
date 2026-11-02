@@ -524,3 +524,11 @@ difference is established), static threshold about -0.06 mV schematic and -0.24 
 DR-0002 verdict). `reports/mc-rollup.20261101-d.{md,json}` regenerates the per-point roll-up from the committed reports;
 `mc-rollup.20261101-c.*` is kept unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The remaining
 grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-02 (fs / 125 C offset): offset Monte Carlo at fs / 125 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-fs-125c-n60.20261102.md`: all 60 samples compared, envelope `status: pass`. Sigma 3.23 mV
+schematic and 3.57 mV extracted (single-point MC sigma, quantized at 3 mV; ratio 1.11, no difference established; no
+DR-0002 verdict). `reports/mc-rollup.20261102.{md,json}` regenerates the per-point roll-up (14 offset and 11 noise points
+of the 45-point grid, counted from the committed reports); `mc-rollup.20261101-d.*` is kept unchanged as history, and
+`tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
