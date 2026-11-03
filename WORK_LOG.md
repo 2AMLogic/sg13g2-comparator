@@ -2,6 +2,16 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-03
+
+- **PR #400**: sim(pex): record failed extracted offset MC at tt/-40C/1.32V, extracted side lost
+- **PR #399**: sim(pex): record extracted whole-latch offset MC, 48 of 60 samples at tt/125C/1.32V via batch
+- **PR #398**: sim(pex): record extracted offset MC at tt/125C/1.08V, 57 of 60 samples via batch
+- **PR #397**: sim(pex): record extracted offset MC at tt/-40C/1.08V, 57 of 60 samples via batch
+- **PR #396**: sim(pex): record extracted offset MC at sf/-40C/1.20V, 57 of 60 samples via batch
+- **PR #395**: sim(pex): record extracted offset MC at sf/125C/1.20V, 57 of 60 samples via batch
+- **PR #394**: sim(pex): record extracted offset MC, 60 of 60 samples at fs/-40C/1.20V via batch
+
 ### 2026-11-02
 
 - **PR #392**: sim(pex): record extracted offset MC at fs/125C/1.20V, 60 of 60 samples via batch

@@ -23,7 +23,7 @@ _None._
 
 Human-approved issues ready for implementation (`loom:issue`).
 
-- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
+_None._
 
 ## In Progress
 
@@ -66,7 +66,7 @@ Issues carrying `loom:curated`.
 | Operator merge-risk holds | 1 |
 | Very important | 0 |
 | Important | 1 |
-| Ready (`loom:issue`) | 1 |
+| Ready (`loom:issue`) | 0 |
 | In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 1 |
