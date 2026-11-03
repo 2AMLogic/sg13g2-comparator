@@ -590,3 +590,13 @@ sigma, quantized at 3 mV; ratio 1.09, no difference established; no DR-0002 verd
 `reports/mc-rollup.20261103-f.{md,json}` regenerates the per-point roll-up (20 offset and 11 noise points of the 45-point
 grid, counted from the committed reports); `mc-rollup.20261103-e.*` is kept unchanged as history, and
 `tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-03 (failed attempt, tt / -40 C / 1.32 V offset): offset Monte Carlo at tt / -40 C / 1.32 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-m40c-132v-n60.20261103.md`: no extracted sample has a value (57 of 60 `lost_shard`,
+`Broken pipe` at collect; samples 27 to 29 lost on the schematic side), so there is no comparison and no extracted sigma at
+this point. The schematic side produced 57 of 60 values (sigma 3.01 mV, not a result of this comparison). Recorded as a
+failed run, not a result; the run could not be re-collected after the first `--attach` consumed the shard map, and nothing
+ran locally. `reports/mc-rollup.20261103-g.{md,json}` regenerates the per-point roll-up (the point is listed with no data,
+so the count of points with data is unchanged); `mc-rollup.20261103-f.*` is kept unchanged as history, and
+`tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
