@@ -580,3 +580,13 @@ ratio 1.10, no difference established; no DR-0002 verdict). `reports/mc-rollup.2
 per-point roll-up (19 offset and 11 noise points of the 45-point grid, counted from the committed reports);
 `mc-rollup.20261103-d.*` is kept unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The remaining
 grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-03 (tt / 125 C / 1.32 V offset): offset Monte Carlo at tt / 125 C / 1.32 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-125c-132v-n60.20261103.md`: 48 of 60 samples compared, envelope `status: error` (four
+extracted shard jobs lost: three reported `interrupted`, one never started; samples 0 to 2, 33 to 38 and 48 to 50; not
+re-run, nothing ran locally). Sigma 3.26 mV schematic and 3.54 mV extracted over the 48 paired samples (single-point MC
+sigma, quantized at 3 mV; ratio 1.09, no difference established; no DR-0002 verdict).
+`reports/mc-rollup.20261103-f.{md,json}` regenerates the per-point roll-up (20 offset and 11 noise points of the 45-point
+grid, counted from the committed reports); `mc-rollup.20261103-e.*` is kept unchanged as history, and
+`tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
