@@ -532,3 +532,11 @@ schematic and 3.57 mV extracted (single-point MC sigma, quantized at 3 mV; ratio
 DR-0002 verdict). `reports/mc-rollup.20261102.{md,json}` regenerates the per-point roll-up (14 offset and 11 noise points
 of the 45-point grid, counted from the committed reports); `mc-rollup.20261101-d.*` is kept unchanged as history, and
 `tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-03 (fs / -40 C offset): offset Monte Carlo at fs / -40 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-fs-m40c-n60.20261103.md`: all 60 samples compared, envelope `status: pass`. Sigma 2.97 mV
+schematic and 3.37 mV extracted (single-point MC sigma, quantized at 3 mV; ratio 1.14, no difference established; no
+DR-0002 verdict). `reports/mc-rollup.20261103.{md,json}` regenerates the per-point roll-up (15 offset and 11 noise points
+of the 45-point grid, counted from the committed reports); `mc-rollup.20261102.*` is kept unchanged as history, and
+`tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
