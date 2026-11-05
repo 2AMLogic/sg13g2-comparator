@@ -2,6 +2,12 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-05
+
+- **PR #403**: sim: complete max-step supplement with vcm-p050 populations 60/60
+- **PR #402**: sim: record partial max-step supplement re-run (4 of 6 populations 60/60)
+- **Issue #89** (closed): sim: complete the two vcm-m050 CM-band offset points that abort (timestep too small) with a uniform tighter max step
+
 ### 2026-11-03
 
 - **PR #400**: sim(pex): record failed extracted offset MC at tt/-40C/1.32V, extracted side lost

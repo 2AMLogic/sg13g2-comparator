@@ -50,6 +50,7 @@ Issues carrying `loom:curated`.
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
 - **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise) *(curated)*
 - **#160**: Draft decision record: input common-mode range row for the ratified spec *(curated)*
+- **#336**: Remove scripts/diagnostics: completed #188 upstream-handoff package (~506 LOC) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -70,7 +71,7 @@ Issues carrying `loom:curated`.
 | In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 1 |
-| Curated | 3 |
+| Curated | 4 |
 | Architect / Hermit proposals | 1 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
