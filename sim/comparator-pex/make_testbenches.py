@@ -11,6 +11,8 @@ What changes, and why (see README.md):
     and non-core cards (XMB) verbatim, and the core instance's nets re-ordered
     to the extractor's pin order (make_reference.PINS), since the extracted
     `comparator` is instantiated positionally;
+  * per-level `meas tran dlevK` reads of the offset staircase (tb.json analyses) are
+    emitted as body `.meas` cards;
   * `.param`s the harness would have supplied (vdd_val, dut_ib, dut_vcm) are
     stated, and the .options of the original tb.json are carried.
 
@@ -38,8 +40,7 @@ PRELUDE = """\
 .param vdd_val=1.2
 .param dut_ib={dut_ib}
 .param dut_vcm={dut_vcm}
-.options {options}
-* comparator_dut wrapper (design/comparator.spice): bias mirror + the core cell.
+{extra}* comparator_dut wrapper (design/comparator.spice): bias mirror + the core cell.
 * The mirror XMB is NOT in the layout; it is the same device on both legs.
 """
 
@@ -65,16 +66,31 @@ def wrapper() -> str:
                       ".ends comparator_dut", ""])
 
 
+# bench directory (sim/comparator-<bench>) -> dut/tb_<stem>.sp; the first two are the
+# deterministic rows, the last two the Monte-Carlo rows (issue #61 acceptance row 3)
+BENCHES = {"regeneration": "regeneration", "kickback": "kickback",
+           "offset-transient-mc": "offset_mc", "transient-noise": "noise"}
+
+
 def build(name: str) -> str:
     tb = json.loads((SIM / f"comparator-{name}/testbench/tb.json").read_text())
     dut = json.loads((SIM / "dut.json").read_text())["params"]
     frag = (SIM / f"comparator-{name}/testbench/{tb['netlist']}").read_text().splitlines()
     body = [l for l in frag if l.strip() and not l.lstrip().startswith("*")]
+    # tb.json "params" (e.g. the calibrated trnoise() source) are stated like the
+    # harness would; "options" (if any) are carried verbatim
+    extra = "".join(f".param {k}={v}\n" for k, v in tb.get("params", {}).items())
+    if tb.get("options"):
+        extra += ".options " + " ".join(tb["options"]) + "\n"
+    # per-level decision reads: in the original bench they sit in the control loop
+    # (tb.json analyses), where klt cannot see them; here they are body `.meas`
+    # cards so the request's `lowcount` / `vos_mv` can reduce them per sample
+    body += ["." + a.strip() for a in tb["analyses"] if a.strip().startswith("meas tran dlev")]
     head = PRELUDE.format(name=name, dut_ib=dut["dut_ib"], dut_vcm=dut["dut_vcm"],
-                          options=" ".join(tb["options"]))
+                          extra=extra)
     return head + wrapper() + "\n".join(body) + "\n"
 
 
 if __name__ == "__main__":
-    emit({HERE / "dut" / f"tb_{name}.sp": build(name) for name in ("regeneration", "kickback")},
+    emit({HERE / "dut" / f"tb_{stem}.sp": build(name) for name, stem in BENCHES.items()},
          "--check" in sys.argv)

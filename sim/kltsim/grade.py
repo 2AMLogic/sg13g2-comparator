@@ -44,6 +44,7 @@ from pathlib import Path
 from statistics import NormalDist
 
 from . import build as build_mod
+from . import populations as pop_mod
 
 PASS = "PASS"
 FAIL = "FAIL"
@@ -583,16 +584,24 @@ def mc_per_corner(bench: BenchEvidence, measurement: str, unit: str | None, grid
     notes: list[str] = []
     # Per-sample trust: probes + gates, grouped by base corner key.
     sample_problems: dict[tuple, list[str]] = {}
-    base_ids: dict[tuple, str] = {}
+    point_corners: dict[tuple, list[dict]] = {}
     for tag, env in bench.envelopes:
         for corner in env.get("corners") or []:
-            if corner.get("monte_carlo") is None:
+            if not isinstance(corner, dict) or corner.get("monte_carlo") is None:
                 continue
             key = _corner_key(corner)
-            base_ids[key] = corner["corner_id"].rsplit("/mc", 1)[0]
+            point_corners.setdefault(key, []).append(corner)
             problem = _corner_problems(corner, bench.name, gates)
             if problem:
-                sample_problems.setdefault(key, []).append(f"{corner['corner_id']}: {problem}")
+                sample_problems.setdefault(key, []).append(f"{corner.get('corner_id')}: {problem}")
+    # Structural population validity per point (shared with the yield collector).
+    base_ids: dict[tuple, str] = {}
+    pop_problems: dict[tuple, str] = {}
+    for key, corners in point_corners.items():
+        try:
+            base_ids[key], _ = pop_mod.validate_point(corners, expected_n)
+        except pop_mod.PopulationError as exc:
+            pop_problems[key] = f"invalid sample population: {exc.message}"
     pops, pop_collisions = _index_populations(bench, (measurement,))
     by_corner, dup_summaries = pops[measurement], pop_collisions[measurement]
     for cid in sorted(dup_summaries):
@@ -603,6 +612,9 @@ def mc_per_corner(bench: BenchEvidence, measurement: str, unit: str | None, grid
     for key in grid_keys(grid):
         k = (key[0], round(key[1], 6), key[2])
         base = base_ids.get(k)
+        if k in pop_problems:
+            out.append(CornerValue(key, None, None, pop_problems[k]))
+            continue
         if base in dup_summaries:
             out.append(CornerValue(key, None, base, "ambiguous duplicate population summary: "
                                    + _collision_text(measurement, base, dup_summaries[base])))
@@ -621,9 +633,12 @@ def mc_per_corner(bench: BenchEvidence, measurement: str, unit: str | None, grid
             out.append(CornerValue(key, None, base, str(exc)))
             continue
         n = entry.get("n")
-        stat_problem = None
+        stat_problem = pop_mod.check_summary(
+            entry, point_corners[k], f"{measurement} summary")
         n_ok = _finite_or_none(n)
-        if n_ok is None or n_ok != int(n_ok):
+        if stat_problem:
+            pass
+        elif n_ok is None or n_ok != int(n_ok):
             stat_problem = f"Monte-Carlo sample count n is not a finite integer ({n!r})"
         else:
             n = int(n_ok)
@@ -689,7 +704,7 @@ def _mc_samples(bench: BenchEvidence) -> dict[tuple, list[dict]]:
     samples: dict[tuple, list[dict]] = {}
     for tag, env in bench.envelopes:
         for corner in env.get("corners") or []:
-            if corner.get("monte_carlo") is None:
+            if not isinstance(corner, dict) or corner.get("monte_carlo") is None:
                 continue
             key = _corner_key(corner)
             if key is not None:
@@ -754,7 +769,12 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
             point["problem"] = "no Monte-Carlo population for this grid point"
             details.append(point)
             continue
-        base = corners[0]["corner_id"].rsplit("/mc", 1)[0]
+        try:
+            base, _ = pop_mod.validate_point(corners, expected_n)
+        except pop_mod.PopulationError as exc:
+            point["problem"] = f"invalid sample population: {exc.message}"
+            details.append(point)
+            continue
         point["corner_id"] = base
         dup = [_collision_text(name, base, pop_collisions[name][base])
                for name in (plus, minus, zero) if base in pop_collisions[name]]
@@ -776,6 +796,8 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
         # (None), never as a usable number.
         point.update({"n": _finite_or_none(ns[plus]) if ns[plus] is not None else None,
                       **{k2: _finite_or_none(v) for k2, v in raw_p.items()}})
+        inconsistent = [p for name, e in entries.items()
+                        if (p := pop_mod.check_summary(e, corners, f"{name} summary"))]
         bad_n = [f"{name}: n = {n} (+{entries[name].get('errored')} errored)"
                  for name, n in ns.items() if n != expected_n or entries[name].get("errored")]
         untrusted = [f"{c['corner_id']}: {p}" for c in corners
@@ -787,6 +809,8 @@ def mc_probit_noise(bench: BenchEvidence, ev: dict, grid: dict) -> tuple[list[di
             1 for d in draws if len(draw_points.get(d, ())) > 1)
         if bad_n:
             point["problem"] = f"sampling basis is not N = {expected_n}: {'; '.join(bad_n)}"
+        elif inconsistent:
+            point["problem"] = f"invalid sample population: {inconsistent[0]}"
         elif nonfinite_p:
             point["problem"] = ("non-finite population statistic(s) "
                                 f"{', '.join(nonfinite_p)}: {[raw_p[k2] for k2 in nonfinite_p]!r}")
@@ -880,12 +904,14 @@ def mc_points_exercised(bench: BenchEvidence, grid: dict, expected_n: int) -> li
         if not corners:
             out.append(CornerValue(key, None, None, "no Monte-Carlo population for this grid point"))
             continue
-        base = corners[0]["corner_id"].rsplit("/mc", 1)[0]
+        try:
+            base, _ = pop_mod.validate_point(corners, expected_n)
+        except pop_mod.PopulationError as exc:
+            out.append(CornerValue(key, None, None, f"invalid sample population: {exc.message}"))
+            continue
         problems = [p for c in corners if (p := _corner_problems(c, bench.name, []))]
         errored = [c for c in corners if c.get("status") == "error"]
-        if len(corners) != expected_n:
-            out.append(CornerValue(key, None, base, f"{len(corners)} samples, expected {expected_n}"))
-        elif problems or errored:
+        if problems or errored:
             out.append(CornerValue(key, None, base, (problems or ["errored sample"])[0]))
         else:
             out.append(CornerValue(key, 1.0, base))

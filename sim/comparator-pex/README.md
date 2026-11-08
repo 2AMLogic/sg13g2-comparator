@@ -50,6 +50,23 @@ text below it is kept as the record of the earlier attempt. The same
     -14.1 %, `apmax` -1.3 %; `bc1` -79.6 % (a tiny-magnitude current row).
   - Rows with no change beyond 0.1 %: supply, end-state, bias current
     (`i_stat` -0.08 %), common-mode levels.
+- Renderer semantics (issue #181): `make_delta_table.py` keeps klt's raw status and
+  `delta_pct` as measurement availability and adds a separate, explicitly mapped
+  interpretation: logic rows (`d*_first`/`d*_end`) as states against the bench's own
+  0.1/0.9 polarity checks (no percentage), `td_a`/`td_c` as absolute values against
+  DR-0002 Row 3 (1.5 ns at 50 mV, 2.0 ns at 0.1 mV) on PVT-grid corners; every
+  other key is ungraded. Tests: `tests/test_delta_table.py`. The 20261009 table
+  above is historical and unchanged.
+- Decision validity (issue #240): a delay only counts toward "met at every PVT grid
+  point" if the matching decision states are correct at the same canonical corner:
+  `td_a` needs `regeneration.da_first` low and `da_end` high (`v(dan)` at 18/55 ns),
+  `td_c` needs `dc_first`/`dc_end` (`v(dcn)`); `kickback.*` states are a different
+  bench and never count. A wrong, indeterminate or missing (absent row or null) state
+  gives "not established", with invalid-point and state-row counts in the summary and per-corner reasons in
+  `delay_decision_validity`; each delay row also carries `decision_validity`. The
+  numeric within/EXCEEDS verdict and raw values are unchanged, and EXCEEDS still
+  reports NOT MET. A delay measured after a flipped decision therefore cannot be
+  read as a compliant decision time. No bound changed; reports are not regenerated.
 - Not run: the 45-point PVT grids and the offset / noise Monte Carlo rows.
   `klt sim --backend batch` was re-probed and refused:
   `batch_no_capacity` ("no capacity in any of the 30 pools after 3
@@ -67,6 +84,36 @@ The PVT and Monte Carlo rows remain not run; no local grid was launched.
 A second probe the same day (`reports/batch-probe.regeneration.pvt.20261010-b.{md,json}`) was refused identically (`batch_no_capacity`, 30 pools).
 
 A third probe (`reports/batch-probe.pvt.20261010-c.md`) ran the full `klt pex` over both staged PVT requests on `--backend batch`, and this time capacity was granted. Result: all 1350 delta rows errored (`reports/pex.batch-probe.pvt.20261010-c.json`). A direct `klt sim` submit (`reports/batch-probe.regeneration.pvt.20261010-c.json`, job `klt-sim-f07e181de148`) shows the cause: `batch_runner_version_mismatch` (runner klt 0.5.0, client 0.7.0), the same as on 2026-10-09. The blocker is now the runner image, not capacity. The `model_mismatch` block in both pex envelopes is a count-only (finger) difference with identical model sets, not a flavour divergence (filed upstream as klayout-tools#3054).
+
+## Update 2026-10-11: extracted-device-only diagnostic leg (issue #191)
+
+A controlled attribution study, **not compliance evidence**; the original full
+PEX above remains the item-7 artifact and DR-0002 is untouched. Three legs on
+the same regeneration stimulus and wrapper (tt / 1.20 V / 27 C, deterministic,
+no sigma): schematic, extracted-device-only, full PEX.
+
+- `make_devonly.py [--check]` derives `dut/comparator.devonly.sp` from
+  `layout/comparator/comparator.pex.spice` (sha256 `9bd443be...980a`): 64
+  fingers kept with model/W/L/AS/AD/PS/PD verbatim; 252 terminal series R
+  collapsed onto their parent nets; 16 ground C and 52 coupling C removed; the
+  DC substrate tie kept. It refuses unknown elements/directives, non-terminal
+  series R, duplicate or orphan terminal R, unresolved `__t` device nodes and
+  C on terminal nodes (`tests/test_devonly.py`). Also generates
+  `dut/tb_regeneration.devonly.sp` and `requests/regeneration.devonly.{nominal,pvt}.json`
+  (checked in CI with the other generators).
+- Report: `reports/devonly-attribution.20261011.{md,json}` (rendered by
+  `make_devonly_report.py` from `reports/devonly-nominal-sim.20261011.json` and
+  the `klt pex` re-run, which reproduced the 20261009 schematic/full values
+  exactly). `td_a` 0.710 -> 1.536 -> 2.040 ns. The increments (+0.826 ns
+  device representation/junction geometry, +0.504 ns routing RC) are
+  conditional differences in a nonlinear circuit, not an additive
+  decomposition; finger count and junction geometry are not separated from
+  each other. `td_c` has a value on the device-only leg (2.230 ns) and none on
+  full PEX.
+- PVT: the 45-point device-only request went to `--backend batch` once
+  (`reports/devonly-pvt-batch.20261011.json`, job `klt-sim-5e70ae964e3a`): all
+  45 points errored, `batch_runner_version_mismatch` (runner klt 0.5.0). No
+  local grid was launched.
 
 ## What ran, and what it proved
 
@@ -135,8 +182,8 @@ submit would only repeat it 45 times. Offset sigma and noise additionally need
 |---|---|---|
 | Decision time vs overdrive / metastability | `comparator-regeneration` | not run (request: `requests/regeneration.{nominal,pvt}.json`) |
 | Kickback | `comparator-kickback` | not run (`requests/kickback.{nominal,pvt}.json`) |
-| Offset sigma (whole latch) | `comparator-offset-transient-mc` | not run, not expressed as a request (needs MC, batch) |
-| Input-referred noise (transient) | `comparator-transient-noise` | not run, not expressed as a request (needs MC, batch) |
+| Offset sigma (whole latch) | `comparator-offset-transient-mc` | request `requests/offset_mc.mc.json` (N=60/pt) and 3-sample probe: `reports/batch-mc-probe.20261031.md`; full grid not run |
+| Input-referred noise (transient) | `comparator-transient-noise` | request `requests/noise.mc.json` (N=80/pt); 3-sample probe: `reports/batch-mc-probe.20261031.md`; one-point N=80 extracted run at tt/27C/1.20V: `reports/batch-mc-noise-nominal-n80.20261031.md`; 45-point grid not run |
 
 `comparator-offset-mc` and `comparator-preamp-noise` are not in scope: they
 instantiate `comparator_dut_analog`, the loop-broken sub-model, which has no
@@ -219,6 +266,38 @@ klt pex layout/comparator/comparator.gds \
 On a host whose ngspice loads OSDI v0.4 the same command yields real
 `delta[]` rows. On this host it reproduces the `error` envelope above.
 
+## Update 2026-10-30: batch probe passes; PVT/MC grids still open (issue #61)
+
+`make_requests.py` now emits the supply as a `corners.params` axis (current klt rejects
+`vdd_val` under `supply_v`) with `options.stage_model_inputs: true` and `timeout_s` 600 (was 3480; see `reports/batch-pvt-sizing.regeneration.20261030-b.md`), and the
+four `requests/*.json` were regenerated. A one-corner batch probe of the regenerated nominal
+request completed with 12/12 measurements: `reports/batch-probe.regeneration.nominal.20261030.md`.
+The full PVT `klt pex` submit had not completed when the client wait cap expired; no PVT, Monte
+Carlo or item-7 citation result exists yet, and item 7 is unchanged.
+
+The 45-unit extracted job `klt-sim-c4adab23fc10` never reported past `elapsed_seconds: 14` (status frozen at
+03:23:27Z) and `--attach` returned nothing within 280 s: `reports/batch-pvt-attach.regeneration.20261030-c.md`.
+Still no PVT result; `klt pex` cannot shard a grid.
+
+That job later finished `failed` (exit 4): 5 of 45 units passed (all `sf/novdd`, about 424 s each) and 40 were
+killed at the 600 s `timeout_s`, so 600 s is too tight for the extracted netlist (sized from a 173 s schematic
+sample). No delta table or item-7 verdict: `reports/batch-pvt-outcome.regeneration.20261030-d.md`.
+
+A 3-unit extracted-side batch sample (tt / 27 C) finished in 230 s but errored on all 3 units: `td_c` reported "out of
+interval" on the extracted netlist while the schematic side passed: `reports/batch-extracted-sample.regeneration.20261030-e.md`.
+That is a post-layout finding to diagnose before the full grid is re-run; item 7 is unchanged.
+
+## Update 2026-10-31: whole-latch MC requests expressed and probed (issue #61)
+
+The offset and transient-noise Monte Carlo rows are now `klt sim` requests (`requests/{offset_mc,noise}.mc.json`,
+generated with their bodies `dut/tb_{offset_mc,noise}.sp`). A 3-sample extracted probe of each ran on the batch
+fleet end to end: `reports/batch-mc-probe.20261031.md`. The full grids, and so any sigma, are not run.
+
+The extracted transient-noise row was then run at one point (tt / 27 C / 1.20 V, N = 80 trials per rung, via sharded
+batch): `reports/batch-mc-noise-nominal-n80.20261031.md`. It shows a static extracted threshold of about -0.7 mV
+(schematic about -0.1 mV) and no resolvable sigma difference at this N. The 45-point grid and any DR-0002 noise
+verdict are not run.
+
 ## Upstream (`2AMLogic/klayout-tools`) friction
 
 Already filed, and hit here: #2570 (no ihp-sg13g2 batch AMI), #2851 and #2948
@@ -238,3 +317,286 @@ a single-corner local `klt pex`; a fleet runner image with klt >= 0.7 and
 in `manifests/sg13g2-comparator.json` and re-render
 `manifests/t1-signoff-report.json`. The committed report is `status: error`
 and must not be cited.
+
+## Update 2026-10-31: offset Monte Carlo at the nominal point, N = 60 (issue #61)
+
+`reports/batch-mc-offset-nominal-n60.20261031.md`: whole-latch offset, tt / 27 C / 1.20 V, seed 20260916, via sharded
+batch. Sigma of `vos_mv` is 3.03 mV schematic and 3.41 mV extracted (single-point MC sigma, quantized at 3 mV; no
+DR-0002 verdict). The 45-point offset grid and the noise Monte Carlo are still not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (later): offset Monte Carlo at ss / 125 C / 1.08 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-ss125-n60.20261031.md`: sigma of `vos_mv` is 3.42 mV schematic and 3.75 mV extracted at the
+slow/hot/low-supply point (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002 verdict).
+The remaining 43 offset points and the noise grid are still not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (later still): transient-noise Monte Carlo at ss / 125 C / 1.08 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-ss125-n80.20261031.md`: 77 of 80 trials compared; 3 extracted trials aborted with `timestep
+too small` (envelope `status: error`, kept as a finding). Extracted static threshold about -1.3 mV (schematic about
+-0.1 mV; nominal point about -0.7 mV); sigmas not distinguishable at this N. One-point result, no DR-0002 verdict; the
+remaining noise and offset grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (latest): offset Monte Carlo at ff / -40 C / 1.32 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-ff-40c-n60.20261031.md`: 57 of 60 samples compared; one 3-sample shard never started on the
+fleet (`batch_poll_timeout`, envelope `status: error`, kept as a finding). Sigma of `vos_mv` is 2.86 mV schematic and
+3.34 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002 verdict). The
+remaining 42 offset points and the noise grid are still not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (final): transient-noise Monte Carlo at ff / -40 C / 1.32 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-ff-40c-n80.20261031.md`: 80 of 80 trials compared, envelope `status: pass`. Extracted static
+threshold about -0.5 mV (schematic about -0.1 mV); sigmas not distinguishable at this N. The noise Monte Carlo now has
+the same three PVT points (tt, ss, ff) as the offset Monte Carlo. One-point results, no DR-0002 verdict; the remaining
+grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (failed attempt): offset Monte Carlo at sf / 27 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-sf-27c-n60.20261031.md`: the extracted side of all 60 samples came back `lost_shard`
+(`Broken pipe` at collect), so there is no comparison and no extracted sigma at the skew corner; the schematic side
+produced 57 of 60 values. Recorded as a failed run, not a result. Item 7 stays `unmet`; the skew-corner offset evidence
+is still missing.
+
+## Update 2026-10-31 (re-run): offset Monte Carlo at sf / 27 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-sf-27c-n60.20261031-b.md`: re-run of the earlier failed sf attempt, now complete (60 of 60
+samples compared, envelope `status: pass`). Sigma of `vos_mv` is 2.99 mV schematic and 3.41 mV extracted (single-point MC
+sigma, quantized at 3 mV; no difference established; no DR-0002 verdict). The remaining 41 offset points and `fs`, and the
+noise grid, are still not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (sf noise): transient-noise Monte Carlo at sf / 27 C / 1.20 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-sf-27c-n80.20261031.md`: 80 of 80 trials compared, envelope `status: pass`. Extracted static
+threshold about -0.5 mV (schematic about -0.25 mV); sigmas not distinguishable at this N. The noise Monte Carlo now has
+tt, ss, ff and sf points. One-point results, no DR-0002 verdict; the remaining grid points are not run; item 7 stays
+`unmet`.
+
+## Update 2026-10-31 (fs offset): offset Monte Carlo at fs / 27 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-fs-27c-n60.20261031.md`: 57 of 60 samples compared; one 3-sample extracted shard was lost when
+the client's `--attach` was interrupted by my own wait cap (envelope `status: error`, kept as a finding). Sigma of
+`vos_mv` is 3.02 mV schematic and 3.23 mV extracted (single-point MC sigma, quantized at 3 mV; no difference
+established; no DR-0002 verdict). The offset Monte Carlo now has tt, ss, ff, sf and fs points. The remaining grid
+points and `fs` noise are not run; item 7 stays `unmet`.
+
+## Update 2026-10-31 (fs noise): transient-noise Monte Carlo at fs / 27 C / 1.20 V, 77 of 80 trials (issue #61)
+
+`reports/batch-mc-noise-fs-27c-n80.20261031.md`: 77 of 80 trials compared; one 3-trial extracted shard was lost when the
+client's `--attach` was interrupted by my own wait cap (envelope `status: error`, kept as a finding). Extracted static
+threshold about -0.4 mV (schematic about -0.25 mV); sigmas not distinguishable at this N. The noise Monte Carlo now has
+tt, ss, ff, sf and fs points. One-point results, no DR-0002 verdict; the remaining grid points are not run; item 7 stays
+`unmet`.
+
+## Update 2026-10-31 (1.32 V offset): offset Monte Carlo at tt / 27 C / 1.32 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-132v-n60.20261031.md`: 60 of 60 samples compared, envelope `status: pass` (the point whose
+submit failed on the shared vCPU quota in the previous pass). Sigma of `vos_mv` is 2.93 mV schematic and 3.40 mV
+extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002 verdict). The remaining grid
+points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (1.32 V noise): transient-noise Monte Carlo at tt / 27 C / 1.32 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-tt-132v-n80.20261101.md`: 77 of 80 trials compared; one 3-trial schematic shard
+(`klt-sim-edeeec291ff4`) never started on the fleet (`batch_poll_timeout` after 1800 s; envelope `status: error`, kept as
+a finding), after an earlier submit was cut off by a daemon restart. Probit-fit sigma is 0.92 mV schematic and 0.72 mV
+extracted, static threshold about -0.03 mV schematic and -0.47 mV extracted (single-point result; no difference
+established; no DR-0002 verdict). The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (1.08 V offset): offset Monte Carlo at tt / 27 C / 1.08 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-108v-n60.20261101.md`: 57 of 60 samples compared; one 3-sample extracted shard
+(`klt-sim-49b69a062f46`) never started on the fleet (`batch_poll_timeout` after 1800 s; envelope `status: error`, kept as
+a finding). Sigma 3.29 mV schematic and 3.50 mV extracted (single-point MC sigma, quantized at 3 mV; no difference
+established; no DR-0002 verdict). The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (1.08 V noise): transient-noise Monte Carlo at tt / 27 C / 1.08 V, 78 of 80 trials (issue #61)
+
+`reports/batch-mc-noise-tt-108v-n80.20261101.md`: 78 of 80 trials compared; one 2-trial schematic shard
+(`klt-sim-b46075ede4e5`) never started on the fleet (`batch_poll_timeout` after 1800 s; envelope `status: error`, kept as
+a finding). Probit-fit sigma is 0.89 mV schematic and 0.88 mV extracted, static threshold about -0.06 mV schematic and
+-0.59 mV extracted (single-point result; no difference established; no DR-0002 verdict). The remaining grid points are
+not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (125 C offset): offset Monte Carlo at tt / 125 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-125c-n60.20261101.md`: all 60 samples compared, envelope `status: pass`. Sigma 3.23 mV
+schematic and 3.45 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
+verdict). A first run of this point lost its data to my own output handling and was resubmitted (disclosed in the
+report). The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (125 C noise): transient-noise Monte Carlo at tt / 125 C / 1.20 V, 77 of 80 trials (issue #61)
+
+`reports/batch-mc-noise-tt-125c-n80.20261101.md`: 77 of 80 trials compared; one 3-trial extracted shard
+(`klt-sim-afa888b806e0`) never started on the fleet (`batch_poll_timeout` after 1800 s; envelope `status: error`, kept as
+a finding). Probit-fit sigma is 0.96 mV schematic and 1.38 mV extracted (the extracted `d_plus` rung is 77/77 and was
+clamped, so no difference is established), static threshold about -0.16 mV schematic and -1.20 mV extracted
+(single-point result; no DR-0002 verdict). The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (-40 C offset): offset Monte Carlo at tt / -40 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-m40c-n60.20261101.md`: all 60 samples compared, envelope `status: pass`. Sigma 3.03 mV
+schematic and 3.37 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
+verdict). The first submit was cut off by my own command timeout and was resubmitted (disclosed in the report). The
+remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (-40 C noise): transient-noise Monte Carlo at tt / -40 C / 1.20 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-tt-m40c-n80.20261101.md`: all 80 trials compared, envelope `status: pass`. Probit-fit sigma is
+0.78 mV schematic and 0.70 mV extracted (extracted `d_plus` rung 80/80, clamped, so no difference is established), static
+threshold about +0.05 mV schematic and -0.33 mV extracted (single-point result; no DR-0002 verdict). The first submit was
+cut off by my own command timeout and was resubmitted (disclosed in the report). The remaining grid points are not run;
+item 7 stays `unmet`.
+
+## Update 2026-11-01 (ff / 125 C offset): offset Monte Carlo at ff / 125 C / 1.32 V, 45 of 60 samples (issue #61)
+
+`reports/batch-mc-offset-ff-125c-132v-n60.20261101.md`: 45 of 60 samples compared; five 3-sample extracted shards were
+`interrupted` on the fleet and lost when my 1500 s attach cap ended (envelope `status: error`, kept as a finding, not
+resumed). Sigma on the 45 paired samples is 3.11 mV schematic and 3.42 mV extracted (single-point MC sigma, quantized at
+3 mV; no difference established; no DR-0002 verdict). The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (ff / 125 C noise): transient-noise Monte Carlo at ff / 125 C / 1.32 V, 77 of 80 trials (issue #61)
+
+`reports/batch-mc-noise-ff-125c-132v-n80.20261101.md`: 77 of 80 trials compared; three extracted trials (`mc39`, `mc50`,
+`mc53`) have no value because three batch jobs reported `failed` (envelope `status: error`, kept as a finding, not
+re-run). Probit-fit sigma is 0.79 mV schematic and 1.19 mV extracted (extracted `d_plus` rung 77/77, clamped, so no
+sigma difference is established), static threshold about 0.0 mV schematic and -0.71 mV extracted; the extracted
+`d_minus` rung (33/77 vs 11/77) is visibly higher. Single-point result; no DR-0002 verdict. The remaining grid points
+are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (ss / -40 C offset): offset Monte Carlo at ss / -40 C / 1.08 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-ss-m40c-108v-n60.20261101.md`: all 60 samples compared, envelope `status: pass`. Sigma 3.29 mV
+schematic and 3.36 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
+verdict). The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (ss / -40 C noise): transient-noise Monte Carlo at ss / -40 C / 1.08 V, 80 of 80 trials (issue #61)
+
+`reports/batch-mc-noise-ss-m40c-108v-n80.20261101.md`: all 80 trials compared, envelope `status: pass`. The extracted
+latch decides LOW in all `d_zero` and `d_minus` trials and in 65 of 80 `d_plus` trials (schematic: 40, 13 and 69 of 80
+HIGH); 20 extracted `d_plus` outputs are unresolved at the 5 ns sample. Two rungs are clamped, so the probit fit (sigma
+0.97 mV schematic, 0.62 mV extracted; theta -0.02 mV vs +1.55 mV) is rough. Single-point result; no DR-0002 verdict. The
+noise Monte Carlo point list is now complete with the offset list; item 7 stays `unmet` until the DR-0002 rows, the
+citation, hash and regenerated signoff report are done.
+
+## Update 2026-11-01 (roll-up): per-point Monte Carlo roll-up of the recorded extracted points (issue #61)
+
+`reports/mc-rollup.20261101.{md,json}`, generated by `make_mc_rollup.py` (checked by `tests/test_mc_rollup.py`) from the
+committed per-point reports only; nothing was simulated. It lists 11 offset points and 11 noise points of the 45-point
+grid, with schematic and extracted sigma, compared counts and the quoted, unchanged DR-0002 Targets. Noise points
+`tt/27C/1.20V` and `ss/125C/1.08V` have no committed fit and are listed as such. Each sigma is a single-point Monte Carlo
+sigma, so the roll-up is not a grid result and not a DR-0002 verdict; two noise points (ff/125C/1.32V, tt/125C/1.20V)
+have extracted fits above 1.0 mV, as findings. Item 7 stays `unmet`: `klt signoff` accepts only a `klt pex` report, and
+the committed one is the single-corner run, so the manifest citation and signoff report are unchanged.
+
+## Update 2026-11-01 (ss / 27 C offset and noise): Monte Carlo at ss / 27 C / 1.08 V (issue #61)
+
+`reports/batch-mc-offset-ss-27c-108v-n60.20261101.md`: all 60 samples compared, envelope `status: pass`. Sigma 3.23 mV
+schematic and 3.36 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
+verdict).
+
+`reports/batch-mc-noise-ss-27c-108v-n80.20261101.md`: 76 of 80 trials compared; four extracted trials (`mc13`, `mc46`,
+`mc53`, `mc76`) have no value because ngspice aborted with `timestep_too_small` (the documented `trnoise()` limitation),
+kept as a finding, not re-run. Probit-fit sigma is 1.03 mV schematic and 0.51 mV extracted (no rung clamped); the
+schematic fit is slightly above the quoted 1.0 mV Target, as a one-point restatement and not a Row 2 verdict. Nine
+extracted trials are unresolved at the 5 ns sample. Several earlier submit attempts were cut off by my own session limits
+and their jobs were not collected (disclosed in both reports).
+
+`reports/mc-rollup.20261101-b.{md,json}` regenerates the per-point roll-up (12 offset and 12 noise points of the 45-point
+grid); `mc-rollup.20261101.*` is kept unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The
+remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-01 (ff / 27 C offset): offset Monte Carlo at ff / 27 C / 1.32 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-ff-27c-132v-n60.20261101.md`: all 60 samples compared, envelope `status: pass`. Sigma 2.93 mV
+schematic and 3.40 mV extracted (single-point MC sigma, quantized at 3 mV; no difference established; no DR-0002
+verdict). The quantized values equal those of the tt / 27 C / 1.32 V point sample for sample (same seed, 3 mV staircase;
+raw values differ), disclosed in the report. `reports/mc-rollup.20261101-c.{md,json}` regenerates the per-point roll-up
+(13 offset and 10 noise points of the 45-point grid, counted from the committed reports); `mc-rollup.20261101-b.*` is kept
+unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7
+stays `unmet`.
+
+## Update 2026-11-01 (ff / 27 C noise): transient-noise Monte Carlo at ff / 27 C / 1.32 V, N = 80 (issue #61)
+
+`reports/batch-mc-noise-ff-27c-132v-n80.20261101.md`: all 80 trials compared on both sides, envelope `status: pass`
+(240 rows, 0 failed, 0 errored). Probit-fit sigma is 0.81 mV schematic and 0.91 mV extracted (no rung clamped, so no
+difference is established), static threshold about -0.06 mV schematic and -0.24 mV extracted (single-point result; no
+DR-0002 verdict). `reports/mc-rollup.20261101-d.{md,json}` regenerates the per-point roll-up from the committed reports;
+`mc-rollup.20261101-c.*` is kept unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The remaining
+grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-02 (fs / 125 C offset): offset Monte Carlo at fs / 125 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-fs-125c-n60.20261102.md`: all 60 samples compared, envelope `status: pass`. Sigma 3.23 mV
+schematic and 3.57 mV extracted (single-point MC sigma, quantized at 3 mV; ratio 1.11, no difference established; no
+DR-0002 verdict). `reports/mc-rollup.20261102.{md,json}` regenerates the per-point roll-up (14 offset and 11 noise points
+of the 45-point grid, counted from the committed reports); `mc-rollup.20261101-d.*` is kept unchanged as history, and
+`tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-03 (fs / -40 C offset): offset Monte Carlo at fs / -40 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-fs-m40c-n60.20261103.md`: all 60 samples compared, envelope `status: pass`. Sigma 2.97 mV
+schematic and 3.37 mV extracted (single-point MC sigma, quantized at 3 mV; ratio 1.14, no difference established; no
+DR-0002 verdict). `reports/mc-rollup.20261103.{md,json}` regenerates the per-point roll-up (15 offset and 11 noise points
+of the 45-point grid, counted from the committed reports); `mc-rollup.20261102.*` is kept unchanged as history, and
+`tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-03 (sf / 125 C offset): offset Monte Carlo at sf / 125 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-sf-125c-n60.20261103.md`: 57 of 60 samples compared, envelope `status: error` (shard job
+`klt-sim-65ae84a69bdc`, extracted side, samples 0 to 2, never started on the fleet and hit `batch_poll_timeout`; not
+re-run, nothing ran locally). Sigma 3.17 mV schematic and 3.44 mV extracted over the 57 paired samples (single-point MC
+sigma, quantized at 3 mV; ratio 1.08, no difference established; no DR-0002 verdict).
+`reports/mc-rollup.20261103-b.{md,json}` regenerates the per-point roll-up (16 offset and 11 noise points of the 45-point
+grid, counted from the committed reports); `mc-rollup.20261103.*` is kept unchanged as history, and
+`tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-03 (sf / -40 C offset): offset Monte Carlo at sf / -40 C / 1.20 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-sf-m40c-n60.20261103.md`: 57 of 60 samples compared, envelope `status: error` (shard job
+`klt-sim-924c73f17b2f`, extracted side, samples 0 to 2, never started on the fleet and hit `batch_poll_timeout`; not
+re-run, nothing ran locally). Sigma 2.97 mV schematic and 3.31 mV extracted over the 57 paired samples (single-point MC
+sigma, quantized at 3 mV; ratio 1.11, no difference established; no DR-0002 verdict).
+`reports/mc-rollup.20261103-c.{md,json}` regenerates the per-point roll-up (17 offset and 11 noise points of the 45-point
+grid, counted from the committed reports); `mc-rollup.20261103-b.*` is kept unchanged as history, and
+`tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-03 (tt / -40 C / 1.08 V offset): offset Monte Carlo at tt / -40 C / 1.08 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-m40c-108v-n60.20261103.md`: 57 of 60 samples compared, envelope `status: error` (shard job
+`klt-sim-c9991d25f6c6`, extracted side, samples 51 to 53, never started on the fleet; not re-run, nothing ran locally).
+Sigma 3.28 mV schematic and 3.38 mV extracted over the 57 paired samples (single-point MC sigma, quantized at 3 mV;
+ratio 1.03, no difference established; no DR-0002 verdict). `reports/mc-rollup.20261103-d.{md,json}` regenerates the
+per-point roll-up (18 offset and 11 noise points of the 45-point grid, counted from the committed reports);
+`mc-rollup.20261103-c.*` is kept unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The remaining
+grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-03 (tt / 125 C / 1.08 V offset): offset Monte Carlo at tt / 125 C / 1.08 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-125c-108v-n60.20261103.md`: 57 of 60 samples compared, envelope `status: error` (shard job
+`klt-sim-024f4ac6202c`, extracted side, samples 3 to 5, recorded `lost_shard`; not re-run, nothing ran locally).
+Sigma 3.41 mV schematic and 3.74 mV extracted over the 57 paired samples (single-point MC sigma, quantized at 3 mV;
+ratio 1.10, no difference established; no DR-0002 verdict). `reports/mc-rollup.20261103-e.{md,json}` regenerates the
+per-point roll-up (19 offset and 11 noise points of the 45-point grid, counted from the committed reports);
+`mc-rollup.20261103-d.*` is kept unchanged as history, and `tests/test_mc_rollup.py` checks the newer one. The remaining
+grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-03 (tt / 125 C / 1.32 V offset): offset Monte Carlo at tt / 125 C / 1.32 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-125c-132v-n60.20261103.md`: 48 of 60 samples compared, envelope `status: error` (four
+extracted shard jobs lost: three reported `interrupted`, one never started; samples 0 to 2, 33 to 38 and 48 to 50; not
+re-run, nothing ran locally). Sigma 3.26 mV schematic and 3.54 mV extracted over the 48 paired samples (single-point MC
+sigma, quantized at 3 mV; ratio 1.09, no difference established; no DR-0002 verdict).
+`reports/mc-rollup.20261103-f.{md,json}` regenerates the per-point roll-up (20 offset and 11 noise points of the 45-point
+grid, counted from the committed reports); `mc-rollup.20261103-e.*` is kept unchanged as history, and
+`tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-03 (failed attempt, tt / -40 C / 1.32 V offset): offset Monte Carlo at tt / -40 C / 1.32 V, N = 60 (issue #61)
+
+`reports/batch-mc-offset-tt-m40c-132v-n60.20261103.md`: no extracted sample has a value (57 of 60 `lost_shard`,
+`Broken pipe` at collect; samples 27 to 29 lost on the schematic side), so there is no comparison and no extracted sigma at
+this point. The schematic side produced 57 of 60 values (sigma 3.01 mV, not a result of this comparison). Recorded as a
+failed run, not a result; the run could not be re-collected after the first `--attach` consumed the shard map, and nothing
+ran locally. `reports/mc-rollup.20261103-g.{md,json}` regenerates the per-point roll-up (the point is listed with no data,
+so the count of points with data is unchanged); `mc-rollup.20261103-f.*` is kept unchanged as history, and
+`tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.

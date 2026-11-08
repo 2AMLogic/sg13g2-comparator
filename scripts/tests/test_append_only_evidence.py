@@ -180,6 +180,27 @@ class Protection(Base):
         self.assertEqual(self.main(b), 1)
 
 
+class StoredEvidenceManifests(Base):
+    """Issue #318: manifests/artifacts/*.manifest.json are append-only."""
+
+    M = "manifests/artifacts/b-r1.manifest.json"
+
+    def test_add_passes_modify_and_delete_fail(self):
+        b = self.r.commit()
+        self.r.write(self.M, "{}\n")
+        self.r.write("manifests/artifacts/README.md", "r\n")
+        b2 = self.r.commit()
+        self.assertEqual(self.run_check(b), [])
+        self.r.write(self.M, '{"edited": 1}\n')
+        self.r.write("manifests/artifacts/README.md", "edited\n")  # docs: not protected
+        self.r.commit()
+        self.assertEqual(len(self.run_check(b2)), 1)
+        (self.r.root / self.M).unlink()
+        self.r.commit()
+        self.assertEqual(len(self.run_check(b2)), 1)
+        self.assertEqual(self.main(b2), 1)
+
+
 class AggregateCharacterization(Base):
     D = "sim/characterization/20261009-x-schematic"
 

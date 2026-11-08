@@ -24,6 +24,15 @@ on IHP SG13G2, IHP's open-source 130 nm SiGe BiCMOS PDK, designed and verified b
   describe the gap, not the design.
 - **Verification is the product**: no claim without a testbench; PVT corners
   on every recorded result; `sim/` results are append-only evidence.
+  Before requesting review, run `python3 scripts/check_evidence_size.py --tree
+  HEAD` on the final committed candidate (exit 0 = within budget, 1 = violation
+  or invalid budget, 2 = measurement error) and put the tested SHA, exit status
+  and measured size in the PR. Any HEAD change (amend, rebase, new commit)
+  needs a fresh run. A failure goes to the decision-record/authorization policy
+  in `sim/README.md` "Evidence size budget"; it grants no exception. If Python
+  is unavailable, say local validation is unavailable and cite the successful
+  `append-only-evidence` CI result for that exact commit; a skipped check is
+  never success.
 - Spec changes go through `spec/` with a decision record; agents do not
   relax the ratified spec to make results pass.
 

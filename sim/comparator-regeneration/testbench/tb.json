@@ -41,7 +41,21 @@
     "dout_od1_first": "db_first",
     "dout_od01_first": "dc_first",
     "i_static_ua": "abs(i_stat)*1e6",
-    "e_dec_fj": "abs(q_dec - i_stat*8.1e-9)*vsup_v*1e15"
+    "e_dec_fj": "abs(q_dec - i_stat*8.1e-9)*vsup_v*1e15",
+    "td_od50_rev_ns": "tdr_a*1e9",
+    "td_od1_rev_ns": "tdr_b*1e9",
+    "td_od01_rev_ns": "tdr_c*1e9",
+    "tau_rev_ps": "(tdr_c-tdr_b)/ln(10)*1e12",
+    "dout_od50_rev_first": "dra_first",
+    "dout_od1_rev_first": "drb_first",
+    "dout_od01_rev_first": "drc_first",
+    "dout_od50_rev_end": "dra_end",
+    "dout_od1_rev_end": "drb_end",
+    "dout_od01_rev_end": "drc_end",
+    "dtd_od50_rev_ps": "(tdr_a-td_a)*1e12",
+    "dtd_od1_rev_ps": "(tdr_b-td_b)*1e12",
+    "dtd_od01_rev_ps": "(tdr_c-td_c)*1e12",
+    "dtau_rev_ps": "((tdr_c-tdr_b)-(td_c-td_b))/ln(10)*1e12"
   },
   "checks": {
     "td_od50_ns": {
@@ -94,6 +108,40 @@
       "min": 1.0,
       "max": 1000.0,
       "description": "SWITCHING ENERGY PER DECISION, added as a real check now that sim/dut.json binds a transistor-level decision stage (design/comparator.spice) -- see this note's own prior trigger condition in evidence.notes below. abs(q_dec - i_stat*8.1e-9)*vsup_v integrates the supply current over the second-strobe decision window, nets out the static-bias baseline, and converts to energy; the abs() means this is a magnitude sanity envelope, not a spec bound (README.md has no energy-per-decision row). Bounds are deliberately loose (roughly 30x either side of the first transistor-level 45-point record's observed ~31-61 fJ span, named in this experiment's README.md) to catch a wrong-sign/wrong-units/collapsed-to-residue regression, not to pin the design's actual switching energy."
+    },
+    "td_od50_rev_ns": {
+      "min": 0.001,
+      "max": 25.0,
+      "description": "SUPPLEMENTAL REVERSE-POLARITY decision time: clock (second strobe, rising) to the supply-normalized output FALLING through 0.5, at 50 mV overdrive BELOW the trip point. Same sanity envelope as td_od50_ns and nothing more -- no spec bound, no per-axis floor (td_od50_ns stays the corner-sensitivity anchor), and nothing scored reads it. The `fall=1 td=35n` window is what makes it the second decision: the power-up resolution and the first (positive) decision both happen before 35 ns."
+    },
+    "tau_rev_ps": {
+      "min": 0.1,
+      "max": 20000.0,
+      "description": "Reverse-polarity regeneration time constant, (t_rev(0.1 mV) - t_rev(1 mV))/ln(10) -- the same extraction and sanity envelope as tau_ps, on the HIGH->LOW decision. Supplemental; the metastability statements in this repo are still computed from tau_ps."
+    },
+    "dout_od50_rev_first": {
+      "min": 0.9,
+      "description": "REVERSE-SEQUENCE POLARITY PROOF, first half: at the first strobe the mirrored input was POSITIVE, so the held output must be HIGH. Without it the timed fall could be from a state the first decision never established."
+    },
+    "dout_od1_rev_first": {
+      "min": 0.9,
+      "description": "the same at 1 mV overdrive."
+    },
+    "dout_od01_rev_first": {
+      "min": 0.9,
+      "description": "the same at 0.1 mV overdrive."
+    },
+    "dout_od50_rev_end": {
+      "max": 0.1,
+      "description": "REVERSE-SEQUENCE POLARITY PROOF, second half: after the second strobe the mirrored instance must hold the NEGATIVE answer. Together with dout_od50_rev_first it proves the same instance decided HIGH then LOW, i.e. that td_od50_rev_ns timed an actual HIGH->LOW decision."
+    },
+    "dout_od1_rev_end": {
+      "max": 0.1,
+      "description": "the same at 1 mV overdrive."
+    },
+    "dout_od01_rev_end": {
+      "max": 0.1,
+      "description": "the same at 0.1 mV overdrive -- the near-metastable rung resolves to the correct NEGATIVE answer within the strobe window."
     }
   },
   "evidence": {
@@ -105,12 +153,28 @@
       "METASTABILITY IS A FIRST-CLASS ROW HERE, not a note. tau and resolve_decades are recorded at every PVT point.",
       "e_dec_fj NOW CARRIES A CHECK (issue #20). The prior placeholder DUT's decision stage was behavioural and drew no supply current at all, so the switching energy measured against it was the FRONT END's alone and what remained of the charge integral was dominated by numerical residue -- this note originally said a check belonged here the moment a transistor-level decision stage was bound in sim/dut.json. sim/dut.json now binds design/comparator.spice, whose decision stage is transistor-level and draws real dynamic (and static) supply current, so e_dec_fj is a genuine front-end-plus-decision-stage switching energy; see checks.e_dec_fj.description above for the bound.",
       "THE TARG SEARCHES START AT td=35n, PORTED FROM gf180-comparator's fix (its own PR history): a real comparator's output SR latch has no defined power-up state, so an unwindowed targ search can lock onto the t=0 metastable-resolution transient instead of the strobe-driven decision under test. 35 ns is after the first strobe has completed and after the 20 ns input flip has settled, and before the second strobe at 40 ns.",
-      "SOLVER TOLERANCES. reltol = 1e-4 and vntol = 1e-9 are tightened from the ngspice defaults so that a sub-nanosecond delay difference between two overdrives is resolved rather than smeared. abstol is 1e-13, matching gf180-comparator's finding that 1e-15 (the kickback deck's tighter setting) makes some points of this grid fail to take their first transient step at all."
+      "SOLVER TOLERANCES. reltol = 1e-4 and vntol = 1e-9 are tightened from the ngspice defaults so that a sub-nanosecond delay difference between two overdrives is resolved rather than smeared. abstol is 1e-13, matching gf180-comparator's finding that 1e-15 (the kickback deck's tighter setting) makes some points of this grid fail to take their first transient step at all.",
+      "REVERSE-POLARITY MIRROR LADDER, SUPPLEMENTAL (twin of gf180-comparator#158/#166). Instances RA/RB/RC repeat the A/B/C rungs with the stimulus sign mirrored (positive for the first strobe, negative for the second), so tdr_* time the HIGH->LOW decision on the same second strobe with the same trigger, the same supply-normalized 0.5 threshold and the same td=35n window as td_*; dout_*_rev_first (>= 0.9) and dout_*_rev_end (<= 0.1) prove the HIGH-then-LOW sequence actually happened. The dtd_*_rev_ps and dtau_rev_ps columns are reverse minus forward, per PVT point, in the same transient. Reported, never scored: td_od50_ns, tau_ps and resolve_decades keep their names, expressions and meaning.",
+      "WHY THE LADDER IS A SEPARATE FRAGMENT AND A SEPARATE `reverse_ladder` KEY, NOT MORE `analyses`. `analyses`, `options` and tb_regeneration.spice are consumed fields that layout/pex pins by hash and re-grades committed evidence from; an appended `analyses` card or mirrored instance would change what that committed evidence is said to have run (sim/ evidence is append-only). The mirrored instances therefore live in tb_regeneration_reverse.spice and their nine `.meas` cards in reverse_ladder.analyses, and the harness appends that fragment (one more `.include`) and those cards to the SAME transient. The fragment is validated like the main one and its sha256 is recorded in each record's provenance."
     ]
   },
   "options": [
     "reltol=1e-4",
     "vntol=1e-9",
     "abstol=1e-13"
-  ]
+  ],
+  "reverse_ladder": {
+    "netlist": "tb_regeneration_reverse.spice",
+    "analyses": [
+      "meas tran tdr_a trig v(clkn) val=0.5 rise=2 targ v(dran) val=0.5 fall=1 td=35n",
+      "meas tran tdr_b trig v(clkn) val=0.5 rise=2 targ v(drbn) val=0.5 fall=1 td=35n",
+      "meas tran tdr_c trig v(clkn) val=0.5 rise=2 targ v(drcn) val=0.5 fall=1 td=35n",
+      "meas tran dra_first find v(dran) at=18n",
+      "meas tran drb_first find v(drbn) at=18n",
+      "meas tran drc_first find v(drcn) at=18n",
+      "meas tran dra_end find v(dran) at=55n",
+      "meas tran drb_end find v(drbn) at=55n",
+      "meas tran drc_end find v(drcn) at=55n"
+    ]
+  }
 }

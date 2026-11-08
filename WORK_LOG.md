@@ -2,6 +2,280 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-05
+
+- **PR #403**: sim: complete max-step supplement with vcm-p050 populations 60/60
+- **PR #402**: sim: record partial max-step supplement re-run (4 of 6 populations 60/60)
+- **Issue #89** (closed): sim: complete the two vcm-m050 CM-band offset points that abort (timestep too small) with a uniform tighter max step
+
+### 2026-11-03
+
+- **PR #400**: sim(pex): record failed extracted offset MC at tt/-40C/1.32V, extracted side lost
+- **PR #399**: sim(pex): record extracted whole-latch offset MC, 48 of 60 samples at tt/125C/1.32V via batch
+- **PR #398**: sim(pex): record extracted offset MC at tt/125C/1.08V, 57 of 60 samples via batch
+- **PR #397**: sim(pex): record extracted offset MC at tt/-40C/1.08V, 57 of 60 samples via batch
+- **PR #396**: sim(pex): record extracted offset MC at sf/-40C/1.20V, 57 of 60 samples via batch
+- **PR #395**: sim(pex): record extracted offset MC at sf/125C/1.20V, 57 of 60 samples via batch
+- **PR #394**: sim(pex): record extracted offset MC, 60 of 60 samples at fs/-40C/1.20V via batch
+
+### 2026-11-02
+
+- **PR #392**: sim(pex): record extracted offset MC at fs/125C/1.20V, 60 of 60 samples via batch
+
+### 2026-11-01
+
+- **PR #389**: sim(pex): record extracted whole-latch noise MC, 80 of 80 trials at ff/27C/1.32V via batch
+- **PR #388**: sim(pex): record extracted whole-latch offset MC at ff/27C/1.32V (60/60) via batch
+- **PR #387**: sim(pex): extracted whole-latch MC at ss/27C/1.08V (offset 60/60, noise 76/80) via batch
+- **PR #386**: sim(pex): add per-point roll-up of recorded extracted Monte Carlo results
+- **PR #385**: sim(pex): record extracted whole-latch noise MC at ss/-40C/1.08V, 80 of 80 trials via batch
+- **PR #384**: sim(pex): record extracted whole-latch offset MC, 60 of 60 samples at ss/-40C/1.08V via batch
+- **PR #383**: sim(pex): record extracted whole-latch noise MC at ff/125C/1.32V, 77 of 80 trials
+- **PR #382**: sim(pex): record extracted offset MC at ff/125C/1.32V, 45 of 60 samples via batch
+- **PR #380**: sim(pex): record extracted whole-latch noise MC at tt/-40C/1.20V, 80 of 80 trials via batch
+- **PR #379**: sim(pex): record extracted whole-latch offset MC at tt/-40C/1.20V, 60 of 60 samples
+- **PR #378**: sim(pex): record extracted whole-latch noise MC at tt/125C/1.20V, 77 of 80 trials via batch
+- **PR #376**: sim(pex): record extracted whole-latch offset MC at tt/125C/1.20V, 60 of 60 samples via batch
+- **PR #375**: sim(pex): record extracted whole-latch noise MC, 78 of 80 trials at tt/27C/1.08V
+- **PR #374**: sim(pex): record extracted whole-latch offset MC at tt/27C/1.08V, 57 of 60 samples via batch
+- **PR #372**: sim(pex): record extracted whole-latch noise MC at tt/27C/1.32V, 77 of 80 trials (Part of #61)
+
+### 2026-10-31
+
+- **PR #371**: sim(pex): record extracted whole-latch offset MC, N=60 at tt/27C/1.32V via sharded batch
+- **PR #370**: sim(pex): record extracted whole-latch transient-noise MC at fs/27C/1.20V, 77 of 80 trials (Part of #61)
+- **PR #369**: sim(pex): record extracted whole-latch offset MC at fs/27C/1.20V, 57 of 60 compared (Part of #61)
+- **PR #368**: sim(pex): record extracted whole-latch transient-noise MC, N=80 at sf/27C/1.20V
+- **PR #367**: sim(pex): record extracted whole-latch offset MC, N=60 at sf/27C/1.20V via sharded batch
+- **PR #366**: sim(pex): record failed extracted offset MC attempt at sf/27C/1.20V (extracted side lost)
+- **PR #365**: sim(pex): record extracted whole-latch noise MC, N=80 at ff/-40C/1.32V via sharded batch
+- **PR #364**: sim(pex): record extracted offset MC at ff/-40C/1.32V, 57 of 60 samples (Part of #61)
+- **PR #363**: sim(pex): record extracted whole-latch transient-noise MC, N=80 at ss/125C/1.08V via sharded batch
+- **PR #362**: sim(pex): record extracted whole-latch offset MC, N=60 at ss/125C/1.08V via sharded batch
+- **PR #361**: sim(pex): record extracted whole-latch transient-noise MC, N=80 at tt/27C/1.20V via batch
+- **PR #360**: refactor(sim): reuse cmband's CM-band Condition grid in kickback_cmband
+- **PR #359**: sim(pex): record extracted whole-latch offset MC at nominal point, N=60 via batch
+- **PR #358**: sim(pex): express whole-latch MC requests and probe them on the batch fleet
+- **PR #357**: sim(pex): record extracted 45-corner kickback grid via sharded batch
+- **PR #355**: sim(pex): record sharded 45-corner extracted regeneration grid, 42 of 45 corners
+- **Issue #356** (closed): Remove duplicated CM-band Condition table from kickback_cmband: reuse cmband's
+
+### 2026-10-30
+
+- **PR #353**: refactor(sim): reuse kcli._submit_with_retry in kickback and memory runners
+- **PR #352**: sim(pex): record 3-unit extracted batch sample with td_c post-layout error
+- **PR #350**: sim(pex): record failed 45-unit extracted regeneration batch job
+- **PR #349**: refactor(scripts): share git()/resolve_tree() across evidence checkers
+- **PR #348**: refactor(sim): share CM-band source-line rewrite across bench modules
+- **PR #347**: sim(pex): record stalled 45-unit extracted regeneration batch job
+- **PR #345**: sim(pex): size regeneration request timeout from measured unit runtime
+- **PR #343**: docs(sim): record failed full regeneration PVT batch job and refused split
+- **PR #342**: fix(sim): emit pex PVT supply as corners.params and record passing batch probe
+- **Issue #351** (closed): Dedupe _submit_with_retry: remove two copies of kcli._submit_with_retry
+- **Issue #346** (closed): Simplify: dedupe git()/resolve_tree() across three CI check scripts
+- **Issue #344** (closed): Consolidate duplicated CM-band apply_transform across cmband, cmdecision, kickback_cmband
+
+### 2026-10-27
+
+- **PR #338**: build: pin klayout-tools to release 0.8.0 and accept release pins in the drift guard
+- **Issue #337** (closed): Bump klayout-tools pin 3a75c3ae705b → 0.8.0
+- **PR #212**: sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (#165)
+- **PR #171**: sim: memory/hysteresis characterization bench (paired-history switching boundary over PVT) (Closes #159)
+- **Issue #165** (closed): sim: kickback residue at dut_vcm -/+50 mV as klt sim corner campaigns (evidence for DR-0004 CM-range row)
+- **Issue #159** (closed): Memory / hysteresis characterization bench: does the previous decision bias the next?
+- **PR #218**: sim: max-step supplement workflow for aborted CM-band offset points (#89, partial: batch run failed)
+
+### 2026-10-26
+
+- **Issue #322** (closed): DR-0031 is stale after #318: evidence-size exception no longer in force
+- **PR #199**: PEX diagnostic: extracted-device-only leg to separate device geometry from routing RC
+- **Issue #191** (closed): PEX diagnostic: separate extracted device geometry from routing RC delay
+
+### 2026-10-25
+
+- **PR #265**: Validate timestep smoke evidence before computing noise convergence (#263)
+- **Issue #263** (closed): Validate timestep smoke evidence before computing noise convergence
+- **Issue #325** (closed): Remove scripts/diagnostics: completed #188 guard handoff package, unwired
+
+### 2026-10-24
+
+- **PR #324**: Retire per-PR evidence-size exceptions; count evidence bytes only
+- **Issue #323** (closed): Squash the 27 evidence-size exception records into one superseding record; replace the cap with the artifact store
+
+### 2026-10-23
+
+- **PR #321**: Evidence manifests: artifact:<key> URIs, drop the bucket setting (klt 7e3561f+)
+- **Issue #320** (closed): Evidence manifests: use artifact:<key> URIs and drop the bucket setting (klt 7e3561f+)
+- **PR #319**: Store new sim evidence through the artifact store; commit manifests only (#318)
+- **Issue #318** (closed): Write sim evidence through the fleet artifact store; commit manifests; restore the size ceiling against manifests
+- **PR #303**: refactor: publish comparison and ibsweep reports through artifacts.publish
+- **Issue #302** (closed): Consolidate remaining comparison/ibsweep report writers onto artifacts.publish (parallel drift with #237)
+- **PR #270**: Validate CM decision timing dimensions and physical domains
+- **Issue #266** (closed): Validate CM decision timing dimensions and physical domains
+- **PR #268**: Reject invalid local PVT grid inputs before simulation
+- **Issue #264** (closed): Reject invalid local PVT grid inputs before simulation
+- **PR #248**: estimate: resolve reference offset/yield N from committed tree metadata (#247)
+- **Issue #247** (closed): Derive evidence-size estimate denominators from selected reference campaigns
+- **PR #238**: Validate clock-supply probes and reject ambiguous sample identities
+- **Issue #235** (closed): Validate clock-supply probes and reject ambiguous sample identities
+
+### 2026-10-22
+
+- **PR #276**: Mirror gf180's supplemental reverse-polarity ladder fragment (#274)
+- **Issue #274** (closed): Mirror gf180's supplemental reverse-polarity ladder fragment (bench-structure parity, gf180-comparator#158/#166)
+- **Issue #297** (closed): Remove scripts/diagnostics/: completed #188 guard-handoff repro, unrelated to the comparator
+
+### 2026-10-21
+
+- **PR #317**: test: show captured git output when sparse-checkout sh() fails
+- **Issue #316** (closed): test flake: test_append_only_and_size_job_from_sparse_clone fails on append-only sim evidence
+- **PR #313**: ci: make sim evidence-size check report-only while suspended
+- **Issue #312** (closed): Suspend the sim/ evidence-size ceiling (report-only) until the fleet S3 evidence store lands
+
+### 2026-10-20
+
+- **PR #249**: Validate Monte Carlo sample populations before compliance grading
+- **Issue #245** (closed): Validate actual Monte Carlo populations before compliance grading
+- **PR #281**: feat: read per-PR evidence-size exception files so open PRs stop conflicting
+- **Issue #278** (closed): Every evidence PR rewrites the same total-ceiling line in sim/evidence-size-budget.json
+
+### 2026-10-17
+
+- **PR #296**: refactor: share cm-band undo_transform between cmband and cmdecision
+- **Issue #295** (closed): Remove dead _spec_meas and dedupe cmband/cmdecision undo_transform
+- **PR #292**: refactor: remove three zero-caller helpers from sim harness and kltsim
+- **Issue #291** (closed): Remove four zero-caller helpers in sim/harness and sim/kltsim
+- **PR #290**: refactor: share fleet-cap retry and local smoke runner across klt sim drivers
+- **Issue #289** (closed): Consolidate duplicated klt-sim fleet-cap retry loop (4 copies) and local smoke runner (2 copies) across campaign drivers
+- **Issue #286** (closed): Remove scripts/diagnostics: delivered #188 guard-repro handoff, unreferenced
+
+### 2026-10-15
+
+- **PR #243**: Preserve derived campaign report pairs before regeneration (#237)
+- **Issue #237** (closed): Preserve derived campaign report pairs before regeneration
+
+### 2026-10-12
+
+- **PR #273**: Reject mixed-geometry sizing finalists in candidate Target summaries
+- **Issue #269** (closed): Reject mixed-geometry sizing finalists in candidate Target summaries
+- **PR #271**: Validate bias mirror/headroom screening probes before aggregation
+- **Issue #267** (closed): Validate bias mirror headroom screening probes before aggregation
+- **Issue #260** (closed): Auditor process proposal: run final evidence-size preflight before requesting review
+
+- **PR #259**: yield: re-derive the index in the engine-free consistency check
+- **PR #258**: ci: run KLayout implant geometry regression in layout-reproducibility (#257)
+- **PR #256**: cmband: empty reproduction is INCOMPLETE; count rejected draws per record
+- **PR #254**: PDK DRC: reject incomplete deck runs before reporting clean (#253)
+- **PR #251**: Validate CM-offset draw identities, probes, pairing and reproduction completeness (#250)
+- **PR #246**: README claims guard: verify noise compliance verdicts (#242)
+- **Issue #257** (closed): Run implant geometry regression tests in the KLayout-equipped CI job
+- **Issue #255** (closed): Recompute yield index statistics during engine-free consistency checks
+- **Issue #253** (closed): PDK DRC: reject incomplete deck runs before reporting clean
+- **Issue #252** (closed): cmband.reproduction(): empty comparison yields vacuous REPRODUCED verdict
+- **Issue #250** (closed): Validate common-mode offset draw identities, probes and reproduction completeness
+- **Issue #242** (closed): Verify public noise compliance verdict statements
+- **PR #241**: PEX timing compliance: require matching valid decision states
+- **Issue #240** (closed): PEX timing compliance: require matching valid decision states
+
+### 2026-10-11
+
+- **PR #239**: noise_full: validate provenance per tn_full_* config before arithmetic (#236)
+- **PR #234**: check_readme_claims: pin README kickback residue claims to the historical harness record
+- **PR #233**: docs: require evidence size check on final HEAD before review (#223)
+- **PR #231**: README evidence: verify common-mode offset characterization counts and ranges
+- **PR #230**: CI: verify source schematics regenerate the committed comparator netlist
+- **PR #229**: Supplemental DRC: count report items and reject malformed marker evidence
+- **PR #227**: fix: validate the complete physical PVT grid in README evidence loaders
+- **Issue #236** (closed): Bind full-noise analysis to verified configuration and submission provenance
+- **Issue #232** (closed): README evidence: pin kickback residue claims to their historical measurement population
+- **Issue #223** (closed): Builder preflight: check tracked sim size before requesting review
+- **Issue #228** (closed): README evidence: verify common-mode offset characterization counts and ranges
+- **Issue #224** (closed): CI: verify source schematics regenerate the committed comparator netlist
+- **Issue #220** (closed): Supplemental DRC: count report items and reject malformed marker evidence
+- **Issue #217** (closed): README evidence loaders: validate the complete physical PVT identity set
+
+### 2026-10-11
+
+- **PR #225**: Reject incomplete reproduction and non-finite CM probes in decision-band validation
+- **PR #222**: ci: fail closed when sparse checkout omits ruff lint inputs
+- **PR #221**: Preflight CM-band run submissions and report failed parts
+- **PR #219**: pex: require distinct physical corners and valid delay evidence
+- **PR #215**: docs: reconcile harness-unit-tests sparse row in sim/README.md with ci.yml (#187)
+- **PR #214**: Layout: repair PDK-deck DRC findings pSD.b and pSD.i (#184)
+- **Issue #209** (closed): Reject incomplete reproduction and non-finite CM probes in decision-band validation
+- **Issue #216** (closed): CI: fail when sparse checkout omits intended Ruff input files
+- **Issue #194** (closed): CM-band offset runner: preflight existing envelopes and report failed parts
+- **Issue #211** (closed): PEX renderer: require distinct physical corners and valid delay evidence
+- **Issue #210** (closed): Guard telemetry: retain detached reset protection unless disposal is proven
+- **Issue #187** (closed): Docs: sim/README.md sparse-cone table omits harness-unit-tests' new pdk_drc inputs
+- **Issue #184** (closed): Layout: repair PDK-deck DRC findings pSD.b (x10) and pSD.i (x52)
+
+- **Issue #177** (closed): Reject ambiguous repeated ngspice output in the local PVT harness
+- **Issue #178** (closed): Validate local testbench check bounds before simulation
+- **Issue #180** (closed): Layout: verify physical rules outside the curated DRC deck
+- **Issue #181** (closed): PEX reporting: distinguish raw measurement success from circuit compliance
+- **Issue #179** (closed): Freeze local PVT source inputs before executing the grid
+- **Issue #186** (closed): Unit tests for the CM-band campaign runner (retry, resubmit and append-only guards)
+- **Issue #192** (closed): Noise analysis: retain shared-draw disclosures and bound grid-mean uncertainty
+- **Issue #197** (closed): Preserve partial ngspice diagnostics when local PVT points time out
+- **Issue #196** (closed): Record compiled OSDI model identity in local PVT evidence
+- **Issue #193** (closed): README claims: verify offset and full-noise figures against their own evidence populations
+- **Issue #188** (closed): Guard telemetry: package alternate-index wrapper reproduction for upstream handoff
+- **Issue #203** (closed): Record runtime SPICE model-source identity in local PVT evidence
+- **Issue #173** (closed): Clock-edge, strobe-width and supply-disturbance sensitivity characterization of the whole latch
+- **Issue #164** (closed): sim: decision time / metastability at dut_vcm -/+50 mV as klt sim corner campaigns (evidence for DR-0004 CM-range row)
+- **PR #183**: Reject ambiguous repeated ngspice output in the local PVT harness
+- **PR #182**: Validate local testbench check bounds before simulation
+- **PR #185**: layout: supplemental DRC against IHP's own deck (#180)
+- **PR #189**: PEX delta table: separate measurement availability from compliance (#181)
+- **PR #190**: harness: freeze local PVT source inputs before executing the grid (Closes #179)
+- **PR #195**: test: unit tests for CM-band campaign runner retry and append-only guards
+- **PR #198**: Noise analysis: retain shared-draw disclosures and bound grid-mean uncertainty
+- **PR #201**: runner: preserve partial ngspice diagnostics on local PVT timeout
+- **PR #202**: Record compiled OSDI model identity in local PVT evidence (#196)
+- **PR #204**: README claims: verify offset and full-noise figures against their own evidence populations
+- **PR #205**: feat(diagnostics): alternate-index wrapper guard reproduction for upstream handoff
+- **PR #206**: harness: record runtime SPICE model-source identity in PVT evidence (#203)
+- **PR #207**: sim: clock-edge, strobe-width and supply-disturbance sensitivity characterization (#173)
+- **PR #208**: sim: decision time / metastability at dut_vcm -/+50 mV as klt sim campaigns (#164)
+
+### 2026-10-10
+
+- **Issue #174** (closed): CI guard: README spec-table figures must match the committed characterization report
+- **Issue #82** (closed): Offset 3σ: klt sim per-draw campaign reads 13 % above the whole-latch record (systematic, cause unknown)
+- **PR #175**: ci: guard README spec-table figures against the characterization report
+- **PR #176**: analysis: klt-vs-record offset shift is 1.3 sigma once CRN is accounted for (#82)
+
+### 2026-10-10
+
+- **PR #170**: T1 statistical signoff: N=200 offset populations at every PVT point (Closes #167)
+- **PR #169**: ci: pinned ruff F-rule static check (Closes #157)
+- **Issue #167** (closed): T1 statistical signoff: larger offset populations at every PVT point
+- **Issue #157** (closed): CI: pinned pyflakes-class static check over harness, kltsim and guard scripts
+
+- **PR #158**: test: unit tests for harness PDK resolution and toolchain-pin drift
+- **PR #163**: klt yield evidence for the statistical DR-0002 rows; cite T1 item 6 (unmet, undersized_sample)
+- **PR #162**: Protect aggregated characterization reports from in-place replacement
+- **PR #161**: signoff parity: preserve JSON container structure
+- **PR #154**: grade: validate supply/temperature probe units (Closes #152)
+- **PR #153**: grade: reject repeated or malformed measurement names within a corner
+- **PR #148**: pex: full PVT klt pex on batch; runner klt 0.5.0 vs client 0.7.0 blocks every corner (Part of #61)
+- **PR #147**: tests: unit tests for signoff parity, ERC tool, netlist generator
+- **PR #146**: Cite artifact-anchored evidence for T1 items 1, 2, 9, 10; bump klt pin (#65)
+- **PR #145**: Capture verified Git provenance before PVT simulation
+- **PR #144**: pex: second batch re-probe, still no capacity (Part of #61)
+- **Issue #156** (closed): Unit tests for harness PDK resolution and toolchain-pin drift checks
+- **Issue #63** (closed): Monte Carlo: mint a klt yield report for the statistical spec rows (offset sigma) and cite it (T1 item 6)
+- **Issue #155** (closed): Protect aggregated characterization reports from in-place replacement
+- **Issue #149** (closed): Make signoff parity preserve JSON container structure
+- **Issue #151** (closed): Guard telemetry: retain stash create redirect confinement
+- **Issue #152** (closed): Validate supply and temperature probe units before accepting PVT evidence
+- **Issue #150** (closed): Reject repeated measurement names within corner evidence
+- **Issue #117** (closed): Unit tests for the CI-gating scripts: signoff parity, ERC judge, netlist generator
+- **Issue #141** (closed): Guard decision review: ask:(^|[;&|(`[:space:]])git checkout \.
+- **Issue #65** (closed): Cite artifact-anchored evidence for T1 items 1, 9 and 10 (design sources, testbenches, repo hygiene)
+- **Issue #142** (closed): Capture verified Git provenance before PVT simulation
+
 ### 2026-10-10
 
 - **PR #140**: feat(sim): T1 item 8 aggregated characterization report (schematic)

@@ -324,8 +324,19 @@ def full(campaign_dir: Path) -> list[dict]:
                 entry = None
             cells[row_id] = ibsweep_mod._cell(entry)
         geometry, geom_problems = _geometry_report(sub, tuple(grade_mod._bench_names()))
-        out.append({"name": sub.name[len("full_"):], "dir": sub.name,
-                    "geometry": geometry, "geometry_problems": geom_problems, "rows": cells})
+        cand = {"name": sub.name[len("full_"):], "dir": sub.name,
+                "geometry": geometry, "geometry_problems": geom_problems,
+                "candidate_status": "available", "rejection_reasons": [], "rows": cells}
+        if geom_problems:
+            # Cross-bench geometry cannot be attributed to one candidate (issue
+            # #269): the individually graded cells survive only as diagnostics;
+            # no candidate-level row carries a verdict.
+            cand["candidate_status"] = "rejected"
+            cand["rejection_reasons"] = list(geom_problems)
+            cand["diagnostic_rows"] = cells
+            cand["rows"] = {rid: {"state": "rejected", "reason": "; ".join(geom_problems)}
+                            for rid, _l, _u in FULL_ROWS}
+        out.append(cand)
     return out
 
 
@@ -345,10 +356,6 @@ def _mc(cell, binding=False):
     if not cell["available"]:
         return f"unavailable ({cell['valid']}/{cell['expected']} valid)"
     return _f(cell["value"]) if binding else f"{_f(cell['value'])} @ {cell['point']}"
-
-
-def _w(cell, scale=1.0):
-    return "-" if cell is None else f"{_f(cell['value'] * scale)} @ {cell['point']}"
 
 
 def render_markdown(result: dict) -> str:
@@ -399,7 +406,12 @@ def render_markdown(result: dict) -> str:
             cells = []
             for row_id, _l, _u in FULL_ROWS:
                 c = r["rows"][row_id]
-                if c["state"] != "measured":
+                if c["state"] == "rejected":
+                    d = r["diagnostic_rows"][row_id]
+                    cells.append("REJECTED (diagnostic: " + (
+                        f"{_f(d['value'])} @ {d['at']}, bench T {d['target_verdict']}"
+                        if d["state"] == "measured" else "not run") + ")")
+                elif c["state"] != "measured":
                     cells.append("not run")
                 else:
                     tv = "n/a" if c["target_verdict"] == grade_mod.NOT_SPECIFIED else c["target_verdict"]
@@ -409,15 +421,31 @@ def render_markdown(result: dict) -> str:
         L += ["", "### Ratified Target rows per finalist", "",
               "| candidate | Target rows met | Target rows failed | incomplete | not run |", "|---|---|---|---|---|"]
         for r in result["full"]:
+            if r.get("candidate_status") == "rejected":
+                L.append(f"| {r['name']} | REJECTED: not attributable to one candidate | "
+                         "REJECTED | REJECTED | REJECTED |")
+                continue
             met, failed, inc, unrun = _met(r)
             L.append(f"| {r['name']} | {', '.join(met) or '-'} | {', '.join(failed) or '-'} | "
                      f"{', '.join(inc) or '-'} | {', '.join(unrun) or '-'} |")
+        rejected = [r for r in result["full"] if r.get("candidate_status") == "rejected"]
+        if rejected:
+            L += ["", "### Rejected finalists (geometry validation, issue #269)", "",
+                  "Benches of these candidates declare inconsistent or unreadable geometry "
+                  "overrides, so no candidate-level Target row is claimed met or failed. The "
+                  "individual bench results are kept as diagnostics (`diagnostic_rows` in "
+                  "sizesweep.json). Rejected is distinct from `not run`.", ""]
+            for r in rejected:
+                for why in r["rejection_reasons"]:
+                    L.append(f"- `{r['name']}`: {why}")
         L.append("")
     return "\n".join(L)
 
 
 def _met(r: dict):
     met, failed, inc, unrun = [], [], [], []
+    if r.get("candidate_status") == "rejected":
+        return met, failed, inc, unrun
     for row_id, _l, _u in FULL_ROWS:
         c = r["rows"][row_id]
         if c["state"] != "measured":

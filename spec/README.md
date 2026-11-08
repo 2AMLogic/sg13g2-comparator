@@ -46,6 +46,12 @@ rewritten once ratified — a later change supersedes it with a new,
 higher-numbered record rather than editing history in place, the same
 append-only convention [`sim/README.md`](../sim/README.md) uses for evidence.
 
+Evidence-size exception records (DR-0005 to DR-0032) are retired: they are
+superseded by
+[`evidence-size/323-retire-incremental-evidence-size-raises.md`](decision-records/evidence-size/323-retire-incremental-evidence-size-raises.md)
+and kept as history. No PR may add a new one; the checker rejects it. See the
+"Evidence size budget" section of [`sim/README.md`](../sim/README.md).
+
 Ratification flows through the two-key mechanism (an EE key and a market
 key); scope-only spec DRs ratified with both keys need no per-PR operator
 statement. The two reviewer variants live in this repo, installed as

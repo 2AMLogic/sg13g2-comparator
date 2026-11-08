@@ -160,6 +160,47 @@ python3 design/netlist.py --check    # CI-style staleness check, exit nonzero if
 
 Requires `xschem` on `PATH` and a resolvable SG13G2 PDK install (same
 resolution order as `sim/harness/pdk.py`; see `sim/README.md` "Cold start").
+A missing `xschem`, PDK, or hierarchical symbol is a hard failure (nonzero
+exit), never a skipped check. xschem's PDK `xschemrc` reads `$PWD`, so run it
+from a normal shell (a bare `env -i` without `PWD` makes xschem exit 10).
+
+### CI: `netlist-regeneration` (issue #224)
+
+`.github/workflows/ci.yml` job `netlist-regeneration` runs exactly
+
+```bash
+python3 design/netlist.py --check
+```
+
+with a **real** xschem and the pinned PDK, so a schematic-only edit that was
+not re-netlisted turns CI red. (The mocked tests in `design/tests/` still run
+in `harness-unit-tests`; they cover generator logic, not this schematic.)
+Provisioning is [`scripts/provision_netlist_env.sh`](../scripts/provision_netlist_env.sh):
+
+- `xschem <prefix>` builds xschem 3.4.7 from its sha256-verified release
+  tarball (the pin lives in that script); the job asserts the provisioned
+  binary is the one on `PATH`.
+- `pdk <root>` fetches the release, URL and tarball sha256 declared in
+  [`sim/pdk.json`](../sim/pdk.json), verifies it, and lays out
+  `<root>/ihp-sg13g2/{libs.tech,libs.ref}` (the OSDI models and ngspice are
+  not needed to netlist). The job points `PDK_ROOT` at it, i.e. the same
+  discovery contract as `sim/harness/pdk.py`.
+- The sparse checkout is `design/`, `sim/harness/` (imported by
+  `netlist.py`), `sim/pdk.json` and the provisioner; its sufficiency is proven
+  by `scripts/tests/test_sparse_checkout.py` (see `sim/README.md`).
+
+Local reproduction (nothing host-wide; scratch prefix):
+
+```bash
+scripts/provision_netlist_env.sh xschem /tmp/nl/xschem   # needs tcl/tk/X11/cairo dev libs, bison, flex, gawk
+scripts/provision_netlist_env.sh pdk /tmp/nl/pdk
+PATH=/tmp/nl/xschem/bin:$PATH PDK_ROOT=/tmp/nl/pdk python3 design/netlist.py --check
+```
+
+or, with xschem and the pinned PDK already installed, just
+`python3 design/netlist.py --check`. If it reports stale, run
+`python3 design/netlist.py` and refresh the four bound files (see
+[`manifests/README.md`](../manifests/README.md)).
 `design/netlist.py` points `XSCHEM_USER_LIBRARY_PATH` at this directory so
 xschem can resolve the hierarchical-cell symbols above (`comparator_dut.sym`
 etc. live next to their `.sch`, not under the PDK's own symbol tree) — see

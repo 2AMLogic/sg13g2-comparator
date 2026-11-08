@@ -25,59 +25,8 @@ TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$(cd "$TEST_DIR/.." && pwd)"
 GUARD="$SCRIPTS_DIR/verdict-staleness-guard.sh"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m'
-
-TESTS_RUN=0
-TESTS_PASSED=0
-TESTS_FAILED=0
-
-assert_eq() {
-    local expected="$1" actual="$2" msg="$3"
-    TESTS_RUN=$((TESTS_RUN + 1))
-    if [[ "$expected" == "$actual" ]]; then
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        echo -e "  ${GREEN}PASS${NC}: $msg"
-    else
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        echo -e "  ${RED}FAIL${NC}: $msg"
-        echo "    Expected: '$expected'"
-        echo "    Actual:   '$actual'"
-    fi
-}
-
-# assert_contains/assert_not_contains use a pure-bash substring match (no
-# forked printf|grep pipeline) so a transient fork/exec failure under
-# run-ci-suites.sh's parallel suite pool can never masquerade as a genuine
-# content mismatch (#7819, #7874).
-assert_contains() {
-    local haystack="$1" needle="$2" msg="$3"
-    TESTS_RUN=$((TESTS_RUN + 1))
-    if [[ "$haystack" == *"$needle"* ]]; then
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        echo -e "  ${GREEN}PASS${NC}: $msg"
-    else
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        echo -e "  ${RED}FAIL${NC}: $msg"
-        echo "    Expected substring: '$needle'"
-        echo "    In: '$haystack'"
-    fi
-}
-
-assert_not_contains() {
-    local haystack="$1" needle="$2" msg="$3"
-    TESTS_RUN=$((TESTS_RUN + 1))
-    if [[ "$haystack" == *"$needle"* ]]; then
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        echo -e "  ${RED}FAIL${NC}: $msg"
-        echo "    Unexpected substring: '$needle'"
-        echo "    In: '$haystack'"
-    else
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-        echo -e "  ${GREEN}PASS${NC}: $msg"
-    fi
-}
+# shellcheck source=lib/assert.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/assert.sh"
 
 if [[ ! -x "$GUARD" ]]; then
     echo -e "${RED}FATAL${NC}: $GUARD not found or not executable" >&2
@@ -176,6 +125,26 @@ case "$1" in
       if [[ -f "$canned" ]]; then cat "$canned"; else echo "[]"; fi
       exit 0
     fi
+    # #13586: timeline (fails if timeline-fail-<N>) and collaborator permission
+    # (perm-<login> holds the permission word; absent -> "none").
+    if [[ "$path" == repos/*/issues/*/timeline ]]; then
+      num="${path#repos/*/issues/}"
+      num="${num%/timeline}"
+      printf 'TIMELINE %s\n' "$num" >> "$STUB_DIR_FROM_ENV/timeline-calls.log"
+      if [[ -f "$STUB_DIR_FROM_ENV/timeline-fail-$num" ]]; then
+        echo "stub gh: timeline fetch failed (HTTP 502)" >&2
+        exit 1
+      fi
+      canned="$STUB_DIR_FROM_ENV/timeline-$num.json"
+      if [[ -f "$canned" ]]; then cat "$canned"; else echo "[]"; fi
+      exit 0
+    fi
+    if [[ "$path" == repos/*/collaborators/*/permission ]]; then
+      login="${path#repos/*/collaborators/}"
+      login="${login%/permission}"
+      if [[ -f "$STUB_DIR_FROM_ENV/perm-$login" ]]; then cat "$STUB_DIR_FROM_ENV/perm-$login"; else echo none; fi
+      exit 0
+    fi
     echo "stub gh: unhandled api args: $*" >&2
     exit 3
     ;;
@@ -230,6 +199,11 @@ chmod +x "$STUB_DIR/gh"
 cat > "$STUB_DIR/loom-daemon" <<'STUB'
 #!/usr/bin/env bash
 STUB_DIR_FROM_ENV="${LOOM_TEST_STUB_DIR:?stub loom-daemon: LOOM_TEST_STUB_DIR not set}"
+# $STUB_DIR/hold-labels: the registry's answer to `labels list --property hold
+# --with-retired` (#11795); absent, the query fails like an older binary.
+if [[ "$*" == "labels list --property hold --with-retired" && -f "$STUB_DIR_FROM_ENV/hold-labels" ]]; then
+  exec cat "$STUB_DIR_FROM_ENV/hold-labels"
+fi
 if [[ "$1" == "forge" && "$2" == "verdict-equivalent" ]]; then
   printf 'TREE %s\n' "$*" >> "$STUB_DIR_FROM_ENV/tree-calls.log"
   if [[ -f "$STUB_DIR_FROM_ENV/tree-verb-missing" ]]; then
@@ -239,6 +213,10 @@ if [[ "$1" == "forge" && "$2" == "verdict-equivalent" ]]; then
   if [[ -f "$STUB_DIR_FROM_ENV/tree-compare-fail" ]]; then
     echo "stub loom-daemon: could not decide $4 -> $5 — re-review (fail closed). Why: clean-merge: new head $5 is not in the local clone and could not be fetched: stub" >&2
     exit 1
+  fi
+  if [[ -f "$STUB_DIR_FROM_ENV/tree-no-repo-flag" && "$*" == *" --repo "* ]]; then
+    echo "error: unexpected argument '--repo' found" >&2
+    exit 2
   fi
   EQ_KIND=""
   [[ -f "$STUB_DIR_FROM_ENV/tree-identical" ]] && EQ_KIND=tree
@@ -319,6 +297,9 @@ export PATH="$STUB_DIR:$PATH"
 # Force the guard's $PATH resolution tier (the production shape). A sweep-
 # dispatched shell inherits LOOM_DAEMON_BIN pointing at the real installed
 # daemon, which would silently run live `gh` mutations instead of the stub.
+# A real daemon from the caller (CI exports LOOM_DAEMON_BIN) supplies (g3)'s
+# registry answer; it is only ever asked `labels list`, a read.
+LOOM_TEST_REAL_DAEMON="${LOOM_TEST_REAL_DAEMON:-${LOOM_DAEMON_BIN:-}}"
 unset LOOM_DAEMON_BIN
 
 SHA_A="1111111111111111111111111111111111111111"
@@ -422,6 +403,7 @@ reset_state() {
     rm -f "$STUB_DIR"/tree-compare-fail "$STUB_DIR"/tree-verb-missing
     rm -f "$STUB_DIR"/equiv-clean-merge "$STUB_DIR"/equiv-rebase
     rm -f "$STUB_DIR"/notice-calls.log "$STUB_DIR"/notice-stdin.json "$STUB_DIR"/notice-verb-missing
+    rm -f "$STUB_DIR"/timeline-*.json "$STUB_DIR"/timeline-fail-* "$STUB_DIR"/timeline-calls.log "$STUB_DIR"/perm-*
 }
 
 run_guard() {
@@ -457,6 +439,16 @@ run_guard 201
 assert_eq "0" "$RC" "(b) Marker SHA == head SHA -> exit 0"
 assert_eq "FRESH" "$(get_field "$OUT" DECISION)" "(b) DECISION=FRESH"
 assert_eq "$SHA_A" "$(get_field "$OUT" MARKER_SHA)" "(b) MARKER_SHA reported"
+
+# (b1) Lenient reader: a hand-posted `verdict=approve` marker (not the canonical
+#      `approved`) must still be read, not treated as no verdict (#12104).
+reset_state
+pr_json 200 "$SHA_A" "loom:pr"
+{ echo "["; verdict_comment "2026-08-08T02:22:00Z" "$SHA_A" "approve"; echo "]"; } > "$STUB_DIR/comments-200.json"
+run_guard 200
+assert_eq "0" "$RC" "(b1) verdict=approve marker, SHA == head -> exit 0"
+assert_eq "FRESH" "$(get_field "$OUT" DECISION)" "(b1) DECISION=FRESH"
+assert_eq "$SHA_A" "$(get_field "$OUT" MARKER_SHA)" "(b1) MARKER_SHA reported"
 
 # (b2) Regression: an unchanged-head PR must never be re-queued, even with
 #      --clear (no spurious label writes on ordinary re-runs / comment-only
@@ -579,14 +571,38 @@ assert_eq "0" "$(get_field "$OUT" CLEARED)" "(g) CLEARED=0 on an explicit hold"
 assert_contains "$OUT" "clear suppressed" "(g) REASON explains the suppression"
 assert_eq "" "$WRITES" "(g) No label writes on a held PR"
 
-# (g2) Same for loom:operator-only.
+# (g2) Same for loom:frozen (the third hold, #11795).
 reset_state
-pr_json 210 "$SHA_B" "loom:pr" "loom:operator-only"
+pr_json 210 "$SHA_B" "loom:pr" "loom:frozen"
 { echo "["; verdict_comment "2026-08-08T03:00:00Z" "$SHA_A" "approved"; echo "]"; } > "$STUB_DIR/comments-210.json"
 run_guard 210 --clear
-assert_eq "12" "$RC" "(g2) Stale approval on loom:operator-only -> exit 12"
-assert_eq "0" "$(get_field "$OUT" CLEARED)" "(g2) CLEARED=0 on loom:operator-only"
-assert_eq "" "$WRITES" "(g2) No label writes on loom:operator-only"
+assert_eq "12" "$RC" "(g2) Stale approval on loom:frozen -> exit 12"
+assert_eq "0" "$(get_field "$OUT" CLEARED)" "(g2) CLEARED=0 on loom:frozen"
+assert_eq "" "$WRITES" "(g2) No label writes on loom:frozen"
+
+# (g3) #11795 transition: a PR carrying ONLY a retired hold name (not yet moved
+#      by `labels migrate`) is still held -- --clear stays suppressed, through
+#      the registry (--with-retired) and through the older-daemon fallback.
+for retired in loom:operator-only loom:operator-blocked; do
+  for source in fallback registry; do
+    reset_state
+    rm -f "$STUB_DIR/hold-labels"
+    if [[ "$source" == "registry" ]]; then
+      if [[ -n "$LOOM_TEST_REAL_DAEMON" && -x "$LOOM_TEST_REAL_DAEMON" ]]; then
+        "$LOOM_TEST_REAL_DAEMON" labels list --property hold --with-retired > "$STUB_DIR/hold-labels"
+      else
+        printf '%s\n' loom:blocked loom:operator loom:frozen loom:operator-only loom:operator-decision \
+          loom:operator-mechanical loom:operator-blocked loom:needs-capability > "$STUB_DIR/hold-labels"
+      fi
+    fi
+    pr_json 210 "$SHA_B" "loom:pr" "$retired"
+    { echo "["; verdict_comment "2026-08-08T03:00:00Z" "$SHA_A" "approved"; echo "]"; } > "$STUB_DIR/comments-210.json"
+    run_guard 210 --clear
+    assert_eq "0" "$(get_field "$OUT" CLEARED)" "(g3) only $retired ($source) -> CLEARED=0, still held"
+    assert_eq "" "$WRITES" "(g3) only $retired ($source) -> no label writes"
+  done
+done
+rm -f "$STUB_DIR/hold-labels"
 
 # (h) Idempotency: the old->new transition was already announced by an earlier
 #     pass (daemon backstop and a Judge pass can both notice the same move).
@@ -1284,7 +1300,7 @@ assert_eq "$SHA_B" "$(get_field "$OUT" HEAD_SHA)" "(u1) HEAD_SHA is the moved he
 assert_eq "" "$WRITES" "(u1) loom:pr is NOT removed on a tree-identical move"
 assert_eq "" "$COMMENTS_POSTED" "(u1) No stale-verdict comment posted"
 assert_eq "" "$DAEMON" "(u1) No auto-merge disarm — the reviewed tree IS what is at the head"
-assert_contains "$TREE_CALLS" "forge verdict-equivalent 270 $SHA_A $SHA_B" "(u1) The comparison is asked pr, marker, head, in that order"
+assert_contains "$TREE_CALLS" "forge verdict-equivalent --repo owner/repo 270 $SHA_A $SHA_B" "(u1) The comparison names the vetted write repo, then asks pr, marker, head, in that order (#13150)"
 assert_contains "$OUT" "equivalence kind: tree" "(u1) REASON names the equivalence kind that carried the verdict"
 assert_contains "$OUT" "CI still re-runs" "(u1) REASON states that CI is not exempted (#9416 AC5)"
 
@@ -1336,6 +1352,27 @@ pr_json 274 "$SHA_A" "loom:pr"
 run_guard 274 --clear
 assert_eq "0" "$RC" "(u5) Marker == head -> exit 0"
 assert_eq "" "$TREE_CALLS" "(u5) No compare call on the unchanged-head fast path"
+
+# (u5b) #13150: with LOOM_REPO known the comparison names the repo; without it the flag is omitted.
+reset_state
+pr_json 276 "$SHA_B" "loom:pr"
+{ echo "["; verdict_comment "2026-09-30T00:00:00Z" "$SHA_A" "approved"; echo "]"; } > "$STUB_DIR/comments-276.json"
+: > "$STUB_DIR/tree-identical"
+rm -f "$STUB_DIR/tree-calls.log"
+LOOM_REPO=acme/widgets run_guard 276
+assert_eq "FRESH" "$(get_field "$OUT" DECISION)" "(u5b) LOOM_REPO set -> FRESH"
+assert_contains "$TREE_CALLS" "forge verdict-equivalent --repo acme/widgets 276 $SHA_A $SHA_B" "(u5b) --repo <repo> is passed to the verb"
+rm -f "$STUB_DIR/tree-calls.log"
+run_guard 276
+assert_contains "$TREE_CALLS" "forge verdict-equivalent 276 $SHA_A $SHA_B" "(u5b) No known repo -> flag omitted, as before"
+
+# (u5c) #13150: a daemon whose clap rejects --repo is retried once without it (not widened into STALE).
+rm -f "$STUB_DIR/tree-calls.log"
+: > "$STUB_DIR/tree-no-repo-flag"
+LOOM_REPO=acme/widgets run_guard 276
+assert_eq "FRESH" "$(get_field "$OUT" DECISION)" "(u5c) --repo-rejecting daemon -> still FRESH via the retry"
+assert_contains "$TREE_CALLS" "forge verdict-equivalent 276 $SHA_A $SHA_B" "(u5c) The retry omits the flag"
+rm -f "$STUB_DIR/tree-no-repo-flag"
 
 # (u6) Report-only (no --clear) on a tree-identical move: FRESH, exit 0, and
 #      still nothing written — a caller that only reports must see the
@@ -1506,6 +1543,64 @@ touch "$STUB_DIR/trust-verb-missing"
 run_guard 275 --clear --anchor
 assert_eq "11" "$RC" "(u6) Unauthenticated markers -> exit 11"
 assert_eq "" "$COMMENTS_POSTED$WRITES" "(u6) No comment, no label writes"
+
+# --- (v) operator send-back at an unchanged head (#13586) ------------------
+# Marker names SHA_A, head is SHA_B, and a trusted human applied the label after
+# the marker. v_case <pr> <timeline-json-body> builds that fixture.
+v_case() {
+    local n="$1" tl="$2"
+    reset_state
+    pr_json "$n" "$SHA_B" "loom:changes-requested"
+    { echo "["; verdict_comment "2026-11-01T10:00:00Z" "$SHA_A" "changes-requested"; echo "]"; } > "$STUB_DIR/comments-$n.json"
+    printf '[%s]' "$tl" > "$STUB_DIR/timeline-$n.json"
+}
+V_COMMIT='{"event":"committed","sha":"'"$SHA_B"'"}'
+V_LABEL_OP='{"event":"labeled","label":{"name":"loom:changes-requested"},"actor":{"login":"operator1"},"created_at":"2026-11-02T10:00:00Z"}'
+
+# (v1) trusted label after marker, no head move after -> FRESH, nothing written.
+v_case 280 "$V_COMMIT,$V_LABEL_OP"; echo write > "$STUB_DIR/perm-operator1"
+run_guard 280 --clear
+assert_eq "0/FRESH/0" "$RC/$(get_field "$OUT" DECISION)/$(get_field "$OUT" CLEARED)" "(v1) trusted send-back at current head -> FRESH"
+assert_eq "" "$WRITES$COMMENTS_POSTED$DAEMON" "(v1) nothing cleared or written"
+
+# (v2) a commit lands after the label -> STALE, --clear as before.
+v_case 281 "$V_LABEL_OP,$V_COMMIT"; echo write > "$STUB_DIR/perm-operator1"
+run_guard 281 --clear
+assert_eq "12/STALE/1" "$RC/$(get_field "$OUT" DECISION)/$(get_field "$OUT" CLEARED)" "(v2) head moved after label -> STALE and cleared"
+
+# (v2b) force-push after the label -> STALE.
+v_case 282 "$V_LABEL_OP"',{"event":"head_ref_force_pushed","created_at":"2026-11-03T10:00:00Z"}'; echo write > "$STUB_DIR/perm-operator1"
+run_guard 282
+assert_eq "12" "$RC" "(v2b) force-push after label -> STALE"
+
+# (v3) untrusted labeler -> existing marker comparison decides.
+v_case 283 "$V_COMMIT,$V_LABEL_OP"
+run_guard 283
+assert_eq "12" "$RC" "(v3) labeler without write access -> STALE"
+
+# (v4) label event older than the marker -> STALE.
+v_case 284 "$V_COMMIT,${V_LABEL_OP/2026-11-02/2026-10-30}"; echo write > "$STUB_DIR/perm-operator1"
+run_guard 284
+assert_eq "12" "$RC" "(v4) label older than the marker -> STALE"
+
+# (v5) timeline read failure -> fail closed to the marker comparison.
+v_case 285 "$V_COMMIT,$V_LABEL_OP"; echo write > "$STUB_DIR/perm-operator1"; touch "$STUB_DIR/timeline-fail-285"
+run_guard 285
+assert_eq "12" "$RC" "(v5) timeline unreadable -> STALE"
+
+# (v6) several labeled events: the latest wins (old trusted one, newer untrusted one).
+v_case 286 "$V_COMMIT,$V_LABEL_OP"',{"event":"unlabeled","label":{"name":"loom:changes-requested"},"actor":{"login":"rando"},"created_at":"2026-11-02T11:00:00Z"},{"event":"labeled","label":{"name":"loom:changes-requested"},"actor":{"login":"rando"},"created_at":"2026-11-02T12:00:00Z"}'; echo write > "$STUB_DIR/perm-operator1"
+run_guard 286
+assert_eq "12" "$RC" "(v6) latest labeled event (untrusted) decides -> STALE"
+
+# (v7) an approval never takes this path.
+reset_state
+pr_json 287 "$SHA_B" "loom:pr"
+{ echo "["; verdict_comment "2026-11-01T10:00:00Z" "$SHA_A" "approved"; echo "]"; } > "$STUB_DIR/comments-287.json"
+printf '[%s]' "${V_LABEL_OP/changes-requested/pr}" > "$STUB_DIR/timeline-287.json"; echo write > "$STUB_DIR/perm-operator1"
+run_guard 287
+assert_eq "12" "$RC" "(v7) loom:pr keeps the strict marker rule"
+assert_eq "" "$(cat "$STUB_DIR/timeline-calls.log" 2>/dev/null)" "(v7) timeline not even read for an approval"
 
 # --- Summary -------------------------------------------------------------
 echo ""

@@ -28,6 +28,19 @@ python3 sim/run_offset_cm_band.py repeat  --series $S --condition vcm-p050 --pro
 python3 sim/run_offset_cm_band.py compare --series $S
 ```
 
+`run` refuses by default when any selected part's envelope already exists:
+campaign evidence is append-only, so a recorded result is never resubmitted
+(the runner's hidden `--force` does not override this). `--skip-existing` is
+the explicit resume mode — enveloped parts are skipped (needing no request)
+and only unenveloped parts are submitted; a selection that is already fully
+enveloped is a successful no-op. Retrying a recorded result requires a new
+`--series`. Every selected part is checked before anything is submitted, so
+an envelope conflict or a missing request (for a part that would be
+submitted) fails the whole run with nothing sent. A part whose submission
+fails at runtime is reported with its tag and final exit code while the
+remaining eligible parts still run; the command exits with the maximum part
+code.
+
 A condition is selected by one `.param vcm_delta` in the netlist body
 (`vcm cm 0 dc {dut_vcm+vcm_delta}`; 0 for nominal); it is recorded in the body
 header, the request, and every `*.invocation.json` / `attempts.jsonl` entry.
@@ -35,6 +48,20 @@ Details: `sim/kltsim/cmband.py`. Pairing: klt derives each draw's seed from
 (base seed 20260916, corner index, sample index) only, so draw k at a grid
 point is the same mismatch under all three conditions (verified per point in
 the comparison, not assumed).
+
+Draw evidence is validated before reduction (issue #250). `vos_mv` and the
+`vcm_meas` probe must be finite numbers in a compatible unit (normalized to
+mV / V); otherwise the draw is a named untrusted draw. Each draw's
+`sample_index` and `seed` must be nonnegative integers. A point whose indices
+repeat, or are not 0..59, or whose seeds repeat is rejected, and no copy of a
+repeated draw is selected. Pairing needs two complete trusted populations
+with the same indices and the same valid seeds; otherwise `pair_rejected`
+records why. Reproduction checks report a complete-reproduction `verdict`
+that accounts for every expected draw on both sides. This is separate from
+the informational surviving-draw counts. The committed `comparison.*` predate
+this check and are not rewritten. Regenerating them from the committed
+envelopes leaves every recorded statistic and pairing result unchanged and
+gives `REPRODUCED` for both reproduction checks.
 
 ## Evidence
 
@@ -88,3 +115,66 @@ points. It keeps the same seed and is never merged into this campaign's
 population. Separately, `klt sim` reports the abort only as "measurement
 produced no value", and the reason appears only in the kept `ngspice.log`.
 That tool gap is tracked at 2AMLogic/klayout-tools#2918.
+
+### Supplementary max-step attempt (#89), not yet successful
+
+`campaigns/20261011-33aef587e-maxstep20p.md` summarises the first submission of the
+supplementary campaign (`tran 100p 990n 0 20p`, seed 20260916, N=60, all three
+conditions at the two points). **It produced no simulation data**: all six
+batch jobs failed within about 5 s (`batch_job_failed`, runner exit 87) because
+the fleet runner ran klt 0.5.0 and the client was newer
+(`environment.remote.runner_compatibility = mismatch`). The client versions
+were mixed: five retained envelopes were submitted by klt 0.7.0+g04ca88ce427c,
+and `vcm-p050/offset_cm.mos_sf_mismatch` by 0.6.0+g3a75c3ae705b. The other 21
+attempts in `attempts.jsonl` (all 0.6.0, exit 1) were refused at the fleet's
+concurrency cap and produced no envelope. The retained envelopes are evidence
+of that failed attempt only. Their bytes (envelopes as byte-exact `gzip -9n`
+copies, spice decks, requests, invocations, `attempts.jsonl` and
+`supplement-report.json`) are in the fleet artifact store, named by
+`manifests/artifacts/comparator-offset-cm-band-20261011-33aef587e-maxstep20p.manifest.json`;
+git keeps only that manifest and the summary. The decompressed envelope bytes hash to each
+invocation's `envelope_sha256`. They say nothing about the max step,
+a bench artifact, or a convergence weakness, so the question above stays open.
+The 43/45 result of the parent campaign is unchanged. Re-submission needs a
+fleet runner image compatible with the client; `supplement-report` regenerates
+the report from whichever envelopes exist in a series directory (fetch stored
+objects with `klt artifact get <manifest>#<name>`).
+
+### Supplementary max-step re-run r2 (#89), partial: 4 of 6 populations
+
+`campaigns/20261105-58805e2fa-maxstep20p-r2.md` is the re-run on the klt 0.9.0
+batch runner (`runner_compatibility = match`; the exit-87 failure above is
+gone). Same setting (`tran 100p 990n 0 20p`, seed 20260916, N=60). Result:
+
+- `vcm-m050` and `vcm-nom` at both points: **60/60 valid** each. The two
+  draws that abort in the parent (mc12, mc23) complete under the tighter step.
+- `vcm-p050` at both points: **not run**. The fleet refused submission
+  (`batch_no_capacity`, vCPU cap shared with ci-spot); no local fallback was
+  used. Resume with `supplement-run --series <this series> --condition vcm-p050`
+  after fetching the stored objects.
+- Max-step sensitivity over the 1318 compared draws: max |Δvos| = 0.00078 mV.
+- Bench artifact vs low-CM/cold convergence weakness: still open.
+
+The parent campaign's 43/45 result is unchanged and nothing is merged into it.
+Bytes are in the artifact store, named by
+`manifests/artifacts/comparator-offset-cm-band-20261105-58805e2fa-maxstep20p-r2.manifest.json`.
+
+### Supplementary max-step re-run (#89), completed: 6 of 6 populations 60/60
+
+`campaigns/20261105-58805e2fa-maxstep20p-r2-resume.md` is the completed r2
+series: the `vcm-p050` populations were resumed with `supplement-run --series
+20261105-58805e2fa-maxstep20p-r2 --condition vcm-p050` through the batch fleet
+(jobs `klt-sim-ec11984c8b84`, `klt-sim-f29292075418`) and both are **60/60
+valid**. The store does not overwrite the partial record above, so the full
+series is stored under the `-resume` run id; its manifest is
+`manifests/artifacts/comparator-offset-cm-band-20261105-58805e2fa-maxstep20p-r2-resume.manifest.json`.
+
+- All six populations (2 PVT points x 3 conditions) are 60/60 valid at
+  `tran 100p 990n 0 20p`; the two parent aborts (mc12, mc23) complete.
+- Max-step sensitivity over 1978 paired draws: max |Δvos| = 0.00078 mV, so the
+  step change alone does not move vos at this measurement resolution.
+- Bench artifact vs low-CM/cold convergence weakness: **still open**. The result
+  is consistent with a time-step-control artifact of the default stepping, but
+  the data does not distinguish it from a real low-CM/cold weakness.
+
+The parent's 43/45 result is unchanged; nothing is merged into it.

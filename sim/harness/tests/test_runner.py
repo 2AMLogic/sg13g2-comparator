@@ -18,8 +18,10 @@ without a real testbench/PDK/DUT.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import math
+import re
 import shutil
 import subprocess
 import sys
@@ -29,14 +31,16 @@ import types
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from harness.corners import CORNERS, PvtPoint  # noqa: E402
-from harness import report as report_mod  # noqa: E402
+from harness import cli, report as report_mod  # noqa: E402
+from harness import dut as dut_mod  # noqa: E402
 from harness.report import _json_num, _strict_point, summarize  # noqa: E402
-from harness.runner import PointResult, run_grid, run_point  # noqa: E402
+from harness.runner import PointResult, parse_measurements_checked, run_grid, run_point  # noqa: E402
 
 
 def _fake_completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess:
@@ -121,6 +125,46 @@ class NonFiniteMeasurementTest(RunPointWarningsTest):
         self.assertEqual(result.measurements, {"vos_mv": 0.15})
         self.assertTrue(result.warnings)
         self.assertEqual(result.invalid, {})
+
+
+class RepeatedMeasurementTest(RunPointWarningsTest):
+    """Issue #177: repeated requested names are ambiguous and rejected."""
+
+    def test_duplicates_fail_in_any_order(self):
+        cases = [
+            ("1", "99"), ("99", "1"), ("1", "1"), ("1", "1e999"), ("1e999", "1"),
+            ("-1e999", "1"), ("1", "-1e999"), ("1", "1e999", "2"),
+        ]
+        for vals in cases:
+            result = self._run("".join(f"m_vos_mv = {v}\n" for v in vals))
+            self.assertEqual(result.status, "failed", vals)
+            self.assertNotIn("vos_mv", result.measurements)
+            self.assertEqual(result.missing, ["vos_mv"])
+            self.assertIn(", ".join(vals), result.invalid["vos_mv"])
+            self.assertIn("vos_mv", result.message)
+            self.assertIn("vos_mv", result.as_dict()["invalid_measurements"])
+
+    def test_unexpected_names_do_not_invalidate_requested(self):
+        result = self._run("m_other = 1\nm_other = 2\nm_vos_mv = 0.5\n")
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.measurements["vos_mv"], 0.5)
+        self.assertEqual(result.invalid, {})
+
+    def test_unique_finite_unchanged(self):
+        self.assertEqual(
+            parse_measurements_checked("m_a = 1.5e-01\nm_b = -2\n"),
+            ({"a": 0.15, "b": -2.0}, {}),
+        )
+
+    def test_rejected_point_excluded_from_summary_and_fails_grid(self):
+        good = self._run("m_vos_mv = 1\n")
+        bad = self._run("m_vos_mv = 1\nm_vos_mv = 1\n")
+        bad.point = PvtPoint(corner=CORNERS["tt"], temp_c=27.0, vdd=1.2, index=1)
+        tb = types.SimpleNamespace(measure={"vos_mv": "v(out)"}, checks={"vos_mv": {"max": 5.0}})
+        summary = summarize(tb, [good, bad])["vos_mv"]
+        self.assertEqual(list(summary.values), [good.point.corner_id])
+        self.assertTrue(any("ambiguous" in f for f in summary.failures))
+        self.assertEqual(report_mod.usable_points([good, bad], tb.measure), [good])
 
 
 def _summ_tb(check):
@@ -447,6 +491,67 @@ class ExclusiveLogTest(RunPointWarningsTest):
         self.assertIn("m_vos_mv", (log_dir / results[0].log).read_text())
 
 
+class TimeoutDiagnosticsTest(RunPointWarningsTest):
+    """Issue #197: partial ngspice output survives a local timeout."""
+
+    def _timeout(self, stdout, stderr, **kw):
+        exc = subprocess.TimeoutExpired(["ngspice"], 7, output=stdout, stderr=stderr)
+        with mock.patch("harness.runner.compose_deck", return_value="* stub\n"), \
+             mock.patch("harness.runner.subprocess.run", side_effect=exc):
+            return run_point(self.tb, self.pdk, self.dut, self.point, self.workdir,
+                             timeout_s=7, **kw)
+
+    def _log(self, r):
+        return (self.workdir / r.log).read_text()
+
+    def test_bytes_output_retained_with_replacement(self):
+        r = self._timeout(b"iter 1\n\xff\xfe bad", b"warn: gmin\n")
+        self.assertEqual(r.status, "error")
+        log = self._log(r)
+        self.assertIn("TIMEOUT after 7s", log)
+        self.assertIn("===== partial stdout =====\niter 1\n\ufffd\ufffd bad\n", log)
+        self.assertIn("===== partial stderr =====\nwarn: gmin\n", log)
+
+    def test_text_output_retained(self):
+        r = self._timeout("tran step 12\n", "singular matrix\n")
+        self.assertEqual(r.status, "error")
+        log = self._log(r)
+        self.assertIn("TIMEOUT after 7s", log)
+        self.assertIn("tran step 12", log)
+        self.assertIn("singular matrix", log)
+
+    def test_absent_output_keeps_marker(self):
+        r = self._timeout(None, None)
+        self.assertEqual(r.status, "error")
+        self.assertIn("timed out after 7s", r.message)
+        log = self._log(r)
+        self.assertIn("TIMEOUT after 7s", log)
+        self.assertEqual(log.count("(none captured)"), 2)
+
+    def test_complete_looking_partial_output_is_still_error(self):
+        r = self._timeout("m_vos_mv = 1.0\n", "")
+        self.assertEqual(r.status, "error")
+        self.assertEqual(r.measurements, {})
+        self.assertIn("m_vos_mv = 1.0", self._log(r))
+
+    def test_exclusive_collision_and_other_logs_protected(self):
+        log_dir = self.workdir / "corners" / "rid"
+        log_dir.mkdir(parents=True)
+        mine = log_dir / f"{self.point.corner_id}.log"
+        other = log_dir / "other.log"
+        mine.write_text("committed\n")
+        other.write_text("other evidence\n")
+        with self.assertRaises(FileExistsError):
+            self._timeout("x", "y", log_dir=log_dir, exclusive_logs=True)
+        self.assertEqual(mine.read_text(), "committed\n")
+        self.assertEqual(other.read_text(), "other evidence\n")
+        mine.unlink()
+        r = self._timeout("partial\n", None, log_dir=log_dir, exclusive_logs=True)
+        self.assertEqual(r.status, "error")
+        self.assertIn("partial", mine.read_text())
+        self.assertEqual(other.read_text(), "other evidence\n")
+
+
 class GitProvenanceTest(ReservationTestBase):
     """Issue #142: verified, single-capture Git provenance."""
 
@@ -518,6 +623,261 @@ class GitProvenanceTest(ReservationTestBase):
         text = report_mod.render_record(tb, [], {}, ctx)
         self.assertIn("NOT VERIFIED", text)
 
+
+_DUT_NET = """.subckt comparator_dut vinp vinn clk ibias dout doutb vdd vss
+.ends
+.subckt comparator_dut_analog vinp vinn ibias aop aon vdd vss
+.ends
+.subckt comparator_dut_latch inp inn clk dout doutb vdd vss
+.ends
+.subckt c vss
+XM3 ln lp np vss n
+.ends
+"""
+
+
+class FrozenInputsTest(unittest.TestCase):
+    """Issue #179: points and record use inputs captured before the grid."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.sim = sim = self.root / "sim"
+        (sim / "exp" / "testbench").mkdir(parents=True)
+        noise = {"subckt": "c", "inner": "x1", "instances": ["x0"], "ts": 1e-11,
+                 "rails": {"vss": "0"}, "devices": {"XM3": {"g": 1e-3}}}
+        self.live = {
+            sim / "d.spice": _DUT_NET,
+            sim / "dut.json": json.dumps({"netlist": "d.spice", "id": "d", "provenance": "schematic"}),
+            sim / "exp/testbench/t.spice": "* tb\n",
+            sim / "exp/testbench/tb.json": json.dumps(
+                {"netlist": "t.spice", "corners": ["tt"], "temperatures_c": [27, 85],
+                 "supply_tolerance": 0, "measure": {"m": "1"}, "internal_noise": noise}),
+        }
+        for path, text in self.live.items():
+            path.write_text(text)
+        self.decks = []
+
+    def run_cli(self, mutate=False, osdi_edit=None, models_edit=None,
+                preflight_exc=None, put_exc=None):
+        osdi = self.root / "osdi"
+        osdi.mkdir(exist_ok=True)
+        for name in cli.pdk_mod.REQUIRED_OSDI:
+            with open(osdi / name, "wb") as fh:
+                fh.write(name.encode())
+        models = self.root / "pdk/libs.tech/ngspice/models"
+        models.mkdir(parents=True, exist_ok=True)
+        (models / "cornerMOSlv.lib").write_text(".LIB mos_tt\n.include m.lib\n.ENDL\n")
+        (models / "m.lib").write_text(".param vfb=1.0\n")
+
+        def fake(cmd, **kw):
+            deck = Path(cmd[-1]).read_text()
+            incs = re.findall(r'^\.include "(.*)"$', deck, re.M)
+            self.decks.append((deck, incs, [Path(i).read_text() for i in incs]))
+            for path, text in self.live.items() if mutate else ():
+                path.write_text(text.replace("ln lp", "qq lp") + "*edit\n")
+            if osdi_edit:
+                osdi_edit(osdi / "r3_cmc.osdi")
+            if models_edit:
+                models_edit(models / "m.lib")
+            return _fake_completed("m_m = 1.0\n")
+
+        pdk = types.SimpleNamespace(
+            variant="v", version="0" * 40, missing_osdi=list, models_dir=models,
+            mos_corner_lib=models / "cornerMOSlv.lib", osdi_dir=osdi, provenance=lambda: dict.fromkeys(
+                ("variant", "release_version", "discovered_via"), "x"))
+        chain = types.SimpleNamespace(drift=[], as_dict=lambda: {
+            "observed": {"ngspice": "n", "python": "3"}, "drift": []})
+        def fake_put(files, repo_root):
+            # Issue #318: an in-memory artifact store; bytes land under
+            # self.store (outside sim/), never in the repo tree.
+            if put_exc is not None:
+                raise put_exc
+            entries = []
+            for path, name in files:
+                data = path.read_bytes()
+                dest = self.store / name
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data)
+                sha = hashlib.sha256(data).hexdigest()
+                entries.append({"sha256": sha, "size": len(data), "kind": "evidence",
+                                "producer": {"tool": "klt", "version": "t",
+                                             "loom.repo": "o/r", "commit": None},
+                                "uri": f"artifact:evidence/o__r/{sha[:2]}/{sha}",
+                                "name": name})
+            return {"schema_version": 1, "entries": entries}, []
+
+        self.store = self.root / "store"
+        with mock.patch.multiple(cli, REPO_ROOT=self.root, SIM_DIR=self.sim,
+                                 WORK_DIR=self.sim / ".work",
+                                 STAGE_DIR=self.sim / ".work/.stage"), \
+             mock.patch.object(cli.store_mod, "preflight", side_effect=preflight_exc), \
+             mock.patch.object(cli.store_mod, "put_files", side_effect=fake_put), \
+             mock.patch.multiple(dut_mod, REPO_ROOT=self.root, SIM_DIR=self.sim), \
+             mock.patch.object(cli.pdk_mod, "find_pdk", return_value=pdk), \
+             mock.patch("harness.runner.ngspice_version", return_value="n"), \
+             mock.patch("harness.toolchain.check", return_value=chain), \
+             mock.patch.object(report_mod, "capture_git_provenance",
+                               return_value=report_mod.GitProvenance(COMMIT, (), True)), \
+             mock.patch("harness.runner.subprocess.run", side_effect=fake) as run, \
+             redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            rc = cli.main(["exp", "--dut", str(self.sim / "dut.json")])
+        return rc, run
+
+    def check_frozen(self, mutate):
+        rc, _ = self.run_cli(mutate)
+        self.assertEqual(rc, 0)
+        sha = [hashlib.sha256(t.encode()).hexdigest() for t in self.live.values()]
+        # Issue #318: the JSON twin, snapshot and logs are stored, not
+        # committed; the repo keeps the Markdown record and the manifest.
+        self.assertEqual(list((self.sim / "exp/records").glob("*.json")), [])
+        self.assertFalse((self.sim / "exp/corners").exists())
+        self.assertFalse((self.sim / "exp/netlist-snapshots").exists())
+        (path,) = (self.store / "sim/exp/records").glob("*.json")
+        rec = json.loads(path.read_text())
+        ctx, tb = rec["context"], rec["testbench"]
+        (manifest,) = (self.root / "manifests/artifacts").iterdir()
+        self.assertEqual(manifest.name, f"exp-{rec['record_id']}.manifest.json")
+        names = {e["name"] for e in json.loads(manifest.read_text())["entries"]}
+        self.assertEqual(len(names), 4)  # JSON twin, snapshot, two corner logs
+        self.assertIn(f"sim/exp/records/{rec['record_id']}.json", names)
+        self.assertEqual(list((self.sim / ".work/.stage/exp/sim/exp/corners").iterdir()), [])
+        md_path = self.sim / f"exp/records/{rec['record_id']}.md"
+        self.assertIn("## Stored evidence", md_path.read_text())
+        path = md_path.with_suffix(".json")  # .md lookups below
+        self.assertEqual([ctx["dut_netlist_sha256"], ctx["dut_config_sha256"],
+                          tb["netlist_sha256"], tb["manifest_sha256"]], sha)
+        self.assertEqual(ctx["dut_netlist"], "sim/d.spice")
+        self.assertEqual(ctx["osdi"], {**cli.pdk_mod.osdi_identity(self.root / "osdi"),
+                                       "rehashed_after_grid": "unchanged"})
+        self.assertNotIn(str(self.root / "osdi"), json.dumps(ctx["osdi"]))
+        self.assertIn("unchanged after the grid", path.with_suffix(".md").read_text())
+        models = self.root / "pdk/libs.tech/ngspice/models"
+        self.assertEqual(ctx["model_sources"], {
+            **cli.pdk_mod.model_source_identity(models, roots=(models / "cornerMOSlv.lib",)),
+            "rehashed_after_grid": "unchanged"})
+        self.assertEqual(sorted(ctx["model_sources"]["files"]), ["cornerMOSlv.lib", "m.lib"])
+        self.assertNotIn(str(self.root), json.dumps(ctx["model_sources"]))
+        md = path.with_suffix(".md").read_text()
+        self.assertIn(f"SPICE model sources**: inventory sha256 "
+                      f"`{ctx['model_sources']['inventory_sha256'][:16]}`", md)
+        self.assertIn("not PDK authenticity", md)
+        self.assertNotIn("INCOMPLETE", md)
+        snap = (self.store / f"sim/exp/netlist-snapshots/{rec['record_id']}.spice").read_text()
+        self.assertIn(_DUT_NET + "\n* -", snap)
+        self.assertTrue(snap.endswith("FRAGMENT ----------------\n* tb\n"))
+        self.assertEqual(len(self.decks), 2)
+        for deck, incs, texts in self.decks:
+            self.assertTrue(all(f"/{rec['record_id']}/inputs/" in i for i in incs))
+            self.assertEqual(texts, [_DUT_NET, "* tb\n"])
+            self.assertIn("x0.x1.ln x0.x1.np", deck)  # noise hook reads the snapshot
+        self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+        return [p.read_text() for p in self.live]
+
+    def test_live_edits_mid_grid_do_not_reach_points_or_record(self):
+        self.assertIn("*edit", self.check_frozen(True)[0])
+
+    def test_unchanged_run(self):
+        self.assertEqual(self.check_frozen(False), list(self.live.values()))
+
+    def test_capture_failure_aborts_before_simulation(self):
+        old = self.sim / "exp/corners/old/tt.log"
+        old.parent.mkdir(parents=True)
+        old.write_text("committed\n")
+        before = _tree(self.sim / "exp")
+        with mock.patch.object(Path, "write_bytes", side_effect=OSError("disk full")):
+            rc, run = self.run_cli()
+        self.assertEqual(rc, 7)
+        run.assert_not_called()
+        self.assertEqual(_tree(self.sim / "exp"), before)
+        self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+
+    def test_osdi_changed_or_unreadable_mid_grid_is_not_certified(self):
+        """Issue #196: no record, logs kept, explicit non-zero exit."""
+        for edit in (lambda p: p.write_bytes(b"rebuilt"), lambda p: p.unlink(missing_ok=True)):
+            with self.subTest(edit=edit):
+                shutil.rmtree(self.sim / ".work/.stage", ignore_errors=True)
+                rc, _ = self.run_cli(osdi_edit=edit)
+                self.assertEqual(rc, 9)
+                self.assertFalse((self.sim / "exp/records").exists())
+                self.assertFalse((self.root / "manifests").exists())
+                (logs,) = (self.sim / ".work/.stage/exp/sim/exp/corners").iterdir()
+                self.assertEqual(len(list(logs.glob("*.log"))), 2)
+                self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+
+    def test_spice_model_sources_changed_or_unreadable_mid_grid_not_certified(self):
+        """Issue #203: same release + same OSDI, edited coefficients -> no record."""
+        for edit in (lambda p: p.write_text(".param vfb=1.01\n"),
+                     lambda p: p.unlink(missing_ok=True),
+                     lambda p: (p.parent / "new.lib").write_text("* added\n")):
+            with self.subTest(edit=edit):
+                shutil.rmtree(self.sim / ".work/.stage", ignore_errors=True)
+                shutil.rmtree(self.root / "pdk", ignore_errors=True)
+                rc, _ = self.run_cli(models_edit=edit)
+                self.assertEqual(rc, 9)
+                self.assertFalse((self.sim / "exp/records").exists())
+                (logs,) = (self.sim / ".work/.stage/exp/sim/exp/corners").iterdir()
+                self.assertEqual(len(list(logs.glob("*.log"))), 2)
+                self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+
+    def test_unreadable_spice_sources_before_grid_refuses_to_simulate(self):
+        with mock.patch.object(cli.pdk_mod, "model_source_identity",
+                               side_effect=cli.pdk_mod.ModelSourceIdentityError("m.lib: denied")):
+            rc, run = self.run_cli()
+        self.assertEqual(rc, 8)
+        run.assert_not_called()
+        self.assertFalse((self.sim / "exp/corners").exists())
+
+    def test_incomplete_scope_is_disclosed_in_record(self):
+        ext = self.root / "ext.lib"
+        ext.write_text("* ext\n")
+
+        models = self.root / "pdk/libs.tech/ngspice/models"
+        models.mkdir(parents=True)
+        (models / "x.lib").symlink_to(ext)
+        rc, _ = self.run_cli()
+        self.assertEqual(rc, 0)
+        (path,) = (self.store / "sim/exp/records").glob("*.json")
+        scope = json.loads(path.read_text())["context"]["model_sources"]["scope"]
+        path = self.sim / "exp/records" / path.name
+        self.assertFalse(scope["complete"])
+        self.assertEqual(scope["outside_tree_links"], ["x.lib"])
+        self.assertIn("Inventory scope INCOMPLETE** — model loading may read bytes this "
+                      "hash does not cover: link `x.lib` leaves the tree",
+                      path.with_suffix(".md").read_text())
+
+    def test_store_unavailable_refuses_to_simulate(self):
+        """Issue #318: no broker / no klt verb -> exit 10 before any point runs."""
+        rc, run = self.run_cli(preflight_exc=cli.store_mod.StoreError("no broker"))
+        self.assertEqual(rc, 10)
+        run.assert_not_called()
+        self.assertFalse((self.sim / "exp/records").exists())
+        self.assertFalse((self.sim / "exp/corners").exists())
+        self.assertFalse((self.root / "manifests").exists())
+
+    def test_store_failure_after_grid_commits_nothing(self):
+        """Issue #318: a put that fails (broker unreachable mid-run) is fail
+        closed: no manifest, no record, no blob under sim/; staged bytes kept."""
+        rc, run = self.run_cli(put_exc=cli.store_mod.StoreError("broker_unreachable"))
+        self.assertEqual(rc, 10)
+        self.assertEqual(run.call_count, 2)
+        self.assertFalse((self.sim / "exp/records").exists())
+        self.assertFalse((self.sim / "exp/corners").exists())
+        self.assertFalse((self.sim / "exp/netlist-snapshots").exists())
+        self.assertFalse((self.root / "manifests").exists())
+        stage = self.sim / ".work/.stage/exp/sim/exp"
+        self.assertEqual(len(list((stage / "records").glob("*.json"))), 1)
+        self.assertEqual(len(list((stage / "corners").glob("*/*.log"))), 2)
+        self.assertEqual(list((self.sim / ".work/exp").iterdir()), [])
+
+    def test_unreadable_osdi_before_grid_refuses_to_simulate(self):
+        with mock.patch.object(cli.pdk_mod, "osdi_identity",
+                               side_effect=cli.pdk_mod.OsdiIdentityError("x: denied")):
+            rc, run = self.run_cli()
+        self.assertEqual(rc, 8)
+        run.assert_not_called()
+        self.assertFalse((self.sim / "exp/corners").exists())
 
 if __name__ == "__main__":
     unittest.main()

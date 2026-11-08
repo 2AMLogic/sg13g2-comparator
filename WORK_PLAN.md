@@ -3,28 +3,33 @@
 <!-- guide:plan-body:start -->
 ## Operator Attention: Merge-Risk-Hold Pileup
 
-Judge-approved PRs stuck under a `loom:operator` merge-risk hold — implementation work is done, only a human merge decision is missing.
+Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
+
+- **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
+
+## Very Important
+
+`loom:very-important` (one counts per workspace); every stage takes these first.
 
 _None._
 
-## Operator Priority
+## Important
 
-Issues the operator starred (`loom:operator-priority`); land these first.
+`loom:important`; taken before unlabelled work.
 
-_None._
+- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
 
 ## Ready
 
 Human-approved issues ready for implementation (`loom:issue`).
 
-- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
+_None._
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-- **#63**: Monte Carlo: mint a klt yield report for the statistical spec rows (offset sigma) and cite it (T1 item 6)
-- **#117**: Unit tests for the CI-gating scripts: signoff parity, ERC judge, netlist generator
+- **#160**: Draft decision record: input common-mode range row for the ratified spec
 
 ## PRs Awaiting Review
 
@@ -36,19 +41,20 @@ _None._
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
-_None._
+- **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
 
 ## Proposed
 
 Issues carrying `loom:curated`.
 
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
-- **#63**: Monte Carlo: mint a klt yield report for the statistical spec rows (offset sigma) and cite it (T1 item 6) *(curated)*
-- **#65**: Cite artifact-anchored evidence for T1 items 1, 9 and 10 (design sources, testbenches, repo hygiene) *(curated)*
+- **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise) *(curated)*
+- **#160**: Draft decision record: input common-mode range row for the ratified spec *(curated)*
+- **#336**: Remove scripts/diagnostics: completed #188 upstream-handoff package (~506 LOC) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-- **#142**: Capture verified Git provenance before PVT simulation *(architect)*
+- **#336**: Remove scripts/diagnostics: completed #188 upstream-handoff package (~506 LOC) *(hermit)*
 
 ## Epics
 
@@ -56,15 +62,16 @@ Issues carrying `loom:curated`.
 
 ## Backlog Balance
 
-| Tier | Count |
+| Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 0 |
-| Operator priority | 0 |
-| Ready (`loom:issue`) | 1 |
-| In Progress (`loom:building`) | 2 |
+| Operator merge-risk holds | 1 |
+| Very important | 0 |
+| Important | 1 |
+| Ready (`loom:issue`) | 0 |
+| In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 0 |
-| Curated | 3 |
+| Approved PRs awaiting merge | 1 |
+| Curated | 4 |
 | Architect / Hermit proposals | 1 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->

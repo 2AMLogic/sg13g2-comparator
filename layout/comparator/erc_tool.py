@@ -108,7 +108,7 @@ def judge(path: str, expect: str | None) -> int:
             'erc.net_connectivity:["vbias"]', 'erc.missing_tie:["nwell_vdd"]'}
     if not want <= set(cov["checked"]):
         bad.append(f"checked work missing: {sorted(want - set(cov['checked']))}")
-    if d["file"].startswith("/") or "/home/" in json.dumps(d):
+    if (d["file"]["path"] if isinstance(d["file"], dict) else d["file"]).startswith("/") or "/home/" in json.dumps(d):
         bad.append("host-absolute path in envelope")
     if d["provenance"]["devices"]:
         bad.append("unexpected devices[] carve-out")

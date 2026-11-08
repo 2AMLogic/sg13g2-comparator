@@ -10,6 +10,20 @@ appended record. The runs themselves are the `tn_full_*` benches of the
 (analysis: `noise_full.md` / `noise_full.json` there, produced by
 `python3 sim/run_klt_corner_verification.py noise-full --campaign 20261009-issue81`).
 
+**Provenance-validated re-analysis (issue
+[#236](https://github.com/2AMLogic/sg13g2-comparator/issues/236)).**
+`noise-full` now checks each configuration's saved request/invocation hashes,
+decompressed envelope bytes, request semantics (against that configuration's
+own `tn_full_*` bench contract), envelope input hash, embedded schematic DUT
+and body injection configuration before any sigma is computed; a failing
+configuration is rejected, never `complete`. The re-analysis of the unchanged
+`20261009-issue81` inputs is in
+[`reports/analysis-20261011-issue236/`](reports/analysis-20261011-issue236/noise_full.md)
+(all six configurations validate; the numbers are identical to the historical
+`noise_full.*` above, which stays untouched as append-only evidence). The
+command refuses to overwrite existing output; use
+`--report-dir <new directory>`.
+
 It is **appended evidence**: the earlier record
 (`../comparator-transient-noise/records/20260921-154729-41cbc7f`, whose bench
 states it injects noise only at the DUT's input pins and is therefore a lower
@@ -139,6 +153,18 @@ the existing deck's comments warn about for timestep-sensitive TRNOISE.
 | 20 ps | 1.324 | 0.136 | n/a |
 | 10 ps | 1.116 | 0.102 | -1.2 SE |
 | 5 ps | 1.414 | 0.154 | +0.4 SE |
+
+Issue #263: `noise_full.timestep_convergence()` validates every rung before
+computing a statistic (saved request/invocation/envelope hashes, nominal
+corner, `tn_full_both` body and DUT, a well-formed `sha256:<64 hex>`
+`provenance.deck.content_hash` so the model deck is proven, explicit sample
+identities, no errored or untrusted samples, finite 0/1 hits, distinct
+raw-noise draws, N as declared by the request). A rejected rung keeps its
+diagnostics but has no sigma, SE or comparison; a comparison against the
+20 ps rung is made only when nothing but the solver step / max step differs
+between the two rungs, and absent smoke evidence is reported as unavailable.
+Re-running the validator on this campaign reproduces the table above; the
+historical report is not regenerated.
 
 No monotonic trend and no move beyond 1.2 standard errors. This is a
 convergence check at the stated precision (about 10 %), not a proof of

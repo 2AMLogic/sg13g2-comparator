@@ -45,7 +45,7 @@ why, is the rest of this document.
 |---|---|---|
 | `block` | `sg13g2-comparator` | **Required** — identifies this block's row in the fleet roll-up (2AMLogic/2am#956), which consumes exactly this file |
 | `kind` | `analog` | confirmed against the block itself, not taken from the filing: the DUT is a single-tail StrongARM dynamic latch (`design/comparator.spice`, DR-0001) on `sg13_lv_nmos`/`sg13_lv_pmos` — a continuous-time-analog comparator with no digital partition, no RTL, no standard cells, and no mixed-signal boundary to declare. The spec rows are offset-σ, input-referred noise, metastability/decision time, and kickback — all analog measurements (`README.md`'s target-spec table). Analog satisfies the Analog column only, which is the column every row below is graded against. |
-| `evidence` | items `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `10` and `11` | item 3 cites the `klt drc` envelope, item 4 the `klt lvs` envelope, item 6 a `klt yield` report (`unmet`, `undersized_sample`), item 5 a `klt sim` corner-matrix envelope whose own verdict is a Target **fail** (below), item 11 the compound of a `klt erc` supply-spec envelope and that same LVS envelope; items 1, 2, 9 and 10 cite artifact-anchored generic envelopes (below); every other item is deliberately uncited — see "What is deliberately uncited, and why" |
+| `evidence` | items `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `10` and `11` | item 3 cites the `klt drc` envelope, item 4 the `klt lvs` envelope, item 6 a `klt yield` report (`met`: N = 200 per PVT point, #167; other T1 items stay unmet), item 5 a `klt sim` corner-matrix envelope whose own verdict is a Target **fail** (below), item 11 the compound of a `klt erc` supply-spec envelope and that same LVS envelope; items 1, 2, 9 and 10 cite artifact-anchored generic envelopes (below); every other item is deliberately uncited — see "What is deliberately uncited, and why" |
 
 ## Items 1, 2, 9 and 10: artifact-anchored citations (#65)
 
@@ -71,7 +71,11 @@ and the manifest's pinned `content_hash` are both refreshed (and
 `t1-signoff-report.json` re-rendered). Regenerating the GDS or the netlist is
 therefore a four-file change: artifact, envelope, manifest, report. The
 `.sch` sources are not hashed directly, only the netlist derived from them;
-`python3 design/netlist.py --check` is what ties them.
+`python3 design/netlist.py --check` is what ties them, and CI enforces it: job
+`netlist-regeneration` regenerates the netlist from the `.sch`/`.sym` sources
+with a pinned real xschem and the `sim/pdk.json` PDK and fails if the committed
+netlist differs, so a schematic edit cannot leave this hashed netlist (and the
+item 1 evidence anchored to it) silently stale (see `design/README.md`).
 
 ## What is deliberately uncited, and why
 
@@ -97,17 +101,26 @@ row:
   #62, and still `unmet`, because two ratified Targets fail on the evidence.
   See "Item 5" below.
 - **Item 6 (Statistical claims carry Monte Carlo evidence)** — cited since
-  #63, and `unmet` / `undersized_sample`. The evidence is a `klt yield` report
-  (`sim/klt-yield/campaigns/20261010-d73a9ac/offset.yield.json`), 45 separate
-  per-PVT offset populations (N = 60 each, ratified seed and N) with a declared
-  over-limit negative control that `klt yield` reports `detected`. The pinned
-  grader refuses it because N = 60 with zero failures does not meet `klt
-  yield`'s default precision target (needs 183). The `content_hash` pinned is
-  the sha256 of the report's `samples` document
+  #63; repointed by #167 from the N = 60 report (`unmet` /
+  `undersized_sample`, still committed under
+  `sim/klt-yield/campaigns/20261010-d73a9ac/`) to a larger offset-only
+  campaign, and now `met`. The evidence is a `klt yield` report
+  (`sim/klt-yield/campaigns/20261010-n200/offset.yield.json`), 45 separate
+  per-PVT offset populations of exactly N = 200 draws each (declared with
+  `--offset-n 200`, base seed 20260916, every sample seed recorded), no
+  exclusions, with a declared over-limit negative control that `klt yield`
+  reports `detected` at 45/45 and a `sufficient` sample-size verdict at every
+  point (zero observed failures; the engine's zero-failure requirement is
+  N = 183). It supports a per-draw yield interval only: it is not a ratified
+  yield target (none exists) and does not replace the quantization-corrected
+  3-sigma Row 1 statistic (worst 11.41 mV against the 15 mV Target), which is
+  carried separately in the index. Issue #82's discrepancy warning is retained.
+  The `content_hash` pinned is the sha256 of the report's `samples` document
   (`inputs/offset.samples.json`), which is what the pinned grader hashes for a
-  yield report. The noise row's yield report is committed but not cited: a hit
-  fraction is not the ratified noise sigma, whose Target fails. See
-  `sim/klt-yield/README.md`.
+  yield report. The noise row's yield report (historical campaign) is
+  committed but not cited: a hit fraction is not the ratified noise sigma,
+  whose Target fails. The campaign's committed size needed an exact budget
+  exception (DR-0005). See `sim/klt-yield/README.md`.
 - **Item 7 (Post-layout verification)** — an analog block's item 7 accepts
   a `klt pex` report and nothing else. It is **cited** (since #61) at
   `layout/comparator/pex_report.json`, `content_hash` pinned to the layout
@@ -145,7 +158,7 @@ both file-backed and pinned by `content_hash`.
 
 | Part | File | Pinned `content_hash` | Tool-defined value |
 |---|---|---|---|
-| `klt erc` | `layout/comparator/erc_report.json` | `sha256:67e44380bac6f5b2eb52ac80cfc0422856e06a8b12cd7526b36717531655ea41` | `provenance.input.content_hash`: the GDS (the same value item 3 pins) |
+| `klt erc` | `layout/comparator/erc_report.json` | `sha256:583e99c6ee32474e0209d3aeaeb406393050e2bce9de4674bf091ee6a9e9d80d` | `provenance.input.content_hash`: the GDS (the same value item 3 pins) |
 | `klt lvs` | `layout/comparator/lvs_report.json` | `sha256:6970e7e51951f876f68536d37d37adf16e5ff121862c9ee60a8be94ff6a3bf0b` | `provenance.input.content_hash`: the extracted netlist (item 4's value; the envelope was **not** re-minted, none of its inputs changed) |
 
 **Declared supply set, reconciled against the schematic.** The ERC request
@@ -206,11 +219,11 @@ body verification.
 Item 3 cites `layout/comparator/drc_report.json`, the `klt drc --deck sg13g2
 --top comparator` envelope for `layout/comparator/comparator.gds` (issue
 #59), pinned by `content_hash`
-`sha256:67e44380bac6f5b2eb52ac80cfc0422856e06a8b12cd7526b36717531655ea41`
+`sha256:583e99c6ee32474e0209d3aeaeb406393050e2bce9de4674bf091ee6a9e9d80d`
 (the GDS's own hash, recorded as `provenance.input.content_hash`). It reads
-`status: clean`, `violation_count: 0`, `rules_checked` 21, against deck
-`sha256:894326a4e37fb24fef2f7ffc6ae1da55a0e262b0f0bc1c09adc4862909278fda`
-(klt `0.6.0+g3a75c3ae705b`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
+`status: clean`, `violation_count: 0`, `rules_checked` 38, against deck
+`sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`
+(klt `0.8.0`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
 regenerates it; `--check` requires it fresh (`klt drc --check`). `klt signoff`
 grades item 3 on `status: clean` alone and does not enforce disclosure, so the
 three `coverage` fields of the envelope are quoted verbatim here. This is
@@ -218,19 +231,21 @@ klt's *curated* deck, **not** the foundry's own DRC deck: "clean" means clean
 inside this scope only.
 
 `coverage.layers_in_stream_without_rules` (drawn in the stream, no rule in the
-deck: nSD, pSD, NWell, Metal3 pin, Metal3 text, and the text layer):
+deck: Metal3 pin, Metal3 text, and the text layer; the klt 0.8.0 deck adds
+nSD, pSD and NWell rules, so those are no longer listed):
 
 ```
-7/0, 14/0, 30/2, 30/25, 31/0, 63/0
+30/2, 30/25, 63/0
 ```
 
-`coverage.rules_skipped` (22; every one has reason `no_applicable_geometry`
-in `coverage.inapplicable`: this layout draws no Metal4/5, TopMetal or
+`coverage.rules_skipped` (24; every one has reason `no_applicable_geometry`
+in `coverage.inapplicable`: this layout draws no Metal4/5, TopMetal, MIM or
 Via3/4/TopVia, and the deck's Metal3 enclosure of Via3 has no Via3 to act on):
 
 ```
 metal3.enclosing.via3.1, metal4.enclosing.via4.1, metal4.space.1,
-metal4.width.1, metal5.enclosing.topvia1.1, metal5.space.1, metal5.width.1,
+metal4.width.1, metal5.enclosing.mim.1, metal5.enclosing.topvia1.1,
+metal5.space.1, metal5.width.1, mim.enclosing.topvia1.1,
 topmetal1.enclosing.topvia1.1, topmetal1.enclosing.topvia2.1,
 topmetal1.space.1, topmetal1.width.1, topmetal2.enclosing.topvia2.1,
 topmetal2.space.1, topmetal2.width.1, topvia1.space.1, topvia1.width.1,
@@ -241,10 +256,13 @@ via4.width.1
 `coverage.deck_scope` (chapters of the foundry DRM the deck transcribes):
 
 ```
-Act, Cnt, Gat, M1, M2, M3, M4, M5, TM1, TM2, TV1, TV2, V1, V2, V3, V4
+Act, Cnt, Gat, M1, M2, M3, M4, M5, MIM, NW, TM1, TM2, TV1, TV2, V1, V2, V3,
+V4, pSD
 ```
 
-Consequences stated plainly: NWell and nSD/pSD geometry, Gat.c endcap,
+Consequences stated plainly (the klt 0.8.0 deck now carries NWell, nSD and pSD
+rules, so those layers are no longer listed as uncovered; their coverage was
+not otherwise re-audited here): Gat.c endcap,
 Cnt.e/Cnt.f, latch-up tap distance, density and seal ring are **not checked**
 by this evidence (see `layout/README.md`, "What this layout is, and is not").
 Also, `layout/comparator/drc_report.json` records its input as the
@@ -267,7 +285,7 @@ not of the GDS or the schematic. The tool does not bind it to either, so
 changed GDS, schematic subcircuit or request; see `layout/README.md`, stage 4.
 
 The envelope reads `status: match` (engine `klayout` 0.30.12, klt
-`0.6.0+g3a75c3ae705b`), 24/24 devices, 18/18 nets, 8/8 pins including
+`0.8.0`), 24/24 devices, 18/18 nets, 8/8 pins including
 `vdd`/`vss` and the independent `vbias`, 0 mismatches, 0 warnings.
 `power_connectivity.status` is `unchecked`, which `klt signoff` accepts: with
 `reference.form: subckt-call` the supply pins take part in the ordinary
@@ -336,7 +354,7 @@ covering them.
 
 ## Item 8 (Characterization report) — cited, honestly `unmet` / `check_failed`
 
-Item 8 cites `sim/characterization/20261009-d73a9ac-schematic/envelope.json`
+Item 8 cites `sim/characterization/20261009-d73a9ac-schematic-r2/envelope.json`
 (issue [#64]), a `kind: generic`, `t1_item: 8`, `schema_version: 1` envelope
 generated by `sim/characterize.sh report` from the committed schematic campaign
 `sim/klt-corner-verification/campaigns/20261009-d73a9ac` (explicitly named, never
@@ -344,10 +362,19 @@ generated by `sim/characterize.sh report` from the committed schematic campaign
 index, `report.json` and `report.md` (one row per DR-0002 sub-bound: value, unit,
 Target and Stretch bound and verdict, binding point, population, statistical
 basis, source path and sha256). `content_hash`
-`sha256:8a15e4b89531af55e5265d5cfc91754a22e65ca799b1bd2ac04ba3cff1ddda6f` is the
+`sha256:6aec8c6625809335ccc38464dea9ee03c95ef7a185901f0589828e863763e8b1` is the
 hash of `input-index.json` (selected evidence paths and digests, DR-0002 bounds,
 DUT identity, grader digest), recorded as the envelope's
 `provenance.input.content_hash`.
+
+The report directory was re-minted as `...-schematic-r2` (issue #245): the grader
+digest is an indexed source and the grader gained a shared sample-population
+validator (`sim/kltsim/populations.py`, now itself an indexed `grader` source),
+so the earlier directory
+`sim/characterization/20261009-d73a9ac-schematic/` is retained unchanged as
+superseded history. Every number in the two reports is identical; only the
+grader digests (and the added `populations.py` entry), hence the input-index
+hash, differ.
 
 **What the envelope's `status` asserts.** It mirrors bounded-Target compliance
 of the schematic DUT: `pass` only if every DR-0002 sub-bound with a ratified
@@ -382,18 +409,18 @@ source campaign are never edited.
 
 ## Regeneration and freshness
 
-The report is frozen at the pinned `klt` build — `2AMLogic/klayout-tools` @
-`3a75c3ae705b7ad3803625255de93bcd982e70c6` (the same pin the fleet's other
-committed manifest, `gf180-usb2-phy`, freezes against). A released `klt`
-older than 2026-09-17 does **not** know item 11 and renders a ten-item
-report; the pinned build renders all eleven. If the pinned build moves,
-the manifest, the freeze, and the pin move in one change.
+The report is frozen at the pinned `klt` release — `2AMLogic/klayout-tools`
+`v0.8.0` (commit `c572046be644e0407f693f2410f3abb799d68a3a`, PyPI
+`klayout-tools==0.8.0`). A `klt` older than 2026-09-17 does **not** know item
+11 and renders a ten-item report; the pinned build renders all eleven. If the
+pinned build moves, the manifest, the freeze, and the pin move in one change.
 
 [`klt-pin.json`](klt-pin.json) is the single source of truth for the pin
 (`klt_commit`, `klt_version`, `klayout_version`). CI runs
 `python3 scripts/check_klt_pin.py` (stdlib only) in the signoff job, which
 fails if any machine-read copy disagrees with it: both `ci.yml` install
-lines and its `klayout==` pin, `layout/run_flow.sh` `KLT_PIN`/`KLAYOUT_PIN`,
+lines (`klayout-tools==<klt_version>`; the git form `@<sha>` is still
+accepted for a dev-build pin) and its `klayout==` pin, `layout/run_flow.sh` `KLT_PIN`/`KLAYOUT_PIN`,
 this report's `build.git_commit`/`build.version`, and the `provenance`
 block of the DRC, LVS and ERC reports under `layout/comparator/`.
 `pex_report.json` is deliberately on a different build and is not checked.
@@ -436,8 +463,8 @@ not committed around.
 | `../layout/comparator/drc_report.json` | the cited item 3 evidence (`klt drc` envelope), regenerated by `layout/run_flow.sh` |
 | `../layout/comparator/lvs_report.json` | the cited item 4 evidence (`klt lvs` envelope), with its derived inputs `lvs_extracted.spice`, `lvs_reference.spice`, `lvs_request.json`, regenerated by `layout/run_flow.sh` |
 | `../layout/comparator/erc_report.json`, `../layout/comparator/erc_supply_spec.json` | the cited item 11 `klt erc` evidence and its derived request, regenerated by `layout/run_flow.sh` (item 11 also cites `lvs_report.json`) |
-| `../sim/klt-yield/campaigns/20261010-d73a9ac/` | the cited item 6 evidence (`offset.yield.json`, pinned by the sha256 of `inputs/offset.samples.json`), the uncited noise report, and the index; regenerated by `sim/run_klt_yield.py generate` |
-| `../sim/characterization/20261009-d73a9ac-schematic/` | the cited item 8 evidence (`envelope.json`, generic) with `report.md`/`report.json` and the hashed `input-index.json`, regenerated by `sim/characterize.sh report` |
+| `../sim/klt-yield/campaigns/20261010-n200/` | the cited item 6 evidence (`offset.yield.json`, N = 200 per point, pinned by the sha256 of `inputs/offset.samples.json`) and the index; regenerated by `sim/run_klt_yield.py generate --offset-n 200 --rows offset` (the superseded N = 60 campaign `20261010-d73a9ac`, with its uncited noise report, stays committed and checkable) |
+| `../sim/characterization/20261009-d73a9ac-schematic-r2/` | the cited item 8 evidence (`envelope.json`, generic) with `report.md`/`report.json` and the hashed `input-index.json`, regenerated by `sim/characterize.sh report` |
 | `evidence/` | the four generic envelopes for items 1, 2, 9, 10 plus the testbench inventory and hygiene checklist they bind |
 | `t1-signoff-report.json` | `klt signoff --manifest sg13g2-comparator.json --format json` output, frozen at the pinned `klt`; CI diff-checks a fresh render against it |
 | `README.md` | this claim document — kind basis, citation rationale and the disclosure of the uncited rows, the regeneration contract |
@@ -446,3 +473,12 @@ not committed around.
 [#3]: https://github.com/2AMLogic/sg13g2-comparator/issues/3
 [#38]: https://github.com/2AMLogic/sg13g2-comparator/issues/38
 [#64]: https://github.com/2AMLogic/sg13g2-comparator/issues/64
+
+## Stored-evidence manifests (`manifests/artifacts/`)
+
+Separate from the signoff manifest above: since issue #318, new simulation
+evidence is stored in the fleet artifact store, and git keeps one manifest per
+run under [`artifacts/`](artifacts/README.md). Writing them needs a `klt` with
+the `artifact` verb. That client is not the signoff build pinned in
+`klt-pin.json`, and the pin is unchanged. See `sim/README.md`, "Stored
+evidence".

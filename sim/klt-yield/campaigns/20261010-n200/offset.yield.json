@@ -1,0 +1,5601 @@
+{
+  "samples": "sim/klt-yield/campaigns/20261010-n200/inputs/offset.samples.json",
+  "limits": null,
+  "source": {
+    "kind": "sample-set",
+    "netlist": null,
+    "monte_carlo": null,
+    "sample_count": 9000
+  },
+  "schema_version": 1,
+  "confidence": 0.95,
+  "target_ci_halfwidth": 0.01,
+  "min_samples": 2,
+  "status": "reported",
+  "measurement_count": 45,
+  "measurements": [
+    {
+      "name": "vos_mv@tt_-40c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_tt_mismatch/1.080V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.2999046499999987,
+        "stddev": 3.2111602300439572,
+        "min": -7.50026,
+        "max": 7.50011,
+        "median": 1.49981,
+        "skewness": -0.18733267715177443,
+        "excess_kurtosis": -0.27975927219302843,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.306818477050098,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.999996704575136,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.999989420335515,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.557069607807006,
+        "cpk": 1.5259381134233396,
+        "cpk_confidence_interval": {
+          "low": 1.369067198295687,
+          "high": 1.6828090285509922
+        },
+        "sigma_to_spec": 4.577814340270018,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.107201594887061,
+          "high": 5.0484270856529765
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 9.461277581611801e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 3.2313753638322867e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@tt_-40c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.3068 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@tt_-40c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@tt_27c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_tt_mismatch/1.080V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.10495654999999988,
+        "stddev": 3.2791279149101986,
+        "min": -7.50005,
+        "max": 10.5,
+        "median": -1.49983,
+        "skewness": 0.3904712414993972,
+        "excess_kurtosis": 0.36445987967581184,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.367896860416961,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999951703059236,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999848404405218,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5247956559623654,
+        "cpk": 1.5141265031953788,
+        "cpk_confidence_interval": {
+          "low": 1.3583641753094207,
+          "high": 1.669888831081337
+        },
+        "sigma_to_spec": 4.542379509586136,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.075092525928262,
+          "high": 5.00966649324401
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 2.7811394679886696e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 8.933705454525507e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@tt_27c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.3679 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@tt_27c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@tt_125c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_tt_mismatch/1.080V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.14991619999999986,
+        "stddev": 3.8249625011929482,
+        "min": -10.4998,
+        "max": 10.5,
+        "median": 0.0001100000000000545,
+        "skewness": 0.09005874678402329,
+        "excess_kurtosis": 0.12665762701531946,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 5.3748127769105585,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999109381222929,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9997690695640337,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.3072023577853573,
+        "cpk": 1.2941376371113427,
+        "cpk_confidence_interval": {
+          "low": 1.1588635380310301,
+          "high": 1.4294117361916552
+        },
+        "sigma_to_spec": 3.882412911334028,
+        "sigma_to_spec_confidence_interval": {
+          "low": 3.4765906140930904,
+          "high": 4.2882352085749655
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 5.1712531112306304e-05,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.00013785080006850514
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@tt_125c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 5.3748 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@tt_125c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@tt_-40c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_tt_mismatch/1.200V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.19502185000000163,
+        "stddev": 3.2052164205256277,
+        "min": -7.50027,
+        "max": 7.50025,
+        "median": 1.49977,
+        "skewness": -0.11524965172518727,
+        "excess_kurtosis": -0.2539009785149644,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.521327552039226,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.999997007453136,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999903372405716,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5599570649834755,
+        "cpk": 1.5396753508012322,
+        "cpk_confidence_interval": {
+          "low": 1.3815141819486443,
+          "high": 1.69783651965382
+        },
+        "sigma_to_spec": 4.619026052403696,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.144542545845933,
+          "high": 5.09350955896146
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 1.9277272620672707e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 6.325291515767545e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@tt_-40c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.5213 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@tt_-40c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@tt_27c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_tt_mismatch/1.200V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.22501815000000058,
+        "stddev": 3.1462448201856126,
+        "min": -7.50013,
+        "max": 10.5,
+        "median": 1.49993,
+        "skewness": 0.07606662988672692,
+        "excess_kurtosis": 0.3769254494762828,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.894563863977307,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999980218020365,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999934581816496,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5891961006724917,
+        "cpk": 1.5653562362351225,
+        "cpk_confidence_interval": {
+          "low": 1.4047804037378389,
+          "high": 1.7259320687324062
+        },
+        "sigma_to_spec": 4.696068708705368,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.214341211213517,
+          "high": 5.177796206197218
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 6.521161572238742e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 2.2730325669671234e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@tt_27c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.8946 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@tt_27c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@tt_125c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_tt_mismatch/1.200V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.01505650000000081,
+        "stddev": 3.139881924621941,
+        "min": -7.50001,
+        "max": 10.4998,
+        "median": -1.49999,
+        "skewness": 0.35598550011347263,
+        "excess_kurtosis": 0.13997463726262982,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 8.48272818935165,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999982224243456,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999940854217021,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5924165685313236,
+        "cpk": 1.5908181538603843,
+        "cpk_confidence_interval": {
+          "low": 1.4278450059659142,
+          "high": 1.7537913017548543
+        },
+        "sigma_to_spec": 4.772454461581153,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.2835350178977425,
+          "high": 5.261373905264563
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 9.099713335421177e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 3.114578343662742e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@tt_125c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 8.4827 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@tt_125c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@tt_-40c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_tt_mismatch/1.320V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.05982404999999948,
+        "stddev": 2.88409836650773,
+        "min": -10.4998,
+        "max": 4.5004,
+        "median": 0.0001900000000001345,
+        "skewness": -0.40234527647459956,
+        "excess_kurtosis": 0.2955214515824074,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 9.292280456495982,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999998005136463,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.999999253622554,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.733644059461936,
+        "cpk": 1.726729818868906,
+        "cpk_confidence_interval": {
+          "low": 1.5509110810326219,
+          "high": 1.90254855670519
+        },
+        "sigma_to_spec": 5.180189456606718,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.652733243097866,
+          "high": 5.7076456701155704
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 1.1083032764231729e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 4.2349261043040124e-07
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@tt_-40c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 9.2923 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@tt_-40c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@tt_27c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_tt_mismatch/1.320V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.029779649999999425,
+        "stddev": 3.3218032847237313,
+        "min": -7.49992,
+        "max": 10.5002,
+        "median": -1.49963,
+        "skewness": 0.10323020490168659,
+        "excess_kurtosis": 0.12623388824583692,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 6.882267379767635,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999936814024544,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999804865837609,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5052065313421596,
+        "cpk": 1.5022182297634208,
+        "cpk_confidence_interval": {
+          "low": 1.347572791625854,
+          "high": 1.6568636679009876
+        },
+        "sigma_to_spec": 4.506654689290262,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.042718374877562,
+          "high": 4.970591003702963
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 3.2928839181482106e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.0472986611316076e-05
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@tt_27c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 6.8823 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@tt_27c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@tt_125c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_tt_mismatch/1.320V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.2849000999999997,
+        "stddev": 3.2959021071255687,
+        "min": -10.4998,
+        "max": 7.50012,
+        "median": -1.49982,
+        "skewness": -0.16761921470178376,
+        "excess_kurtosis": 0.0183723452985447,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 6.947142063182764,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999942274555618,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999820764880647,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5170353479826542,
+        "cpk": 1.4882217798264012,
+        "cpk_confidence_interval": {
+          "low": 1.3348880727129857,
+          "high": 1.6415554869398168
+        },
+        "sigma_to_spec": 4.464665339479204,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.004664218138958,
+          "high": 4.92466646081945
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 4.009700018477962e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.2604429133690896e-05
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@tt_125c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 6.9471 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@tt_125c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ff_-40c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ff_mismatch/1.080V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.29972609999999944,
+        "stddev": 3.2111558442756905,
+        "min": -7.50039,
+        "max": 7.49973,
+        "median": 1.49965,
+        "skewness": -0.16268514642359844,
+        "excess_kurtosis": -0.38135604889787,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.245734453483893,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999967050391473,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999894217345602,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5570717344389127,
+        "cpk": 1.5259587318800054,
+        "cpk_confidence_interval": {
+          "low": 1.3690858809366464,
+          "high": 1.6828315828233644
+        },
+        "sigma_to_spec": 4.577876195640016,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.107257642809939,
+          "high": 5.048494748470093
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 9.463581394315049e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 3.232118725991271e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ff_-40c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.2457 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ff_-40c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ff_27c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ff_mismatch/1.080V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.12014139999999918,
+        "stddev": 3.333337857598828,
+        "min": -7.50015,
+        "max": 10.4999,
+        "median": -1.50009,
+        "skewness": 0.43150155170702525,
+        "excess_kurtosis": 0.310005818793083,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.316105233278626,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999931108447373,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999788366650536,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.4999979640832906,
+        "cpk": 1.4879838403898162,
+        "cpk_confidence_interval": {
+          "low": 1.334672423088499,
+          "high": 1.6412952576911335
+        },
+        "sigma_to_spec": 4.463951521169449,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.004017269265497,
+          "high": 4.9238857730734
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 4.023088847831642e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.2643997701870929e-05
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ff_27c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.3161 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ff_27c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ff_125c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ff_mismatch/1.080V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.2852706499999976,
+        "stddev": 3.9107612818658186,
+        "min": -10.4999,
+        "max": 10.4994,
+        "median": -1.4999099999999999,
+        "skewness": 0.12007416592724715,
+        "excess_kurtosis": 0.05524892064616704,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 5.260610275402627,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9998694979737978,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9996708979671586,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.2785234484101538,
+        "cpk": 1.254208434065607,
+        "cpk_confidence_interval": {
+          "low": 1.1226144854847735,
+          "high": 1.3858023826464405
+        },
+        "sigma_to_spec": 3.7626253021968212,
+        "sigma_to_spec_confidence_interval": {
+          "low": 3.3678434564543203,
+          "high": 4.157407147939321
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 8.40695095967331e-05,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.00021652925196528173
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ff_125c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 5.2606 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ff_125c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ff_-40c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ff_mismatch/1.200V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.20971199999999815,
+        "stddev": 3.2323679060489505,
+        "min": -7.49992,
+        "max": 7.50042,
+        "median": 1.500115,
+        "skewness": -0.14466382368182412,
+        "excess_kurtosis": -0.23198145976993523,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.449373206433623,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999963600483522,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999883812775323,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5468536210383597,
+        "cpk": 1.5252273699333467,
+        "cpk_confidence_interval": {
+          "low": 1.368423183359981,
+          "high": 1.6820315565067125
+        },
+        "sigma_to_spec": 4.57568210980004,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.105269550079942,
+          "high": 5.046094669520137
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 2.3733542557394964e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 7.694588213520604e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ff_-40c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.4494 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ff_-40c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ff_27c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ff_mismatch/1.200V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.16519570000000022,
+        "stddev": 3.220951672619488,
+        "min": -7.49987,
+        "max": 10.5,
+        "median": 1.500075,
+        "skewness": 0.07677330561626002,
+        "excess_kurtosis": 0.2768604496660898,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.3290116282435065,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999966958251879,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999893925826625,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5523362373002243,
+        "cpk": 1.5352402858764793,
+        "cpk_confidence_interval": {
+          "low": 1.3774957838021906,
+          "high": 1.692984787950768
+        },
+        "sigma_to_spec": 4.6057208576294375,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.132487351406572,
+          "high": 5.078954363852304
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 1.2489774709774189e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 4.200300232564737e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ff_27c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.3290 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ff_27c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ff_125c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ff_mismatch/1.200V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.014821899999999983,
+        "stddev": 3.0669369079298816,
+        "min": -7.50005,
+        "max": 10.499,
+        "median": -1.49993,
+        "skewness": 0.36831520174592336,
+        "excess_kurtosis": 0.31877570246970244,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 8.988090429774507,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999989958132085,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999965503599837,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.630291117848556,
+        "cpk": 1.62868018372058,
+        "cpk_confidence_interval": {
+          "low": 1.4621365470866712,
+          "high": 1.7952238203544888
+        },
+        "sigma_to_spec": 4.88604055116174,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.3864096412600135,
+          "high": 5.385671461063467
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 4.897667077901241e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.733637087834622e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ff_125c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 8.9881 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ff_125c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ff_-40c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ff_mismatch/1.320V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -5.525000000039082e-05,
+        "stddev": 2.900354294723585,
+        "min": -10.5,
+        "max": 4.50018,
+        "median": 1.49976,
+        "skewness": -0.434842566711716,
+        "excess_kurtosis": 0.28649224533989104,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 9.212798695300911,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999997681279338,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999991390712768,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.7239273178094674,
+        "cpk": 1.7239209680105132,
+        "cpk_confidence_interval": {
+          "low": 1.5483684721923567,
+          "high": 1.8994734638286697
+        },
+        "sigma_to_spec": 5.17176290403154,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.645105416577071,
+          "high": 5.6984203914860085
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 1.1594785487363101e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 4.420544657269197e-07
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ff_-40c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 9.2128 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ff_-40c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ff_27c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ff_mismatch/1.320V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.029838649999999235,
+        "stddev": 3.2944649249026403,
+        "min": -7.50011,
+        "max": 7.50037,
+        "median": -1.4996399999999999,
+        "skewness": 0.03688548582969447,
+        "excess_kurtosis": -0.13927350848234443,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 6.926723752046769,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999947089762288,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.999983483254805,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5176971417134644,
+        "cpk": 1.514678072792292,
+        "cpk_confidence_interval": {
+          "low": 1.358863993742946,
+          "high": 1.6704921518416378
+        },
+        "sigma_to_spec": 4.544034218376876,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.076591981228838,
+          "high": 5.011476455524914
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 2.759384655495442e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 8.867898965878356e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ff_27c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 6.9267 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ff_27c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ff_125c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ff_mismatch/1.320V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.2551721000000003,
+        "stddev": 3.339162755294102,
+        "min": -10.4999,
+        "max": 7.49978,
+        "median": -1.49992,
+        "skewness": -0.14705334439721604,
+        "excess_kurtosis": -0.06818450975024071,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 6.747345364087405,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999925110148793,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999771128564783,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.4973813397004114,
+        "cpk": 1.471908676970267,
+        "cpk_confidence_interval": {
+          "low": 1.3201024002108293,
+          "high": 1.6237149537297046
+        },
+        "sigma_to_spec": 4.4157260309108,
+        "sigma_to_spec_confidence_interval": {
+          "low": 3.9603072006324878,
+          "high": 4.871144861189114
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 5.033576162261071e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.5608044132062398e-05
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ff_125c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 6.7473 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ff_125c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ss_-40c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ss_mismatch/1.080V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.25520835000000064,
+        "stddev": 3.200979358371337,
+        "min": -7.49995,
+        "max": 7.50032,
+        "median": 1.500035,
+        "skewness": -0.210018484454834,
+        "excess_kurtosis": -0.346890984354256,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.416333753043554,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999970103292917,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999903464660594,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5620219439790475,
+        "cpk": 1.5354458744466017,
+        "cpk_confidence_interval": {
+          "low": 1.3776820599523827,
+          "high": 1.6932096889408208
+        },
+        "sigma_to_spec": 4.6063376233398055,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.133046179857148,
+          "high": 5.079629066822463
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 9.40556705631559e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 3.213396248547461e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ss_-40c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.4163 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ss_-40c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ss_27c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ss_mismatch/1.080V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.1197900500000012,
+        "stddev": 3.22297637750017,
+        "min": -7.49989,
+        "max": 10.5003,
+        "median": -1.4997099999999999,
+        "skewness": 0.44519253176551066,
+        "excess_kurtosis": 0.5404042454061257,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 8.050055012676765,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999966948719314,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999893895951332,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5513610446869424,
+        "cpk": 1.5389718702128687,
+        "cpk_confidence_interval": {
+          "low": 1.3808767990151647,
+          "high": 1.6970669414105728
+        },
+        "sigma_to_spec": 4.616915610638606,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.142630397045494,
+          "high": 5.091200824231718
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 1.947427797000681e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 6.386205054273014e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ss_27c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 8.0501 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ss_27c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ss_125c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ss_mismatch/1.080V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.04500694999999857,
+        "stddev": 3.756128877964465,
+        "min": -10.5,
+        "max": 10.4999,
+        "median": 1.49991,
+        "skewness": 0.026396452704470483,
+        "excess_kurtosis": -0.00011592297125240236,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 5.452069622383687,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999348087847019,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9998271751920597,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.331157732455021,
+        "cpk": 1.3271636424879065,
+        "cpk_confidence_interval": {
+          "low": 1.1888355609204848,
+          "high": 1.4654917240553282
+        },
+        "sigma_to_spec": 3.9814909274637196,
+        "sigma_to_spec_confidence_interval": {
+          "low": 3.5665066827614544,
+          "high": 4.396475172165985
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 3.4242167805425834e-05,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 9.390422031640946e-05
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ss_125c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 5.4521 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ss_125c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ss_-40c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ss_mismatch/1.200V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.10490200000000056,
+        "stddev": 3.123742471983465,
+        "min": -7.5001,
+        "max": 7.50026,
+        "median": 1.4998749999999998,
+        "skewness": -0.1074769349313981,
+        "excess_kurtosis": -0.15342785130684033,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.826978650147009,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999984072879226,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999946675041598,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.6006441135415297,
+        "cpk": 1.5894500622882806,
+        "cpk_confidence_interval": {
+          "low": 1.4266058039547675,
+          "high": 1.7522943206217936
+        },
+        "sigma_to_spec": 4.768350186864842,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.279817411864302,
+          "high": 5.256882961865381
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 9.287035935586247e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 3.1751227239912385e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ss_-40c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.8270 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ss_-40c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ss_27c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ss_mismatch/1.200V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.19484230000000002,
+        "stddev": 3.119391515352792,
+        "min": -7.50014,
+        "max": 10.4998,
+        "median": 1.49971,
+        "skewness": 0.10862825254022358,
+        "excess_kurtosis": 0.24782481005775825,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.872151554170182,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999984085533392,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999946716616812,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.6028767070088406,
+        "cpk": 1.5820561613948387,
+        "cpk_confidence_interval": {
+          "low": 1.4199083363490037,
+          "high": 1.7442039864406738
+        },
+        "sigma_to_spec": 4.746168484184516,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.259725009047012,
+          "high": 5.232611959322021
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 5.549164006666865e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.951151361384142e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ss_27c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.8722 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ss_27c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ss_125c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ss_mismatch/1.200V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.015052549999999592,
+        "stddev": 3.110968434268348,
+        "min": -7.50008,
+        "max": 10.5,
+        "median": -1.4999850000000001,
+        "skewness": 0.2844366590591559,
+        "excess_kurtosis": 0.10841696978426363,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 8.117605547388584,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999985758388907,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999952017117144,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.6072165647594951,
+        "cpk": 1.6056037175793703,
+        "cpk_confidence_interval": {
+          "low": 1.4412370399365797,
+          "high": 1.7699703952221608
+        },
+        "sigma_to_spec": 4.816811152738111,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.323711119809739,
+          "high": 5.309911185666483
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 7.293531176044405e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 2.5268339251085755e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ss_125c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 8.1176 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ss_125c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ss_-40c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ss_mismatch/1.320V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.00017920000000028137,
+        "stddev": 2.884722051945607,
+        "min": -10.5,
+        "max": 4.50043,
+        "median": 1.499965,
+        "skewness": -0.35699051356550926,
+        "excess_kurtosis": 0.18707844744580715,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 9.16592733737057,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999998005051974,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999992535921446,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.733269240489821,
+        "cpk": 1.7332485336999612,
+        "cpk_confidence_interval": {
+          "low": 1.5568117926725575,
+          "high": 1.909685274727365
+        },
+        "sigma_to_spec": 5.199745601099884,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.670435378017673,
+          "high": 5.729055824182095
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 9.971406503833289e-08,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 3.830155731404905e-07
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ss_-40c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 9.1659 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ss_-40c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ss_27c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ss_mismatch/1.320V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.10497334999999758,
+        "stddev": 3.347388849490411,
+        "min": -7.50001,
+        "max": 10.5,
+        "median": -1.499865,
+        "skewness": 0.12066497979364268,
+        "excess_kurtosis": 0.07037026648821065,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 6.7381309062924775,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999924974507263,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999770726487207,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.4937015760093644,
+        "cpk": 1.483248318787099,
+        "cpk_confidence_interval": {
+          "low": 1.3303804505975492,
+          "high": 1.636116186976649
+        },
+        "sigma_to_spec": 4.449744956361297,
+        "sigma_to_spec_confidence_interval": {
+          "low": 3.9911413517926473,
+          "high": 4.908348560929947
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 4.298616145003586e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.345646238923616e-05
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ss_27c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 6.7381 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ss_27c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@ss_125c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_ss_mismatch/1.320V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.3150333500000014,
+        "stddev": 3.2655882583632727,
+        "min": -10.5,
+        "max": 7.49997,
+        "median": -1.50001,
+        "skewness": -0.12788740588603348,
+        "excess_kurtosis": 0.011278586877018437,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.006250109137984,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999951849438534,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999848858484078,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5311177051163278,
+        "cpk": 1.4989608291238539,
+        "cpk_confidence_interval": {
+          "low": 1.3446207692335146,
+          "high": 1.6533008890141931
+        },
+        "sigma_to_spec": 4.496882487371561,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.033862307700543,
+          "high": 4.959902667042579
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 3.447853722448913e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.09360661914085e-05
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@ss_125c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.0063 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@ss_125c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@fs_-40c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_fs_mismatch/1.080V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.2702410000000006,
+        "stddev": 3.213827487803102,
+        "min": -7.50011,
+        "max": 7.50024,
+        "median": 1.500085,
+        "skewness": -0.1856934819483645,
+        "excess_kurtosis": -0.28625993889538304,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.257906741510446,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.999996700954948,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999894089249087,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5557773461629962,
+        "cpk": 1.527748357776034,
+        "cpk_confidence_interval": {
+          "low": 1.3707074746666195,
+          "high": 1.6847892408854486
+        },
+        "sigma_to_spec": 4.5832450733281025,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.112122423999859,
+          "high": 5.0543677226563455
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 1.009970354074059e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 3.4369787796694348e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@fs_-40c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.2579 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@fs_-40c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@fs_27c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_fs_mismatch/1.080V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.09003185000000011,
+        "stddev": 3.307034595410256,
+        "min": -7.50009,
+        "max": 10.5,
+        "median": -1.49992,
+        "skewness": 0.41468758417325435,
+        "excess_kurtosis": 0.3668827463571276,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.354750725218093,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999942152933208,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999820392972412,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5119285437592231,
+        "cpk": 1.502853762168393,
+        "cpk_confidence_interval": {
+          "low": 1.3481487365645826,
+          "high": 1.6575587877722036
+        },
+        "sigma_to_spec": 4.508561286505179,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.0444462096937475,
+          "high": 4.9726763633166104
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 3.2634357956807666e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.0384837414612877e-05
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@fs_27c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.3548 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@fs_27c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@fs_125c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_fs_mismatch/1.080V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.14953420000000006,
+        "stddev": 3.860259911648926,
+        "min": -10.4994,
+        "max": 10.5003,
+        "median": -1.499285,
+        "skewness": 0.09682896639882316,
+        "excess_kurtosis": 0.04270263482977832,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 5.116980821337695,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.999896758776909,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9997351412323034,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.295249572421726,
+        "cpk": 1.282337298514231,
+        "cpk_confidence_interval": {
+          "low": 1.1481522311776773,
+          "high": 1.4165223658507846
+        },
+        "sigma_to_spec": 3.8470118955426926,
+        "sigma_to_spec_confidence_interval": {
+          "low": 3.4444566935330316,
+          "high": 4.249567097552354
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 5.978358313971544e-05,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.00015775641011506875
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@fs_125c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 5.1170 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@fs_125c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@fs_-40c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_fs_mismatch/1.200V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.20990159999999924,
+        "stddev": 3.246326867785336,
+        "min": -7.50017,
+        "max": 7.5003,
+        "median": 0.00013499999999999623,
+        "skewness": -0.12920776432582887,
+        "excess_kurtosis": -0.2575663935023922,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.248589781258207,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.999995994525964,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999872867451722,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5402022666346689,
+        "cpk": 1.518649538628653,
+        "cpk_confidence_interval": {
+          "low": 1.3624627869401453,
+          "high": 1.6748362903171605
+        },
+        "sigma_to_spec": 4.555948615885959,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.0873883608204356,
+          "high": 5.024508870951482
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 2.607484239121559e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 8.407502406322209e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@fs_-40c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.2486 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@fs_-40c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@fs_27c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_fs_mismatch/1.200V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.22503425000000063,
+        "stddev": 3.217314454994415,
+        "min": -7.50006,
+        "max": 10.5,
+        "median": 1.49995,
+        "skewness": 0.1232122402539253,
+        "excess_kurtosis": 0.2594649960393993,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.368784312036943,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999966979673877,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999893994008222,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5540911744695094,
+        "cpk": 1.530776258344285,
+        "cpk_confidence_interval": {
+          "low": 1.373451039797562,
+          "high": 1.688101476891008
+        },
+        "sigma_to_spec": 4.592328775032855,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.120353119392686,
+          "high": 5.064304430673024
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 1.1103970862879355e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 3.7588808298803022e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@fs_27c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.3688 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@fs_27c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@fs_125c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_fs_mismatch/1.200V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.014556999999999718,
+        "stddev": 3.1398704958557975,
+        "min": -7.49946,
+        "max": 10.5003,
+        "median": -1.499415,
+        "skewness": 0.329621373333633,
+        "excess_kurtosis": 0.1394677605630994,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 8.13788092217652,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.999998222609655,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999940860032922,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5924223647438074,
+        "cpk": 1.590876971919569,
+        "cpk_confidence_interval": {
+          "low": 1.4278982825047897,
+          "high": 1.7538556613343483
+        },
+        "sigma_to_spec": 4.7726309157587075,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.283694847514369,
+          "high": 5.261566984003045
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 9.0917417672324e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 3.112000260602646e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@fs_125c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 8.1379 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@fs_125c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@fs_-40c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_fs_mismatch/1.320V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.044902499999999,
+        "stddev": 2.931039687303721,
+        "min": -10.4999,
+        "max": 7.50018,
+        "median": 1.49992,
+        "skewness": -0.34678917751374155,
+        "excess_kurtosis": 0.31674016813433825,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 8.95058854457814,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999996896290345,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999988647766225,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.7058793238652892,
+        "cpk": 1.7007727741092984,
+        "cpk_confidence_interval": {
+          "low": 1.5274132652532528,
+          "high": 1.874132282965344
+        },
+        "sigma_to_spec": 5.102318322327895,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.582239795759758,
+          "high": 5.622396848896032
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 1.6775889153397117e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 6.27837712328395e-07
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@fs_-40c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 8.9506 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@fs_-40c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@fs_27c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_fs_mismatch/1.320V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.059878299999998906,
+        "stddev": 3.3485101323559654,
+        "min": -7.49998,
+        "max": 10.5002,
+        "median": -1.499755,
+        "skewness": 0.10461688459988788,
+        "excess_kurtosis": 0.06264235892487946,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 6.7172940575148115,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999924967389952,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999770705703349,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.4932013947594267,
+        "cpk": 1.4872407040210385,
+        "cpk_confidence_interval": {
+          "low": 1.3339989005436919,
+          "high": 1.640482507498385
+        },
+        "sigma_to_spec": 4.461722112063115,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.001996701631075,
+          "high": 4.921447522495155
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 4.06518078861706e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.2768339583755969e-05
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@fs_27c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 6.7173 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@fs_27c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@fs_125c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_fs_mismatch/1.320V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.314551600000001,
+        "stddev": 3.320487144135522,
+        "min": -10.4994,
+        "max": 7.5004,
+        "median": -1.49946,
+        "skewness": -0.13457062621785496,
+        "excess_kurtosis": -0.041760274561641886,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 6.797170233600277,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999931330493564,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999789034471215,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5058031496465059,
+        "cpk": 1.4742262969794158,
+        "cpk_confidence_interval": {
+          "low": 1.322203110958537,
+          "high": 1.6262494830002945
+        },
+        "sigma_to_spec": 4.422678890938247,
+        "sigma_to_spec_confidence_interval": {
+          "low": 3.966609332875611,
+          "high": 4.8787484490008834
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 4.874228679840606e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.514337082184693e-05
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@fs_125c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 6.7972 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@fs_125c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@sf_-40c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_sf_mismatch/1.080V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.2852808,
+        "stddev": 3.212541781410619,
+        "min": -7.5,
+        "max": 7.50054,
+        "median": 1.500105,
+        "skewness": -0.17418339447055323,
+        "excess_kurtosis": -0.28744344995371973,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.308706767527926,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999967019458983,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999894121421994,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.556399991101287,
+        "cpk": 1.526799255462529,
+        "cpk_confidence_interval": {
+          "low": 1.3698474879167168,
+          "high": 1.683751023008341
+        },
+        "sigma_to_spec": 4.580397766387587,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.1095424637501505,
+          "high": 5.051253069025023
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 9.775919381491747e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 3.3328029508589143e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@sf_-40c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.3087 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@sf_-40c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@sf_27c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_sf_mismatch/1.080V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.11998194999999909,
+        "stddev": 3.2786162799321117,
+        "min": -7.49992,
+        "max": 10.5001,
+        "median": -1.49991,
+        "skewness": 0.40345068901437314,
+        "excess_kurtosis": 0.37374478792108423,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.430114660544491,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999951703012094,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999848404487873,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5250336035370178,
+        "cpk": 1.5128351698324913,
+        "cpk_confidence_interval": {
+          "low": 1.3571939951523762,
+          "high": 1.6684763445126065
+        },
+        "sigma_to_spec": 4.538505509497474,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.0715819854571285,
+          "high": 5.005429033537819
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 2.8327157949585824e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 9.089592529056172e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@sf_27c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.4301 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@sf_27c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@sf_125c_1.08v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_sf_mismatch/1.080V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.1654449499999995,
+        "stddev": 3.8124892781124786,
+        "min": -10.5003,
+        "max": 10.4995,
+        "median": -1.5003000000000002,
+        "skewness": 0.12349601226242851,
+        "excess_kurtosis": 0.11678811797834765,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 5.3384549223791815,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.999915319506918,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9997796353225468,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.3114790981065905,
+        "cpk": 1.2970139251857713,
+        "cpk_confidence_interval": {
+          "low": 1.1614742020027489,
+          "high": 1.4325536483687937
+        },
+        "sigma_to_spec": 3.891041775557314,
+        "sigma_to_spec_confidence_interval": {
+          "low": 3.4844226060082466,
+          "high": 4.297660945106381
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 4.990737211177021e-05,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.0001333681059863256
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@sf_125c_1.08v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 5.3385 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@sf_125c_1.08v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@sf_-40c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_sf_mismatch/1.200V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.1651484000000001,
+        "stddev": 3.149988935116475,
+        "min": -7.5003,
+        "max": 7.50006,
+        "median": -0.00021000000000004349,
+        "skewness": -0.07622974182553226,
+        "excess_kurtosis": -0.21751308423523552,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.619980345436138,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999980199328781,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999934521076151,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5873071629742468,
+        "cpk": 1.5698310804226643,
+        "cpk_confidence_interval": {
+          "low": 1.4088341575892582,
+          "high": 1.7308280032560703
+        },
+        "sigma_to_spec": 4.709493241267992,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.226502472767775,
+          "high": 5.1924840097682115
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 1.2416672416946343e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 4.177090201095441e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@sf_-40c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.6200 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@sf_-40c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@sf_27c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_sf_mismatch/1.200V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.23984244999999874,
+        "stddev": 3.0870685509645326,
+        "min": -7.50017,
+        "max": 10.4998,
+        "median": 1.49978,
+        "skewness": 0.07546687109728514,
+        "excess_kurtosis": 0.33387123438247146,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 8.221947611692666,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999987317767259,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.999995699635384,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.619659530539996,
+        "cpk": 1.5937619898752917,
+        "cpk_confidence_interval": {
+          "low": 1.4305114694558103,
+          "high": 1.7570125102947731
+        },
+        "sigma_to_spec": 4.781285969625875,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.291534408367431,
+          "high": 5.271037530884319
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 3.973363709689337e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 1.4221714651325057e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@sf_27c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 8.2219 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@sf_27c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@sf_125c_1.20v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_sf_mismatch/1.200V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.030522850000000518,
+        "stddev": 3.081615885466448,
+        "min": -7.50048,
+        "max": 10.4993,
+        "median": -1.500445,
+        "skewness": 0.33370899373011376,
+        "excess_kurtosis": 0.18991680647117315,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 8.745349837198761,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999988688822157,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999961397792463,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.6225253846792058,
+        "cpk": 1.6192237780833554,
+        "cpk_confidence_interval": {
+          "low": 1.4535725206293424,
+          "high": 1.7848750355373684
+        },
+        "sigma_to_spec": 4.857671334250066,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.360717561888027,
+          "high": 5.354625106612105
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 5.938717409937513e-07,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 2.0805101373252616e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@sf_125c_1.20v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 8.7453 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@sf_125c_1.20v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@sf_-40c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_sf_mismatch/1.320V/-40C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.01474264999999992,
+        "stddev": 2.837266834205746,
+        "min": -10.4998,
+        "max": 4.50037,
+        "median": 1.50012,
+        "skewness": -0.37864115150152994,
+        "excess_kurtosis": 0.3028151939972332,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 9.515082347762423,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999998754619099,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999995228986637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.7622593475243866,
+        "cpk": 1.760527322673068,
+        "cpk_confidence_interval": {
+          "low": 1.5815027211644317,
+          "high": 1.9395519241817043
+        },
+        "sigma_to_spec": 5.2815819680192035,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.744508163493295,
+          "high": 5.818655772545113
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 6.403657964964678e-08,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 2.5135585475335194e-07
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@sf_-40c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 9.5151 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@sf_-40c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@sf_27c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_sf_mismatch/1.320V/27C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": 0.00027104999999999713,
+        "stddev": 3.280833398900821,
+        "min": -7.49978,
+        "max": 10.5004,
+        "median": -1.4996450000000001,
+        "skewness": 0.13866689521914502,
+        "excess_kurtosis": 0.14420009579380855,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.055545543535754,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.999995169299005,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999848374378713,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5240030175488801,
+        "cpk": 1.523975478814353,
+        "cpk_confidence_interval": {
+          "low": 1.3672888201805968,
+          "high": 1.680662137448109
+        },
+        "sigma_to_spec": 4.571926436443059,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.101866460541791,
+          "high": 5.041986412344327
+        },
+        "limiting_side": "upper"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 2.414397945725086e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 7.819865784487686e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@sf_27c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.0555 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@sf_27c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    },
+    {
+      "name": "vos_mv@sf_125c_1.32v",
+      "unit": "mV",
+      "n": 200,
+      "errored": 0,
+      "failed_unmeasurable": 0,
+      "censored": 0,
+      "inconclusive": 0,
+      "limits": {
+        "min": -15.0,
+        "max": 15.0
+      },
+      "source_corners": [
+        "mos_sf_mismatch/1.320V/125C"
+      ],
+      "distribution": {
+        "model": "normal",
+        "mean": -0.285245799999999,
+        "stddev": 3.2544635757742895,
+        "min": -10.5002,
+        "max": 7.49984,
+        "median": -1.500135,
+        "skewness": -0.16901732715078696,
+        "excess_kurtosis": 0.12330972691122533,
+        "normality": {
+          "test": "anderson-darling",
+          "statistic": 7.253324754242021,
+          "critical_value": 0.787,
+          "significance": 0.05,
+          "verdict": "rejected"
+        }
+      },
+      "yield": {
+        "empirical": {
+          "method": "clopper-pearson",
+          "estimate": 1.0,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9817246596448637,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "normal": {
+          "method": "normal-delta",
+          "estimate": 0.9999956065234286,
+          "confidence": 0.95,
+          "confidence_interval": {
+            "low": 0.9999861327552672,
+            "high": 1.0
+          },
+          "n": 200
+        },
+        "variance_reduced": null
+      },
+      "capability": {
+        "cp": 1.5363515011257791,
+        "cpk": 1.5071356469244577,
+        "cpk_confidence_interval": {
+          "low": 1.3520290937169834,
+          "high": 1.662242200131932
+        },
+        "sigma_to_spec": 4.521406940773373,
+        "sigma_to_spec_confidence_interval": {
+          "low": 4.05608728115095,
+          "high": 4.986726600395796
+        },
+        "limiting_side": "lower"
+      },
+      "sample_size": {
+        "n": 200,
+        "observed_ci_halfwidth": 0.009137670177568169,
+        "target_ci_halfwidth": 0.01,
+        "required_n": 183,
+        "required_n_for_target": null,
+        "verdict": "sufficient",
+        "method": "clopper-pearson-zero-failures",
+        "variance_reduced": null
+      },
+      "negative_control": {
+        "description": "synthetic over-limit control: the nominal draws of this point plus a forced 30 mV offset (2 x the limit)",
+        "n": 200,
+        "errored": 0,
+        "failed_unmeasurable": 0,
+        "censored": 0,
+        "yield": {
+          "empirical": {
+            "method": "clopper-pearson",
+            "estimate": 0.0,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 0.018275340355136394
+            },
+            "n": 200
+          },
+          "normal": {
+            "method": "normal-delta",
+            "estimate": 3.071498239106441e-06,
+            "confidence": 0.95,
+            "confidence_interval": {
+              "low": 0.0,
+              "high": 9.809056324121357e-06
+            },
+            "n": 200
+          },
+          "variance_reduced": null
+        },
+        "nominal_empirical_estimate": 1.0,
+        "degradation_detected": true,
+        "verdict": "detected"
+      },
+      "analytic_cross_check": null,
+      "sampling": {
+        "strategy": "plain_random",
+        "replicates": null,
+        "effective_sample_size": null
+      },
+      "status": "reported",
+      "warnings": [
+        "measurement 'vos_mv@sf_125c_1.32v': the sample set is not consistent with a normal distribution (Anderson-Darling A2* = 7.2533 > 0.787); treat the parametric yield estimate and Cpk as indicative only and prefer the empirical estimate",
+        "measurement 'vos_mv@sf_125c_1.32v': no sample fell outside the limits, so the empirical yield is bounded only from below -- \"at least 98.1725% at 95% confidence, N = 200\" is the honest statement, not \"100% yield\""
+      ]
+    }
+  ],
+  "warnings": [
+    "no measurement declared a target_yield, so no yield claim was checked -- the estimates below are reported, never failed"
+  ]
+}

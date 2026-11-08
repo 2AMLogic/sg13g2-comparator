@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -41,6 +42,9 @@ from .corners import (
     DEFAULT_NOMINAL_SUPPLY_V,
     DEFAULT_SUPPLY_TOLERANCE,
     DEFAULT_TEMPERATURES_C,
+    supply_points,
+    validate_supply_params,
+    validate_temperatures,
 )
 
 MANIFEST_NAME = "tb.json"
@@ -92,6 +96,26 @@ class Testbench:
     #: Optional internal-noise hook request (harness/internal_noise.py). Empty
     #: (the default) => compose_deck emits nothing extra.
     internal_noise: dict = field(default_factory=dict)
+    # Issue #179: fragment bytes and hashes captured once by load().
+    netlist_bytes: bytes = field(default=b"", repr=False)
+    netlist_sha256: str = ""
+    manifest_sha256: str = ""
+    #: Supplemental reverse-polarity ladder (gf180-comparator#158/#166 twin):
+    #: ``{"netlist": <fragment>, "analyses": [<.meas cards>]}``. A second
+    #: netlist fragment and `.meas` cards the harness appends to the SAME
+    #: transient. DELIBERATELY outside `analyses` and the main netlist: those
+    #: are hashed consumed fields that layout/pex pins and re-grades committed
+    #: evidence from, so a supplemental bench extension must not change them.
+    #: Reported, never scored.
+    reverse_ladder: dict = field(default_factory=dict)
+    reverse_ladder_netlist: Path | None = None
+    reverse_ladder_bytes: bytes = field(default=b"", repr=False)
+    reverse_ladder_sha256: str = ""
+
+    @property
+    def reverse_ladder_path(self) -> Path | None:
+        """The declared reverse-ladder fragment, or None when undeclared."""
+        return self.reverse_ladder_netlist
 
     @property
     def experiment(self) -> str:
@@ -103,16 +127,8 @@ class Testbench:
         """``sim/<experiment-slug>/`` -- where records/corners/snapshots live."""
         return self.directory.parent
 
-    @property
-    def netlist_sha256(self) -> str:
-        return hashlib.sha256(self.netlist.read_bytes()).hexdigest()
-
-    @property
-    def manifest_sha256(self) -> str:
-        return hashlib.sha256((self.directory / MANIFEST_NAME).read_bytes()).hexdigest()
-
     def provenance(self) -> dict:
-        return {
+        prov = {
             "name": self.name,
             "description": self.description,
             "claim": self.claim,
@@ -124,12 +140,35 @@ class Testbench:
             "nominal_supply_v": self.nominal_supply_v,
             "supply_tolerance": self.supply_tolerance,
         }
+        if self.reverse_ladder:
+            prov["reverse_ladder_netlist"] = self.reverse_ladder_netlist.name
+            prov["reverse_ladder_netlist_sha256"] = self.reverse_ladder_sha256
+        return prov
 
 
 def _require(manifest: dict, key: str, path: Path):
     if key not in manifest:
         raise ValueError(f"{path}: missing required key {key!r}")
     return manifest[key]
+
+
+def _check_bound(value, where: str, nonneg: bool = False) -> None:
+    """Reject a bound that is not a finite real number (bool, str, null,
+    container, NaN, Inf, or an int too large for a float) at load time."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{where} must be a finite number, got {value!r}")
+    try:
+        finite = math.isfinite(value)
+    except OverflowError:
+        finite = False
+    if not finite:
+        raise ValueError(f"{where} must be finite, got {value!r}")
+    if nonneg and value < 0:
+        raise ValueError(f"{where} must be >= 0, got {value!r}")
+
+
+def _reject_json_constant(token: str):
+    raise ValueError(f"non-finite JSON constant {token} is not allowed")
 
 
 def _validate_checks(checks: dict[str, dict], measure: dict[str, str], path: Path) -> None:
@@ -147,6 +186,10 @@ def _validate_checks(checks: dict[str, dict], measure: dict[str, str], path: Pat
                 f"{path}: check {name!r} has unknown key(s) {', '.join(unknown)}; "
                 f"known: {', '.join(CHECK_KEYS)}"
             )
+        where = f"{path}: check {name!r}: "
+        for key in ("min", "max", "min_spread_pct", "max_spread_pct"):
+            if key in spec:
+                _check_bound(spec[key], where + key, nonneg="spread" in key)
         for axis_key in ("min_spread_pct_by_axis", "max_spread_pct_by_axis"):
             axes = spec.get(axis_key)
             if axes is None:
@@ -159,6 +202,17 @@ def _validate_checks(checks: dict[str, dict], measure: dict[str, str], path: Pat
                     f"{path}: check {name!r}: unknown axis/axes {', '.join(unknown_axes)} in "
                     f"{axis_key}; known: {', '.join(AXES)}"
                 )
+            for axis, bound in axes.items():
+                _check_bound(bound, f"{where}{axis_key}[{axis!r}]", nonneg=True)
+        mins = spec.get("min_spread_pct_by_axis") or {}
+        maxs = spec.get("max_spread_pct_by_axis") or {}
+        pairs = [("min", spec.get("min"), spec.get("max")),
+                 ("min_spread_pct", spec.get("min_spread_pct"), spec.get("max_spread_pct"))]
+        pairs += [(f"min_spread_pct_by_axis[{ax!r}]", mins[ax], maxs[ax])
+                  for ax in sorted(set(mins) & set(maxs))]
+        for key, lo, hi in pairs:
+            if lo is not None and hi is not None and lo > hi:
+                raise ValueError(f"{where}{key} ({lo!r}) exceeds its max ({hi!r})")
 
 
 def _validate_monte_carlo_seed(evidence: dict, analyses, path: Path) -> None:
@@ -203,7 +257,8 @@ def load(directory: str | Path) -> Testbench:
     if not manifest_path.is_file():
         raise FileNotFoundError(f"no {MANIFEST_NAME} in {directory}")
 
-    manifest = json.loads(manifest_path.read_text())
+    raw = manifest_path.read_bytes()
+    manifest = json.loads(raw, parse_constant=_reject_json_constant)
 
     netlist = directory / _require(manifest, "netlist", manifest_path)
     if not netlist.is_file():
@@ -243,17 +298,47 @@ def load(directory: str | Path) -> Testbench:
 
     _validate_monte_carlo_seed(evidence, manifest.get("analyses", ("op",)), manifest_path)
 
+    try:
+        nominal_supply_v, supply_tolerance = validate_supply_params(
+            manifest.get("nominal_supply_v", DEFAULT_NOMINAL_SUPPLY_V),
+            manifest.get("supply_tolerance", DEFAULT_SUPPLY_TOLERANCE),
+        )
+        temperatures_c = tuple(
+            validate_temperatures(manifest.get("temperatures_c", DEFAULT_TEMPERATURES_C))
+        )
+        supply_points(nominal_supply_v, supply_tolerance)
+    except ValueError as exc:
+        raise ValueError(f"{manifest_path}: {exc}") from None
+
+    reverse = dict(manifest.get("reverse_ladder") or {})
+    rev_path = None
+    rev_data = b""
+    if reverse:
+        if not isinstance(reverse.get("netlist"), str) or not isinstance(
+                reverse.get("analyses"), list) or not reverse["analyses"] or not all(
+                    isinstance(a, str) and a.strip() for a in reverse["analyses"]):
+            raise ValueError(
+                f"{manifest_path}: reverse_ladder must declare a non-empty "
+                "`analyses` list of `.meas` card strings and the supplemental "
+                "`netlist` fragment they run against"
+            )
+        rev_path = directory / reverse["netlist"]
+        if not rev_path.is_file():
+            raise FileNotFoundError(
+                f"{manifest_path}: reverse_ladder names {rev_path}, which does not exist"
+            )
+        rev_data = rev_path.read_bytes()
+
+    data = netlist.read_bytes()
     tb = Testbench(
         directory=directory,
         name=manifest.get("name", directory.parent.name),
         netlist=netlist,
         description=manifest.get("description", ""),
         claim=manifest.get("claim", ""),
-        nominal_supply_v=float(manifest.get("nominal_supply_v", DEFAULT_NOMINAL_SUPPLY_V)),
-        supply_tolerance=float(manifest.get("supply_tolerance", DEFAULT_SUPPLY_TOLERANCE)),
-        temperatures_c=tuple(
-            float(t) for t in manifest.get("temperatures_c", DEFAULT_TEMPERATURES_C)
-        ),
+        nominal_supply_v=nominal_supply_v,
+        supply_tolerance=supply_tolerance,
+        temperatures_c=temperatures_c,
         corners=tuple(manifest.get("corners", (DEFAULT_CORNER_SET,))),
         analyses=tuple(manifest.get("analyses", ("op",))),
         measure=measure,
@@ -262,10 +347,19 @@ def load(directory: str | Path) -> Testbench:
         options=tuple(manifest.get("options", ())),
         evidence=evidence,
         internal_noise=dict(manifest.get("internal_noise") or {}),
+        netlist_bytes=data,
+        netlist_sha256=hashlib.sha256(data).hexdigest(),
+        manifest_sha256=hashlib.sha256(raw).hexdigest(),
+        reverse_ladder=reverse,
+        reverse_ladder_netlist=rev_path,
+        reverse_ladder_bytes=rev_data,
+        reverse_ladder_sha256=hashlib.sha256(rev_data).hexdigest() if reverse else "",
     )
     if tb.internal_noise:
         internal_noise_mod.validate_block(tb.internal_noise)
     validate_netlist(tb)
+    if reverse:
+        _validate_fragment(rev_path, rev_data)
     return tb
 
 
@@ -276,8 +370,13 @@ def validate_netlist(tb: Testbench) -> None:
     ``.end`` or a hardcoded ``.temp 27`` that silently pins every corner to
     room temperature.
     """
+    _validate_fragment(tb.netlist, tb.netlist_bytes)
+
+
+def _validate_fragment(path: Path, data: bytes) -> None:
+    """Forbidden-directive scan of one fragment (main or reverse-ladder)."""
     problems: list[str] = []
-    for lineno, raw in enumerate(tb.netlist.read_text().splitlines(), start=1):
+    for lineno, raw in enumerate(data.decode().splitlines(), start=1):
         line = raw.strip().lower()
         if not line.startswith("."):
             continue
@@ -286,7 +385,7 @@ def validate_netlist(tb: Testbench) -> None:
             problems.append(f"  line {lineno}: {raw.strip()}")
     if problems:
         raise ValueError(
-            f"{tb.netlist}: netlist fragments must not contain "
+            f"{path}: netlist fragments must not contain "
             f"{', '.join(FORBIDDEN_DIRECTIVES)} -- the harness supplies the models, "
             "corner libs, temperature, the DUT netlist and the control block:\n"
             + "\n".join(problems)

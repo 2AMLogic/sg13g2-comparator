@@ -221,5 +221,67 @@ class KltPinTests(unittest.TestCase):
         self.assertFails(chk.PIN_FILE, "klayout_version")
 
 
+REL_VER = "0.8.0"
+REL_SHA = "c572046be644e0407f693f2410f3abb799d68a3a"
+
+
+class KltReleasePinTests(unittest.TestCase):
+    """Release-form pin: PyPI `klayout-tools==X.Y.Z`, bare `X.Y.Z` version."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.fx = fx = Fixture(self._tmp.name)
+        fx.write_json(chk.PIN_FILE, {
+            "klt_commit": REL_SHA, "klt_version": REL_VER, "klayout_version": KLAYOUT})
+        fx.write(chk.CI_YML, CI.replace(
+            f"klayout-tools @ git+https://github.com/2AMLogic/klayout-tools@{SHA}",
+            f"klayout-tools=={REL_VER}"))
+        fx.write(chk.RUN_FLOW, RUN_FLOW.replace(SHA, REL_VER))
+        fx.write_json(chk.SIGNOFF, {
+            "build": {"version": REL_VER, "git_commit": REL_SHA}, "items": []})
+        for rel in chk.LAYOUT_REPORTS:
+            fx.write_json(rel, {"provenance": {
+                "klt_version": REL_VER, "klayout_version": KLAYOUT}})
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def assertFails(self, *needles):
+        rc, _out, err = self.fx.run()
+        self.assertEqual(rc, 1, err)
+        for n in needles:
+            self.assertIn(n, err)
+
+    def test_agree(self):
+        rc, out, err = self.fx.run()
+        self.assertEqual(rc, 0, err)
+        self.assertIn("13 copies agree", out)
+
+    def test_ci_version_mismatch(self):
+        self.fx.edit(chk.CI_YML, f"klayout-tools=={REL_VER}", "klayout-tools==0.7.0")
+        self.assertFails(chk.PIN_FILE + ":klt_version", "0.7.0", chk.CI_YML)
+
+    def test_ci_git_form_rejected_for_release_pin(self):
+        self.fx.edit(chk.CI_YML, f"klayout-tools=={REL_VER}",
+                     f"klayout-tools @ git+https://github.com/x/klayout-tools@{REL_SHA}")
+        self.assertFails("git-form", chk.CI_YML)
+
+    def test_run_flow_mismatch(self):
+        self.fx.edit(chk.RUN_FLOW, f'KLT_PIN="{REL_VER}"', 'KLT_PIN="0.7.0"')
+        self.assertFails(chk.RUN_FLOW, "(KLT_PIN)", "0.7.0")
+
+    def test_signoff_mismatch(self):
+        d = self.fx.read_json(chk.SIGNOFF)
+        d["build"]["version"] = "0.6.0+g3a75c3ae705b"
+        self.fx.write_json(chk.SIGNOFF, d)
+        self.assertFails(chk.SIGNOFF + ":build.version")
+
+    def test_non_release_non_git_version_rejected(self):
+        d = self.fx.read_json(chk.PIN_FILE)
+        d["klt_version"] = "0.8"
+        self.fx.write_json(chk.PIN_FILE, d)
+        self.assertFails("neither a release version")
+
+
 if __name__ == "__main__":
     unittest.main()

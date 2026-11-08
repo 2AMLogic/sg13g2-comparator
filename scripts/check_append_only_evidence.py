@@ -4,7 +4,10 @@
 Fails when a path under ``sim/<bench>/{records,corners,netlist-snapshots,
 campaigns,reports}/`` that exists at ``--base`` is not present at ``--head``
 with the same Git blob ID and mode. Aggregated characterization reports under
-``sim/characterization/<report-id>/`` are protected the same way (issue #155).
+``sim/characterization/<report-id>/`` are protected the same way (issue #155),
+and so are stored-evidence manifests ``manifests/artifacts/*.manifest.json``
+(issue #318): a manifest is the only committed handle on bytes that live in
+the artifact store, so it may not be edited or deleted either.
 Additions are always allowed. A move is a
 deletion plus an addition (``--no-renames``), so moving evidence away fails on
 the old path while moving something *into* a protected directory passes.
@@ -23,16 +26,21 @@ Stdlib only; needs ``git`` on PATH.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
+import os
 import posixpath
 import re
-import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from git_plumbing import git as _git, resolve_tree as _resolve_tree  # noqa: E402
 
 PROTECTED_DIRS = frozenset(
     {"records", "corners", "netlist-snapshots", "campaigns", "reports"}
 )
 AGGREGATE_ROOT = "characterization"
+MANIFEST_RE = re.compile(r"^manifests/artifacts/[^/]+\.manifest\.json$")
 EXCEPTIONS_PATH = "sim/evidence-exceptions.json"
 RECORD_DIR = "spec/decision-records/"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -55,6 +63,8 @@ class RegistryError(Exception):
 
 
 def is_protected(path: str) -> bool:
+    if MANIFEST_RE.match(path):
+        return True
     parts = path.split("/")
     if len(parts) >= 4 and parts[0] == "sim" and parts[1] == AGGREGATE_ROOT \
             and all(parts[2:]):
@@ -68,32 +78,11 @@ def is_protected(path: str) -> bool:
     )
 
 
-def git(repo: str, *args: str, check: bool = True) -> bytes:
-    try:
-        proc = subprocess.run(
-            ["git", "-C", repo, *args],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
-        )
-    except OSError as exc:
-        raise GitError(f"cannot run git: {exc}") from exc
-    if check and proc.returncode != 0:
-        msg = proc.stderr.decode("utf-8", "replace").strip()
-        raise GitError(f"git {' '.join(args)} failed: {msg}")
-    return proc.stdout if proc.returncode == 0 else b""
+git = functools.partial(_git, error=GitError)
 
 
 def resolve_tree(repo: str, rev: str, label: str) -> str:
-    if rev.startswith("-"):
-        raise GitError(f"invalid {label} revision {rev!r}")
-    try:
-        out = git(repo, "rev-parse", "--verify", "--quiet", "--end-of-options",
-                  f"{rev}^{{tree}}")
-    except GitError as exc:
-        raise GitError(f"{label} revision {rev!r} is unavailable: {exc}") from exc
-    oid = out.decode().strip()
-    if not oid:
-        raise GitError(f"{label} revision {rev!r} is unavailable")
-    return oid
+    return _resolve_tree(repo, rev, GitError, label)
 
 
 def raw_diff(repo: str, base: str, head: str):

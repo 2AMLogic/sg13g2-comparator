@@ -108,6 +108,55 @@ tarball with a checksum-pinned OpenVAF-Reloaded compiler; no third-party
 path** (`sim/README.md` "Cold start"), run once per PDK install, not a
 manual workaround outside the command surface above.
 
+### OSDI identity, loadability and authenticity (issue #196)
+
+Three separate questions, three separate checks:
+
+- **Identity** — *which bytes?* `pdk.osdi_identity()` hashes the four
+  required files (sha256 per file, plus `inventory_sha256` over sorted
+  `<sha256>  <name>` lines; no absolute path). The runner captures it before
+  the grid (exit 8 if a model is missing or unreadable), re-hashes after it,
+  and refuses to certify (exit 9, no record, logs kept) if anything changed or
+  became unreadable. New records carry it as `context.osdi`. Two installs
+  with the same `.fetched-version` but different binaries now differ here.
+- **Loadability** — *does ngspice accept them?* `missing_osdi()` and
+  `build-osdi.sh --check` (an `op` with every model `pre_osdi`-loaded).
+- **Authenticity / build origin** — *not established by hashes.* Hashes
+  prove neither the compiler version nor that the sources were IHP's. When
+  `build-osdi.sh` compiles, it writes a machine-local
+  `osdi/.build-osdi-receipt.json` tying the output hashes to the compiler pin
+  (asset sha256), platform, flags, PDK release marker and a sha256 over each
+  Verilog-A source directory. `build_provenance.status` is `receipt` only if
+  the receipt names exactly the loaded bytes; otherwise it is `unknown` with a
+  reason (e.g. models reused from an older build). Records written before
+  issue #196 have no `osdi` field: their binary identity is unavailable, not
+  implied.
+
+### Four provenance questions about the device models (issue #203)
+
+| Question | Field | What it establishes — and what it does not |
+|---|---|---|
+| Release naming | `context.pdk.release_version` | The tag in the install's `.fetched-version` marker. A *name*: editing a model file leaves it unchanged. |
+| Runtime SPICE source identity | `context.model_sources` | sha256 per file of the whole `libs.tech/ngspice/models/` tree (relative POSIX paths, sorted; `inventory_sha256` over `<sha256>  <path>` lines, no absolute path) — the `.lib`/`.include` parameter files ngspice parses, incl. corner and mismatch coefficients. |
+| Compiled binary identity | `context.osdi` | The four `pre_osdi`-loaded binaries (issue #196 above). Says nothing about the SPICE parameter files. |
+| Authenticity | — | **Not established by any hash here.** Equal hashes mean equal bytes, not that the bytes are IHP's. |
+
+`pdk.model_source_identity()` is a deliberately conservative **whole-tree**
+inventory, not an ngspice dependency parser: it changes when an *unused*
+model file changes, and it is not the exact closure of the selected `.LIB`
+sections. Its `scope` discloses what it does not cover: file symlinks
+leaving the tree (their bytes are hashed, but flagged), symlinked
+directories outside the tree (not descended), and `.include`/`.inc`/`.lib
+<file>` references that resolve outside the tree or to no inventoried file.
+Any of those sets `scope.complete = false`, which the Markdown record prints
+as **Inventory scope INCOMPLETE**. The deck root (`cornerMOSlv.lib`) must lie
+inside the tree. The runner captures it before the grid (exit 8 if a source
+is unreadable, vanishes, is not a regular file, or the root is outside the
+tree), re-hashes after it, and refuses to certify (exit 9, no record, logs
+kept) if anything changed or became unreadable. Records written before
+issue #203 have no `model_sources` field: their source identity is
+unavailable, not implied.
+
 ## Checks, and what they are for
 
 A `checks` entry names a measurement and bounds it. The vocabulary:

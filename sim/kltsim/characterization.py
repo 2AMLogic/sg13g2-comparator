@@ -41,6 +41,7 @@ import math
 import sys
 from pathlib import Path
 
+from . import artifacts as artifacts_mod
 from . import build as build_mod
 from . import grade as grade_mod
 
@@ -89,6 +90,13 @@ ROW_CAVEATS = {
         "sim/klt-corner-verification/README.md.",
     ],
 }
+
+
+#: Every module that decides what the grader accepts or computes. Each is an
+#: indexed ``grader`` source, so changing any of them (including the shared
+#: sample-population acceptance policy in ``populations.py``) makes the report
+#: stale; ``verify_index`` also rejects an index that omits one of them.
+GRADER_SOURCES = ("sim/kltsim/grade.py", "sim/kltsim/populations.py")
 
 
 class CharacterizationError(RuntimeError):
@@ -188,7 +196,8 @@ def build_index(grading: dict, rows_spec: dict, campaign_dir: Path,
     add("sim/dut.json", "dut-binding")
     add(grading["dut"]["netlist"], "dut-netlist")
     add(rows_spec["spec_source"], "ratified-spec")
-    add("sim/kltsim/grade.py", "grader")
+    for rel in GRADER_SOURCES:
+        add(rel, "grader")
     for rel in _retained_paths(grading):
         add(rel, "retained-record")
     sources.sort(key=lambda s: s["path"])
@@ -215,6 +224,11 @@ def verify_index(index: dict, root: Path | None = None) -> list[str]:
     problems = []
     if index.get("schema") != SCHEMA_INDEX:
         problems.append(f"index schema is {index.get('schema')!r}, expected {SCHEMA_INDEX}")
+    graders = {src.get("path") for src in index.get("sources") or []
+               if src.get("role") == "grader"}
+    for rel in GRADER_SOURCES:
+        if rel not in graders:
+            problems.append(f"{rel}: grader source is not indexed (stale index)")
     for src in index.get("sources") or []:
         path = root / src["path"]
         if not path.is_file():
@@ -583,8 +597,16 @@ def render_markdown(report: dict) -> str:
 # --------------------------------------------------------------------------- #
 
 
+#: Report directories are append-only, so a grader change (its sha256 is an
+#: indexed source) mints a NEW report directory rather than rewriting one.
+#: campaign id -> current report directory name; the superseded directory
+#: (``<campaign>-schematic``) stays as history.
+REPORT_DIR_NAMES = {"20261009-d73a9ac": "20261009-d73a9ac-schematic-r2"}
+
+
 def default_out_dir(campaign_id: str, root: Path | None = None) -> Path:
-    return (root or build_mod.REPO_ROOT) / "sim" / "characterization" / f"{campaign_id}-schematic"
+    name = REPORT_DIR_NAMES.get(campaign_id, f"{campaign_id}-schematic")
+    return (root or build_mod.REPO_ROOT) / "sim" / "characterization" / name
 
 
 def build_artifacts(campaign_dir: Path, out_dir: Path, root: Path | None = None,
@@ -639,35 +661,23 @@ def generate(campaign_dir: Path, out_dir: Path, root: Path | None = None) -> dic
     only by creating the absent files (exclusive creation); existing files
     are never rewritten. Supersede a report with a NEW output directory.
     """
-    artifacts = build_artifacts(campaign_dir, out_dir, root)
+    built = build_artifacts(campaign_dir, out_dir, root)
     out_dir = Path(out_dir)
-    conflicts = []
-    if out_dir.is_symlink() or (out_dir.exists() and not out_dir.is_dir()):
-        conflicts.append(f"{out_dir}: exists and is not a directory")
-    else:
-        for name, data in artifacts.items():
-            path = out_dir / name
-            if path.is_symlink() or (path.exists() and not path.is_file()):
-                conflicts.append(f"{path}: exists and is not a regular file")
-            elif path.exists() and path.read_bytes() != data:
-                conflicts.append(f"{path}: existing content differs from the regenerated content")
-    if conflicts:
+    try:
+        artifacts_mod.commit(
+            [(out_dir / name, data) for name, data in built.items()],
+            differs="existing content differs from the regenerated content",
+            race="created concurrently with different content; left unchanged",
+            require_dir=out_dir)
+    except artifacts_mod.ArtifactConflict as exc:
+        if exc.concurrent:
+            raise CharacterizationError(exc.conflicts[0]) from None
         raise CharacterizationError(
             "refusing to generate: characterization reports are append-only evidence and "
-            "nothing was written. Conflicting artifact(s):\n  " + "\n  ".join(conflicts)
+            "nothing was written. Conflicting artifact(s):\n  " + "\n  ".join(exc.conflicts)
             + "\nGenerate into a NEW report directory (and repoint the manifest item 8 "
-            "citation) instead of replacing these files.")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for name, data in artifacts.items():
-        try:
-            with open(out_dir / name, "xb") as fh:
-                fh.write(data)
-        except FileExistsError:
-            if (out_dir / name).read_bytes() != data:
-                raise CharacterizationError(
-                    f"{out_dir / name}: created concurrently with different content; "
-                    "left unchanged") from None
-    return artifacts
+            "citation) instead of replacing these files.") from None
+    return built
 
 
 def check(campaign_dir: Path, out_dir: Path, root: Path | None = None,

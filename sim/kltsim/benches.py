@@ -22,6 +22,7 @@ request, which stays a pure ``klt sim`` document.
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 
 #: The ratified PVT grid (README.md / DR-0002 Row 5): 5 process x 3 supply
@@ -324,6 +325,36 @@ OFFSET_MC = Bench(
     ),
     probes={"supply": ("vdd_meas",), "temperature": "temp_meas"},
 )
+
+
+#: Upper bound on a declared offset draw count. A typo (60000) must not reach
+#: the batch fleet or the evidence budget; a deliberate larger campaign raises
+#: this constant in a reviewed change.
+OFFSET_MC_N_MAX = 1000
+
+
+def validate_offset_n(n) -> int:
+    """A declared offset draw count, or ``ValueError`` (rejected before any
+    request is composed or submitted). Must be a true int (not bool, float or
+    string) in ``[2, OFFSET_MC_N_MAX]``: ``klt yield`` needs at least 2."""
+    if isinstance(n, bool) or not isinstance(n, int):
+        raise ValueError(f"offset draw count must be an integer, got {n!r}")
+    if not 2 <= n <= OFFSET_MC_N_MAX:
+        raise ValueError(f"offset draw count {n} is outside [2, {OFFSET_MC_N_MAX}]")
+    return n
+
+
+def offset_mc_with_n(n: int | None) -> Bench:
+    """``OFFSET_MC`` with a declared draw count. ``None`` (and the historical
+    N) returns the unchanged bench, so default behaviour is byte-identical."""
+    if n is None or n == OFFSET_MC_N:
+        return OFFSET_MC
+    n = validate_offset_n(n)
+    return dataclasses.replace(
+        OFFSET_MC,
+        description=OFFSET_MC.description.replace(f"N = {OFFSET_MC_N}", f"N = {n}"),
+        monte_carlo={**OFFSET_MC.monte_carlo, "n": n},
+    )
 
 
 #: DR-0002 Row 2 basis (sim/comparator-transient-noise, record

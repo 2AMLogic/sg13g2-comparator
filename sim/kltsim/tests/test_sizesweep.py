@@ -486,5 +486,104 @@ class FullGridRegressionTests(unittest.TestCase):
             self.assertEqual(set(ev), set(grade._bench_names()))
 
 
+class FullFinalistGeometryGateTests(unittest.TestCase):
+    """Issue #269: a finalist is one candidate only if all benches agree."""
+
+    OVERRIDE = {"XM1.w": "8u", "XM2.w": "8u"}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def run_full(self, bodies, skip=(), verdict=None):
+        sub = self.root / "full_x"
+        sub.mkdir()
+        for bname, bench in BENCH_SPECS.items():
+            if bname in skip:
+                continue
+            if isinstance(bodies.get(bname), str):
+                text = bodies[bname]
+            else:
+                text = build.compose_body(bench, build.BATCH_OSDI_DIR, geometry_overrides=bodies.get(bname))
+            (sub / f"{bname}.body.spice").write_text(text, encoding="utf-8")
+        verdict = verdict or grade.PASS
+        rows = [{"id": rid, "target_verdict": verdict, "stretch_verdict": verdict,
+                 "target_bound": 1.0, "stretch_bound": 1.0,
+                 "target": {"points_valid": 45, "points_expected": 45, "points_failing": 0,
+                            "worst": {"value": 0.5, "point": "tt_27c_1.2v"}},
+                 "stretch": {"points_failing": 0}}
+                for rid, _l, _u in sizesweep.FULL_ROWS if rid not in skip_rows(skip)]
+        orig = grade.grade_campaign
+        grade.grade_campaign = lambda _d: {"rows": rows}
+        self.addCleanup(setattr, grade, "grade_campaign", orig)
+        res = sizesweep.full(self.root)
+        self.assertEqual(len(res), 1)
+        result = {"campaign": "c", "screen": [], "full": res}
+        json.dumps(grade.json_safe(result), allow_nan=False)
+        return res[0], sizesweep.render_markdown(result)
+
+    def test_consistent_baseline_control(self):
+        r, md = self.run_full({})
+        self.assertEqual(r["candidate_status"], "available")
+        met, failed, _i, _u = sizesweep._met(r)
+        self.assertTrue(met)
+        self.assertEqual(failed, [])
+        self.assertNotIn("REJECTED", md)
+
+    def test_consistent_override_control(self):
+        bodies = {b: self.OVERRIDE for b in BENCH_SPECS}
+        r, md = self.run_full(bodies)
+        self.assertEqual(r["candidate_status"], "available")
+        self.assertEqual(r["geometry"], self.OVERRIDE)
+        self.assertTrue(sizesweep._met(r)[0])
+        self.assertNotIn("REJECTED", md)
+
+    def test_conflicting_geometry_is_rejected(self):
+        r, md = self.run_full({"kickback": self.OVERRIDE})
+        self.assertEqual(r["candidate_status"], "rejected")
+        self.assertTrue(any("inconsistent" in x for x in r["rejection_reasons"]))
+        self.assertEqual(sizesweep._met(r), ([], [], [], []))
+        self.assertTrue(all(c["state"] == "rejected" for c in r["rows"].values()))
+        # individual results survive as diagnostics only
+        self.assertTrue(any(c["state"] == "measured" for c in r["diagnostic_rows"].values()))
+        self.assertIn("REJECTED", md)
+        self.assertIn("inconsistent candidate geometry", md)
+        self.assertNotIn("Target rows met | ", md.split("Ratified Target rows")[0])
+        row = [l for l in md.splitlines() if l.startswith("| x | REJECTED")]
+        self.assertEqual(len(row), 1)
+        self.assertNotIn("1,", row[0])
+
+    def test_conflicting_failed_rows_not_counted_failed(self):
+        r, _md = self.run_full({"kickback": self.OVERRIDE}, verdict=grade.FAIL)
+        self.assertEqual(sizesweep._met(r), ([], [], [], []))
+
+    def test_unreadable_header_is_rejected(self):
+        good = build.compose_body(KICKBACK, build.BATCH_OSDI_DIR)
+        bad = good.replace("\n", "\n" + build.GEOMETRY_MARKER + " garbage-no-equals\n", 1)
+        with self.assertRaises(build.BuildError):
+            build.extract_geometry(bad)
+        r, md = self.run_full({"kickback": bad})
+        self.assertEqual(r["candidate_status"], "rejected")
+        self.assertTrue(any("unreadable" in x for x in r["rejection_reasons"]))
+        self.assertEqual(sizesweep._met(r), ([], [], [], []))
+        self.assertIn("unreadable geometry override", md)
+
+    def test_missing_bench_still_reported_as_not_run(self):
+        r, _md = self.run_full({}, skip=("kickback",))
+        self.assertEqual(r["candidate_status"], "available")
+        _m, _f, _i, unrun = sizesweep._met(r)
+        self.assertTrue(unrun)
+        self.assertNotIn("rejected", {c["state"] for c in r["rows"].values()})
+
+
+def skip_rows(skip):
+    return {rid for rid, _l, _u in sizesweep.FULL_ROWS
+            if any(rid in (KICK_ROWS if b == "kickback" else ()) for b in skip)}
+
+
+KICK_ROWS = ("4a", "4b")
+
+
 if __name__ == "__main__":
     unittest.main()
