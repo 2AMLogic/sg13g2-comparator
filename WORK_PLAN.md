@@ -30,7 +30,6 @@ _None._
 Issues currently being built (`loom:building`).
 
 - **#160**: Draft decision record: input common-mode range row for the ratified spec
-- **#405**: Probe the two Row 4b band-edge kickback rejects (DR-0004 gate)
 
 ## PRs Awaiting Review
 
@@ -52,7 +51,6 @@ Issues carrying `loom:curated`.
 - **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise) *(curated)*
 - **#160**: Draft decision record: input common-mode range row for the ratified spec *(curated)*
 - **#336**: Remove scripts/diagnostics: completed #188 upstream-handoff package (~506 LOC) *(curated)*
-- **#405**: Probe the two Row 4b band-edge kickback rejects (DR-0004 gate) *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -70,10 +68,10 @@ Issues carrying `loom:curated`.
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 2 |
+| In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 1 |
-| Curated | 5 |
+| Curated | 4 |
 | Architect / Hermit proposals | 1 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
