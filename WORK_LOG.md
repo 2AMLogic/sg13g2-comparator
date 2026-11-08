@@ -2,6 +2,11 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-08
+
+- **PR #407**: sim: probe the two Row 4b band-edge kickback rejects as a labelled supplement
+- **Issue #405** (closed): Probe the two Row 4b band-edge kickback rejects (DR-0004 gate)
+
 ### 2026-11-05
 
 - **PR #403**: sim: complete max-step supplement with vcm-p050 populations 60/60
