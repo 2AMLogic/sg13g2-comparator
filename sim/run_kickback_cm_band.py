@@ -5,6 +5,9 @@
     python3 sim/run_kickback_cm_band.py run     --series ID --condition C [--klt KLT]
     python3 sim/run_kickback_cm_band.py smoke   --condition C --osdi-dir DIR [--klt KLT]
     python3 sim/run_kickback_cm_band.py compare --series ID
+    python3 sim/run_kickback_cm_band.py probe-build   --series ID        (issue #405)
+    python3 sim/run_kickback_cm_band.py probe-run     --series ID --condition C --arm A
+    python3 sim/run_kickback_cm_band.py probe-compare --series ID
 
 Conditions: vcm-m050 (dut_vcm - 50 mV), vcm-nom (dut_vcm; reproduction gate),
 vcm-p050 (dut_vcm + 50 mV). Each is ONE deterministic 45-point `klt sim`
@@ -29,6 +32,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -59,7 +63,27 @@ def cmd_build(args) -> int:
     return 0
 
 
-def _graded_attempts(out_dir: Path, tag: str) -> int:
+def _retire_unrun_submit(out_dir: Path, tag: str) -> None:
+    """A batch job that FAILED before running anything (e.g. runner/client klt
+    mismatch: no corner measured) leaves an all-error envelope. Keep it, renamed
+    with its fleet job id (never deleted), so the arm can be submitted again."""
+    env_path = out_dir / f"{tag}.envelope.json"
+    if not env_path.is_file():
+        return
+    env = json.loads(env_path.read_text(encoding="utf-8"))
+    codes = (env.get("diagnostic_counts") or {}).get("by_code") or {}
+    if env.get("status") != "error" or "batch_job_failed" not in codes or env.get("passed") \
+            or env.get("failed"):
+        return
+    job = ((env.get("environment") or {}).get("remote") or {}).get("job_id") or "unknown"
+    for suffix in ("envelope", "invocation"):
+        src = out_dir / f"{tag}.{suffix}.json"
+        if src.is_file():
+            src.rename(out_dir / f"{tag}.{suffix}.unrun-{job}.json")
+    print(f"{tag}: retired unrun failed submit {job} (kept as *.unrun-{job}.json)", file=sys.stderr)
+
+
+def _graded_attempts(out_dir: Path, tag: str, unrun_ok: bool = False) -> int:
     log = out_dir / "attempts.jsonl"
     if not log.is_file():
         return 0
@@ -69,7 +93,7 @@ def _graded_attempts(out_dir: Path, tag: str) -> int:
             rec = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if rec.get("tag") == tag and rec.get("exit_code") in (0, 3, 4):
+        if rec.get("tag") == tag and rec.get("exit_code") in ((0, 3) if unrun_ok else (0, 3, 4)):
             n += 1
     return n
 
@@ -136,6 +160,71 @@ def cmd_compare(args) -> int:
     return 0 if r["ok"] else 2
 
 
+def cmd_probe_build(args) -> int:
+    for name in args.condition or [c.name for c in kb.CONDITIONS]:
+        cond = kb.condition(name)
+        for arm in args.arm or kb.PROBE_ARMS:
+            try:
+                paths = kb.write_probe_inputs(cond, arm, _series(args) / cond.name)
+            except kb.KickbackCmBandError as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            for p in paths:
+                print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
+    return 0
+
+
+def cmd_probe_run(args) -> int:
+    """Submit one arm request on the batch fleet (capacity_wait_s is in the
+    request). A failed submit is reported, never run locally."""
+    cond = kb.condition(args.condition)
+    out_dir = _series(args) / cond.name
+    tag = kb.probe_arm_tag(args.arm)
+    request = out_dir / f"{tag}.request.json"
+    if not request.is_file():
+        print(f"no request at {request}; run `probe-build` first", file=sys.stderr)
+        return 1
+    _retire_unrun_submit(out_dir, tag)
+    if (out_dir / f"{tag}.envelope.json").exists():
+        print(f"{tag}: envelope present -- append-only, not resubmitted", file=sys.stderr)
+        return 0 if args.skip_existing else 1
+    if _graded_attempts(out_dir, tag, unrun_ok=True):
+        print(f"{tag}: attempts.jsonl records a graded run but no envelope; refusing to "
+              "resubmit (investigate)", file=sys.stderr)
+        return 1
+    extra = {"condition": kb.condition_metadata(cond), "kind": "probe", "probe_arm": args.arm,
+             "issue": kb.PROBE_ISSUE}
+    # --backend batch explicitly: the body's OSDI path exists only on the fleet,
+    # so even the one-corner edge requests must not stay local.
+    code = 1
+    for attempt in range(1, args.retry_refused + 2):
+        code = kcli._submit(request, out_dir, tag, args, backend="batch", extra=extra)
+        if code == 0 or not kcli._last_attempt_refused_at_cap(out_dir):
+            break
+        if attempt <= args.retry_refused:
+            print(f"{tag}: fleet at its instance cap; retry {attempt}/{args.retry_refused} "
+                  f"in {args.retry_wait}s", file=sys.stderr)
+            time.sleep(args.retry_wait)
+    return code
+
+
+def cmd_probe_compare(args) -> int:
+    series = _series(args)
+    res = kb.probe_compare(series)
+    (series / "comparison.json").write_text(json.dumps(res, indent=2) + "\n", encoding="utf-8")
+    (series / "comparison.md").write_text(kb.probe_render_markdown(res), encoding="utf-8")
+    for p in res["problems"]:
+        print("problem:", p, file=sys.stderr)
+    for r in res["points"]:
+        for arm, a in r["arms"].items():
+            if a.get("present"):
+                v = a["values"]
+                print(r["condition"], r["key"], arm, a["corner_status"],
+                      "repro165" if a["equals_165_on_original_cards"] else "DIFFERS",
+                      {g: v.get(g) for g in kb.PROBE_GATES})
+    return 1 if res["problems"] else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     default_klt = shutil.which("klt") or "klt"
     names = [c.name for c in kb.CONDITIONS]
@@ -170,6 +259,26 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("compare")
     g.add_argument("--series", required=True)
     g.set_defaults(func=cmd_compare)
+
+    pb = sub.add_parser("probe-build")
+    pb.add_argument("--series", required=True)
+    pb.add_argument("--condition", action="append", choices=names)
+    pb.add_argument("--arm", action="append", choices=list(kb.PROBE_ARMS))
+    pb.set_defaults(func=cmd_probe_build)
+
+    pr = sub.add_parser("probe-run")
+    pr.add_argument("--series", required=True)
+    pr.add_argument("--condition", required=True, choices=names)
+    pr.add_argument("--arm", required=True, choices=list(kb.PROBE_ARMS))
+    pr.add_argument("--skip-existing", action="store_true")
+    pr.add_argument("--klt", default=default_klt)
+    pr.add_argument("--retry-refused", type=int, default=0)
+    pr.add_argument("--retry-wait", type=int, default=120)
+    pr.set_defaults(func=cmd_probe_run, force=False)
+
+    pc = sub.add_parser("probe-compare")
+    pc.add_argument("--series", required=True)
+    pc.set_defaults(func=cmd_probe_compare)
 
     args = ap.parse_args(argv)
     return args.func(args)
