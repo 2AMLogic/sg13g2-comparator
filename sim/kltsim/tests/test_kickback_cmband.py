@@ -218,6 +218,42 @@ class Reproduction(unittest.TestCase):
         self.assertFalse(self.check(env=env_for(NOM, m))["ok"])
 
 
+class Probe405(unittest.TestCase):
+    """Issue #405 supplementary probe requests."""
+
+    def test_grid_is_exactly_the_probe_points_and_batch(self):
+        for name, sups in kb.PROBE_SUPPLIES_V.items():
+            req = kb.probe_request(kb.condition(name), "obs")
+            self.assertEqual(req["corners"]["process"], ["mos_ss"])
+            self.assertEqual(req["corners"]["supply_v"], {"vsup": list(sups)})
+            self.assertEqual(req["corners"]["temperature_c"], [-40.0])
+            self.assertEqual(req["backend"], "batch")
+            self.assertEqual(req["batch"]["capacity_wait_s"], 600)
+
+    def test_repro_arm_keeps_165_cards_and_analysis(self):
+        cond = kb.condition("vcm-m050")
+        base = kb.compose_request(cond)
+        rep = kb.probe_request(cond, "repro")
+        self.assertEqual(rep["measurements"], base["measurements"])
+        self.assertEqual(rep["analysis"], base["analysis"])
+
+    def test_arms_add_cards_and_vary_only_the_labelled_setting(self):
+        cond = kb.condition("vcm-p050")
+        names = lambda r: [m["name"] for m in r["measurements"]]  # noqa: E731
+        obs, xing, step = (kb.probe_request(cond, a) for a in ("obs", "xing", "step20p"))
+        self.assertIn("b_dp_55n", names(obs))
+        self.assertNotIn("b_t_half", names(obs))
+        self.assertIn("b_t_half", names(xing))
+        self.assertEqual(names(step), names(obs))
+        self.assertEqual(step["analysis"]["args"], "5p 60n 0 20p")
+        self.assertEqual(obs["analysis"]["args"], "5p 60n")
+        self.assertEqual(len(set(names(xing))), len(names(xing)))
+
+    def test_unknown_arm_refused(self):
+        with self.assertRaises(kb.KickbackCmBandError):
+            kb.probe_request(kb.condition("vcm-nom"), "nope")
+
+
 class Evidence(unittest.TestCase):
     def test_build_is_append_only(self):
         with tempfile.TemporaryDirectory() as d:
