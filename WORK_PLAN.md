@@ -29,7 +29,7 @@ _None._
 
 Issues currently being built (`loom:building`).
 
-- **#160**: Draft decision record: input common-mode range row for the ratified spec
+_None._
 
 ## PRs Awaiting Review
 
@@ -68,7 +68,7 @@ Issues carrying `loom:curated`.
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 1 |
+| In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 1 |
 | Curated | 4 |
