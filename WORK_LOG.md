@@ -2,6 +2,11 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-10
+
+- **PR #411**: chore: remove one-off scripts/diagnostics reproduction package
+- **Issue #336** (closed): Remove scripts/diagnostics: completed #188 upstream-handoff package (~506 LOC)
+
 ### 2026-11-08
 
 - **PR #407**: sim: probe the two Row 4b band-edge kickback rejects as a labelled supplement
