@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the per-row schematic-vs-extracted delta table from a klt pex envelope.
 
-usage: make_delta_table.py <pex_report.json> <out_stem>
+usage: make_delta_table.py [--bench NAME] <pex_report.json> <out_stem>
 Writes <out_stem>.json and <out_stem>.md (new files only; refuses to overwrite).
 
 Two separate readings per row (issue #181). Availability: klt's raw status and
@@ -34,6 +34,15 @@ or missing (absent row or null value) required state leaves that point's delay
 "decision state not valid": the numeric verdict (within/EXCEEDS) and raw values
 stay visible, but the point does not count toward "met at every PVT grid point".
 EXCEEDS still reports NOT MET whatever the validity. No bound is invented.
+
+Bench labelling (issue #417). LOGIC/DELAY/TIMING_STATES are keyed (bench,
+measurement), so every row must carry its bench. `klt pex` prefixes delta[]
+`spec_row` with the request's filename stem only when it was given MORE THAN
+ONE testbench (`single_testbench` in klt's pex.py); a one-request run emits the
+bare measurement name, and klt has no flag to ask for the prefix. `--bench
+NAME` supplies that missing label and only that: it refuses an envelope klt
+already prefixed, is recorded in the output as `spec_row_prefix` so a reader
+knows the label is caller-applied, and changes no value, status or delta.
 """
 import itertools
 import json
@@ -57,6 +66,9 @@ TIMING_STATES = {("regeneration", "td_a"): (("regeneration", "da_first"), ("rege
 GRID = ({"tt", "ff", "ss", "fs", "sf"}, {Decimal("1.08"), Decimal("1.2"), Decimal("1.32")}, {-40, 27, 125})
 GRID_POINTS = frozenset(itertools.product(*GRID))
 CORNER = re.compile(r"(\w+)/([0-9.]+)V/(-?\d+)C")
+# `--bench` label: dotted segments, like klt's own `<request-stem>.` prefix, so
+# k = (first, last) still resolves to (bench, measurement). No empty segments.
+BENCH = re.compile(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*")
 FIELDS = ("spec_row", "corner_id", "schematic_value", "extracted_value", "delta_pct", "status")
 
 
@@ -137,9 +149,30 @@ def phys_rows(phys, k, cid):
     return [phys[k, cid]] if (k, cid) in phys else []
 
 
-def render(env, source):
+def prefixed(env, bench):
+    """Label every bare `spec_row` with `bench` (issue #417); see the module docstring.
+
+    Refuses an envelope whose rows klt already prefixed -- re-labelling those would
+    invent a bench klt did not report. A row with a missing or non-string `spec_row`
+    is passed through untouched, for render()'s own validation to reject.
+    """
+    labelled = [r["spec_row"] for r in env["delta"]
+                if isinstance(r, dict) and isinstance(r.get("spec_row"), str)
+                and "." in r["spec_row"]]
+    if labelled:
+        raise ValueError(f"--bench {bench}: delta[] is already prefixed by klt "
+                         f"(e.g. {labelled[0]!r}); re-labelling it would be ambiguous")
+    return {**env, "delta": [
+        {**r, "spec_row": f"{bench}.{r['spec_row']}"}
+        if isinstance(r, dict) and isinstance(r.get("spec_row"), str) and r["spec_row"] else r
+        for r in env["delta"]]}
+
+
+def render(env, source, bench=None):
     if not isinstance(env, dict) or not isinstance(env.get("delta"), list) or not env["delta"]:
         raise ValueError("envelope has no delta[] rows")
+    if bench is not None:
+        env = prefixed(env, bench)
     rows, seen, phys, got, summary = [], set(), {}, {}, {}
     for i, r in enumerate(env["delta"]):
         if not isinstance(r, dict) or any(k not in r for k in FIELDS):
@@ -193,6 +226,11 @@ def render(env, source):
         "source_envelope": str(source),
         "klt_version": (env.get("provenance") or {}).get("klt_version"),
         "envelope_status": env.get("status"),
+        "spec_row_prefix": bench,
+        "spec_row_prefix_meaning": None if bench is None else
+            "caller-supplied bench label (--bench): klt emitted bare measurement names "
+            "because the run passed a single testbench. Values, statuses and deltas are "
+            "klt's, unchanged",
         "passed": env.get("passed"), "failed": env.get("failed"), "errored": env.get("errored"),
         "klt_status_meaning": "measurement availability (both legs produced a value; no limits "
                               "are set in the requests), not circuit compliance",
@@ -231,15 +269,30 @@ def markdown(out):
 
 
 def main(argv):
+    bench = None
+    if "--bench" in argv:
+        i = argv.index("--bench")
+        if i + 1 >= len(argv):
+            sys.exit(__doc__)
+        bench = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
+        if not BENCH.fullmatch(bench):
+            print(f"error: --bench {bench!r}: expected dotted [A-Za-z0-9_] segments",
+                  file=sys.stderr)
+            return 2
     if len(argv) != 2:
         sys.exit(__doc__)
     src, stem = Path(argv[0]), Path(argv[1])
     try:
-        out, md = render(load(src), src)
+        out, md = render(load(src), src, bench)
     except (OSError, ValueError) as e:
         print(f"error: {src}: {e}", file=sys.stderr)
         return 2
-    paths = [stem.with_suffix(".json"), stem.with_suffix(".md")]
+    # Append, never Path.with_suffix: a dotted stem like `grid.regeneration.20261114`
+    # has `.20261114` as its suffix, so with_suffix would REPLACE the date and write
+    # `grid.regeneration.json` -- not the `<out_stem>.json` this tool documents, and
+    # a silently wrong evidence filename (issue #417).
+    paths = [stem.with_name(stem.name + e) for e in (".json", ".md")]
     for p in paths:
         if p.exists():
             print(f"refusing to overwrite {p}", file=sys.stderr)
