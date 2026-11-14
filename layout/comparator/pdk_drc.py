@@ -52,7 +52,6 @@ SCHEMA = "sg13g2-comparator.pdk-drc/1"
 TOP = "comparator"
 DEFAULT_GDS = HERE / "comparator.gds"
 DEFAULT_REPORT = HERE / "pdk_drc_report.json"
-SIM_PDK_JSON = REPO / "sim" / "pdk.json"
 
 #: IHP-Open-PDK release this repo pins (sim/pdk.json) and what the installed
 #: checkout's ``.fetched-version`` must read.

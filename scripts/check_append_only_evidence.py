@@ -44,7 +44,6 @@ MANIFEST_RE = re.compile(r"^manifests/artifacts/[^/]+\.manifest\.json$")
 EXCEPTIONS_PATH = "sim/evidence-exceptions.json"
 RECORD_DIR = "spec/decision-records/"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
-ZERO_OID = re.compile(r"^0+$")
 OID_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 MODE_RE = re.compile(r"^[0-7]{6}$")
 ENTRY_KEYS = {

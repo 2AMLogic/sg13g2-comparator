@@ -93,13 +93,8 @@ SHORT_RESET_MIN_ABS_UV = 40.0
 SHORT_OVER_LONG_MIN_UV = 20.0
 
 HISTORIES = ("P", "N")
-CONDITION_SIGN = {"P": +1, "N": -1}
 
 BENCH_NAME = "memory"
-CONTROL_NAMES = ("long", "short")
-CONTROL_PERIOD_NS = {"nominal": NOMINAL_PERIOD_NS, "long": LONG_RESET_PERIOD_NS,
-                     "short": SHORT_RESET_PERIOD_NS}
-CONTROL_POINT = ("tt", 1.2, 27)
 
 #: solver options. Threshold work at 10 uV needs a tighter relative
 #: tolerance than the 1e-4 the timing benches use.
@@ -140,10 +135,6 @@ def round_probes(lo_uv: int, hi_uv: int, first: bool) -> list[int]:
     step = width // FANOUT
     idx = range(0, FANOUT + 1) if first else range(1, FANOUT)
     return [lo_uv + i * step for i in idx]
-
-
-def n_probes(first: bool) -> int:
-    return FANOUT + 1 if first else FANOUT - 1
 
 
 def round_step_uv(round_no: int) -> int:
