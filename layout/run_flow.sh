@@ -65,7 +65,7 @@ GDS="${CELL_DIR}/comparator.gds"
 TOP="comparator"
 PORTS="vinp,vinn,clk,vbias,dout,doutb,vdd,vss"
 
-KLT_PIN="0.8.0"  # PyPI release klayout-tools==${KLT_PIN}
+KLT_PIN="0.9.1"  # PyPI release klayout-tools==${KLT_PIN}
 KLAYOUT_PIN="0.30.12"  # the KLayout this klt build was tested against
 
 MODE="run"
