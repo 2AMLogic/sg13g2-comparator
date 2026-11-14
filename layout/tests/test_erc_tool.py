@@ -3,58 +3,34 @@
 stdlib only. erc_tool imports ``klayout.db`` at module load but touches it
 only inside ``mutate()``; when real klayout is absent, empty stand-in modules
 are installed for the import and removed again in a ``finally`` so nothing
-else in the process sees a fake klayout. ``mutate`` is out of scope.
+else in the process sees a fake klayout -- see ``klayout_standin.load_tool``,
+which both this module and test_pdk_drc.py share (issue #432). ``mutate`` is
+out of scope.
 """
 
 import contextlib
-import importlib.util
 import io
 import json
 import sys
 import tempfile
-import types
 import unittest
 from pathlib import Path
+
+# Importing the sibling helper needs layout/tests on sys.path. unittest
+# discovery inserts the start directory itself, but `python3 -I` implies -P
+# (3.11+), so a direct `python3 -I layout/tests/<file>` run -- and
+# pinned_deck_contract.py loading this module by path -- does not get it.
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+import klayout_standin  # noqa: E402
 
 LAYOUT = Path(__file__).resolve().parents[1]
 TOOL = LAYOUT / "comparator" / "erc_tool.py"
 COMMITTED = LAYOUT / "comparator" / "erc_report.json"
 
-_STANDINS = ("klayout", "klayout.db")
-
-
-def _load():
-    try:
-        import klayout.db  # noqa: F401
-        standin = False
-    except ImportError:
-        standin = True
-    path_before = list(sys.path)
-    mods_before = set(sys.modules)
-    if standin:
-        pkg = types.ModuleType("klayout")
-        pkg.__path__ = []
-        db = types.ModuleType("klayout.db")
-        pkg.db = db
-        sys.modules["klayout"] = pkg
-        sys.modules["klayout.db"] = db
-    try:
-        spec = importlib.util.spec_from_file_location("erc_tool_under_test", TOOL)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-    finally:
-        if standin:
-            for name in _STANDINS:
-                sys.modules.pop(name, None)
-            # common_sg13g2 got bound to the stand-in; do not leave it behind.
-            for name in set(sys.modules) - mods_before:
-                if name == "common_sg13g2":
-                    sys.modules.pop(name, None)
-            sys.path[:] = path_before
-    return mod, standin
-
-
-erc, USED_STANDIN = _load()
+erc, USED_STANDIN = klayout_standin.load_tool(TOOL, "erc_tool_under_test")
 c = erc.c
 
 WANT = [
