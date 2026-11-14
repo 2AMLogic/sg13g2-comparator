@@ -132,22 +132,47 @@ row:
   `.meas` waits for (its output is already high before the flip, i.e. it
   decided the other way at -0.1 mV), so the measurement has no value. That
   is a recorded post-layout finding, not a tooling failure, and the request
-  was not edited to hide it. The run is **one corner only** (tt, 1.20 V,
-  27 C, deterministic transient, no Monte Carlo, no sigma): the 45-point PVT
-  grids and the offset-sigma / noise Monte Carlo rows were not run, and host
-  rules forbid a local grid. The batch fleet first refused the submit
-  (`batch_no_capacity`, 30 pools). When capacity was granted (2026-10-10,
-  job `klt-sim-f07e181de148`, record
-  `sim/comparator-pex/reports/batch-probe.pvt.20261010-c.md`), every corner
-  failed with `batch_runner_version_mismatch` (fleet runner klt 0.5.0,
-  client 0.7.0). The open blocker is the runner image. Extraction half:
-  `body_bias.status: "biased"` (0 unbiased devices); `extraction.model` is
+  was not edited to hide it. The cited run is **one corner only** (tt,
+  1.20 V, 27 C, deterministic transient, no Monte Carlo, no sigma); host
+  rules forbid a local grid, and the wider post-layout coverage lives in
+  separate, uncited batch records. As of 2026-11-14 those records are: the
+  extracted 45-corner kickback grid
+  (`sim/comparator-pex/reports/batch-extracted-grid.kickback.20261031.md`:
+  envelope `status: pass`, all 45 corners measured on both sides, 810 rows
+  passed / 0 failed / 0 errored); the extracted regeneration grid
+  (`sim/comparator-pex/reports/batch-extracted-grid.regeneration.20261031.md`:
+  envelope `status: error`, 42 of 45 corners compared on both sides, 462
+  rows passed / 0 failed / 78 errored); the follow-up that measured the
+  three corners that grid missed
+  (`sim/comparator-pex/reports/batch-extracted-ss125.regeneration.20261114.md`,
+  #417: all three `ss` / 125 C corners on both sides, 36 rows, 33 passed /
+  0 failed / 3 errored, the errored rows all `td_c`); and the latest
+  per-point Monte Carlo roll-up
+  (`sim/comparator-pex/reports/mc-rollup.20261103-g.md`: "20 offset and 11
+  noise points have data, out of 45 grid points" — 25 offset and 34 noise
+  points missing). The three batch records state development `klt` clients
+  (`0.8.1.dev897+ga42d9de8d98d` kickback, `0.8.1.dev887+g2e9ee1aa66cf`
+  regeneration, `0.9.2.dev1024+g8da9718f0cb6` ss/125 C; all out of pin,
+  tracked in #416) and that nothing ran locally. What remains before a
+  full-grid `klt pex` report can be cited: the missing Monte Carlo points
+  (tracked in #61), a single 45-corner grid record — "three corners are
+  not a grid result", so the split evidence above does not provide one —
+  and the updated item-7 citation, `content_hash` and regenerated signoff
+  report. Dated history, 2026-10-10, since superseded: the batch fleet
+  first refused the submit (`batch_no_capacity`, 30 pools); when capacity
+  was granted (job `klt-sim-f07e181de148`, record
+  `sim/comparator-pex/reports/batch-probe.pvt.20261010-c.md`), every
+  corner failed with `batch_runner_version_mismatch` (fleet runner klt
+  0.5.0, client 0.7.0) — then the open blocker; the 2026-11-14 run records
+  `runner_klt_version: 0.9.0`, `runner_compatibility: match`. Extraction
+  half: `body_bias.status: "biased"` (0 unbiased devices); `extraction.model` is
   the quasi-static lumped-RC model (single series R per net, net-to-ground
   C plus vertical-overlap coupling; no lateral coupling without
   `--critical-net`, no fringe shielding, no distributed RC) quoted in full
   in the envelope. Per-row deltas: `sim/comparator-pex/reports/delta-nominal-20261009.{md,json}`;
   discussion and what closes the gap: `sim/comparator-pex/README.md`. The
-  earlier errored attempt (`pex.attempt-20261009.json`) is kept as history.
+  earlier errored attempt
+  (`sim/comparator-pex/reports/pex.attempt-20261009.json`) is kept as history.
 - **Item 8 (Characterization report)** — cited since #64; see "Item 8" below.
 - **Item 11 (Power delivery (structural))** — cited since #38; see "Item 11" below.
 
