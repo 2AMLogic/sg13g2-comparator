@@ -522,12 +522,16 @@ def _last_attempt_refused_at_cap(out_dir: Path) -> bool:
 
 
 def _submit_with_retry(request: Path, out_dir: Path, tag: str, args,
-                       extra: dict | None = None) -> int:
+                       extra: dict | None = None, backend: str | None = None) -> int:
     """``_submit``, resubmitted while the shared fleet refuses at its instance
-    cap: sleep ``args.retry_wait`` between up to ``args.retry_refused`` retries."""
+    cap: sleep ``args.retry_wait`` between up to ``args.retry_refused`` retries.
+
+    ``backend`` is forwarded to ``_submit`` on every attempt and stays LAST in
+    the signature: every caller passes ``extra`` positionally.
+    """
     code = 1
     for attempt in range(1, args.retry_refused + 2):
-        code = _submit(request, out_dir, tag, args, extra=extra)
+        code = _submit(request, out_dir, tag, args, backend=backend, extra=extra)
         if code == 0 or not _last_attempt_refused_at_cap(out_dir):
             break
         if attempt <= args.retry_refused:
@@ -540,7 +544,19 @@ def _submit_with_retry(request: Path, out_dir: Path, tag: str, args,
 def run_local_smoke(req: dict, work: Path, klt: str) -> int:
     """Write ``req`` under ``work``, run it once with ``klt sim --backend local``,
     keep the envelope, and print one ``corner_id status {measurements}`` line
-    per corner."""
+    per corner.
+
+    Every driver's ``smoke`` subcommand goes through here. ``cmd_smoke`` above
+    deliberately does NOT: it builds its request with
+    ``build_mod.write_bench_inputs`` rather than ``work / "request.json"`` and
+    prints a richer JSON summary (per-corner diagnostics), so it is not a
+    drop-in call. One divergence follows from that and is not a decision anyone
+    made: on an unparseable envelope ``cmd_smoke`` prints ``proc.stdout[-2000:]``
+    before returning 1, while this helper returns 1 silently. Folding the two
+    together means choosing whether that diagnostic becomes shared behaviour
+    (issue #431 left it alone rather than changing three smoke paths' output as
+    a side effect).
+    """
     request = work / "request.json"
     request.write_text(json.dumps(req, indent=2) + "\n", encoding="utf-8")
     cmd = [klt, "sim", str(request), "--backend", "local", "--format", "json",
