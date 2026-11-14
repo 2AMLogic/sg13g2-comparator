@@ -600,3 +600,17 @@ failed run, not a result; the run could not be re-collected after the first `--a
 ran locally. `reports/mc-rollup.20261103-g.{md,json}` regenerates the per-point roll-up (the point is listed with no data,
 so the count of points with data is unchanged); `mc-rollup.20261103-f.*` is kept unchanged as history, and
 `tests/test_mc_rollup.py` checks the newer one. The remaining grid points are not run; item 7 stays `unmet`.
+
+## Update 2026-11-14 (ss / 125 C fill-in): the three unmeasured extracted regeneration corners, measured (issue #417)
+
+`reports/batch-extracted-ss125.regeneration.20261114.md`: the **ss / 125 C / `vdd_val` 1.08, 1.2, 1.32** corners
+that `batch-extracted-grid.regeneration.20261031.md` recorded as an unmeasured gap now have extracted-side data.
+All 3 corners compared on both sides, 36 delta rows (33 passed, 0 failed, 3 errored), on the batch fleet with
+nothing run locally: schematic job `klt-sim-55fa249b7bd4` (13 s), extracted job `klt-sim-48d01a80ae36` (45 s),
+client `klt 0.9.2.dev1024+g8da9718f0cb6` (a development build, out of the 0.8.0 pin — see #416), throwaway request
+restricted to those corners at `timeout_s` 1800 (the committed `requests/regeneration.pvt.json` is unchanged).
+`td_a` +142.6 % median (+133.7 .. +148.4), `td_b` +134.9 % (+123.7 .. +145.7), `q_dec` -11.4 % (-14.9 .. -9.4) —
+all inside the range the other 42 corners already span. The 3 `td_c` rows are recorded **as errored** (`out of
+interval`), the same post-layout finding as at all 45 corners of the 10-31 grid; its cause is not re-isolated.
+The 10-31 report is byte-unchanged. Three corners are not a grid result and carry **no DR-0002 verdict**; item 7
+stays `unmet` and the remaining Monte Carlo points of #61 are untouched.

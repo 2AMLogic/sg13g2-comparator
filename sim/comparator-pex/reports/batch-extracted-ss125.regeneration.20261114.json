@@ -1,0 +1,568 @@
+{
+  "source_envelope": "/tmp/issue-417-run/envelope.ss125.json",
+  "klt_version": "0.9.2.dev1024+g8da9718f0cb6",
+  "envelope_status": "error",
+  "spec_row_prefix": "regeneration.ss125",
+  "spec_row_prefix_meaning": "caller-supplied bench label (--bench): klt emitted bare measurement names because the run passed a single testbench. Values, statuses and deltas are klt's, unchanged",
+  "passed": 33,
+  "failed": 0,
+  "errored": 3,
+  "klt_status_meaning": "measurement availability (both legs produced a value; no limits are set in the requests), not circuit compliance",
+  "corners": [
+    "ss/novdd/125C/params:vdd_val=1.08",
+    "ss/novdd/125C/params:vdd_val=1.2",
+    "ss/novdd/125C/params:vdd_val=1.32"
+  ],
+  "pvt_grid_points": 0,
+  "statistical_basis": "none: deterministic transient measurements at 3 corner(s); no Monte Carlo, no seeds; no sigma or offset/noise compliance is implied",
+  "delay_compliance_extracted": {},
+  "delay_decision_validity": {},
+  "rows": [
+    {
+      "spec_row": "regeneration.ss125.vsup_v",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": 1.08,
+      "extracted_value": 1.08,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.td_a",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": 8.36464e-10,
+      "extracted_value": 1.95468e-09,
+      "delta_pct": 133.684,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "delay",
+        "criterion": "DR-0002 Row 3 Target: <= 1.5 ns at 50 mV overdrive",
+        "verdict": "ungraded: corner outside the ratified PVT grid"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.td_b",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": 1.21919e-09,
+      "extracted_value": 2.72676e-09,
+      "delta_pct": 123.653,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.td_c",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": 1.43685e-09,
+      "extracted_value": null,
+      "delta_pct": null,
+      "status": "error",
+      "availability": "extracted missing",
+      "interpretation": {
+        "kind": "delay",
+        "criterion": "DR-0002 Row 3 sub-row: <= 2.0 ns at 0.1 mV overdrive",
+        "verdict": "ungraded: corner outside the ratified PVT grid"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.da_first",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": 6.99775e-06,
+      "extracted_value": 6.75624e-06,
+      "delta_pct": -3.451,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "low",
+        "schematic_state": "low",
+        "extracted_state": "low",
+        "state_change": false,
+        "verdict": "correct (expected low)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.db_first",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": 1.40946e-07,
+      "extracted_value": 7.71924e-06,
+      "delta_pct": 5376.736,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "low",
+        "schematic_state": "low",
+        "extracted_state": "low",
+        "state_change": false,
+        "verdict": "correct (expected low)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.dc_first",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": 6.53335e-06,
+      "extracted_value": 0.999999,
+      "delta_pct": 15305968.097,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "low",
+        "schematic_state": "low",
+        "extracted_state": "high",
+        "state_change": true,
+        "verdict": "WRONG STATE (expected low)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.da_end",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": 0.999999,
+      "extracted_value": 1.0,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "high",
+        "schematic_state": "high",
+        "extracted_state": "high",
+        "state_change": false,
+        "verdict": "correct (expected high)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.db_end",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": 0.999999,
+      "extracted_value": 1.0,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "high",
+        "schematic_state": "high",
+        "extracted_state": "high",
+        "state_change": false,
+        "verdict": "correct (expected high)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.dc_end",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": 0.999999,
+      "extracted_value": 1.0,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "high",
+        "schematic_state": "high",
+        "extracted_state": "high",
+        "state_change": false,
+        "verdict": "correct (expected high)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.i_stat",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": -2.03626e-05,
+      "extracted_value": -2.0377e-05,
+      "delta_pct": -0.071,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.q_dec",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.08",
+      "schematic_value": -1.94851e-13,
+      "extracted_value": -2.13198e-13,
+      "delta_pct": -9.416,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.vsup_v",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": 1.2,
+      "extracted_value": 1.2,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.td_a",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": 8.3042e-10,
+      "extracted_value": 2.0146e-09,
+      "delta_pct": 142.6,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "delay",
+        "criterion": "DR-0002 Row 3 Target: <= 1.5 ns at 50 mV overdrive",
+        "verdict": "ungraded: corner outside the ratified PVT grid"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.td_b",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": 1.13064e-09,
+      "extracted_value": 2.65626e-09,
+      "delta_pct": 134.934,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.td_c",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": 1.30012e-09,
+      "extracted_value": null,
+      "delta_pct": null,
+      "status": "error",
+      "availability": "extracted missing",
+      "interpretation": {
+        "kind": "delay",
+        "criterion": "DR-0002 Row 3 sub-row: <= 2.0 ns at 0.1 mV overdrive",
+        "verdict": "ungraded: corner outside the ratified PVT grid"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.da_first",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": 1.22644e-07,
+      "extracted_value": 9.67998e-08,
+      "delta_pct": -21.073,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "low",
+        "schematic_state": "low",
+        "extracted_state": "low",
+        "state_change": false,
+        "verdict": "correct (expected low)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.db_first",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": 5.83119e-06,
+      "extracted_value": 6.50689e-06,
+      "delta_pct": 11.588,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "low",
+        "schematic_state": "low",
+        "extracted_state": "low",
+        "state_change": false,
+        "verdict": "correct (expected low)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.dc_first",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": 5.80305e-06,
+      "extracted_value": 0.999999,
+      "delta_pct": 17232200.256,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "low",
+        "schematic_state": "low",
+        "extracted_state": "high",
+        "state_change": true,
+        "verdict": "WRONG STATE (expected low)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.da_end",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": 0.999999,
+      "extracted_value": 1.0,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "high",
+        "schematic_state": "high",
+        "extracted_state": "high",
+        "state_change": false,
+        "verdict": "correct (expected high)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.db_end",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": 0.999999,
+      "extracted_value": 1.0,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "high",
+        "schematic_state": "high",
+        "extracted_state": "high",
+        "state_change": false,
+        "verdict": "correct (expected high)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.dc_end",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": 0.999999,
+      "extracted_value": 1.0,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "high",
+        "schematic_state": "high",
+        "extracted_state": "high",
+        "state_change": false,
+        "verdict": "correct (expected high)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.i_stat",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": -2.0363e-05,
+      "extracted_value": -2.03772e-05,
+      "delta_pct": -0.07,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.q_dec",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.2",
+      "schematic_value": -1.98425e-13,
+      "extracted_value": -2.21042e-13,
+      "delta_pct": -11.398,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.vsup_v",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": 1.32,
+      "extracted_value": 1.32,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.td_a",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": 8.50185e-10,
+      "extracted_value": 2.11199e-09,
+      "delta_pct": 148.415,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "delay",
+        "criterion": "DR-0002 Row 3 Target: <= 1.5 ns at 50 mV overdrive",
+        "verdict": "ungraded: corner outside the ratified PVT grid"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.td_b",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": 1.10219e-09,
+      "extracted_value": 2.70862e-09,
+      "delta_pct": 145.749,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.td_c",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": 1.24379e-09,
+      "extracted_value": null,
+      "delta_pct": null,
+      "status": "error",
+      "availability": "extracted missing",
+      "interpretation": {
+        "kind": "delay",
+        "criterion": "DR-0002 Row 3 sub-row: <= 2.0 ns at 0.1 mV overdrive",
+        "verdict": "ungraded: corner outside the ratified PVT grid"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.da_first",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": 4.87334e-06,
+      "extracted_value": 4.7622e-06,
+      "delta_pct": -2.281,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "low",
+        "schematic_state": "low",
+        "extracted_state": "low",
+        "state_change": false,
+        "verdict": "correct (expected low)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.db_first",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": 1.15256e-07,
+      "extracted_value": 7.81793e-08,
+      "delta_pct": -32.169,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "low",
+        "schematic_state": "low",
+        "extracted_state": "low",
+        "state_change": false,
+        "verdict": "correct (expected low)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.dc_first",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": 5.14885e-06,
+      "extracted_value": 0.999999,
+      "delta_pct": 19421693.216,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "low",
+        "schematic_state": "low",
+        "extracted_state": "high",
+        "state_change": true,
+        "verdict": "WRONG STATE (expected low)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.da_end",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": 0.999999,
+      "extracted_value": 1.0,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "high",
+        "schematic_state": "high",
+        "extracted_state": "high",
+        "state_change": false,
+        "verdict": "correct (expected high)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.db_end",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": 0.999999,
+      "extracted_value": 1.0,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "high",
+        "schematic_state": "high",
+        "extracted_state": "high",
+        "state_change": false,
+        "verdict": "correct (expected high)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.dc_end",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": 0.999999,
+      "extracted_value": 1.0,
+      "delta_pct": 0.0,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": "logic",
+        "expected": "high",
+        "schematic_state": "high",
+        "extracted_state": "high",
+        "state_change": false,
+        "verdict": "correct (expected high)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.i_stat",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": -2.03636e-05,
+      "extracted_value": -2.03776e-05,
+      "delta_pct": -0.069,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    },
+    {
+      "spec_row": "regeneration.ss125.q_dec",
+      "corner_id": "ss/novdd/125C/params:vdd_val=1.32",
+      "schematic_value": -2.03188e-13,
+      "extracted_value": -2.33371e-13,
+      "delta_pct": -14.855,
+      "status": "pass",
+      "availability": "both legs measured",
+      "interpretation": {
+        "kind": null,
+        "verdict": "ungraded (no mapped criterion)"
+      }
+    }
+  ]
+}
