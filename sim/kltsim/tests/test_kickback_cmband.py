@@ -45,6 +45,15 @@ def meas(corner, name):
     return next(m for m in corner["measurements"] if m["name"] == name)
 
 
+def seed_probe_ref_body(series, cond):
+    """Materialize the #165 probe reference body inside the tempdir so the
+    byte-identity check in write_probe_inputs stays independent of campaign
+    evidence outside the CI sparse cone (see test_run_offset_cm_band)."""
+    ref = series / kb.PROBE_REFERENCE_SERIES / cond.name / kb.BODY_NAME
+    ref.parent.mkdir(parents=True, exist_ok=True)
+    ref.write_text(kb.compose_body(cond))
+
+
 class Transform(unittest.TestCase):
     def test_reference_has_double_space_and_matches_once(self):
         self.assertIn("vcm  cm 0 dc {dut_vcm}", REF_BODY)
@@ -294,8 +303,10 @@ class Evidence(unittest.TestCase):
         arm = "repro"
         with tempfile.TemporaryDirectory() as d:
             series = Path(d)
+            seed_probe_ref_body(series, NOM)
             out = series / NOM.name
-            kb.write_probe_inputs(NOM, arm, out)
+            with mock.patch.object(kb, "SERIES_DIR", series):
+                kb.write_probe_inputs(NOM, arm, out)
             args = mock.Mock(series="s", condition=NOM.name, arm=arm, skip_existing=False,
                              retry_refused=2, retry_wait=5, klt="klt", force=False)
             with mock.patch.object(rkb, "_series", return_value=series), \
@@ -314,8 +325,10 @@ class Evidence(unittest.TestCase):
         arm = "obs"
         with tempfile.TemporaryDirectory() as d:
             series = Path(d)
+            seed_probe_ref_body(series, NOM)
             out = series / NOM.name
-            kb.write_probe_inputs(NOM, arm, out)
+            with mock.patch.object(kb, "SERIES_DIR", series):
+                kb.write_probe_inputs(NOM, arm, out)
             args = mock.Mock(series="s", condition=NOM.name, arm=arm, skip_existing=False,
                              retry_refused=2, retry_wait=5, klt="klt", force=False)
             sleeps = []
