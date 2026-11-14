@@ -288,6 +288,48 @@ class Evidence(unittest.TestCase):
                 self.assertEqual(rkb.cmd_run(args), 0)
                 sub.assert_called_once()
 
+    def test_probe_run_submits_on_batch_through_the_retry_helper(self):
+        """cmd_probe_run keeps --backend batch and the fleet-cap retry loop
+        after adopting kcli._submit_with_retry (issue #431)."""
+        arm = "repro"
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d)
+            out = series / NOM.name
+            kb.write_probe_inputs(NOM, arm, out)
+            args = mock.Mock(series="s", condition=NOM.name, arm=arm, skip_existing=False,
+                             retry_refused=2, retry_wait=5, klt="klt", force=False)
+            with mock.patch.object(rkb, "_series", return_value=series), \
+                    mock.patch.object(kcli, "_submit", return_value=0) as sub:
+                self.assertEqual(rkb.cmd_probe_run(args), 0)
+            sub.assert_called_once()
+            self.assertEqual(sub.call_args.kwargs["backend"], "batch")
+            extra = sub.call_args.kwargs["extra"]
+            self.assertEqual(extra["kind"], "probe")
+            self.assertEqual(extra["probe_arm"], arm)
+            self.assertEqual(sub.call_args.args[:3],
+                             (out / f"{kb.probe_arm_tag(arm)}.request.json", out,
+                              kb.probe_arm_tag(arm)))
+
+    def test_probe_run_retries_while_the_fleet_refuses_at_its_cap(self):
+        arm = "obs"
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d)
+            out = series / NOM.name
+            kb.write_probe_inputs(NOM, arm, out)
+            args = mock.Mock(series="s", condition=NOM.name, arm=arm, skip_existing=False,
+                             retry_refused=2, retry_wait=5, klt="klt", force=False)
+            sleeps = []
+            with mock.patch.object(rkb, "_series", return_value=series), \
+                    mock.patch.object(kcli, "_submit", side_effect=[2, 2, 0]) as sub, \
+                    mock.patch.object(kcli, "_last_attempt_refused_at_cap",
+                                      return_value=True), \
+                    mock.patch.object(kcli.time, "sleep", sleeps.append):
+                self.assertEqual(rkb.cmd_probe_run(args), 0)
+            self.assertEqual(sub.call_count, 3)
+            self.assertEqual(sleeps, [5, 5])
+            self.assertEqual([c.kwargs["backend"] for c in sub.call_args_list],
+                             ["batch"] * 3)
+
     def test_compare_is_deterministic_from_saved_envelopes(self):
         with tempfile.TemporaryDirectory() as d:
             series = Path(d)
