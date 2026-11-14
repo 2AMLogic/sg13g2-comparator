@@ -35,7 +35,6 @@ self-reported hash.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import sys
@@ -108,10 +107,6 @@ class CharacterizationError(RuntimeError):
 # --------------------------------------------------------------------------- #
 
 
-def sha256_bytes(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
-
-
 def _dumps(obj) -> str:
     """Deterministic, strict JSON (sorted keys, trailing newline)."""
     return json.dumps(obj, indent=2, sort_keys=True, allow_nan=False,
@@ -141,7 +136,7 @@ def _hash_file(rel: str, root: Path) -> str:
     path = root / rel
     if not path.is_file():
         raise CharacterizationError(f"indexed source is missing: {rel}")
-    return sha256_bytes(path.read_bytes())
+    return build_mod.sha256_bytes(path.read_bytes())
 
 
 # --------------------------------------------------------------------------- #
@@ -233,7 +228,7 @@ def verify_index(index: dict, root: Path | None = None) -> list[str]:
         path = root / src["path"]
         if not path.is_file():
             problems.append(f"{src['path']}: indexed source is missing")
-        elif sha256_bytes(path.read_bytes()) != src["sha256"]:
+        elif build_mod.sha256_bytes(path.read_bytes()) != src["sha256"]:
             problems.append(f"{src['path']}: content differs from the indexed sha256 "
                             f"{src['sha256'][:16]}... (stale or tampered)")
     return problems
@@ -639,7 +634,7 @@ def build_artifacts(campaign_dir: Path, out_dir: Path, root: Path | None = None,
     if grading["dut"]["sha256"] != _hash_file(grading["dut"]["netlist"], root):
         raise CharacterizationError("graded DUT digest does not match the DUT netlist on disk")
     index_text = _dumps(index)
-    index_sha = sha256_bytes(index_text.encode("utf-8"))
+    index_sha = build_mod.sha256_bytes(index_text.encode("utf-8"))
     out_rel = _rel(out_dir, root)
     index_rel = f"{out_rel}/{INDEX_NAME}"
     report = build_report(grading, rows_spec, index, index_sha, index_rel)
@@ -700,7 +695,7 @@ def check(campaign_dir: Path, out_dir: Path, root: Path | None = None,
         envelope = json.loads(committed[ENVELOPE_NAME])
     except ValueError as exc:
         return [f"committed artifact is not valid JSON: {exc}"]
-    pinned = "sha256:" + sha256_bytes(committed[INDEX_NAME])
+    pinned = "sha256:" + build_mod.sha256_bytes(committed[INDEX_NAME])
     got = ((envelope.get("provenance") or {}).get("input") or {}).get("content_hash")
     if got != pinned:
         problems.append(f"envelope provenance.input.content_hash {got} != index file hash {pinned}")
@@ -720,7 +715,7 @@ def check(campaign_dir: Path, out_dir: Path, root: Path | None = None,
     if manifest is not None:
         cited = json.loads(Path(manifest).read_text(encoding="utf-8"))["evidence"].get("8")
         want_file = _rel(out_dir / ENVELOPE_NAME, root)
-        want_hash = "sha256:" + sha256_bytes(committed[INDEX_NAME])
+        want_hash = "sha256:" + build_mod.sha256_bytes(committed[INDEX_NAME])
         if not isinstance(cited, dict) or cited.get("file") != want_file \
                 or cited.get("content_hash") != want_hash:
             problems.append(f"manifest item 8 citation {cited!r} != "

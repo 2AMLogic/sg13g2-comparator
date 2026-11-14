@@ -26,7 +26,6 @@ Nothing here edits a source envelope; derived documents are new files.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import math
 import os
@@ -84,14 +83,6 @@ class EngineError(Exception):
 # --------------------------------------------------------------------------- #
 # generic helpers
 # --------------------------------------------------------------------------- #
-
-
-def sha256_bytes(raw: bytes) -> str:
-    return hashlib.sha256(raw).hexdigest()
-
-
-def sha256_file(path: Path) -> str:
-    return sha256_bytes(Path(path).read_bytes())
 
 
 def dumps(obj) -> str:
@@ -606,7 +597,7 @@ def smoke_control(source_dir: Path, source_rel: str = SOURCE_CAMPAIGN) -> dict:
     if on is None or off is None:
         raise YieldInputError("smoke control: mismatch-on / mismatch-off populations not both present")
     out = {
-        "path": f"{source_rel}/{name}", "sha256": sha256_bytes(raw),
+        "path": f"{source_rel}/{name}", "sha256": build_mod.sha256_bytes(raw),
         "mismatch_on": {"corner_id": on["corner_id"], "n": on["n"], "stddev_mv": on["stddev"]},
         "mismatch_off": {"corner_id": off["corner_id"], "n": off["n"], "stddev_mv": off["stddev"]},
         "limits_mv": [-15.0, 15.0],
@@ -710,8 +701,8 @@ def build_index(campaign_id: str, source_rel: str, derived: dict, reports: dict,
         {
             "row_id": "2", "spec_row": "Input-referred noise (whole-latch transient noise)",
             "report": f"{out_rel}/noise.yield.json",
-            "report_sha256": sha256_bytes(report_bytes["noise"]),
-            "samples": noise_rel, "samples_sha256": sha256_file(REPO_ROOT / noise_rel),
+            "report_sha256": build_mod.sha256_bytes(report_bytes["noise"]),
+            "samples": noise_rel, "samples_sha256": build_mod.sha256_file(REPO_ROOT / noise_rel),
             "citable_for_item6": False,
             "what_the_report_establishes": (
                 "Per PVT point and rung (hit_plus >= 0.5, hit_minus <= 0.5): the fraction of "
@@ -741,14 +732,14 @@ def build_index(campaign_id: str, source_rel: str, derived: dict, reports: dict,
                 "undetermined between the old harness loop and the new process) is NOT settled by "
                 "this analysis, and nothing here replaces the ratified historical record."),
             "benches": source_env,
-            "grading_json_sha256": sha256_file(source_dir / "grading.json"),
+            "grading_json_sha256": build_mod.sha256_file(source_dir / "grading.json"),
         },
         "rows": [
             {
                 "row_id": "1", "spec_row": "Offset sigma (whole latch)",
                 "report": f"{out_rel}/offset.yield.json",
-                "report_sha256": sha256_bytes(report_bytes["offset"]),
-                "samples": off_rel, "samples_sha256": sha256_file(REPO_ROOT / off_rel),
+                "report_sha256": build_mod.sha256_bytes(report_bytes["offset"]),
+                "samples": off_rel, "samples_sha256": build_mod.sha256_file(REPO_ROOT / off_rel),
                 "citable_for_item6": True,
                 "what_the_report_establishes": (
                     f"Per PVT point (45 separate populations, N = {n_text} each, never pooled): the "
@@ -973,9 +964,9 @@ def check(campaign_id: str = DEFAULT_CAMPAIGN_ID, source_rel: str = SOURCE_CAMPA
     for row, key in zip(index["rows"], ("offset", "noise")):
         samples = REPO_ROOT / row["samples"]
         report = REPO_ROOT / row["report"]
-        if not samples.is_file() or sha256_file(samples) != row["samples_sha256"]:
+        if not samples.is_file() or build_mod.sha256_file(samples) != row["samples_sha256"]:
             problems.append(f"row {row['row_id']}: samples hash differs from the index")
-        if not report.is_file() or sha256_file(report) != row["report_sha256"]:
+        if not report.is_file() or build_mod.sha256_file(report) != row["report_sha256"]:
             problems.append(f"row {row['row_id']}: report hash differs from the index")
             continue
         named = json.loads(report.read_bytes()).get("samples")
