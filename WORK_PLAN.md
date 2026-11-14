@@ -18,6 +18,7 @@ _None._
 `loom:important`; taken before unlabelled work.
 
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
+- **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise)
 
 ## Ready
 
@@ -65,7 +66,7 @@ _None._
 |------|-------|
 | Operator merge-risk holds | 1 |
 | Very important | 0 |
-| Important | 1 |
+| Important | 2 |
 | Ready (`loom:issue`) | 0 |
 | In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
