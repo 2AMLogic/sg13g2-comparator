@@ -22,7 +22,6 @@ from .benches import FIXTURE_CASES, FIXTURE_TOL_FC, Bench
 REF_NS = 29.0
 WIN_LO_NS = 30.0
 WIN_HI_NS = 45.0
-END_NS = 45.0
 
 
 def _si(text: str) -> float:
