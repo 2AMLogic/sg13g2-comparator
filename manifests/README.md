@@ -184,7 +184,16 @@ reads `erc_status: clean`, 0 findings. `erc_coverage.checked` holds
 `erc.net_connectivity` for `vdd`, `vss` and `vbias`, `erc.missing_tie` for the
 `nwell_vdd` tie and `erc.floating_gate` for the 10 gate nets;
 `erc_coverage.skipped` is empty, so the tie is not a
-`degenerate_tap_declaration`. The tie is narrowed to Activ & nSD & Cont (the
+`degenerate_tap_declaration`. Under the klt 0.9.1 pin the same run reports
+three further disclosure fields, none of which moves the verdict:
+`erc_coverage.missing_tie_checked: true`,
+`erc_coverage.layers_in_stream_without_declaration: ["63/0"]` (the text layer,
+which carries no supply role), and an explicit
+`erc_coverage.inapplicable` entry declaring `erc.supply_short` inapplicable
+with reason `substrate_continuity_not_modelled` — the machine-readable form of
+the diffusion/well-continuity limit stated under "What this does not
+establish" below, which the 0.8.0 report left implicit by simply omitting the
+check from `checked`. The tie is narrowed to Activ & nSD & Cont (the
 contacts of the n-tap bars; only those carry nSD) inside NWell. The envelope's
 own `status` is `not_checked` (antenna accumulation skipped by
 `--findings-only`; no antenna table exists for this deck). Item 11 does not
@@ -223,7 +232,7 @@ Item 3 cites `layout/comparator/drc_report.json`, the `klt drc --deck sg13g2
 (the GDS's own hash, recorded as `provenance.input.content_hash`). It reads
 `status: clean`, `violation_count: 0`, `rules_checked` 38, against deck
 `sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`
-(klt `0.8.0`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
+(klt `0.9.1`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
 regenerates it; `--check` requires it fresh (`klt drc --check`). `klt signoff`
 grades item 3 on `status: clean` alone and does not enforce disclosure, so the
 three `coverage` fields of the envelope are quoted verbatim here. This is
@@ -231,8 +240,10 @@ klt's *curated* deck, **not** the foundry's own DRC deck: "clean" means clean
 inside this scope only.
 
 `coverage.layers_in_stream_without_rules` (drawn in the stream, no rule in the
-deck: Metal3 pin, Metal3 text, and the text layer; the klt 0.8.0 deck adds
-nSD, pSD and NWell rules, so those are no longer listed):
+deck: Metal3 pin, Metal3 text, and the text layer; the deck carries nSD, pSD
+and NWell rules, so those are not listed — it has done since klt 0.8.0 and
+the 0.9.1 deck is byte-identical to it, same `content_hash`
+`sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`):
 
 ```
 30/2, 30/25, 63/0
@@ -260,9 +271,10 @@ Act, Cnt, Gat, M1, M2, M3, M4, M5, MIM, NW, TM1, TM2, TV1, TV2, V1, V2, V3,
 V4, pSD
 ```
 
-Consequences stated plainly (the klt 0.8.0 deck now carries NWell, nSD and pSD
-rules, so those layers are no longer listed as uncovered; their coverage was
-not otherwise re-audited here): Gat.c endcap,
+Consequences stated plainly (the deck carries NWell, nSD and pSD rules, so
+those layers are not listed as uncovered; their coverage was not otherwise
+re-audited here, and the 0.9.1 deck is the same deck by hash as the 0.8.0 one
+that first added them): Gat.c endcap,
 Cnt.e/Cnt.f, latch-up tap distance, density and seal ring are **not checked**
 by this evidence (see `layout/README.md`, "What this layout is, and is not").
 Also, `layout/comparator/drc_report.json` records its input as the
@@ -285,7 +297,7 @@ not of the GDS or the schematic. The tool does not bind it to either, so
 changed GDS, schematic subcircuit or request; see `layout/README.md`, stage 4.
 
 The envelope reads `status: match` (engine `klayout` 0.30.12, klt
-`0.8.0`), 24/24 devices, 18/18 nets, 8/8 pins including
+`0.9.1`), 24/24 devices, 18/18 nets, 8/8 pins including
 `vdd`/`vss` and the independent `vbias`, 0 mismatches, 0 warnings.
 `power_connectivity.status` is `unchecked`, which `klt signoff` accepts: with
 `reference.form: subckt-call` the supply pins take part in the ordinary
@@ -410,8 +422,8 @@ source campaign are never edited.
 ## Regeneration and freshness
 
 The report is frozen at the pinned `klt` release — `2AMLogic/klayout-tools`
-`v0.8.0` (commit `c572046be644e0407f693f2410f3abb799d68a3a`, PyPI
-`klayout-tools==0.8.0`). A `klt` older than 2026-09-17 does **not** know item
+`v0.9.1` (commit `4d0d29be4fd991f499d59e783a908082d5e24c56`, PyPI
+`klayout-tools==0.9.1`). A `klt` older than 2026-09-17 does **not** know item
 11 and renders a ten-item report; the pinned build renders all eleven. If the
 pinned build moves, the manifest, the freeze, and the pin move in one change.
 
