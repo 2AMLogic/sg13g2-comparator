@@ -357,6 +357,17 @@ def offset_mc_with_n(n: int | None) -> Bench:
     )
 
 
+def regeneration_with_bias_probes(bench: Bench | None = None) -> Bench:
+    """``REGENERATION`` (or ``bench``) with the issue #80 ``BIAS_PROBES``
+    appended. The one definition of the swept-bias measurement superset,
+    shared by ``build --bias-probes``, ``fleet-smoke --bias-probes`` and the
+    ``ibsweep`` grader's declaration, so a swept-bias request and the contract
+    it is graded against cannot drift apart. The issue #62 campaign's request
+    is untouched by it (see ``BIAS_PROBES`` above)."""
+    b = REGENERATION if bench is None else bench
+    return dataclasses.replace(b, measurements=b.measurements + BIAS_PROBES)
+
+
 #: DR-0002 Row 2 basis (sim/comparator-transient-noise, record
 #: 20260921-154729-41cbc7f): N = 80 trials per rung per PVT point, probe
 #: overdrive od_x = 1 mV, injected density 36.27 nV/sqrt(Hz). The seed is

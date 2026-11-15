@@ -18,7 +18,7 @@ import math
 import unittest
 
 from kltsim import build, grade
-from kltsim.benches import BENCHES, PROCESSES, SUPPLIES_V, TEMPERATURES_C
+from kltsim.benches import BENCHES, BIAS_PROBES, PROCESSES, SUPPLIES_V, TEMPERATURES_C
 
 ROWS = json.loads((build.EXPERIMENT_DIR / "rows.json").read_text(encoding="utf-8"))
 GRID = ROWS["grid"]
@@ -1038,6 +1038,82 @@ class CampaignChainTests(unittest.TestCase):
         row = grade.grade(_spec([_row("3a")]), {"regeneration": ev},
                           grade.load_dut_reference())["rows"][0]
         self.assertNotEqual(row["target_verdict"], grade.REJECTED_EVIDENCE)
+
+
+class BiasProbeDeclarationTests(unittest.TestCase):
+    """The issue #80 bias-probe superset at the loading boundary (issue #440):
+    an explicit declaration (``bias_probes.load_campaign`` swaps the
+    ``regeneration`` contract for the superset bench), and the declared
+    superset is compared exactly by ``grade``'s unchanged rules."""
+
+    def _superset_bench(self):
+        from kltsim.benches import regeneration_with_bias_probes
+        return regeneration_with_bias_probes(BENCHES["regeneration"])
+
+    def _superset_request(self) -> dict:
+        return grade._expected_request(self._superset_bench(), "regeneration")
+
+    def _problems(self, bench, request):
+        return grade.check_request_semantics(bench, "regeneration", request)
+
+    def test_declared_superset_is_accepted(self):
+        problems = self._problems(self._superset_bench(), self._superset_request())
+        self.assertEqual(problems, [])
+
+    def test_undeclared_superset_is_still_rejected(self):
+        problems = self._problems(BENCHES["regeneration"], self._superset_request())
+        self.assertTrue(any("request measurements" in p for p in problems), problems)
+
+    def test_a_different_extra_measurement_is_rejected_even_when_declared(self):
+        request = self._superset_request()
+        request["measurements"] = list(request["measurements"]) + [
+            {"name": "something_else", "spice": ".meas tran something_else find v(x) at=1n"}]
+        problems = self._problems(self._superset_bench(), request)
+        self.assertTrue(any("request measurements" in p for p in problems), problems)
+
+    def test_a_missing_probe_is_rejected_even_when_declared(self):
+        request = self._superset_request()
+        request["measurements"] = [m for m in request["measurements"] if m["name"] != "vref_v"]
+        problems = self._problems(self._superset_bench(), request)
+        self.assertTrue(any("request measurements" in p for p in problems), problems)
+
+    def test_superset_bench_changes_only_the_regeneration_measurements(self):
+        superset = self._superset_bench()
+        self.assertEqual(superset.name, BENCHES["regeneration"].name)
+        self.assertEqual(superset.measurements,
+                         BENCHES["regeneration"].measurements + BIAS_PROBES)
+        for field_name in ("analysis", "process_sections", "supply_keys", "probes",
+                           "monte_carlo", "circuit"):
+            self.assertEqual(getattr(superset, field_name),
+                             getattr(BENCHES["regeneration"], field_name))
+        self.assertEqual(BENCHES["regeneration"].measurements,
+                         tuple(m for m in superset.measurements
+                               if m.name not in {"vref_v", "tmid_eval_v"}))
+
+    def test_load_path_threads_the_declaration(self):
+        import tempfile
+        from pathlib import Path
+
+        from kltsim import bias_probes
+        with tempfile.TemporaryDirectory() as d:
+            directory = Path(d)
+            _, _, files = build.plan_bench_inputs(
+                self._superset_bench(), directory, target="batch")
+            for path, data in files:
+                path.write_bytes(data)
+            env = b"{}\n"
+            (directory / "regeneration.envelope.json").write_bytes(env)
+            (directory / "regeneration.invocation.json").write_text(json.dumps({
+                "tag": "regeneration",
+                "request_sha256": hashlib.sha256(
+                    (directory / "regeneration.request.json").read_bytes()).hexdigest(),
+                "envelope_sha256": hashlib.sha256(env).hexdigest(),
+            }))
+            declared = bias_probes.load_campaign(directory)
+            self.assertEqual(declared["regeneration"].chain_problems, [])
+            undeclared = grade.load_campaign(directory)
+            self.assertTrue(any("request measurements" in p
+                                for p in undeclared["regeneration"].chain_problems))
 
 
 class ProbeUnitTests(unittest.TestCase):

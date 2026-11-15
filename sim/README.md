@@ -337,6 +337,23 @@ and Markdown cite the original directory (`source_campaign_dir` /
 `source_series_dir`), and `noise_full.json` carries `campaign`. There is no
 force switch.
 
+Committed pairs vs later renderer changes (issue #440, classified 2026-11-15 on
+`f24d7281c`): five committed pairs predate a later, purely additive renderer or
+grader change, so their `--check` exits 1 while their committed bytes stay
+authoritative -- the ratified "publish in a NEW namespace" case above, not a
+defect. In every one of them zero leaves were removed and zero committed values
+changed; they are deliberately NOT re-published.
+
+| pair | `--check` | why the fresh render differs |
+|---|---|---|
+| `grade --campaign 20261009-d73a9ac` | 1 | predates the #107 provenance bookkeeping (`chain_problems`, `chain_checked.*`) |
+| `grade --campaign 20261010-n200 --offset-n 200` | 0 | reproduces when graded with its declared N (without `--offset-n` the historical N = 60 contract correctly rejects it, exit 1) |
+| `ibsweep --campaign 20261009-issue80` | 1 | predates the #267 mirror-probe coverage keys (`mirror.{complete,points_valid,points_expected}`, +21 JSON leaves); since issue #440 its swept points grade clean again -- the false `REJECTED_EVIDENCE` regression is fixed and `ibsweep.md` is byte-identical again |
+| `noise-full --campaign 20261009-issue81` | 1 | predates the transient-noise uncertainty basis (`grid_mean_se_fully_correlated_bound`, `shared_draw_*`, `grader_notes`, `provenance_status`) |
+| `run_offset_cm_band.py compare --series 20261009-5185f52` | 1 | predates the repeat-control accounting (`controls.repeat[].{expected_draws,missing_draws,rejected_draws,verdict}`) |
+| `run_clock_supply_sensitivity.py compare --series 20261011-ce8cb93` | 1 | predates per-condition coverage (`offset.*.coverage.*`) |
+| `run_decision_cm_band.py compare --series 20261011-94b6bc5b4` | 0 | reproduces |
+
 ## Reproducing one record
 
 Every record ends with the exact command that regenerates it. It is always:
