@@ -127,11 +127,18 @@ and ss/1.200 V, -40 C: the latch can decide and override at these PVT points.
 **`icdc` at the rejects: the gate passes, but not via a decision.** At both
 rejects all three DC homotopies still fail (dynamic gmin, true gmin, source
 stepping — quoted from the committed logs), the transient-op fallback picks its
-own landing spot, and the initial transient solution has `doutb = 1.2` (m050;
-`doutc = 1.2` at p050): the LOW seed is overridden and the bistable latch is
-parked in the HIGH basin before the strobe. Outputs sit at the correct polarity
-from 30 ns on; nothing transitions; the gate passes at 55 ns without the latch
-deciding anything. The floating-input differential is **still collapsed ~46x**
+own landing spot, and the initial transient solution parks all three outputs
+HIGH at both rejects (m050 `1.2/1.2/1.2`; p050 `1.08/1.08/1.08`, the supply
+being 1.080 V there): the LOW seed is overridden and the bistable latch is
+parked in the HIGH basin before the strobe. The branch whose basin actually
+moves against `repro` is the one the failed gate card measures: `doutc` at
+m050 (1.31e-08 in `repro` -> 1.2; the `dout_float_big_end` fail at 6.8e-9) and
+`doutb` at p050 (5.90e-08 -> 1.08; the `dout_float_small_end` fail at 6.2e-9).
+The other float branch was already parked HIGH in `repro` itself (`doutb` = 1.2
+at m050, `doutc` = 1.08 at p050), so it carries no override evidence. Outputs
+sit at the correct polarity from 30 ns on; nothing transitions; the gate
+passes at 55 ns without the latch deciding anything. The floating-input
+differential is **still collapsed ~46x**
 (21.9 µV / 2.19 mV against the programmed 1 mV / 100 mV at m050; 21.4 µV /
 2.14 mV at p050) — the `.nodeset` hint cannot make a failing solve accept the
 analytic point.
