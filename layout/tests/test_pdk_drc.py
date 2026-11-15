@@ -3,58 +3,36 @@
 stdlib only; the deck itself is not run here (it needs the PDK and a real
 KLayout executable). Covered: missing prerequisites are `unavailable` and never
 clean, the lyrdb parser, and the committed report's invariants against the
-committed GDS. Same stand-in loading trick as test_erc_tool.py.
+committed GDS. The stand-in loading trick is shared with test_erc_tool.py via
+``klayout_standin.load_tool`` (issue #432).
 """
 
 import hashlib
-import importlib.util
 import io
 import json
 import os
 import sys
 import tempfile
-import types
 import unittest
 from unittest import mock
 from pathlib import Path
+
+# Importing the sibling helper needs layout/tests on sys.path. unittest
+# discovery inserts the start directory itself, but `python3 -I` implies -P
+# (3.11+), so a direct `python3 -I layout/tests/<file>` run -- and
+# pinned_deck_contract.py loading this module by path -- does not get it.
+_HERE = str(Path(__file__).resolve().parent)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+import klayout_standin  # noqa: E402
 
 LAYOUT = Path(__file__).resolve().parents[1]
 TOOL = LAYOUT / "comparator" / "pdk_drc.py"
 REPORT = LAYOUT / "comparator" / "pdk_drc_report.json"
 GDS = LAYOUT / "comparator" / "comparator.gds"
 
-
-def _load():
-    try:
-        import klayout.db  # noqa: F401
-        standin = False
-    except ImportError:
-        standin = True
-    path_before = list(sys.path)
-    mods_before = set(sys.modules)
-    if standin:
-        pkg = types.ModuleType("klayout")
-        pkg.__path__ = []
-        db = types.ModuleType("klayout.db")
-        pkg.db = db
-        sys.modules["klayout"] = pkg
-        sys.modules["klayout.db"] = db
-    try:
-        spec = importlib.util.spec_from_file_location("pdk_drc_under_test", TOOL)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-    finally:
-        if standin:
-            for name in ("klayout", "klayout.db"):
-                sys.modules.pop(name, None)
-            for name in set(sys.modules) - mods_before:
-                if name == "common_sg13g2":
-                    sys.modules.pop(name, None)
-            sys.path[:] = path_before
-    return mod
-
-
-pd = _load()
+pd, USED_STANDIN = klayout_standin.load_tool(TOOL, "pdk_drc_under_test")
 
 LYRDB = """<?xml version="1.0" encoding="utf-8"?>
 <report-database><categories>
@@ -410,6 +388,14 @@ class CommittedReport(unittest.TestCase):
         self.assertNotIn("/tmp/", text)
         self.assertTrue(self.r["skipped"])
         self.assertTrue(self.r["not_covered"])
+
+
+class TestStandinHygiene(unittest.TestCase):
+    def test_standins_not_leaked(self):
+        if USED_STANDIN:
+            self.assertNotIn("klayout", sys.modules)
+            self.assertNotIn("klayout.db", sys.modules)
+            self.assertNotIn("common_sg13g2", sys.modules)
 
 
 if __name__ == "__main__":
