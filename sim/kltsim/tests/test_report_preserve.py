@@ -39,6 +39,9 @@ class Harness(unittest.TestCase):
     """Runs one public command with mocked analysis whose output is mutable."""
 
     kind = ""
+    # Issue #423: whether a redirected publish cites its source in the JSON and
+    # markdown. `noise` is the one deliberate exception — it must NOT cite.
+    cites_source = True
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -188,9 +191,14 @@ class _Cases:
         self.assertEqual(self.snapshot(self.src), before)
         self.assertEqual({p.name for p in new.iterdir()}, set(self.names))
         self.assertIn("C1", (new / self.names[0]).read_text())
-        if self.kind != "noise":
-            self.assertIn("source_", (new / self.names[0]).read_text())
-            self.assertIn("original evidence", (new / self.names[1]).read_text())
+        json_text = (new / self.names[0]).read_text()
+        md_text = (new / self.names[1]).read_text()
+        if self.cites_source:
+            self.assertIn("source_", json_text)
+            self.assertIn("original evidence", md_text)
+        else:
+            self.assertNotIn("source_", json_text)
+            self.assertNotIn("original evidence", md_text)
 
     def test_report_dir_is_a_file_refused(self):
         f = self.root / "afile"
@@ -206,6 +214,9 @@ class GradeTest(_Cases, Harness):
 
 class NoiseFullTest(_Cases, Harness):
     kind = "noise"
+    # Issue #423: noise_full deliberately publishes without citing its source
+    # campaign; changing that is a sim/README.md decision-record question.
+    cites_source = False
 
     def test_compact_json_serialization_kept(self):
         self.run_cmd()

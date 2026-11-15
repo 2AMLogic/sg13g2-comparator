@@ -181,18 +181,15 @@ def cmd_compare(args) -> int:
     series = _series(args)
     result = cmband.compare_series(series, reference_campaign=args.reference_campaign,
                                    harness_record=cmband.HARNESS_RECORD)
-    report_dir = Path(args.report_dir) if args.report_dir else series
     md = cmband.render_markdown(result)
-    if report_dir != series:
-        result["source_series_dir"] = kcli._cite(series)
-        md = kcli._cite_note(md, "series", series)
+    report_dir, md = kcli.resolve_report_dir(args, series, md, result, "series")
     # Strict JSON (issue #250): a non-finite float is null, never a NaN token.
     rc = artifacts_mod.publish(
         "compare",
         [(report_dir / "comparison.json", (grade_mod.dumps_strict(result, indent=2) + "\n").encode("utf-8")),
          (report_dir / "comparison.md", md.encode("utf-8"))],
         check_only=args.check,
-        namespace_hint=kcli._NAMESPACE_HINT.replace("--campaign/--series", "--series"),
+        namespace_hint=kcli.SERIES_NAMESPACE_HINT,
         require_dir=report_dir)
     if rc or args.check:
         return rc

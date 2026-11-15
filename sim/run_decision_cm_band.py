@@ -64,17 +64,14 @@ def cmd_run(args) -> int:
 def cmd_compare(args) -> int:
     series = _series(args)
     result = cd.compare_series(series, reference_campaign=args.reference_campaign)
-    report_dir = Path(args.report_dir) if args.report_dir else series
     md = cd.render_markdown(result)
-    if report_dir != series:
-        result["source_series_dir"] = kcli._cite(series)
-        md = kcli._cite_note(md, "series", series)
+    report_dir, md = kcli.resolve_report_dir(args, series, md, result, "series")
     rc = artifacts_mod.publish(
         "compare",
         [(report_dir / "comparison.json", (json.dumps(result, indent=2) + "\n").encode("utf-8")),
          (report_dir / "comparison.md", md.encode("utf-8"))],
         check_only=args.check,
-        namespace_hint=kcli._NAMESPACE_HINT.replace("--campaign/--series", "--series"),
+        namespace_hint=kcli.SERIES_NAMESPACE_HINT,
         require_dir=report_dir)
     if rc or args.check:
         return rc

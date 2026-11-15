@@ -565,6 +565,10 @@ _NAMESPACE_HINT = ("Reports are append-only evidence. Publish changed analysis u
                    "directory with --report-dir (it cites the original campaign); "
                    "inputs are always read from --campaign/--series.")
 
+# Same contract for the series-flavoured producers (issue #423: one derived
+# constant instead of three copies of the string surgery).
+SERIES_NAMESPACE_HINT = _NAMESPACE_HINT.replace("--campaign/--series", "--series")
+
 
 def _cite(path: Path) -> str:
     try:
@@ -578,6 +582,18 @@ def _cite_note(markdown: str, kind: str, source: Path) -> str:
             f"`{_cite(source)}`\n")
 
 
+def resolve_report_dir(args, source: Path, md: str, result: dict, kind: str,
+                       cite: bool = True):
+    """Report dir for this run, plus analysis/markdown citing `source` when the
+    pair is being published to a new namespace rather than in place (the
+    citation key is added to ``result`` in place)."""
+    report_dir = Path(getattr(args, "report_dir", None) or source)
+    if cite and report_dir != source:
+        result[f"source_{kind}_dir"] = _cite(source)
+        md = _cite_note(md, kind, source)
+    return report_dir, md
+
+
 def cmd_grade(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     offset_n = getattr(args, "offset_n", None)
@@ -588,11 +604,8 @@ def cmd_grade(args) -> int:
             print(f"grade: {exc}", file=sys.stderr)
             return 2
     result = declared_n_mod.grade_campaign(out_dir, offset_n)
-    report_dir = Path(args.report_dir) if getattr(args, "report_dir", None) else out_dir
     md = grade_mod.render_markdown(result)
-    if report_dir != out_dir:
-        result["source_campaign_dir"] = _cite(out_dir)
-        md = _cite_note(md, "campaign", out_dir)
+    report_dir, md = resolve_report_dir(args, out_dir, md, result, "campaign")
     rc = artifacts_mod.publish(
         "grade",
         [(report_dir / "grading.json", (grade_mod.dumps_strict(result, indent=2) + "\n").encode("utf-8")),
@@ -621,10 +634,16 @@ def cmd_noise_full(args) -> int:
     holds ``noise_full.*`` with different bytes is never overwritten (publish under a new namespace); an identical
     rerun is a no-op and a matching partial pair is completed."""
     out_dir = _campaign_dir(args.campaign)
-    report_dir = Path(args.report_dir) if args.report_dir else out_dir
     result = noise_full_mod.analyse(out_dir)
     result["campaign"] = out_dir.name
     text = noise_full_mod.render_markdown(result)
+    # Issue #423: noise_full deliberately publishes without the citation branch
+    # (`cite=False`) — the committed redirected noise_full report carries no
+    # provenance line, so adding one now would change a regeneration result.
+    # That is an evidence question for the sim/README.md decision-record route,
+    # not a refactor; keep the output byte-identical.
+    report_dir, _ = resolve_report_dir(args, out_dir, text, result, "campaign",
+                                       cite=False)
     targets = {report_dir / "noise_full.json": json.dumps(result, separators=(",", ":")) + "\n",
                report_dir / "noise_full.md": text}
     rc = artifacts_mod.publish(
@@ -642,11 +661,8 @@ def cmd_ibsweep(args) -> int:
     overwritten, an identical rerun is a no-op, ``--check`` is read-only."""
     out_dir = _campaign_dir(args.campaign)
     result = ibsweep_mod.sweep(out_dir)
-    report_dir = Path(args.report_dir) if args.report_dir else out_dir
     md = ibsweep_mod.render_markdown(result)
-    if report_dir != out_dir:
-        result["source_campaign_dir"] = _cite(out_dir)
-        md = _cite_note(md, "campaign", out_dir)
+    report_dir, md = resolve_report_dir(args, out_dir, md, result, "campaign")
     rc = artifacts_mod.publish(
         "ibsweep",
         [(report_dir / "ibsweep.json", (grade_mod.dumps_strict(result, indent=2) + "\n").encode("utf-8")),
