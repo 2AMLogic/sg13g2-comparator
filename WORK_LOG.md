@@ -2,11 +2,38 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-15
+
+- **PR #433**: refactor: route the kickback driver's smoke and probe submits through kcli
+- **PR #443**: sim: probe the Row 4b band-edge kickback rejects with a forced DC operating point
+- **PR #446**: sim: close the #92 bias/latch study -- Rows 3c/4a recoverable, Row 2 unclosed at 1.096 mV
+- **PR #441**: refactor: factor the --report-dir citation preamble into one resolve_report_dir helper
+- **PR #442**: refactor(sim): share the memory bench's round probe-index rule in round_mult
+- **PR #444**: fix: canonicalise klt's params-supply corner ids in make_delta_table
+- **PR #437**: refactor: wire REPEAT_POINT into its seven re-spelled readers, byte-identical
+- **PR #434**: refactor(layout/tests): single-source the klayout stand-in module loader
+- **PR #430**: build: move the klt pin from 0.8.0 to PyPI release 0.9.1
+- **PR #436**: ci: drop four dead sparse-checkout patterns, add cone minimality guard
+- **PR #439**: docs: state item 7 post-layout evidence as of 2026-11-14
+- **Issue #431** (closed): Adopt the shared klt-sim smoke runner and retry wrapper in run_kickback_cm_band.py: two copies the Oct-17 sharing refactor missed
+- **Issue #415** (closed): Probe the two Row 4b band-edge kickback rejects with a forced DC operating point
+- **Issue #92** (closed): Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise)
+- **Issue #423** (closed): Factor the --report-dir citation preamble into one helper beside _cite_note
+- **Issue #422** (closed): Share the round probe-index rule in sim/kltsim/memory.py: one expression written six times
+- **Issue #424** (closed): make_delta_table.py cannot canonicalise the corner ids klt emits for a corners.params supply axis, so every delay row reads ungraded
+- **Issue #426** (closed): Decide `REPEAT_POINT` in sim/run_memory.py: wire into cmd_repeat, or drop
+- **Issue #432** (closed): Dedupe the klayout stand-in module loader duplicated across layout/tests/test_erc_tool.py and test_pdk_drc.py
+- **Issue #416** (closed): Bump the klayout-tools pin from 0.8.0 to the release the batch runner accepts
+- **Issue #429** (closed): Remove five redundant CI sparse-checkout patterns, and guard cone minimality
+- **Issue #418** (closed): Update the item 7 narrative in manifests/README.md to the current post-layout evidence
+
 ### 2026-11-14
 
+- **PR #425**: feat(pex): measure the three ss / 125 C extracted regeneration corners
 - **PR #427**: refactor: call build.py's sha256 helpers instead of module-local copies
 - **PR #421**: refactor: delete eight unreferenced module-level definitions
 - **PR #414**: docs: roadmap as of 2026-11-13
+- **Issue #417** (closed): Measure the three unmeasured extracted regeneration corners (ss / 125 C)
 - **Issue #420** (closed): Remove seven unreferenced module-level constants (none is a hashed report input)
 - **Issue #419** (closed): Consolidate the triplicated sha256 helpers in sim/kltsim onto build.py
 
