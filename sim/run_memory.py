@@ -209,34 +209,39 @@ def cmd_auto(args) -> int:
 # repeat (determinism)
 # --------------------------------------------------------------------------- #
 
-REPEAT_POINT = ("mos_tt", 1.2, 27.0)
+#: The determinism-repeat PVT point, as recorded in the committed campaign
+#: sim/comparator-memory/campaigns/20261010-08e31bed1.md ("Determinism
+#: repeat"). Temperature is int so the generated request bytes match that
+#: record; see issue #426.
+REPEAT_POINT = ("mos_tt", 1.2, 27)
 
 
 def cmd_repeat(args) -> int:
     """Re-submit the nominal tt / 1.20 V / 27 C point for each round, using the
     SAME body (so the same probe plan) as the nominal campaign, narrowed to
     that one corner. Decisions must reproduce exactly."""
+    proc, vsup, temp = REPEAT_POINT
     git = git_state()
     jobs = []
     for k in range(1, mem.MAX_ROUNDS + 1):
         src = round_dir(args.series, "nominal", k)
-        body_src = src / f"{tag_for('mos_tt')}.body.spice"
+        body_src = src / f"{tag_for(proc)}.body.spice"
         if not body_src.is_file():
             continue
         rdir = round_dir(args.series, "repeat", k)
         body_bytes = body_src.read_bytes()
-        req = mem.load_json(src / f"{tag_for('mos_tt')}.request.json")
-        req["corners"]["supply_v"] = {"vsup": [1.2]}
-        req["corners"]["temperature_c"] = [27]
+        req = mem.load_json(src / f"{tag_for(proc)}.request.json")
+        req["corners"]["supply_v"] = {"vsup": [vsup]}
+        req["corners"]["temperature_c"] = [temp]
         req["_comment"] = req["_comment"] + [
             "DETERMINISM REPEAT: the nominal campaign's round body, narrowed to tt / 1.20 V / 27 C."]
         req["_round"] = dict(req.get("_round") or {}, arm="repeat")
         files = [(rdir / body_src.name, body_bytes),
-                 (rdir / f"{tag_for('mos_tt')}.request.json",
+                 (rdir / f"{tag_for(proc)}.request.json",
                   (json.dumps(req, indent=2) + "\n").encode("utf-8"))]
         if not kcli._commit_planned(files, argparse.Namespace(force=False), f"repeat r{k}"):
             return 1
-        tag = tag_for("mos_tt")
+        tag = tag_for(proc)
         if (rdir / f"{tag}.envelope.json").exists():
             continue
         jobs.append((rdir / f"{tag}.request.json", rdir, tag,
@@ -400,8 +405,8 @@ def build_record(series: str) -> dict:
     # determinism repeat
     rep = []
     for k in range(1, mem.MAX_ROUNDS + 1):
-        a = series_dir(series) / "nominal" / f"round{k}" / f"{tag_for('mos_tt')}.envelope.json"
-        b = series_dir(series) / "repeat" / f"round{k}" / f"{tag_for('mos_tt')}.envelope.json"
+        a = series_dir(series) / "nominal" / f"round{k}" / f"{tag_for(REPEAT_POINT[0])}.envelope.json"
+        b = series_dir(series) / "repeat" / f"round{k}" / f"{tag_for(REPEAT_POINT[0])}.envelope.json"
         if not (a.is_file() and b.is_file()):
             continue
         va = _repeat_values(mem.load_json(a))
@@ -419,8 +424,8 @@ def build_record(series: str) -> dict:
 
 def _repeat_values(env: dict) -> dict:
     for c in env.get("corners") or []:
-        if c.get("process") == "mos_tt" and abs(c["supply_v"]["vsup"] - 1.2) < 1e-6 \
-                and abs(c["temperature_c"] - 27) < 1e-6:
+        if c.get("process") == REPEAT_POINT[0] and abs(c["supply_v"]["vsup"] - REPEAT_POINT[1]) < 1e-6 \
+                and abs(c["temperature_c"] - REPEAT_POINT[2]) < 1e-6:
             return {m["name"]: m.get("value") for m in c["measurements"]}
     return {}
 
