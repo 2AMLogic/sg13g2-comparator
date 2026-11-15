@@ -120,6 +120,10 @@ the only bench and `2 <= N <= 1000`), checked against the budget first with
 `estimate --offset-n N`, and graded with `grade --campaign <id> --offset-n N`; the
 saved requests must carry exactly that N. The committed instance is
 `20261010-n200` (N = 200); the historical `20261009-d73a9ac` is unchanged.
+Re-checking the committed pair needs the same declaration (issue #440):
+`grade --campaign 20261010-n200 --offset-n 200 --check` exits 0, while omitting
+`--offset-n` correctly exits 1 (the historical N = 60 contract rejects an
+undeclared N = 200 campaign).
 
 Re-grading the committed campaign needs no simulator:
 `python3 sim/run_klt_corner_verification.py grade --campaign 20261009-d73a9ac`.

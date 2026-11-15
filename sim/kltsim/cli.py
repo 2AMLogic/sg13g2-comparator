@@ -23,7 +23,6 @@ netlist resolves against it.
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import datetime as _dt
 import json
 import math
@@ -45,7 +44,7 @@ from . import ibsweep as ibsweep_mod
 from . import sizesweep as sizesweep_mod
 from . import noise_full as noise_full_mod
 from . import benches as benches_mod
-from .benches import ALL_BENCHES, BENCHES, BIAS_PROBES, FIXTURE_BENCHES
+from .benches import ALL_BENCHES, BENCHES, FIXTURE_BENCHES
 
 CAMPAIGNS_DIR = build_mod.EXPERIMENT_DIR / "campaigns"
 
@@ -125,7 +124,7 @@ def cmd_build(args) -> int:
     for name in names:
         bench = benches_mod.offset_mc_with_n(offset_n) if name == "offset_mc" else ALL_BENCHES[name]
         if args.bias_probes and name == "regeneration":
-            bench = dataclasses.replace(bench, measurements=bench.measurements + BIAS_PROBES)
+            bench = benches_mod.regeneration_with_bias_probes(bench)
         planned += build_mod.plan_bench_inputs(
             bench, out_dir, target="batch", param_overrides=overrides or None,
             geometry_overrides=geometry)[2]
@@ -394,7 +393,7 @@ def cmd_fleet_smoke(args) -> int:
     tag = args.tag or bench.name
     overrides = _parse_overrides(args.dut_param)
     if args.bias_probes and bench.name == "regeneration":
-        bench = dataclasses.replace(bench, measurements=bench.measurements + BIAS_PROBES)
+        bench = benches_mod.regeneration_with_bias_probes(bench)
     _, _, files = build_mod.plan_bench_inputs(
         bench, out_dir, target="batch", split=False, param_overrides=overrides or None)
     # Each tag owns its body (<tag>.body.spice): tags with different overrides

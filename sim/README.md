@@ -337,6 +337,23 @@ and Markdown cite the original directory (`source_campaign_dir` /
 `source_series_dir`), and `noise_full.json` carries `campaign`. There is no
 force switch.
 
+Committed pairs vs later renderer changes (issue #440, classified 2026-11-15 on
+`f24d7281c`): five committed pairs predate a later, purely additive renderer or
+grader change, so their `--check` exits 1 while their committed bytes stay
+authoritative -- the ratified "publish in a NEW namespace" case above, not a
+defect. In every one of them zero leaves were removed and zero committed values
+changed; they are deliberately NOT re-published.
+
+| pair | `--check` | why the fresh render differs |
+|---|---|---|
+| `grade --campaign 20261009-d73a9ac` | 1 | predates the #107 provenance bookkeeping (`chain_problems`, `chain_checked.*`) |
+| `grade --campaign 20261010-n200 --offset-n 200` | 0 | reproduces when graded with its declared N (without `--offset-n` the historical N = 60 contract correctly rejects it, exit 1) |
+| `ibsweep --campaign 20261009-issue80` | 1 | predates the #267 mirror-probe coverage keys (`mirror.{complete,points_valid,points_expected}`, +21 JSON leaves); since issue #440 its swept points grade clean again -- the false `REJECTED_EVIDENCE` regression is fixed and `ibsweep.md` is byte-identical again |
+| `noise-full --campaign 20261009-issue81` | 1 | predates the transient-noise uncertainty basis (`grid_mean_se_fully_correlated_bound`, `shared_draw_*`, `grader_notes`, `provenance_status`) |
+| `run_offset_cm_band.py compare --series 20261009-5185f52` | 1 | predates the repeat-control accounting (`controls.repeat[].{expected_draws,missing_draws,rejected_draws,verdict}`) |
+| `run_clock_supply_sensitivity.py compare --series 20261011-ce8cb93` | 1 | predates per-condition coverage (`offset.*.coverage.*`) |
+| `run_decision_cm_band.py compare --series 20261011-94b6bc5b4` | 0 | reproduces |
+
 ## Reproducing one record
 
 Every record ends with the exact command that regenerates it. It is always:
@@ -689,7 +706,7 @@ transitive inputs):
 |---|---|
 | signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report,readme_claims}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
-| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh,tools/regen_reverse_control.py}`, `sim/comparator-{regeneration,kickback,memory,offset-transient-mc,transient-noise}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `sim/comparator-offset-cm-band/campaigns/20261009-5185f52/{vcm-m050,vcm-nom,vcm-p050}/{*.spice,*.request.json}`; `sim/comparator-kickback-cm-band/campaigns/20261011-165/{vcm-m050,vcm-nom,vcm-p050}/{kickback.body.spice,kickback.envelope.json}`, `sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/{comparison.json,comparison.md,vcm-m050/kickback.body.spice}`, `sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/{vcm-m050,vcm-nom,vcm-p050}/kickback-*.{envelope.json,request.json}`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
+| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh,tools/regen_reverse_control.py}`, `sim/comparator-{regeneration,kickback,memory,offset-transient-mc,transient-noise}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-issue80/ib_{2.5,5,7.5,10,15,20,40}uA/*.{json,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `sim/comparator-offset-cm-band/campaigns/20261009-5185f52/{vcm-m050,vcm-nom,vcm-p050}/{*.spice,*.request.json}`; `sim/comparator-kickback-cm-band/campaigns/20261011-165/{vcm-m050,vcm-nom,vcm-p050}/{kickback.body.spice,kickback.envelope.json}`, `sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/{comparison.json,comparison.md,vcm-m050/kickback.body.spice}`, `sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/{vcm-m050,vcm-nom,vcm-p050}/kickback-*.{envelope.json,request.json}`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
 | netlist-regeneration | `design/`, `sim/harness/`, `sim/pdk.json` |
 | append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` (the size and manifest checks read blobs from the target commit, not the working tree) |
 

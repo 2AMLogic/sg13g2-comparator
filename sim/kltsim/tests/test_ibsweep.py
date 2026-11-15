@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from kltsim import build, ibsweep
+from kltsim import bias_probes, build, grade, ibsweep
 from kltsim.benches import REGENERATION
 
 
@@ -196,6 +196,36 @@ class ProbeSummaryTests(unittest.TestCase):
         self.assertIn("outside the expected PVT grid", self.reasons(m))
         self.assertFalse(m["complete"])
         self.assertEqual(m["points_valid"], 8)
+
+
+class CommittedSweptCampaignTests(unittest.TestCase):
+    """The committed issue #80 sweep grades clean through the declared
+    bias-probe superset (issue #440 regression: every swept point was graded
+    REJECTED_EVIDENCE because the loader could not be told the probes are
+    expected)."""
+
+    campaign = build.EXPERIMENT_DIR / "campaigns" / "20261009-issue80"
+
+    def swept(self):
+        subs = [p for p in self.campaign.iterdir() if ibsweep.ib_of(p) is not None]
+        self.assertEqual(len(subs), 7)
+        return sorted(subs, key=ibsweep.ib_of)
+
+    def test_swept_sub_campaigns_grade_without_rejected_evidence(self):
+        for sub in self.swept():
+            graded = bias_probes.grade_campaign(sub)
+            self.assertEqual(graded["benches"]["regeneration"]["chain_problems"], [], sub.name)
+            for r in graded["rows"]:
+                self.assertNotEqual(r["target_verdict"], grade.REJECTED_EVIDENCE, (sub.name, r["id"]))
+                self.assertNotEqual(r["stretch_verdict"], grade.REJECTED_EVIDENCE, (sub.name, r["id"]))
+
+    def test_the_declaration_is_required_not_assumed(self):
+        for sub in self.swept():
+            declared = bias_probes.load_campaign(sub)["regeneration"]
+            self.assertEqual(declared.chain_problems, [], sub.name)
+            undeclared = grade.load_campaign(sub)["regeneration"]
+            self.assertTrue(any("request measurements" in p for p in undeclared.chain_problems),
+                            sub.name)
 
 
 if __name__ == "__main__":
