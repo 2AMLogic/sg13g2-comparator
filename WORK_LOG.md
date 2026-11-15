@@ -4,6 +4,8 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-11-15
 
+- **PR #449**: pin: move klayout-tools 0.9.1 -> 0.9.2, re-freeze layout evidence
+- **Issue #438** (closed): Decide whether to chase the klayout-tools 0.9.2 pin (0.9.1 landed in #430 as the measured candidate)
 - **PR #433**: refactor: route the kickback driver's smoke and probe submits through kcli
 - **PR #443**: sim: probe the Row 4b band-edge kickback rejects with a forced DC operating point
 - **PR #446**: sim: close the #92 bias/latch study -- Rows 3c/4a recoverable, Row 2 unclosed at 1.096 mV
