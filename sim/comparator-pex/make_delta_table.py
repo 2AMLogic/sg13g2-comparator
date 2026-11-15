@@ -12,7 +12,11 @@ here implies a sigma or offset/noise compliance. Malformed input exits 2.
 
 Evidence validation (issue #211). Corners are canonicalised to a physical
 (process, voltage, temperature) identity (Decimal voltage, int temperature), so
-`tt/1.2V/27C` and `tt/1.200V/27C` are one point. For every mapped key (LOGIC or
+`tt/1.2V/27C`, `tt/1.200V/27C` and klt's `corners.params` supply spelling
+`tt/novdd/27C/params:vdd_val=1.2` (issue #424) are one point. `/mc<n>`,
+`/@variant`, `/options:...` and multi-param labels stay raw, so a Monte-Carlo
+sample never shares an identity with the unsampled corner it was drawn from.
+For every mapped key (LOGIC or
 DELAY) a physical point may appear in at most one row, whatever the spelling or
 nominal/pvt variant; a repeat is ambiguous evidence and is rejected, never
 merged. Full-grid compliance compares the set of canonical identities that are
@@ -66,6 +70,13 @@ TIMING_STATES = {("regeneration", "td_a"): (("regeneration", "da_first"), ("rege
 GRID = ({"tt", "ff", "ss", "fs", "sf"}, {Decimal("1.08"), Decimal("1.2"), Decimal("1.32")}, {-40, 27, 125})
 GRID_POINTS = frozenset(itertools.product(*GRID))
 CORNER = re.compile(r"(\w+)/([0-9.]+)V/(-?\d+)C")
+# The same point on a `corners.params` supply axis (issue #424): with no supply_v
+# source klt emits the literal `novdd` supply label plus the vdd_val param. The
+# `fullmatch` keeps /@<variant>, /options:... and /mc<n> suffixes on the raw
+# fallback -- an mc sample must not share an identity with the unsampled corner
+# it was drawn from -- and the novdd-only, sole-param match keeps a multi-param
+# sweep (two distinct corners, one identity) and a conflicting real supply raw.
+CORNER_PARAMS = re.compile(r"(\w+)/novdd/(-?\d+)C/params:vdd_val=([0-9.]+)")
 # `--bench` label: dotted segments, like klt's own `<request-stem>.` prefix, so
 # k = (first, last) still resolves to (bench, measurement). No empty segments.
 BENCH = re.compile(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*")
@@ -74,9 +85,12 @@ FIELDS = ("spec_row", "corner_id", "schematic_value", "extracted_value", "delta_
 
 def canonical(corner):
     """Physical identity (process, volts, deg C); unparseable labels keep their raw text."""
-    m = CORNER.fullmatch(corner)
     try:
-        return (m[1], Decimal(m[2]), int(m[3])) if m else ("raw", corner)
+        m = CORNER.fullmatch(corner)
+        if m:
+            return (m[1], Decimal(m[2]), int(m[3]))
+        p = CORNER_PARAMS.fullmatch(corner)
+        return (p[1], Decimal(p[3]), int(p[2])) if p else ("raw", corner)
     except InvalidOperation:
         return ("raw", corner)
 
