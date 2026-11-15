@@ -254,6 +254,201 @@ class Probe405(unittest.TestCase):
             kb.probe_request(kb.condition("vcm-nom"), "nope")
 
 
+class Supplement415(unittest.TestCase):
+    """Issue #415 forced-DC supplement: arms repro/obs/optdc/icdc in a new
+    series; optdc/icdc append exactly one declared block to the #165 body."""
+
+    ISSUE = kb.SUPPLEMENT_ISSUE
+
+    def request(self, cond_name, arm):
+        return kb.probe_request(kb.condition(cond_name), arm, issue=self.ISSUE)
+
+    def test_grid_is_exactly_the_probe_points_and_batch(self):
+        for name, sups in kb.PROBE_SUPPLIES_V.items():
+            for arm in kb.PROBE_ARMS_415:
+                req = self.request(name, arm)
+                self.assertEqual(req["corners"]["process"], ["mos_ss"])
+                self.assertEqual(req["corners"]["supply_v"], {"vsup": list(sups)})
+                self.assertEqual(req["corners"]["temperature_c"], [-40.0])
+                self.assertEqual(req["backend"], "batch")
+                self.assertEqual(req["batch"]["capacity_wait_s"], 600)
+
+    def test_labels_issue_415_and_declared_body_supplement(self):
+        for name in kb.PROBE_SUPPLIES_V:
+            for arm in kb.PROBE_ARMS_415:
+                req = self.request(name, arm)
+                self.assertEqual(req["_condition"]["issue"], 415)
+                self.assertEqual(req["_condition"]["probe_arm"], arm)
+                self.assertEqual(req["_condition"].get("body_supplement"),
+                                 arm if arm in kb.PROBE_BODY_SUPPLEMENT_ARMS else None)
+                self.assertIn("(issue #415)", req["_comment"][0])
+
+    def test_analysis_unchanged_and_obs_cards_on_every_non_repro_arm(self):
+        cond = kb.condition("vcm-m050")
+        names = lambda r: [m["name"] for m in r["measurements"]]  # noqa: E731
+        base = kb.compose_request(cond)
+        for arm in ("obs", "optdc", "icdc"):
+            req = self.request("vcm-m050", arm)
+            self.assertEqual(req["analysis"]["args"], "5p 60n")
+            self.assertIn("b_vd_1n", names(req))
+            self.assertIn("c_vd_strobe", names(req))
+            self.assertNotIn("b_t_half", names(req))
+        self.assertEqual(self.request("vcm-m050", "repro")["measurements"], base["measurements"])
+
+    def test_repro_and_obs_bodies_are_byte_identical_to_165(self):
+        for name in kb.PROBE_SUPPLIES_V:
+            cond = kb.condition(name)
+            ref = (kb.SERIES_DIR / "20261011-165" / name / kb.BODY_NAME).read_bytes()
+            for arm in ("repro", "obs"):
+                self.assertEqual(kb.probe_expected_body(cond, arm).encode("utf-8"), ref,
+                                 f"{arm} body for {name} must stay byte-identical to #165")
+
+    def test_supplement_body_is_165_plus_exactly_the_declared_block(self):
+        expected_nodesets = {
+            "vcm-m050": ".nodeset v(bpp)=0.5505 v(bpn)=0.5495 v(cpp)=0.6 v(cpn)=0.5",
+            "vcm-nom": ".nodeset v(bpp)=0.6005 v(bpn)=0.5995 v(cpp)=0.65 v(cpn)=0.55",
+            "vcm-p050": ".nodeset v(bpp)=0.6505 v(bpn)=0.6495 v(cpp)=0.7 v(cpn)=0.6",
+        }
+        for name, cond in ((n, kb.condition(n)) for n in kb.PROBE_SUPPLIES_V):
+            ref = (kb.SERIES_DIR / "20261011-165" / name / kb.BODY_NAME).read_text(encoding="utf-8")
+            optdc = kb.probe_expected_body(cond, "optdc")
+            self.assertTrue(optdc.startswith(ref))
+            self.assertEqual(optdc[len(ref):], kb.probe_body_supplement(cond, "optdc"))
+            self.assertIn(".options itl1=500 gminsteps=500 srcsteps=500 gmin=1e-12\n", optdc)
+            self.assertNotIn(".nodeset v(", optdc)
+            self.assertNotIn(".ic v(", optdc)
+            icdc = kb.probe_expected_body(cond, "icdc")
+            self.assertTrue(icdc.startswith(ref))
+            self.assertEqual(icdc[len(ref):], kb.probe_body_supplement(cond, "icdc"))
+            cards = [ln for ln in icdc[len(ref):].splitlines() if ln and not ln.startswith("*")]
+            self.assertEqual(cards, [expected_nodesets[name],
+                                     ".ic v(douta)=0 v(doutb)=0 v(doutc)=0"])
+            self.assertEqual(icdc, ref + kb.probe_body_supplement(cond, "icdc"))
+
+    def test_supplement_arms_reference_per_arm_body_files(self):
+        for name in kb.PROBE_SUPPLIES_V:
+            for arm in kb.PROBE_ARMS_415:
+                req = self.request(name, arm)
+                if arm in kb.PROBE_BODY_SUPPLEMENT_ARMS:
+                    self.assertEqual(req["netlist"], f"kickback-{arm}.body.spice")
+                else:
+                    self.assertEqual(req["netlist"], kb.BODY_NAME)
+                    self.assertEqual(kb.probe_body_name(arm), kb.BODY_NAME)
+
+    def test_forced_output_polarity_is_the_wrong_one_and_nodes_are_real(self):
+        block = kb.probe_body_supplement(kb.condition("vcm-m050"), "icdc")
+        for node in ("bpp", "bpn", "cpp", "cpn", "douta", "doutb", "doutc"):
+            self.assertIn(node, block)
+        # dout seeded LOW (0 V): the wrong answer for a programmed positive
+        # differential, never the expected high state the gate would pass on,
+        # and never a supply value (0 V is the one supply-independent rail).
+        self.assertIn(".ic v(douta)=0 v(doutb)=0 v(doutc)=0\n", block)
+
+    def test_write_probe_inputs_append_only_and_supplement_paths(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "vcm-m050"
+            for arm in kb.PROBE_ARMS_415:
+                kb.write_probe_inputs(M050, arm, out, issue=self.ISSUE)
+            before = {p.name: p.read_bytes() for p in out.iterdir()}
+            ref = (kb.SERIES_DIR / "20261108-405-probe" / "vcm-m050" / kb.BODY_NAME).read_bytes()
+            # shared body = #165 body (written by repro/obs); per-arm bodies =
+            # #165 body + exactly the declared block
+            self.assertEqual(before[kb.BODY_NAME], ref)
+            self.assertEqual(before["kickback-icdc.body.spice"],
+                             ref + kb.probe_body_supplement(M050, "icdc").encode("utf-8"))
+            self.assertEqual(before["kickback-optdc.body.spice"],
+                             ref + kb.probe_body_supplement(M050, "optdc").encode("utf-8"))
+            self.assertIn("kickback-icdc.request.json", before)
+            for arm in kb.PROBE_ARMS_415:  # identical rebuild: no-op
+                kb.write_probe_inputs(M050, arm, out, issue=self.ISSUE)
+            self.assertEqual({p.name: p.read_bytes() for p in out.iterdir()}, before)
+            (out / kb.BODY_NAME).write_bytes(b"tampered")
+            with self.assertRaises(kb.KickbackCmBandError):
+                kb.write_probe_inputs(M050, "repro", out, issue=self.ISSUE)
+
+    def test_compare_with_supplement_arm_set_labels_issue_415(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d)
+            for cond in kb.CONDITIONS:
+                out = series / cond.name
+                for arm in kb.PROBE_ARMS_415:
+                    kb.write_probe_inputs(cond, arm, out, issue=self.ISSUE)
+                env = env_for(cond)
+                for arm in kb.PROBE_ARMS_415:
+                    (out / f"{kb.probe_arm_tag(arm)}.envelope.json").write_text(
+                        json.dumps(env), encoding="utf-8")
+            res = kb.probe_compare(series, arms=kb.PROBE_ARMS_415, issue=self.ISSUE)
+            self.assertEqual(res["problems"], [])
+            self.assertEqual(res["issue"], 415)
+            self.assertEqual(set(res["arms"]), {f"{c.name}/{a}" for c in kb.CONDITIONS
+                                                for a in kb.PROBE_ARMS_415})
+            # the synthetic edges carry #165's values, so repro/obs equal it;
+            # a forced-body arm would legitimately differ on the gate cards.
+            md = kb.probe_render_markdown(res)
+            self.assertIn("issue #415", md)
+
+    def test_unknown_supplement_arm_refused_everywhere(self):
+        with self.assertRaises(kb.KickbackCmBandError):
+            kb.probe_request(M050, "icdc2")
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(kb.KickbackCmBandError):
+                kb.write_probe_inputs(M050, "icdc2", Path(d))
+
+
+class SupplementRunner(unittest.TestCase):
+    """Runner-level arm-set selection and the frozen-series compare guard."""
+
+    @staticmethod
+    def build_args(series, arm=None):
+        return mock.Mock(series=series, condition=None, arm=arm)
+
+    def test_default_arms_by_series(self):
+        self.assertEqual(rkb._arms_for("20261108-405-probe", None), kb.PROBE_ARMS)
+        self.assertEqual(rkb._arms_for("20261114-415-forceddc", None), kb.PROBE_ARMS_415)
+        self.assertEqual(rkb._arms_for("any-series", ["repro"]), ("repro",))
+
+    def test_default_issue_by_series(self):
+        self.assertEqual(rkb._issue_for("20261108-405-probe"), kb.PROBE_ISSUE)
+        self.assertEqual(rkb._issue_for("20261114-415-forceddc"), kb.SUPPLEMENT_ISSUE)
+
+    def test_probe_build_defaults_write_the_supplement_arm_set(self):
+        # inside the repo tree: cmd_probe_build prints repo-relative paths and
+        # compose_body derives its declared hashes from REPO_ROOT-relative paths
+        with tempfile.TemporaryDirectory(dir=rkb.build_mod.SIM_DIR) as d:
+            series = Path(d)
+            with mock.patch.object(rkb, "_series", return_value=series):
+                self.assertEqual(rkb.cmd_probe_build(self.build_args("20261114-x")), 0)
+            written = sorted(p.name for p in (series / "vcm-m050").iterdir())
+            for arm in kb.PROBE_ARMS_415:
+                self.assertIn(f"kickback-{arm}.request.json", written)
+            req = json.loads((series / "vcm-m050" / "kickback-icdc.request.json")
+                             .read_text(encoding="utf-8"))
+            self.assertEqual(req["_condition"]["issue"], 415)
+            self.assertEqual(req["netlist"], "kickback-icdc.body.spice")
+
+    def test_probe_compare_refuses_frozen_series_with_other_arms(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d)
+            with mock.patch.object(rkb, "_series", return_value=series):
+                code = rkb.cmd_probe_compare(self.build_args("20261108-405-probe", ["icdc"]))
+            self.assertEqual(code, 1)
+            self.assertFalse((series / "comparison.json").exists())
+
+    def test_compare_on_frozen_405_series_reports_no_problems(self):
+        # Regression guard (hazard: appending to kb.PROBE_ARMS makes the frozen
+        # series report spurious missing envelopes and rewrites its committed
+        # comparison files): the #405 arm set over the committed series must
+        # stay problem-free and reproduce the committed comparison exactly.
+        res = kb.probe_compare(kb.SERIES_DIR / "20261108-405-probe", arms=kb.PROBE_ARMS)
+        self.assertEqual(res["problems"], [])
+        committed = json.loads((kb.SERIES_DIR / "20261108-405-probe" / "comparison.json")
+                               .read_text(encoding="utf-8"))
+        self.assertEqual(res, committed)
+        self.assertEqual(kb.probe_render_markdown(res),
+                         (kb.SERIES_DIR / "20261108-405-probe" / "comparison.md")
+                         .read_text(encoding="utf-8"))
+
+
 class Evidence(unittest.TestCase):
     def test_build_is_append_only(self):
         with tempfile.TemporaryDirectory() as d:
