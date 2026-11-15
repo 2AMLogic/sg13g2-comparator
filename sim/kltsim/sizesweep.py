@@ -51,6 +51,18 @@ FULL_ROWS = (
 )
 
 
+def _verdict_rows() -> tuple[str, ...]:
+    """Row ids classified in the ``### Ratified Target rows per finalist``
+    roll-up: every graded row of ``rows.json`` except unbounded reporting
+    requirements (Row 4c today). Derived from the ratified spec rather than
+    hand-listed so the set cannot drift from it (issue #447); ``FULL_ROWS``
+    stays the metric-column list and deliberately omits Row 5a, a coverage
+    row with no scalar or unit to tabulate."""
+    spec = json.loads(
+        (build_mod.EXPERIMENT_DIR / "rows.json").read_text(encoding="utf-8"))
+    return tuple(r["id"] for r in spec["rows"] if not r.get("reporting_requirement"))
+
+
 def screen_request(data: bytes) -> bytes:
     """A built full-grid request rewritten to the screening grid."""
     request = json.loads(data.decode("utf-8"))
@@ -320,10 +332,18 @@ def full(campaign_dir: Path) -> list[dict]:
     for sub in sorted(p for p in campaign_dir.iterdir() if p.is_dir() and p.name.startswith("full_")):
         graded = grade_mod.grade_campaign(sub)
         by_id = {r["id"]: r for r in graded["rows"]}
+        verdict_rows = _verdict_rows()
         cells = {}
-        for row_id, _l, _u in FULL_ROWS:
+        for row_id in verdict_rows:
             entry = by_id.get(row_id)
-            if entry is not None and entry["target_verdict"] == grade_mod.INCOMPLETE \
+            # An INCOMPLETE grid with no valid points is "not swept" for the
+            # metric table -- but a coverage row (e.g. 5a) carries no `target`
+            # block at all, so its INCOMPLETE is real evidence and must reach
+            # the roll-up (issue #447). Key the exemption on evidence_kind, not
+            # on the missing target block: non-coverage rows without one stay
+            # not run.
+            if entry is not None and entry.get("evidence_kind") != "coverage" \
+                    and entry["target_verdict"] == grade_mod.INCOMPLETE \
                     and ((entry.get("target") or {}).get("points_valid") or 0) == 0:
                 entry = None
             cells[row_id] = ibsweep_mod._cell(entry)
@@ -339,7 +359,7 @@ def full(campaign_dir: Path) -> list[dict]:
             cand["rejection_reasons"] = list(geom_problems)
             cand["diagnostic_rows"] = cells
             cand["rows"] = {rid: {"state": "rejected", "reason": "; ".join(geom_problems)}
-                            for rid, _l, _u in FULL_ROWS}
+                            for rid in verdict_rows}
         out.append(cand)
     return out
 
@@ -450,7 +470,7 @@ def _met(r: dict):
     met, failed, inc, unrun = [], [], [], []
     if r.get("candidate_status") == "rejected":
         return met, failed, inc, unrun
-    for row_id, _l, _u in FULL_ROWS:
+    for row_id in _verdict_rows():
         c = r["rows"][row_id]
         if c["state"] != "measured":
             if row_id != "5b":
