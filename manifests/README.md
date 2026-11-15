@@ -271,10 +271,15 @@ so those are not listed. It has carried those since klt 0.8.0, and through
 0.9.1 the deck was byte-identical to the 0.8.0 one — same `content_hash`
 `sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`.
 At klt 0.9.2 the deck moved (hash above) and gained `cont.ongrid.1`
-(IHP rule `cont_drw_Offgrid`: vertices on the 0.005 um manufacturing grid),
-the first rule aimed at the text layer — the layout draws square contacts,
-and the rule **runs and passes**, which is why `rules_checked` went 38 → 39
-and the text layer left this list):
+(IHP rule `cont_drw_Offgrid`: Cont (6/0) vertices on the 0.005 um
+manufacturing grid, `scope: x`) — a rule on the contact layer, not the text
+layer. The layout draws square contacts, and the rule **runs and passes**,
+which is why `rules_checked` went 38 → 39 and `deck_scope` gained `x`. The
+text layer's departure from this list is a separate, deck-side effect,
+recorded as the measurement it is: the 0.9.2 deck's declared layer table now
+includes `63/0` (with `7/21` and `32/0`, also newly declared), and no rule in
+either the 0.9.1 or the 0.9.2 deck references any of the three — the layer
+moved out of this list by declaration alone, not by gaining coverage):
 
 ```
 30/2, 30/25
@@ -305,8 +310,8 @@ V4, pSD, x
 Consequences stated plainly (the deck carries NWell, nSD and pSD rules, so
 those layers are not listed as uncovered; their coverage was not otherwise
 re-audited here; at klt 0.9.2 the deck is no longer the 0.8.0 deck by hash —
-it gained `cont.ongrid.1` on the text layer and a wider layer/scope table,
-without changing any rule value): Gat.c endcap,
+it gained `cont.ongrid.1` (a Cont (6/0) rule, see above) and a wider
+layer/scope table, without changing any rule value): Gat.c endcap,
 Cnt.e/Cnt.f, latch-up tap distance, density and seal ring are **not checked**
 by this evidence (see `layout/README.md`, "What this layout is, and is not").
 Also, `layout/comparator/drc_report.json` records its input as the
