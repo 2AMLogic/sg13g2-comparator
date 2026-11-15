@@ -184,7 +184,7 @@ both file-backed and pinned by `content_hash`.
 | Part | File | Pinned `content_hash` | Tool-defined value |
 |---|---|---|---|
 | `klt erc` | `layout/comparator/erc_report.json` | `sha256:583e99c6ee32474e0209d3aeaeb406393050e2bce9de4674bf091ee6a9e9d80d` | `provenance.input.content_hash`: the GDS (the same value item 3 pins) |
-| `klt lvs` | `layout/comparator/lvs_report.json` | `sha256:6970e7e51951f876f68536d37d37adf16e5ff121862c9ee60a8be94ff6a3bf0b` | `provenance.input.content_hash`: the extracted netlist (item 4's value; the envelope was **not** re-minted, none of its inputs changed) |
+| `klt lvs` | `layout/comparator/lvs_report.json` | `sha256:5430eecf551b34671c2000c45411268388e3cc89095b3bafd49ab319c33817f1` | `provenance.input.content_hash`: the extracted netlist (item 4's value; re-minted at the klt 0.9.2 pin bump — the extractor now emits the `.subckt` pins in request order, so the netlist hash moved while the GDS stayed byte-identical) |
 
 **Declared supply set, reconciled against the schematic.** The ERC request
 (`layout/comparator/erc_supply_spec.json`, derived from the generator's layer
@@ -207,18 +207,19 @@ supply; it is not counted among the supplies.
 **ERC half.** `klt erc --deck sg13g2 --top comparator --findings-only`
 reads `erc_status: clean`, 0 findings. `erc_coverage.checked` holds
 `erc.net_connectivity` for `vdd`, `vss` and `vbias`, `erc.missing_tie` for the
-`nwell_vdd` tie and `erc.floating_gate` for the 10 gate nets;
-`erc_coverage.skipped` is empty, so the tie is not a
-`degenerate_tap_declaration`. Under the klt 0.9.1 pin the same run reports
-three further disclosure fields, none of which moves the verdict:
-`erc_coverage.missing_tie_checked: true`,
+`nwell_vdd` tie, `erc.floating_gate` for the 10 gate nets, and — new at the
+klt 0.9.2 pin — `erc.supply_short` **and** `erc.supply_short.substrate`: the
+run *evaluates* the substrate-isolation path instead of disclosing it
+undecidable. `erc_coverage.skipped` is empty, so the tie is not a
+`degenerate_tap_declaration`, and `erc_coverage.inapplicable` is empty (the
+klt 0.8.0/0.9.1 reports carried an explicit `substrate_continuity_not_modelled`
+entry here — the machine-readable form of the diffusion/well-continuity limit
+stated under "What this does not establish" below; 0.9.2 replaces that
+disclosure with a measurement, `provenance.substrate_bodies` naming the one
+well body and the tie that reaches it). Still reported:
+`erc_coverage.missing_tie_checked: true` and
 `erc_coverage.layers_in_stream_without_declaration: ["63/0"]` (the text layer,
-which carries no supply role), and an explicit
-`erc_coverage.inapplicable` entry declaring `erc.supply_short` inapplicable
-with reason `substrate_continuity_not_modelled` — the machine-readable form of
-the diffusion/well-continuity limit stated under "What this does not
-establish" below, which the 0.8.0 report left implicit by simply omitting the
-check from `checked`. The tie is narrowed to Activ & nSD & Cont (the
+which carries no supply role). The tie is narrowed to Activ & nSD & Cont (the
 contacts of the n-tap bars; only those carry nSD) inside NWell. The envelope's
 own `status` is `not_checked` (antenna accumulation skipped by
 `--findings-only`; no antenna table exists for this deck). Item 11 does not
@@ -255,9 +256,9 @@ Item 3 cites `layout/comparator/drc_report.json`, the `klt drc --deck sg13g2
 #59), pinned by `content_hash`
 `sha256:583e99c6ee32474e0209d3aeaeb406393050e2bce9de4674bf091ee6a9e9d80d`
 (the GDS's own hash, recorded as `provenance.input.content_hash`). It reads
-`status: clean`, `violation_count: 0`, `rules_checked` 38, against deck
-`sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`
-(klt `0.9.1`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
+`status: clean`, `violation_count: 0`, `rules_checked` 39, against deck
+`sha256:cf6dfeadf75bd95bf89beb0a64e06ed43b65f6ff782df10ae200ea200a73d8e9`
+(klt `0.9.2`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
 regenerates it; `--check` requires it fresh (`klt drc --check`). `klt signoff`
 grades item 3 on `status: clean` alone and does not enforce disclosure, so the
 three `coverage` fields of the envelope are quoted verbatim here. This is
@@ -265,13 +266,23 @@ klt's *curated* deck, **not** the foundry's own DRC deck: "clean" means clean
 inside this scope only.
 
 `coverage.layers_in_stream_without_rules` (drawn in the stream, no rule in the
-deck: Metal3 pin, Metal3 text, and the text layer; the deck carries nSD, pSD
-and NWell rules, so those are not listed — it has done since klt 0.8.0 and
-the 0.9.1 deck is byte-identical to it, same `content_hash`
-`sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`):
+deck: Metal3 pin and Metal3 text; the deck carries nSD, pSD and NWell rules,
+so those are not listed. It has carried those since klt 0.8.0, and through
+0.9.1 the deck was byte-identical to the 0.8.0 one — same `content_hash`
+`sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`.
+At klt 0.9.2 the deck moved (hash above) and gained `cont.ongrid.1`
+(IHP rule `cont_drw_Offgrid`: Cont (6/0) vertices on the 0.005 um
+manufacturing grid, `scope: x`) — a rule on the contact layer, not the text
+layer. The layout draws square contacts, and the rule **runs and passes**,
+which is why `rules_checked` went 38 → 39 and `deck_scope` gained `x`. The
+text layer's departure from this list is a separate, deck-side effect,
+recorded as the measurement it is: the 0.9.2 deck's declared layer table now
+includes `63/0` (with `7/21` and `32/0`, also newly declared), and no rule in
+either the 0.9.1 or the 0.9.2 deck references any of the three — the layer
+moved out of this list by declaration alone, not by gaining coverage):
 
 ```
-30/2, 30/25, 63/0
+30/2, 30/25
 ```
 
 `coverage.rules_skipped` (24; every one has reason `no_applicable_geometry`
@@ -293,13 +304,14 @@ via4.width.1
 
 ```
 Act, Cnt, Gat, M1, M2, M3, M4, M5, MIM, NW, TM1, TM2, TV1, TV2, V1, V2, V3,
-V4, pSD
+V4, pSD, x
 ```
 
 Consequences stated plainly (the deck carries NWell, nSD and pSD rules, so
 those layers are not listed as uncovered; their coverage was not otherwise
-re-audited here, and the 0.9.1 deck is the same deck by hash as the 0.8.0 one
-that first added them): Gat.c endcap,
+re-audited here; at klt 0.9.2 the deck is no longer the 0.8.0 deck by hash —
+it gained `cont.ongrid.1` (a Cont (6/0) rule, see above) and a wider
+layer/scope table, without changing any rule value): Gat.c endcap,
 Cnt.e/Cnt.f, latch-up tap distance, density and seal ring are **not checked**
 by this evidence (see `layout/README.md`, "What this layout is, and is not").
 Also, `layout/comparator/drc_report.json` records its input as the
@@ -314,7 +326,7 @@ Item 4 cites `layout/comparator/lvs_report.json`, the `klt lvs` envelope
 (issue #60) comparing `layout/comparator/comparator.gds` (extracted with
 `klt extract --deck sg13g2`) against the `.subckt comparator` block of
 `design/comparator.spice`, pinned by `content_hash`
-`sha256:6970e7e51951f876f68536d37d37adf16e5ff121862c9ee60a8be94ff6a3bf0b`.
+`sha256:5430eecf551b34671c2000c45411268388e3cc89095b3bafd49ab319c33817f1`.
 That is the tool-defined value, `provenance.input.content_hash`, and it is
 the hash of the **extracted netlist** (`layout/comparator/lvs_extracted.spice`),
 not of the GDS or the schematic. The tool does not bind it to either, so
@@ -322,7 +334,7 @@ not of the GDS or the schematic. The tool does not bind it to either, so
 changed GDS, schematic subcircuit or request; see `layout/README.md`, stage 4.
 
 The envelope reads `status: match` (engine `klayout` 0.30.12, klt
-`0.9.1`), 24/24 devices, 18/18 nets, 8/8 pins including
+`0.9.2`), 24/24 devices, 18/18 nets, 8/8 pins including
 `vdd`/`vss` and the independent `vbias`, 0 mismatches, 0 warnings.
 `power_connectivity.status` is `unchecked`, which `klt signoff` accepts: with
 `reference.form: subckt-call` the supply pins take part in the ordinary
@@ -447,8 +459,8 @@ source campaign are never edited.
 ## Regeneration and freshness
 
 The report is frozen at the pinned `klt` release — `2AMLogic/klayout-tools`
-`v0.9.1` (commit `4d0d29be4fd991f499d59e783a908082d5e24c56`, PyPI
-`klayout-tools==0.9.1`). A `klt` older than 2026-09-17 does **not** know item
+`v0.9.2` (commit `046ba74652fc096bd97071fc3237f7159dd40183`, PyPI
+`klayout-tools==0.9.2`). A `klt` older than 2026-09-17 does **not** know item
 11 and renders a ten-item report; the pinned build renders all eleven. If the
 pinned build moves, the manifest, the freeze, and the pin move in one change.
 
