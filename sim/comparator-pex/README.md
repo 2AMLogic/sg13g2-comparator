@@ -614,3 +614,22 @@ all inside the range the other 42 corners already span. The 3 `td_c` rows are re
 interval`), the same post-layout finding as at all 45 corners of the 10-31 grid; its cause is not re-isolated.
 The 10-31 report is byte-unchanged. Three corners are not a grid result and carry **no DR-0002 verdict**; item 7
 stays `unmet` and the remaining Monte Carlo points of #61 are untouched.
+
+## Update 2026-11-15: `make_delta_table.py` reads the derived extract shape (issue #445)
+
+`render()` now accepts the repo's derived-extract shape beside a `klt pex` envelope: `klt pex`
+writes `delta[]` for single-request and batch runs alike, while `rows[]` is the repo's own
+derived-extract convention (the shape `make_mc_rollup.py` reads), used when the full envelope
+JSON is too large to commit — as in
+`reports/batch-extracted-grid.regeneration.20261031.json` (540 `delta[]` rows over 45 corners;
+the 6.6 MB envelope is not committed). The extract's provenance is mapped, not dropped: the
+rendered table records the extract's `client` klt version as `klt_version`, carries
+`klt_git_commit` as a new field, and its `envelope_status` restates klt's own status
+convention from the recorded passed/failed/errored counts (error when any row failed or
+errored, pass otherwise; left null when the extract records no counts). An envelope carrying
+both `delta[]` and `rows[]` is refused as ambiguous, and a rendered table — which also
+carries `rows[]`, plus `source_envelope`/`spec_row_prefix` — is refused, so the renderer
+cannot ingest its own output. Bare `spec_row` names still need `--bench` (issue #417).
+Tests: `tests/test_delta_table.py` (`DerivedExtract`), including the committed grid file
+(540 rows, `pvt_grid_points` 45, non-null provenance) and a CLI run of it. No committed
+report changed; `sim/` stays append-only.

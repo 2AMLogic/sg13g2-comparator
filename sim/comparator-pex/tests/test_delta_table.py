@@ -197,6 +197,105 @@ class Synthetic(unittest.TestCase):
                 mdt.render(env, "fixture")
 
 
+class DerivedExtract(unittest.TestCase):
+    """Issue #445: `rows[]` is the repo's derived-extract input shape; render() output is not.
+
+    `klt pex` writes delta[] for single-request and batch runs alike, so `rows[]` is the
+    repo's own derived-extract convention (the shape make_mc_rollup.py reads, committed
+    when the envelope JSON is too large) and render() must read it with its provenance
+    mapped, not dropped. render()'s own output also carries rows[] and is refused, as is
+    an envelope carrying both container keys.
+    """
+
+    CLIENT, COMMIT = "0.8.1.dev887+g2e9ee1aa66cf", "2e9ee1aa66cfc273ca174c3ae0b33d7ca46fb336"
+    GRID = REPO / "sim/comparator-pex/reports/batch-extracted-grid.regeneration.20261031.json"
+
+    def render(self, rows, **extra):
+        return mdt.render({"rows": rows, "client": self.CLIENT, "klt_git_commit": self.COMMIT, **extra}, "fixture")
+
+    def test_rows_twin_renders_as_delta_twin(self):
+        rows = [row("regeneration.pvt.td_a", TT, 7e-10, 1e-9),
+                row("regeneration.pvt.dc_first", TT, 0.0, 1.0)]
+        a, _ = mdt.render({"status": "error", "provenance": {"klt_version": self.CLIENT},
+                           "delta": [dict(r) for r in rows], "passed": 1, "failed": 0, "errored": 1}, "fixture")
+        b, _ = self.render([dict(r) for r in rows], passed=1, failed=0, errored=1)
+        self.assertEqual(b["klt_version"], self.CLIENT)
+        self.assertEqual(b["envelope_status"], "error")
+        self.assertEqual(b["klt_git_commit"], self.COMMIT)
+        for out in (a, b):
+            for k in ("klt_version", "envelope_status", "klt_git_commit"):
+                out.pop(k, None)  # klt_git_commit is derived-path only by design
+        self.assertEqual(a, b)
+
+    def test_provenance_mapped_from_counts(self):
+        for counts, want in (((1, 0, 0), "pass"), ((1, 0, 1), "error"), ((1, 2, 0), "error")):
+            with self.subTest(counts=counts):
+                out, _ = self.render([row("regeneration.pvt.offset_sigma", TT, 1e-3, 2e-3)],
+                                     passed=counts[0], failed=counts[1], errored=counts[2])
+                self.assertEqual(out["envelope_status"], want)
+                self.assertEqual((out["passed"], out["failed"], out["errored"]), counts)
+        out, _ = mdt.render({"rows": [row("regeneration.pvt.offset_sigma", TT, 1e-3, 2e-3)]}, "fixture")
+        # nothing recorded by the extract, nothing invented by the table
+        self.assertEqual((out["klt_version"], out["envelope_status"], out["klt_git_commit"]), (None, None, None))
+
+    def test_rendered_table_refused(self):
+        good = row("regeneration.pvt.td_a", TT, 7e-10, 1e-9)
+        for extra in ({"source_envelope": "env.json", "spec_row_prefix": None},
+                      {"source_envelope": "env.json"},
+                      {"spec_row_prefix": "regeneration"}):
+            with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "rendered delta table"):
+                self.render([good], **extra)
+
+    def test_both_container_keys_refused(self):
+        good = row("regeneration.pvt.td_a", TT, 7e-10, 1e-9)
+        with self.assertRaisesRegex(ValueError, "both delta\\[\\] and rows\\[\\]"):
+            mdt.render({"delta": [good], "rows": [good]}, "fixture")
+
+    def test_empty_or_non_list_rows_same_error_path_as_delta(self):
+        for env in ({"rows": []}, {"rows": "x"}, {}):
+            with self.subTest(env=env), self.assertRaisesRegex(ValueError, "no delta\\[\\] rows"):
+                mdt.render(env, "fixture")
+
+    def test_dotted_rows_with_bench_still_refused_by_prefixed(self):
+        with self.assertRaisesRegex(ValueError, "already prefixed by klt"):
+            mdt.render({"rows": [row("regeneration.pvt.td_a", TT, 7e-10, 1e-9)],
+                        "client": self.CLIENT}, "fixture", bench="regeneration")
+
+    def test_committed_grid_renders(self):
+        env = mdt.load(self.GRID)
+        out, md = mdt.render(env, str(self.GRID), bench="regeneration")
+        self.assertEqual(len(out["rows"]), len(env["rows"]))
+        self.assertEqual(len(out["corners"]), env["corner_count"])
+        self.assertEqual(out["pvt_grid_points"], 45)
+        self.assertEqual(out["klt_version"], env["client"])
+        self.assertIsNotNone(out["klt_version"])
+        self.assertEqual(out["envelope_status"], "error")
+        self.assertEqual(out["klt_git_commit"], env["klt_git_commit"])
+        self.assertEqual((out["passed"], out["failed"], out["errored"]),
+                         (env["passed"], env["failed"], env["errored"]))
+        self.assertEqual(out["spec_row_prefix"], "regeneration")
+        self.assertTrue(out["delay_compliance_extracted"]["regeneration.td_a"].startswith("NOT MET"))
+        self.assertTrue(out["delay_compliance_extracted"]["regeneration.td_c"].startswith("not established: 0/45"))
+        td_c = [r for r in out["rows"] if r["spec_row"] == "regeneration.td_c"]
+        self.assertEqual(len(td_c), 45)
+        self.assertTrue(all(r["extracted_value"] is None and r["interpretation"]["verdict"] == "missing: no verdict"
+                            for r in td_c))
+        self.assertNotIn("sigma", md.replace("no sigma", "").replace("offset_sigma", ""))
+
+    def test_cli_grid_with_bench(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            res = subprocess.run([sys.executable, "-B", str(PEX / "make_delta_table.py"), "--bench", "regeneration",
+                                  str(self.GRID), str(d / "grid.regeneration")],
+                                 capture_output=True, text=True, timeout=120)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            out = json.loads((d / "grid.regeneration.json").read_text())
+            self.assertEqual((len(out["rows"]), out["pvt_grid_points"]), (540, 45))
+            self.assertIsNotNone(out["klt_version"])
+            self.assertEqual(sorted(p.name for p in d.iterdir()),
+                             ["grid.regeneration.json", "grid.regeneration.md"])
+
+
 class ParamsSupply(unittest.TestCase):
     """Issue #424: the `corners.params` supply spelling is the same physical point.
 

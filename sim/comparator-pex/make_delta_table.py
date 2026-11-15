@@ -47,6 +47,18 @@ bare measurement name, and klt has no flag to ask for the prefix. `--bench
 NAME` supplies that missing label and only that: it refuses an envelope klt
 already prefixed, is recorded in the output as `spec_row_prefix` so a reader
 knows the label is caller-applied, and changes no value, status or delta.
+
+Input shapes (issue #445). `klt pex` writes `delta[]` for single-request and batch
+runs alike; `rows[]` is the repo's own derived-extract convention (the shape
+`make_mc_rollup.py` reads), used when the full envelope JSON is too large to commit.
+render() accepts both: the derived extract's provenance (`client`, `klt_git_commit`,
+passed/failed/errored counts) is mapped into the table rather than dropped, and its
+`envelope_status` restates klt's own status convention from those counts (error when
+any row failed or errored, pass otherwise; left null when the extract records no
+counts). A rendered table -- which also carries `rows[]`, plus
+`source_envelope`/`spec_row_prefix` -- is refused, exactly as `--bench` refuses an
+already-prefixed envelope, so the renderer cannot ingest its own output; an envelope
+carrying both `delta[]` and `rows[]` is refused as ambiguous evidence.
 """
 import itertools
 import json
@@ -182,8 +194,42 @@ def prefixed(env, bench):
         for r in env["delta"]]}
 
 
+def derived_input(env):
+    """Normalise the repo's derived extract (rows[]) into klt's delta[] shape (issue #445).
+
+    `rows[]` is the repo's derived-extract convention, not a klt schema: klt pex writes
+    delta[] for single-request and batch runs alike (see the module docstring). The
+    extract records provenance as `client` / `klt_git_commit` and passed/failed/errored
+    counts where a klt envelope carries `provenance.klt_version` / `status`; those are
+    mapped, not dropped, so the rendered table states what produced it. `status` is
+    restated from the counts by klt's own convention (error when any row failed or
+    errored, pass otherwise) and left absent when the extract records no counts. A
+    rendered table also carries rows[] -- with `source_envelope` / `spec_row_prefix` --
+    and is refused here, exactly as prefixed() refuses an already-prefixed envelope:
+    re-rendering it would present the renderer's own output as fresh evidence. Returns
+    None for a klt delta[] envelope, untouched.
+    """
+    if not isinstance(env, dict) or "delta" in env or not isinstance(env.get("rows"), list):
+        return None
+    if "source_envelope" in env or "spec_row_prefix" in env:
+        raise ValueError("envelope is a rendered delta table (source_envelope/spec_row_prefix "
+                         "present), not an input envelope; refusing to re-render it")
+    norm = {**env, "delta": env["rows"],
+            "provenance": {**(env.get("provenance") or {}), "klt_version": env.get("client")}}
+    if any(k in env for k in ("passed", "failed", "errored")):
+        norm["status"] = "error" if env.get("failed") or env.get("errored") else "pass"
+    return norm
+
+
 def render(env, source, bench=None):
-    if not isinstance(env, dict) or not isinstance(env.get("delta"), list) or not env["delta"]:
+    if not isinstance(env, dict):
+        raise ValueError("envelope has no delta[] rows")
+    if "delta" in env and "rows" in env:
+        raise ValueError("envelope carries both delta[] and rows[]; ambiguous evidence, refusing to choose")
+    derived = derived_input(env)
+    if derived is not None:
+        env = derived
+    if not isinstance(env.get("delta"), list) or not env["delta"]:
         raise ValueError("envelope has no delta[] rows")
     if bench is not None:
         env = prefixed(env, bench)
@@ -258,6 +304,8 @@ def render(env, source, bench=None):
                                     for k, v in validity.items()},
         "rows": rows,
     }
+    if derived is not None:  # the derived extract's klt identity, kept with its version (issue #445)
+        out["klt_git_commit"] = env.get("klt_git_commit")
     return out, markdown(out)
 
 
