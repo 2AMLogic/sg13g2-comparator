@@ -17,7 +17,8 @@ _None._
 
 `loom:important`; taken before unlabelled work.
 
-_None._
+- **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7)
+- **#92**: Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise)
 
 ## Ready
 
@@ -29,8 +30,7 @@ _None._
 
 Issues currently being built (`loom:building`).
 
-- **#160**: Draft decision record: input common-mode range row for the ratified spec
-- **#308**: Remove dead _spec_meas left behind by closed #295
+_None._
 
 ## PRs Awaiting Review
 
@@ -66,9 +66,9 @@ _None._
 |------|-------|
 | Operator merge-risk holds | 1 |
 | Very important | 0 |
-| Important | 0 |
+| Important | 2 |
 | Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 2 |
+| In Progress (`loom:building`) | 0 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 1 |
 | Curated | 3 |

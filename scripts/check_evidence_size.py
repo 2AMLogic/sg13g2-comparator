@@ -44,11 +44,15 @@ Stdlib only; needs ``git`` on PATH.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from git_plumbing import git as _git, git_env, resolve_tree as _resolve_tree  # noqa: E402
 
 BUDGET_PATH = "sim/evidence-size-budget.json"
 EXC_DIR = "sim/evidence-size-exceptions/"
@@ -76,26 +80,7 @@ class BudgetError(Exception):
     """Budget file or exception invalid (exit 1, fail closed)."""
 
 
-def _git_env() -> dict:
-    # Never lazily fetch a missing object from a promisor remote: in a
-    # blob-filtered partial clone `ls-tree -l` would otherwise fetch every blob
-    # one round trip at a time (CI run 38029844566 hung on ~97k of them). A
-    # missing object must fail closed instead.
-    return {**os.environ, "GIT_NO_LAZY_FETCH": "1"}
-
-
-def git(repo: str, *args: str) -> bytes:
-    try:
-        p = subprocess.run(["git", "-C", repo, *args], stdout=subprocess.PIPE,
-                           stderr=subprocess.PIPE, check=False, env=_git_env())
-    except OSError as exc:
-        raise MeasureError(f"cannot run git: {exc}") from exc
-    if p.returncode != 0:
-        raise MeasureError(f"git {' '.join(args)} failed: "
-                           f"{p.stderr.decode('utf-8', 'replace').strip()}")
-    return p.stdout
-
-
+git = functools.partial(_git, error=MeasureError)
 _TRUE = {"true", "yes", "on", "1"}
 
 
@@ -114,7 +99,7 @@ def assert_complete_repo(repo: str) -> None:
             ["git", "-C", repo, "config", "--get-regexp",
              r"^(extensions\.partialclone|remote\..*\.promisor)$"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
-            env=_git_env())
+            env=git_env())
     except OSError as exc:
         raise MeasureError(f"cannot run git: {exc}") from exc
     if p.returncode not in (0, 1):  # 1 = no matching key
@@ -132,13 +117,7 @@ def assert_complete_repo(repo: str) -> None:
 
 
 def resolve_tree(repo: str, rev: str) -> str:
-    if rev.startswith("-"):
-        raise MeasureError(f"invalid revision {rev!r}")
-    out = git(repo, "rev-parse", "--verify", "--quiet", "--end-of-options",
-              f"{rev}^{{tree}}").decode().strip()
-    if not out:
-        raise MeasureError(f"revision {rev!r} is unavailable")
-    return out
+    return _resolve_tree(repo, rev, MeasureError)
 
 
 def parse_ls_tree(raw: bytes) -> list[tuple[str, int]]:

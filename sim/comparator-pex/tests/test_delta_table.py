@@ -324,5 +324,104 @@ class Cli(unittest.TestCase):
             self.assertTrue((d / "new.json").exists() and (d / "new.md").exists())
 
 
+class OutStem(unittest.TestCase):
+    """Issue #417: the two outputs are `<out_stem>.json` / `.md`, dots and all.
+
+    Path.with_suffix() would read the trailing `.20261114` of a dotted evidence stem
+    as a suffix and REPLACE it, writing an undated filename while still reporting
+    success -- and the overwrite refusal would then guard the wrong path.
+    """
+
+    def test_dotted_stem_keeps_every_segment(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "env.json").write_text(json.dumps({"delta": td_rows()}))
+            stem = "batch-extracted-ss125.regeneration.20261114"
+            res = subprocess.run([sys.executable, "-B", str(PEX / "make_delta_table.py"),
+                                  str(d / "env.json"), str(d / stem)],
+                                 capture_output=True, text=True, timeout=60)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertEqual(sorted(p.name for p in d.iterdir()),
+                             sorted(["env.json", f"{stem}.json", f"{stem}.md"]))
+
+    def test_dotted_stem_overwrite_still_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "env.json").write_text(json.dumps({"delta": td_rows()}))
+            stem = "grid.regeneration.20261114"
+            (d / f"{stem}.md").write_text("evidence\n")
+            res = subprocess.run([sys.executable, "-B", str(PEX / "make_delta_table.py"),
+                                  str(d / "env.json"), str(d / stem)],
+                                 capture_output=True, text=True, timeout=60)
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("refusing to overwrite", res.stderr)
+            self.assertEqual((d / f"{stem}.md").read_text(), "evidence\n")
+            self.assertFalse((d / f"{stem}.json").exists())
+
+
+class BenchLabel(unittest.TestCase):
+    """Issue #417: --bench supplies the bench a single-testbench `klt pex` run omits.
+
+    klt prefixes delta[] `spec_row` with the request stem only for a MULTI-testbench
+    run, so a one-request envelope carries bare measurement names that no LOGIC/DELAY
+    key -- all (bench, measurement) -- can map. --bench adds that label and nothing else.
+    """
+
+    def bare(self, key="td_a", ex=1e-9, pts=None):
+        """td_rows(), but with the bare spec_row a single-testbench run emits."""
+        return [row(key, f"{p}/{v}V/{t}C", 7e-10, ex) for p, v, t in (pts or grid_pts())]
+
+    def test_bare_rows_ungradeable_without_bench(self):
+        with self.assertRaises(ValueError):
+            mdt.render({"delta": self.bare()}, "fixture")
+
+    def test_bench_labels_and_grades_bare_rows(self):
+        env = {"delta": self.bare(ex=1e-9)}
+        out, _ = mdt.render(env, "fixture", "regeneration.ss125")
+        self.assertEqual(out["spec_row_prefix"], "regeneration.ss125")
+        self.assertIn("single testbench", out["spec_row_prefix_meaning"])
+        labelled = by(out)["regeneration.ss125.td_a", "tt/1.2V/27C"]
+        self.assertEqual(labelled["interpretation"]["verdict"], "within")
+        self.assertIn("regeneration.td_a", out["delay_compliance_extracted"])
+
+    def test_prefix_changes_no_measurement(self):
+        rows = self.bare(ex=1e-9)
+        out, _ = mdt.render({"delta": [dict(r) for r in rows]}, "fixture", "regeneration.ss125")
+        for src, got in zip(rows, out["rows"]):
+            self.assertEqual(got["spec_row"], f"regeneration.ss125.{src['spec_row']}")
+            for f in ("corner_id", "schematic_value", "extracted_value", "delta_pct", "status"):
+                self.assertEqual(got[f], src[f])
+
+    def test_already_prefixed_envelope_refused(self):
+        env = {"delta": td_rows()}  # klt-prefixed rows
+        with self.assertRaises(ValueError) as cm:
+            mdt.render(env, "fixture", "regeneration.ss125")
+        self.assertIn("already prefixed", str(cm.exception))
+
+    def test_no_bench_leaves_output_unlabelled(self):
+        out, _ = mdt.render({"delta": td_rows()}, "fixture")
+        self.assertIsNone(out["spec_row_prefix"])
+        self.assertIsNone(out["spec_row_prefix_meaning"])
+
+    def test_cli_bench_roundtrip_and_bad_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "env.json").write_text(json.dumps({"delta": self.bare(ex=1e-9)}))
+            cli = [sys.executable, "-B", str(PEX / "make_delta_table.py")]
+            res = subprocess.run(cli + ["--bench", "regeneration.ss125", str(d / "env.json"),
+                                        str(d / "out")], capture_output=True, text=True, timeout=60)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            got = json.loads((d / "out.json").read_text())
+            self.assertEqual(got["spec_row_prefix"], "regeneration.ss125")
+            self.assertTrue(all(r["spec_row"].startswith("regeneration.ss125.") for r in got["rows"]))
+            for bad in ("", "a..b", "bad name", "a.", ".a"):
+                res = subprocess.run(cli + ["--bench", bad, str(d / "env.json"), str(d / "bad")],
+                                     capture_output=True, text=True, timeout=60)
+                with self.subTest(bench=bad):
+                    self.assertEqual(res.returncode, 2, res.stderr)
+                    self.assertNotIn("Traceback", res.stderr)
+                    self.assertFalse((d / "bad.json").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

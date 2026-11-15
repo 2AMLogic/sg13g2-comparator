@@ -1,0 +1,64 @@
+{
+  "engine": "ngspice",
+  "netlist": "../dut/tb_noise.sp",
+  "netlist_source": "schematic",
+  "models": {
+    "pdk": "ihp-sg13g2",
+    "lib": "libs.tech/ngspice/models/cornerMOSlv.lib"
+  },
+  "corners": {
+    "process": [
+      {
+        "name": "tt",
+        "sections": [
+          "mos_tt"
+        ]
+      }
+    ],
+    "params": {
+      "vdd_val": [
+        1.2
+      ]
+    },
+    "temperature_c": [
+      27
+    ]
+  },
+  "analysis": {
+    "kind": "tran",
+    "args": "20p 5.1n 0 20p"
+  },
+  "measurements": [
+    {
+      "name": "d_zero",
+      "spice": ".meas tran d_zero find par('v(dout0)/v(vdd)') at=5n",
+      "unit": "V/V"
+    },
+    {
+      "name": "d_plus",
+      "spice": ".meas tran d_plus find par('v(dout1)/v(vdd)') at=5n",
+      "unit": "V/V"
+    },
+    {
+      "name": "d_minus",
+      "spice": ".meas tran d_minus find par('v(dout2)/v(vdd)') at=5n",
+      "unit": "V/V"
+    }
+  ],
+  "options": {
+    "osdi_preload": [
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/psp103.osdi",
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/psp103_nqs.osdi",
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/r3_cmc.osdi",
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/mosvar.osdi"
+    ],
+    "timeout_s": 900,
+    "keep_artifacts": false,
+    "stage_model_inputs": true
+  },
+  "monte_carlo": {
+    "n": 3,
+    "seed": 20260916,
+    "vary": "mismatch"
+  }
+}

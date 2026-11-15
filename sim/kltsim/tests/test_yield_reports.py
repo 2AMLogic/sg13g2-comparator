@@ -18,6 +18,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from kltsim import build
 from kltsim import grade
 from kltsim import yield_reports as yr
 from kltsim.benches import BENCHES, PROCESSES, SUPPLIES_V, TEMPERATURES_C
@@ -431,7 +432,7 @@ class CitedLargerCampaign(unittest.TestCase):
         cite = manifest["evidence"]["6"]
         report = json.loads((yr.REPO_ROOT / cite["file"]).read_text())
         self.assertEqual(report["samples"], self.index["rows"][0]["samples"])
-        self.assertEqual(cite["content_hash"], "sha256:" + yr.sha256_file(yr.REPO_ROOT / report["samples"]))
+        self.assertEqual(cite["content_hash"], "sha256:" + build.sha256_file(yr.REPO_ROOT / report["samples"]))
 
     def test_frozen_signoff_report_agrees_with_the_citation(self):
         frozen = json.loads((yr.REPO_ROOT / "manifests/t1-signoff-report.json").read_text())

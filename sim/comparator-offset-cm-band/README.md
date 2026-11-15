@@ -139,3 +139,42 @@ The 43/45 result of the parent campaign is unchanged. Re-submission needs a
 fleet runner image compatible with the client; `supplement-report` regenerates
 the report from whichever envelopes exist in a series directory (fetch stored
 objects with `klt artifact get <manifest>#<name>`).
+
+### Supplementary max-step re-run r2 (#89), partial: 4 of 6 populations
+
+`campaigns/20261105-58805e2fa-maxstep20p-r2.md` is the re-run on the klt 0.9.0
+batch runner (`runner_compatibility = match`; the exit-87 failure above is
+gone). Same setting (`tran 100p 990n 0 20p`, seed 20260916, N=60). Result:
+
+- `vcm-m050` and `vcm-nom` at both points: **60/60 valid** each. The two
+  draws that abort in the parent (mc12, mc23) complete under the tighter step.
+- `vcm-p050` at both points: **not run**. The fleet refused submission
+  (`batch_no_capacity`, vCPU cap shared with ci-spot); no local fallback was
+  used. Resume with `supplement-run --series <this series> --condition vcm-p050`
+  after fetching the stored objects.
+- Max-step sensitivity over the 1318 compared draws: max |Δvos| = 0.00078 mV.
+- Bench artifact vs low-CM/cold convergence weakness: still open.
+
+The parent campaign's 43/45 result is unchanged and nothing is merged into it.
+Bytes are in the artifact store, named by
+`manifests/artifacts/comparator-offset-cm-band-20261105-58805e2fa-maxstep20p-r2.manifest.json`.
+
+### Supplementary max-step re-run (#89), completed: 6 of 6 populations 60/60
+
+`campaigns/20261105-58805e2fa-maxstep20p-r2-resume.md` is the completed r2
+series: the `vcm-p050` populations were resumed with `supplement-run --series
+20261105-58805e2fa-maxstep20p-r2 --condition vcm-p050` through the batch fleet
+(jobs `klt-sim-ec11984c8b84`, `klt-sim-f29292075418`) and both are **60/60
+valid**. The store does not overwrite the partial record above, so the full
+series is stored under the `-resume` run id; its manifest is
+`manifests/artifacts/comparator-offset-cm-band-20261105-58805e2fa-maxstep20p-r2-resume.manifest.json`.
+
+- All six populations (2 PVT points x 3 conditions) are 60/60 valid at
+  `tran 100p 990n 0 20p`; the two parent aborts (mc12, mc23) complete.
+- Max-step sensitivity over 1978 paired draws: max |Δvos| = 0.00078 mV, so the
+  step change alone does not move vos at this measurement resolution.
+- Bench artifact vs low-CM/cold convergence weakness: **still open**. The result
+  is consistent with a time-step-control artifact of the default stepping, but
+  the data does not distinguish it from a real low-CM/cold weakness.
+
+The parent's 43/45 result is unchanged; nothing is merged into it.

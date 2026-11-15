@@ -2,6 +2,89 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-10
+
+- **PR #411**: chore: remove one-off scripts/diagnostics reproduction package
+- **Issue #336** (closed): Remove scripts/diagnostics: completed #188 upstream-handoff package (~506 LOC)
+
+### 2026-11-08
+
+- **PR #407**: sim: probe the two Row 4b band-edge kickback rejects as a labelled supplement
+- **Issue #405** (closed): Probe the two Row 4b band-edge kickback rejects (DR-0004 gate)
+
+### 2026-11-05
+
+- **PR #403**: sim: complete max-step supplement with vcm-p050 populations 60/60
+- **PR #402**: sim: record partial max-step supplement re-run (4 of 6 populations 60/60)
+- **Issue #89** (closed): sim: complete the two vcm-m050 CM-band offset points that abort (timestep too small) with a uniform tighter max step
+
+### 2026-11-03
+
+- **PR #400**: sim(pex): record failed extracted offset MC at tt/-40C/1.32V, extracted side lost
+- **PR #399**: sim(pex): record extracted whole-latch offset MC, 48 of 60 samples at tt/125C/1.32V via batch
+- **PR #398**: sim(pex): record extracted offset MC at tt/125C/1.08V, 57 of 60 samples via batch
+- **PR #397**: sim(pex): record extracted offset MC at tt/-40C/1.08V, 57 of 60 samples via batch
+- **PR #396**: sim(pex): record extracted offset MC at sf/-40C/1.20V, 57 of 60 samples via batch
+- **PR #395**: sim(pex): record extracted offset MC at sf/125C/1.20V, 57 of 60 samples via batch
+- **PR #394**: sim(pex): record extracted offset MC, 60 of 60 samples at fs/-40C/1.20V via batch
+
+### 2026-11-02
+
+- **PR #392**: sim(pex): record extracted offset MC at fs/125C/1.20V, 60 of 60 samples via batch
+
+### 2026-11-01
+
+- **PR #389**: sim(pex): record extracted whole-latch noise MC, 80 of 80 trials at ff/27C/1.32V via batch
+- **PR #388**: sim(pex): record extracted whole-latch offset MC at ff/27C/1.32V (60/60) via batch
+- **PR #387**: sim(pex): extracted whole-latch MC at ss/27C/1.08V (offset 60/60, noise 76/80) via batch
+- **PR #386**: sim(pex): add per-point roll-up of recorded extracted Monte Carlo results
+- **PR #385**: sim(pex): record extracted whole-latch noise MC at ss/-40C/1.08V, 80 of 80 trials via batch
+- **PR #384**: sim(pex): record extracted whole-latch offset MC, 60 of 60 samples at ss/-40C/1.08V via batch
+- **PR #383**: sim(pex): record extracted whole-latch noise MC at ff/125C/1.32V, 77 of 80 trials
+- **PR #382**: sim(pex): record extracted offset MC at ff/125C/1.32V, 45 of 60 samples via batch
+- **PR #380**: sim(pex): record extracted whole-latch noise MC at tt/-40C/1.20V, 80 of 80 trials via batch
+- **PR #379**: sim(pex): record extracted whole-latch offset MC at tt/-40C/1.20V, 60 of 60 samples
+- **PR #378**: sim(pex): record extracted whole-latch noise MC at tt/125C/1.20V, 77 of 80 trials via batch
+- **PR #376**: sim(pex): record extracted whole-latch offset MC at tt/125C/1.20V, 60 of 60 samples via batch
+- **PR #375**: sim(pex): record extracted whole-latch noise MC, 78 of 80 trials at tt/27C/1.08V
+- **PR #374**: sim(pex): record extracted whole-latch offset MC at tt/27C/1.08V, 57 of 60 samples via batch
+- **PR #372**: sim(pex): record extracted whole-latch noise MC at tt/27C/1.32V, 77 of 80 trials (Part of #61)
+
+### 2026-10-31
+
+- **PR #371**: sim(pex): record extracted whole-latch offset MC, N=60 at tt/27C/1.32V via sharded batch
+- **PR #370**: sim(pex): record extracted whole-latch transient-noise MC at fs/27C/1.20V, 77 of 80 trials (Part of #61)
+- **PR #369**: sim(pex): record extracted whole-latch offset MC at fs/27C/1.20V, 57 of 60 compared (Part of #61)
+- **PR #368**: sim(pex): record extracted whole-latch transient-noise MC, N=80 at sf/27C/1.20V
+- **PR #367**: sim(pex): record extracted whole-latch offset MC, N=60 at sf/27C/1.20V via sharded batch
+- **PR #366**: sim(pex): record failed extracted offset MC attempt at sf/27C/1.20V (extracted side lost)
+- **PR #365**: sim(pex): record extracted whole-latch noise MC, N=80 at ff/-40C/1.32V via sharded batch
+- **PR #364**: sim(pex): record extracted offset MC at ff/-40C/1.32V, 57 of 60 samples (Part of #61)
+- **PR #363**: sim(pex): record extracted whole-latch transient-noise MC, N=80 at ss/125C/1.08V via sharded batch
+- **PR #362**: sim(pex): record extracted whole-latch offset MC, N=60 at ss/125C/1.08V via sharded batch
+- **PR #361**: sim(pex): record extracted whole-latch transient-noise MC, N=80 at tt/27C/1.20V via batch
+- **PR #360**: refactor(sim): reuse cmband's CM-band Condition grid in kickback_cmband
+- **PR #359**: sim(pex): record extracted whole-latch offset MC at nominal point, N=60 via batch
+- **PR #358**: sim(pex): express whole-latch MC requests and probe them on the batch fleet
+- **PR #357**: sim(pex): record extracted 45-corner kickback grid via sharded batch
+- **PR #355**: sim(pex): record sharded 45-corner extracted regeneration grid, 42 of 45 corners
+- **Issue #356** (closed): Remove duplicated CM-band Condition table from kickback_cmband: reuse cmband's
+
+### 2026-10-30
+
+- **PR #353**: refactor(sim): reuse kcli._submit_with_retry in kickback and memory runners
+- **PR #352**: sim(pex): record 3-unit extracted batch sample with td_c post-layout error
+- **PR #350**: sim(pex): record failed 45-unit extracted regeneration batch job
+- **PR #349**: refactor(scripts): share git()/resolve_tree() across evidence checkers
+- **PR #348**: refactor(sim): share CM-band source-line rewrite across bench modules
+- **PR #347**: sim(pex): record stalled 45-unit extracted regeneration batch job
+- **PR #345**: sim(pex): size regeneration request timeout from measured unit runtime
+- **PR #343**: docs(sim): record failed full regeneration PVT batch job and refused split
+- **PR #342**: fix(sim): emit pex PVT supply as corners.params and record passing batch probe
+- **Issue #351** (closed): Dedupe _submit_with_retry: remove two copies of kcli._submit_with_retry
+- **Issue #346** (closed): Simplify: dedupe git()/resolve_tree() across three CI check scripts
+- **Issue #344** (closed): Consolidate duplicated CM-band apply_transform across cmband, cmdecision, kickback_cmband
+
 ### 2026-10-27
 
 - **PR #338**: build: pin klayout-tools to release 0.8.0 and accept release pins in the drift guard
