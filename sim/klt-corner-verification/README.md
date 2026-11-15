@@ -478,6 +478,9 @@ changes no spec row, no ratified Target, not `design/comparator.spice` and not
 `sim/dut.json`. Adopting any candidate is a follow-up issue plus a decision record.
 Evidence: [`campaigns/20261009-issue92/`](campaigns/20261009-issue92/); generated table
 [`sizesweep.md`](campaigns/20261009-issue92/sizesweep.md) (machine form `sizesweep.json`).
+Note (issue #447): that committed roll-up predates the roll-up fix and omits
+Row 5a entirely; Row 5a's per-candidate verdict is in each finalist's own
+`grading.md` (`full_w8_l034`: PASS).
 Client: the CI-pinned klt `0.5.0+ge8ca621a6961`, batch backend (job ids in each
 envelope's `environment.remote`).
 
@@ -690,6 +693,9 @@ machine forms `.json`; finalist MC envelopes + artifacts are **stored**, not
 committed: manifest
 [`../../../manifests/artifacts/klt-corner-verification-20261115-issue92-bias-mc.manifest.json`](../../../manifests/artifacts/klt-corner-verification-20261115-issue92-bias-mc.manifest.json),
 summary [`campaigns/20261115-issue92-bias-mc.md`](campaigns/20261115-issue92-bias-mc.md)).
+Note (issue #447): the committed roll-ups here predate the roll-up fix and
+omit Row 5a entirely; Row 5a's per-candidate verdict is in each finalist's
+own `grading.md` (INCOMPLETE on all three finalists).
 
 **Fleet probe.** The unchanged `w8_l034` baseline regeneration screening
 request (byte-identical to the parked 20261029 campaign's) completed 18/18
