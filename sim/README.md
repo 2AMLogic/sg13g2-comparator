@@ -271,6 +271,14 @@ A grader change re-mints the report directory (the sha256 of every grader source
 `sim/kltsim/characterization.py` `REPORT_DIR_NAMES` names the current
 one (`-r2` after issue #245) and the superseded directory stays as history.
 
+The declared-contract loaders (`sim/kltsim/declared_n.py`,
+`sim/kltsim/bias_probes.py`) are deliberately not indexed grader sources:
+they share one chain-loading loop (`sim/kltsim/declared_contract.py`,
+issue #452) that mirrors the frozen `grade.load_campaign` without editing it,
+and `sim/kltsim/tests/test_grade.py`'s `CampaignChainTests` per-loader
+subclasses keep every loader's chain-check detection surface in step with
+`grade`'s.
+
 **Sample-population integrity (issue #245).** Before the offset and
 transient-noise reducers use a klt per-corner summary, `sim/kltsim/populations.py`
 (shared with `yield_reports.collect_populations`) requires each PVT point's
