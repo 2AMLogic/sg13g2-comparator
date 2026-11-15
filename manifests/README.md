@@ -132,22 +132,47 @@ row:
   `.meas` waits for (its output is already high before the flip, i.e. it
   decided the other way at -0.1 mV), so the measurement has no value. That
   is a recorded post-layout finding, not a tooling failure, and the request
-  was not edited to hide it. The run is **one corner only** (tt, 1.20 V,
-  27 C, deterministic transient, no Monte Carlo, no sigma): the 45-point PVT
-  grids and the offset-sigma / noise Monte Carlo rows were not run, and host
-  rules forbid a local grid. The batch fleet first refused the submit
-  (`batch_no_capacity`, 30 pools). When capacity was granted (2026-10-10,
-  job `klt-sim-f07e181de148`, record
-  `sim/comparator-pex/reports/batch-probe.pvt.20261010-c.md`), every corner
-  failed with `batch_runner_version_mismatch` (fleet runner klt 0.5.0,
-  client 0.7.0). The open blocker is the runner image. Extraction half:
-  `body_bias.status: "biased"` (0 unbiased devices); `extraction.model` is
+  was not edited to hide it. The cited run is **one corner only** (tt,
+  1.20 V, 27 C, deterministic transient, no Monte Carlo, no sigma); host
+  rules forbid a local grid, and the wider post-layout coverage lives in
+  separate, uncited batch records. As of 2026-11-14 those records are: the
+  extracted 45-corner kickback grid
+  (`sim/comparator-pex/reports/batch-extracted-grid.kickback.20261031.md`:
+  envelope `status: pass`, all 45 corners measured on both sides, 810 rows
+  passed / 0 failed / 0 errored); the extracted regeneration grid
+  (`sim/comparator-pex/reports/batch-extracted-grid.regeneration.20261031.md`:
+  envelope `status: error`, 42 of 45 corners compared on both sides, 462
+  rows passed / 0 failed / 78 errored); the follow-up that measured the
+  three corners that grid missed
+  (`sim/comparator-pex/reports/batch-extracted-ss125.regeneration.20261114.md`,
+  #417: all three `ss` / 125 C corners on both sides, 36 rows, 33 passed /
+  0 failed / 3 errored, the errored rows all `td_c`); and the latest
+  per-point Monte Carlo roll-up
+  (`sim/comparator-pex/reports/mc-rollup.20261103-g.md`: "20 offset and 11
+  noise points have data, out of 45 grid points" — 25 offset and 34 noise
+  points missing). The three batch records state development `klt` clients
+  (`0.8.1.dev897+ga42d9de8d98d` kickback, `0.8.1.dev887+g2e9ee1aa66cf`
+  regeneration, `0.9.2.dev1024+g8da9718f0cb6` ss/125 C; all out of pin,
+  tracked in #416) and that nothing ran locally. What remains before a
+  full-grid `klt pex` report can be cited: the missing Monte Carlo points
+  (tracked in #61), a single 45-corner grid record — "three corners are
+  not a grid result", so the split evidence above does not provide one —
+  and the updated item-7 citation, `content_hash` and regenerated signoff
+  report. Dated history, 2026-10-10, since superseded: the batch fleet
+  first refused the submit (`batch_no_capacity`, 30 pools); when capacity
+  was granted (job `klt-sim-f07e181de148`, record
+  `sim/comparator-pex/reports/batch-probe.pvt.20261010-c.md`), every
+  corner failed with `batch_runner_version_mismatch` (fleet runner klt
+  0.5.0, client 0.7.0) — then the open blocker; the 2026-11-14 run records
+  `runner_klt_version: 0.9.0`, `runner_compatibility: match`. Extraction
+  half: `body_bias.status: "biased"` (0 unbiased devices); `extraction.model` is
   the quasi-static lumped-RC model (single series R per net, net-to-ground
   C plus vertical-overlap coupling; no lateral coupling without
   `--critical-net`, no fringe shielding, no distributed RC) quoted in full
   in the envelope. Per-row deltas: `sim/comparator-pex/reports/delta-nominal-20261009.{md,json}`;
   discussion and what closes the gap: `sim/comparator-pex/README.md`. The
-  earlier errored attempt (`pex.attempt-20261009.json`) is kept as history.
+  earlier errored attempt
+  (`sim/comparator-pex/reports/pex.attempt-20261009.json`) is kept as history.
 - **Item 8 (Characterization report)** — cited since #64; see "Item 8" below.
 - **Item 11 (Power delivery (structural))** — cited since #38; see "Item 11" below.
 
@@ -184,7 +209,16 @@ reads `erc_status: clean`, 0 findings. `erc_coverage.checked` holds
 `erc.net_connectivity` for `vdd`, `vss` and `vbias`, `erc.missing_tie` for the
 `nwell_vdd` tie and `erc.floating_gate` for the 10 gate nets;
 `erc_coverage.skipped` is empty, so the tie is not a
-`degenerate_tap_declaration`. The tie is narrowed to Activ & nSD & Cont (the
+`degenerate_tap_declaration`. Under the klt 0.9.1 pin the same run reports
+three further disclosure fields, none of which moves the verdict:
+`erc_coverage.missing_tie_checked: true`,
+`erc_coverage.layers_in_stream_without_declaration: ["63/0"]` (the text layer,
+which carries no supply role), and an explicit
+`erc_coverage.inapplicable` entry declaring `erc.supply_short` inapplicable
+with reason `substrate_continuity_not_modelled` — the machine-readable form of
+the diffusion/well-continuity limit stated under "What this does not
+establish" below, which the 0.8.0 report left implicit by simply omitting the
+check from `checked`. The tie is narrowed to Activ & nSD & Cont (the
 contacts of the n-tap bars; only those carry nSD) inside NWell. The envelope's
 own `status` is `not_checked` (antenna accumulation skipped by
 `--findings-only`; no antenna table exists for this deck). Item 11 does not
@@ -223,7 +257,7 @@ Item 3 cites `layout/comparator/drc_report.json`, the `klt drc --deck sg13g2
 (the GDS's own hash, recorded as `provenance.input.content_hash`). It reads
 `status: clean`, `violation_count: 0`, `rules_checked` 38, against deck
 `sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`
-(klt `0.8.0`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
+(klt `0.9.1`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
 regenerates it; `--check` requires it fresh (`klt drc --check`). `klt signoff`
 grades item 3 on `status: clean` alone and does not enforce disclosure, so the
 three `coverage` fields of the envelope are quoted verbatim here. This is
@@ -231,8 +265,10 @@ klt's *curated* deck, **not** the foundry's own DRC deck: "clean" means clean
 inside this scope only.
 
 `coverage.layers_in_stream_without_rules` (drawn in the stream, no rule in the
-deck: Metal3 pin, Metal3 text, and the text layer; the klt 0.8.0 deck adds
-nSD, pSD and NWell rules, so those are no longer listed):
+deck: Metal3 pin, Metal3 text, and the text layer; the deck carries nSD, pSD
+and NWell rules, so those are not listed — it has done since klt 0.8.0 and
+the 0.9.1 deck is byte-identical to it, same `content_hash`
+`sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`):
 
 ```
 30/2, 30/25, 63/0
@@ -260,9 +296,10 @@ Act, Cnt, Gat, M1, M2, M3, M4, M5, MIM, NW, TM1, TM2, TV1, TV2, V1, V2, V3,
 V4, pSD
 ```
 
-Consequences stated plainly (the klt 0.8.0 deck now carries NWell, nSD and pSD
-rules, so those layers are no longer listed as uncovered; their coverage was
-not otherwise re-audited here): Gat.c endcap,
+Consequences stated plainly (the deck carries NWell, nSD and pSD rules, so
+those layers are not listed as uncovered; their coverage was not otherwise
+re-audited here, and the 0.9.1 deck is the same deck by hash as the 0.8.0 one
+that first added them): Gat.c endcap,
 Cnt.e/Cnt.f, latch-up tap distance, density and seal ring are **not checked**
 by this evidence (see `layout/README.md`, "What this layout is, and is not").
 Also, `layout/comparator/drc_report.json` records its input as the
@@ -285,7 +322,7 @@ not of the GDS or the schematic. The tool does not bind it to either, so
 changed GDS, schematic subcircuit or request; see `layout/README.md`, stage 4.
 
 The envelope reads `status: match` (engine `klayout` 0.30.12, klt
-`0.8.0`), 24/24 devices, 18/18 nets, 8/8 pins including
+`0.9.1`), 24/24 devices, 18/18 nets, 8/8 pins including
 `vdd`/`vss` and the independent `vbias`, 0 mismatches, 0 warnings.
 `power_connectivity.status` is `unchecked`, which `klt signoff` accepts: with
 `reference.form: subckt-call` the supply pins take part in the ordinary
@@ -410,8 +447,8 @@ source campaign are never edited.
 ## Regeneration and freshness
 
 The report is frozen at the pinned `klt` release — `2AMLogic/klayout-tools`
-`v0.8.0` (commit `c572046be644e0407f693f2410f3abb799d68a3a`, PyPI
-`klayout-tools==0.8.0`). A `klt` older than 2026-09-17 does **not** know item
+`v0.9.1` (commit `4d0d29be4fd991f499d59e783a908082d5e24c56`, PyPI
+`klayout-tools==0.9.1`). A `klt` older than 2026-09-17 does **not** know item
 11 and renders a ten-item report; the pinned build renders all eleven. If the
 pinned build moves, the manifest, the freeze, and the pin move in one change.
 

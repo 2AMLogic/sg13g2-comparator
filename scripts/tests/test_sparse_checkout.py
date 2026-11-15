@@ -167,6 +167,37 @@ class SparseCones(unittest.TestCase):
                 self.assertFalse(set("?[!") & set(p) or "**" in p
                                  or "*" in p.rsplit("/", 1)[0], f"{name}: wildcard {p!r}")
 
+    def test_every_cone_pattern_contributes_a_unique_path(self):
+        """Issue #429: cone minimality -- the over-coverage twin of the
+        #216 sufficiency guard. Every declared pattern must check out at
+        least one tracked path that no other pattern in the same list
+        already checks out, so a pattern subsumed by a sibling glob
+        (`/sim/run_memory.py` under `/sim/run_*.py`), one subsuming its
+        neighbours (`/scripts/` beside the named guard scripts) or matching
+        nothing tracked at all fails with the dead entries named. Derived
+        from git's index (ls-files lists skip-worktree entries too), so it
+        stays clone-free and also holds inside the append-only job's
+        narrowed cone, whose own heredoc patterns this audits."""
+        tracked = sh(["git", "ls-files"], ROOT).stdout.splitlines()
+        for name, job in self.jobs.items():
+            with self.subTest(job=name):
+                patterns = job["patterns"]
+                unique = {}
+                for path in tracked:
+                    hits = [p for p in patterns if self._covered([p], path)]
+                    if len(hits) == 1:
+                        unique.setdefault(hits[0], path)
+                dead = []
+                for p in patterns:
+                    if p in unique:
+                        continue
+                    example = next((t for t in tracked
+                                    if self._covered([p], t)), None)
+                    dead.append(f"{p} (subsumed: {example} also matched by others)"
+                                if example else f"{p} (matches no tracked path)")
+                self.assertEqual(dead, [], f"{name}: patterns contributing no "
+                                 f"path of their own; remove them")
+
     def test_append_only_job_keeps_full_history(self):
         self.assertIn("fetch-depth: 0", self.jobs[SIZE_JOB]["checkout"]["with"])
 
