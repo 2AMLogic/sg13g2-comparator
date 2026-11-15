@@ -355,7 +355,7 @@ def synthetic_env(plan, thresholds, key, period=30.0, first=True, **overrides):
     """An envelope for one corner whose P/N histories switch at thresholds."""
     proc, supply, temp = key
     vals = {"vdd_meas": supply, "temp_meas": float(temp)}
-    mult = list(range(0, 11)) if first else list(range(1, 10))
+    mult = mem.round_mult(first)
     for h in mem.HISTORIES:
         vals[mem.meas_name("lo", h)] = float(plan[key][h]["lo"])
         for m, p in zip(mult, plan[key][h]["probes"]):

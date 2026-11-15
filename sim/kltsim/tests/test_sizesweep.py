@@ -42,6 +42,25 @@ class GeometryTests(unittest.TestCase):
             with self.assertRaises(build.BuildError):
                 self.body(geometry_overrides=bad)
 
+    def test_param_override_read_back_from_body_header(self):
+        self.assertEqual(build.extract_param_overrides(self.body()), {})
+        text = self.body(param_overrides={"dut_ib": 1.5e-05})
+        self.assertEqual(build.extract_param_overrides(text), {"dut_ib": "1.5e-05"})
+
+    def test_candidate_identity_includes_dut_ib(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sub = Path(tmp)
+            (sub / "kickback.body.spice").write_text(self.body(
+                geometry_overrides={"XM1.w": "8u"}, param_overrides={"dut_ib": 1e-05}))
+            (sub / "regeneration.body.spice").write_text(self.body(
+                geometry_overrides={"XM1.w": "8u"}, param_overrides={"dut_ib": 1.5e-05}))
+            _g, problems = sizesweep._geometry_report(sub, ("kickback", "regeneration"))
+            self.assertTrue(problems)
+            (sub / "regeneration.body.spice").write_text(self.body(
+                geometry_overrides={"XM1.w": "8u"}, param_overrides={"dut_ib": 1e-05}))
+            g, problems = sizesweep._geometry_report(sub, ("kickback", "regeneration"))
+            self.assertEqual((g, problems), ({"XM1.w": "8u", "dut_ib": "1e-05"}, []))
+
     def test_parse_geometry(self):
         self.assertEqual(build.parse_geometry(["XM1.w=8u"]), {"XM1.w": "8u"})
         with self.assertRaises(build.BuildError):

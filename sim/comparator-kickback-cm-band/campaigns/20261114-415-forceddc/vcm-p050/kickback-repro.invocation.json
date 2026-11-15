@@ -1,0 +1,35 @@
+{
+  "tag": "kickback-repro",
+  "command": [
+    "klt",
+    "sim",
+    "sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/vcm-p050/kickback-repro.request.json",
+    "--format",
+    "json",
+    "-o",
+    "sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/vcm-p050/artifacts/kickback-repro",
+    "--backend",
+    "batch"
+  ],
+  "cwd": ".",
+  "klt_version": "klt 0.9.2.dev1029+g76f47afa48f1",
+  "env": {
+    "KLT_SIM_BACKEND": "batch"
+  },
+  "request_sha256": "78dddbd490b8ef047e8ca23e951a79cfef59021facaba7510c1aafeccf8abb7b",
+  "started_utc": "2026-11-14T23:15:15+00:00",
+  "finished_utc": "2026-11-14T23:16:08+00:00",
+  "exit_code": 3,
+  "stderr_tail": "klt: batch job klt-sim-5d0ad2aae97e submitting to s3://<bucket>/jobs/klt-sim-5d0ad2aae97e\nklt sim: batch job klt-sim-5d0ad2aae97e: submitted\nklt sim: batch job klt-sim-5d0ad2aae97e launched; re-attach with `klt sim <request> --backend batch --attach klt-sim-5d0ad2aae97e`\nklt sim: batch job klt-sim-5d0ad2aae97e state=no status.json yet elapsed=1s\nklt sim: batch job klt-sim-5d0ad2aae97e: failed\n",
+  "envelope_sha256": "f129a5a8dedc55672cdece31495ab3c7eac55770f1be2a8183c83b63d897d81a",
+  "condition": {
+    "issue": 165,
+    "name": "vcm-p050",
+    "vcm_delta_v": 0.05,
+    "vcm_v": 0.65,
+    "scope": "characterization for candidate DR-0004 CM row (no ratified CM range)"
+  },
+  "kind": "probe",
+  "probe_arm": "repro",
+  "issue": 415
+}
