@@ -44,7 +44,7 @@ class Base(unittest.TestCase):
         self.addCleanup(p.stop)
         self.args = _args(self.series, series=self.series.name)
         self.calls, self.codes, self.refused = [], [], []
-        self.out_dirs, self.sleeps = [], []
+        self.out_dirs, self.sleeps, self.backends = [], [], []
         for obj, name, fn in (
                 (kcli, "_submit", self._submit),
                 (kcli, "_last_attempt_refused_at_cap", self._refused),
@@ -54,9 +54,10 @@ class Base(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def _submit(self, request, out_dir, tag, args, extra=None):
+    def _submit(self, request, out_dir, tag, args, backend=None, extra=None):
         self.calls.append((tag, extra["kind"]))
         self.out_dirs.append(out_dir)
+        self.backends.append(backend)
         return self.codes.pop(0) if self.codes else 0
 
     def _refused(self, out_dir):
@@ -117,6 +118,29 @@ class RetryTests(Base):
         self.assertEqual(self.go(3), 5)
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(self.sleeps, [])
+
+    def test_positional_extra_caller_submits_with_no_backend(self):
+        # `extra` stays the 5th positional parameter: every existing caller
+        # passes it positionally and must keep reaching _submit unchanged.
+        self.assertEqual(self.go(3), 0)
+        self.assertEqual(self.calls, [("t", "k")])
+        self.assertEqual(self.backends, [None])
+
+    def test_backend_is_forwarded_to_submit(self):
+        self.args.retry_refused = 0
+        code = kcli._submit_with_retry(Path("r"), Path("o"), "t", self.args,
+                                       {"kind": "k"}, backend="batch")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.backends, ["batch"])
+
+    def test_backend_is_forwarded_on_every_retry(self):
+        self.codes, self.refused = [2, 2, 0], [True, True]
+        self.args.retry_refused = 2
+        code = kcli._submit_with_retry(Path("r"), Path("o"), "t", self.args,
+                                       {"kind": "k"}, backend="batch")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.backends, ["batch"] * 3)
+        self.assertEqual(self.sleeps, [7, 7])
 
 
 class LocalSmokeTests(unittest.TestCase):
