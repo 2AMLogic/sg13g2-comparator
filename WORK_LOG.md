@@ -2,6 +2,14 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-14
+
+- **PR #427**: refactor: call build.py's sha256 helpers instead of module-local copies
+- **PR #421**: refactor: delete eight unreferenced module-level definitions
+- **PR #414**: docs: roadmap as of 2026-11-13
+- **Issue #420** (closed): Remove seven unreferenced module-level constants (none is a hashed report input)
+- **Issue #419** (closed): Consolidate the triplicated sha256 helpers in sim/kltsim onto build.py
+
 ### 2026-11-10
 
 - **PR #411**: chore: remove one-off scripts/diagnostics reproduction package
