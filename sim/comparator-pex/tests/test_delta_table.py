@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -194,6 +195,68 @@ class Synthetic(unittest.TestCase):
         for env in bad:
             with self.subTest(env=env), self.assertRaises(ValueError):
                 mdt.render(env, "fixture")
+
+
+class ParamsSupply(unittest.TestCase):
+    """Issue #424: the `corners.params` supply spelling is the same physical point.
+
+    A request that puts the supply on the corners.params axis (no supply_v source)
+    makes klt emit `ss/novdd/125C/params:vdd_val=1.08`; `canonical()` must map it
+    to the identity the `<V>V` spellings already have, while mc samples, variants,
+    options, extra params and a conflicting real supply stay raw and ungraded.
+    """
+
+    def render(self, rows):
+        return mdt.render({"status": "error", "delta": rows}, "fixture")
+
+    def pc(self, p, v, t):
+        return f"{p}/novdd/{t}C/params:vdd_val={v}"
+
+    def test_same_identity_as_v_spelling(self):
+        self.assertEqual(mdt.canonical("ss/novdd/125C/params:vdd_val=1.08"),
+                         ("ss", Decimal("1.08"), 125))
+        self.assertTrue(mdt.in_grid("ss/novdd/125C/params:vdd_val=1.08"))
+        self.assertTrue(mdt.in_grid("ff/1.080V/-40C"))  # klt's old %.3f spelling, unchanged
+
+    def test_params_spelled_grid_grades(self):
+        pts = grid_pts()
+        rows = [row("regeneration.pvt.td_a", self.pc(p, v, t), 7e-10, 1e-9) for p, v, t in pts]
+        rows += [r for p, v, t in pts
+                 for r in (row("regeneration.pvt.da_first", self.pc(p, v, t), 0.0, 0.0),
+                           row("regeneration.pvt.da_end", self.pc(p, v, t), 1.0, 1.0))]
+        out, _ = self.render(rows)
+        self.assertTrue(out["delay_compliance_extracted"]["regeneration.td_a"].startswith("met at every"))
+        self.assertEqual(out["pvt_grid_points"], 45)
+        rows[0]["extracted_value"] = None
+        out, _ = self.render(rows)
+        self.assertTrue(out["delay_compliance_extracted"]["regeneration.td_a"]
+                        .startswith("not established: 44/45"))
+
+    def test_mixed_spelling_duplicate_rejected(self):
+        with self.assertRaisesRegex(ValueError, "repeats the physical point"):
+            self.render([row("regeneration.pvt.td_a", "tt/1.200V/27C", 7e-10, 1e-9),
+                         row("regeneration.pvt.td_a", "tt/novdd/27C/params:vdd_val=1.2", 7e-10, 1e-9)])
+        # the same point on two different measurements, one per spelling: not ambiguous
+        self.render([row("regeneration.pvt.td_a", "tt/1.200V/27C", 7e-10, 1e-9),
+                     row("regeneration.pvt.offset_sigma", "tt/novdd/27C/params:vdd_val=1.2", 1e-3, 2e-3)])
+
+    def test_suffixes_and_extra_params_stay_raw(self):
+        for c in ("tt/1.200V/27C/mc3",
+                  "tt/novdd/27C/@sliced/params:vdd_val=1.2",
+                  "tt/novdd/27C/params:vdd_val=1.2/options:x=1",
+                  "tt/novdd/27C/params:vdd_val=1.2/mc3",
+                  "tt/novdd/27C/params:other=5,vdd_val=1.2",
+                  "tt/novdd/27C/params:vdd_val=1.2,other=5",
+                  "tt/1.080V/27C/params:vdd_val=1.2"):  # a real supply AND a vdd_val param
+            with self.subTest(corner=c):
+                self.assertEqual(mdt.canonical(c), ("raw", c))
+                self.assertFalse(mdt.in_grid(c))
+
+    def test_out_of_grid_params_voltage_ungraded(self):
+        c = "tt/novdd/27C/params:vdd_val=1.5"
+        out, _ = self.render([row("regeneration.pvt.td_a", c, 7e-10, 9e-9)])
+        self.assertIn("outside", by(out)["regeneration.pvt.td_a", c]["interpretation"]["verdict"])
+        self.assertEqual(out["pvt_grid_points"], 0)
 
 
 class DecisionValidity(unittest.TestCase):
