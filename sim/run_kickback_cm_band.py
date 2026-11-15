@@ -20,6 +20,14 @@ runs ONE corner locally (a debug probe) in a scratch dir, writing nothing
 under sim/. `compare` writes ID/comparison.json + comparison.md offline from
 the saved envelopes.
 
+Probe supplements (never merged into the #165 populations): the frozen
+`20261108-405-probe` series (issue #405) runs arms repro/obs/xing/step20p;
+a series with any other id defaults to the issue #415 forced-DC supplement's
+arms repro/obs/optdc/icdc, whose optdc/icdc bodies append a declared block
+to the #165 body (sim/kltsim/kickback_cmband.py: probe_body_supplement).
+probe-compare only ever writes into the series it is pointed at; it refuses
+to rewrite the frozen #405 series with a non-#405 arm set.
+
 See sim/kltsim/kickback_cmband.py and sim/comparator-kickback-cm-band/README.md.
 Run from the repository root.
 """
@@ -40,6 +48,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import kickback_cmband as kb  # noqa: E402
+
+#: The frozen issue #405 probe series: default arm set, and the one series
+#: probe-compare may rewrite with its own comparison files (AC: byte-unchanged).
+FROZEN_PROBE_SERIES = "20261108-405-probe"
+
+
+def _arms_for(series_name: str, chosen: list[str] | None) -> tuple[str, ...]:
+    """Default arm set by series: the frozen #405 probe keeps its four arms;
+    any other series is the issue #415 forced-DC supplement's arm set."""
+    if chosen:
+        return tuple(chosen)
+    return kb.PROBE_ARMS if series_name == FROZEN_PROBE_SERIES else kb.PROBE_ARMS_415
+
+
+def _issue_for(series_name: str) -> int:
+    return kb.PROBE_ISSUE if series_name == FROZEN_PROBE_SERIES else kb.SUPPLEMENT_ISSUE
 
 
 def _series(args) -> Path:
@@ -161,11 +185,12 @@ def cmd_compare(args) -> int:
 
 
 def cmd_probe_build(args) -> int:
+    issue = _issue_for(args.series)
     for name in args.condition or [c.name for c in kb.CONDITIONS]:
         cond = kb.condition(name)
-        for arm in args.arm or kb.PROBE_ARMS:
+        for arm in _arms_for(args.series, args.arm):
             try:
-                paths = kb.write_probe_inputs(cond, arm, _series(args) / cond.name)
+                paths = kb.write_probe_inputs(cond, arm, _series(args) / cond.name, issue=issue)
             except kb.KickbackCmBandError as exc:
                 print(str(exc), file=sys.stderr)
                 return 1
@@ -193,7 +218,7 @@ def cmd_probe_run(args) -> int:
               "resubmit (investigate)", file=sys.stderr)
         return 1
     extra = {"condition": kb.condition_metadata(cond), "kind": "probe", "probe_arm": args.arm,
-             "issue": kb.PROBE_ISSUE}
+             "issue": _issue_for(args.series)}
     # --backend batch explicitly: the body's OSDI path exists only on the fleet,
     # so even the one-corner edge requests must not stay local.
     code = 1
@@ -210,7 +235,13 @@ def cmd_probe_run(args) -> int:
 
 def cmd_probe_compare(args) -> int:
     series = _series(args)
-    res = kb.probe_compare(series)
+    arms = _arms_for(args.series, args.arm)
+    if args.series == FROZEN_PROBE_SERIES and set(arms) != set(kb.PROBE_ARMS):
+        print(f"{args.series} is the frozen #405 probe series; refusing to rewrite it "
+              "with a non-#405 arm set (its committed files must stay byte-unchanged)",
+              file=sys.stderr)
+        return 1
+    res = kb.probe_compare(series, arms=arms, issue=_issue_for(args.series))
     (series / "comparison.json").write_text(json.dumps(res, indent=2) + "\n", encoding="utf-8")
     (series / "comparison.md").write_text(kb.probe_render_markdown(res), encoding="utf-8")
     for p in res["problems"]:
@@ -263,13 +294,13 @@ def main(argv: list[str] | None = None) -> int:
     pb = sub.add_parser("probe-build")
     pb.add_argument("--series", required=True)
     pb.add_argument("--condition", action="append", choices=names)
-    pb.add_argument("--arm", action="append", choices=list(kb.PROBE_ARMS))
+    pb.add_argument("--arm", action="append", choices=list(kb.ALL_PROBE_ARMS))
     pb.set_defaults(func=cmd_probe_build)
 
     pr = sub.add_parser("probe-run")
     pr.add_argument("--series", required=True)
     pr.add_argument("--condition", required=True, choices=names)
-    pr.add_argument("--arm", required=True, choices=list(kb.PROBE_ARMS))
+    pr.add_argument("--arm", required=True, choices=list(kb.ALL_PROBE_ARMS))
     pr.add_argument("--skip-existing", action="store_true")
     pr.add_argument("--klt", default=default_klt)
     pr.add_argument("--retry-refused", type=int, default=0)
@@ -278,6 +309,8 @@ def main(argv: list[str] | None = None) -> int:
 
     pc = sub.add_parser("probe-compare")
     pc.add_argument("--series", required=True)
+    pc.add_argument("--arm", action="append", choices=list(kb.ALL_PROBE_ARMS),
+                    help="arm set to compare (default: by series, see --help)")
     pc.set_defaults(func=cmd_probe_compare)
 
     args = ap.parse_args(argv)

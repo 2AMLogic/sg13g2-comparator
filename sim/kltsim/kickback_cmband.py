@@ -565,6 +565,63 @@ PROBE_ARMS = ("repro", "obs", "xing", "step20p")
 STEP_ARM_ARGS = {"step20p": "5p 60n 0 20p"}
 PROBE_REFERENCE_SERIES = "20261011-165"
 
+# --------------------------------------------------------------------------- #
+# issue #415: supplement arms that force a converged DC operating point
+# --------------------------------------------------------------------------- #
+# DISCRIMINATING FOLLOW-UP to the #405 probe, which left "no arm forced a
+# converged DC point (.nodeset/.ic, gmin/itl options)" undone. The supplement
+# runs the same two rejected points plus the vcm-nom control in a NEW series;
+# repro/obs keep the #165 body byte-identical (reproduction gate) and the two
+# new arms append ONE declared block to the body (probe_body_supplement):
+#
+#   optdc  DC convergence aids only (.options itl1/gminsteps/srcsteps, gmin
+#          kept at its 1e-12 default); no .nodeset, no .ic. If the DC warning
+#          clears and the programmed differential appears on bd/cd on its own,
+#          the artifact is confirmed with no circularity to argue about.
+#   icdc   .nodeset of the four floating input pins at their analytic DC
+#          values (at DC no current flows through rfloat, so v(bpp) must
+#          equal v(bsp) = v(cm) + dv_small/2, and likewise for the other
+#          three) and .ic of every branch output at the LOW polarity
+#          (dout=0) -- the wrong answer for the programmed differential, and
+#          the state the rejects already hold on their failing branch. No
+#          arm is forced toward the expected answer, so a 55 ns gate pass
+#          needs a genuine post-strobe decision from a stated wrong-polarity
+#          start.
+#
+# Because optdc/icdc bodies differ from the repro/obs body while one condition
+# directory holds all four arms, the supplement arms reference per-arm body
+# files (kickback-<arm>.body.spice); the shared kickback.body.spice stays the
+# #165 body, written by repro/obs. The AC-2 diff against #165 is exactly the
+# declared block.
+#
+# ngspice semantics (verified against the pinned ngspice-47, no uic on the
+# tran): .nodeset and .ic without uic seed the DC solve rather than pinning
+# nodes; in a bistable circuit the seed selects the basin the solve lands
+# in. The realized start state is therefore re-read from the 1 ns
+# observables instead of assumed; the series README interprets against it.
+
+SUPPLEMENT_ISSUE = 415
+#: The arm set the #415 forced-DC supplement series runs. repro/obs are shared
+#: with the #405 probe (identical cards and body; only the issue label differs).
+PROBE_ARMS_415 = ("repro", "obs", "optdc", "icdc")
+#: Every arm the probe-build / probe-run / probe-compare CLI accepts (#405+#415).
+ALL_PROBE_ARMS = PROBE_ARMS + tuple(a for a in PROBE_ARMS_415 if a not in PROBE_ARMS)
+#: Arms whose body is the #165 body plus exactly probe_body_supplement().
+PROBE_BODY_SUPPLEMENT_ARMS = ("optdc", "icdc")
+
+PROBE_ARM_NOTES = {
+    "repro": "arm repro: the #165 measurement cards and analysis, unchanged "
+             "(reproduction gate).",
+    "obs": "arm obs: #165 cards + outputs over time + input differential probes.",
+    "xing": "arm xing: arm obs + decision-threshold crossing times.",
+    "step20p": "arm step20p: arm obs with tran max step 20p (as the #89 supplement).",
+    "optdc": "arm optdc: arm obs + DC convergence aids only (.options itl1/gminsteps/"
+             "srcsteps, gmin kept at its 1e-12 default); no .nodeset, no .ic.",
+    "icdc": "arm icdc: arm obs + .nodeset of the four floating input pins at their "
+            "analytic DC values and .ic of every branch output at the LOW (dout=0) "
+            "state -- the wrong polarity for the programmed differential.",
+}
+
 
 def probe_arm_tag(arm: str) -> str:
     return f"{TAG}-{arm}"
@@ -594,13 +651,15 @@ def probe_observables(with_crossings: bool) -> list[dict]:
     return cards
 
 
-def probe_request(cond: Condition, arm: str) -> dict:
+def probe_request(cond: Condition, arm: str, *, issue: int = PROBE_ISSUE) -> dict:
     """The #165 request of ``cond`` restricted to the probe PVT points, with the
     arm's cards/analysis. Always batch (the body's OSDI path exists only on the
-    fleet), with capacity_wait_s so a burst waits instead of failing."""
-    if arm not in PROBE_ARMS:
+    fleet), with capacity_wait_s so a burst waits instead of failing. ``issue``
+    labels the request's provenance: the #405 probe default; the #415
+    forced-DC supplement passes SUPPLEMENT_ISSUE."""
+    if arm not in ALL_PROBE_ARMS:
         raise KickbackCmBandError(f"unknown probe arm {arm!r}")
-    req = compose_request(cond)
+    req = compose_request(cond, probe_body_name(arm))
     req["corners"]["process"] = [PROBE_PROCESS]
     req["corners"]["supply_v"] = {"vsup": list(PROBE_SUPPLIES_V[cond.name])}
     req["corners"]["temperature_c"] = [PROBE_TEMPERATURE_C]
@@ -609,36 +668,99 @@ def probe_request(cond: Condition, arm: str) -> dict:
     if arm in STEP_ARM_ARGS:
         req["analysis"] = {**req["analysis"], "args": STEP_ARM_ARGS[arm]}
     req["batch"] = {"capacity_wait_s": PROBE_CAPACITY_WAIT_S}
+    if arm in PROBE_BODY_SUPPLEMENT_ARMS:
+        body_note = (f"Body file `{probe_body_name(arm)}` is the issue #165 body of this "
+                     "condition plus exactly the declared "
+                     f"`{arm}` supplement block (see the series README); restricted to the probe "
+                     "PVT points; separately labelled, never merged into the #165 populations.")
+    else:
+        body_note = ("Same body as the issue #165 campaign of this condition; restricted to the "
+                     "probe PVT points; separately labelled, never merged into the #165 populations.")
     req["_comment"] = [
-        f"sg13g2-comparator -- SUPPLEMENTARY probe request (issue #{PROBE_ISSUE}), condition "
+        f"sg13g2-comparator -- SUPPLEMENTARY probe request (issue #{issue}), condition "
         f"`{cond.name}`, arm `{arm}`.",
         "GENERATED by `python3 sim/run_kickback_cm_band.py probe-build`; the committed copy is "
         "byte-for-byte what was submitted.",
-        "Same body as the issue #165 campaign of this condition; restricted to the probe PVT "
-        "points; separately labelled, never merged into the #165 populations.",
-        {"repro": "arm repro: the #165 measurement cards and analysis, unchanged "
-                  "(reproduction gate).",
-         "obs": "arm obs: #165 cards + outputs over time + input differential probes.",
-         "xing": "arm xing: arm obs + decision-threshold crossing times.",
-         "step20p": "arm step20p: arm obs with tran max step 20p (as the #89 supplement)."}[arm],
+        body_note,
+        PROBE_ARM_NOTES[arm],
     ]
-    req["_condition"] = {**condition_metadata(cond), "issue": PROBE_ISSUE,
+    req["_condition"] = {**condition_metadata(cond), "issue": issue,
                          "probe_arm": arm, "reference_series": PROBE_REFERENCE_SERIES}
+    if arm in PROBE_BODY_SUPPLEMENT_ARMS:
+        req["_condition"]["body_supplement"] = arm
     return req
 
 
-def probe_input_bytes(cond: Condition, arm: str) -> dict[str, bytes]:
-    return {BODY_NAME: compose_body(cond).encode("utf-8"),
+def probe_body_name(arm: str) -> str:
+    """The body file this arm's request references. Arms with a declared
+    supplement block get a per-arm body file -- several arms with different
+    bodies share one condition directory, and the shared
+    ``kickback.body.spice`` must stay the #165 body (repro/obs write it)."""
+    return (f"{probe_arm_tag(arm)}.body.spice"
+            if arm in PROBE_BODY_SUPPLEMENT_ARMS else BODY_NAME)
+
+
+def probe_body_supplement(cond: Condition, arm: str) -> str:
+    """The exact text appended to the #165 body for ``arm``; '' for arms that
+    keep the #165 body byte-identical. The block is the ONLY permitted body
+    change, so the AC-2 diff against #165 is exactly this text."""
+    if arm == "optdc":
+        return (
+            "\n"
+            "* ---- issue #415 supplement (arm optdc): DC convergence aids only --------\n"
+            "* Appended verbatim after the issue #165 body; nothing else changed. Solver\n"
+            "* effort only, so the graded values stay comparable to #165: reltol/vntol/\n"
+            "* abstol/chgtol untouched, gmin pinned at its 1e-12 default (the 1 GOhm /\n"
+            "* 1 pF floating network is sensitive to shunt conductance), no .nodeset,\n"
+            "* no .ic, no analysis change.\n"
+            ".options itl1=500 gminsteps=500 srcsteps=500 gmin=1e-12\n"
+        )
+    if arm == "icdc":
+        cm = cond.vcm_v()
+        half_small, half_big = 0.5e-3, 50.0e-3  # dv_small/2, dv_big/2 (body .param values)
+        nodeset = (f".nodeset v(bpp)={cm + half_small:.4g} v(bpn)={cm - half_small:.4g}"
+                   f" v(cpp)={cm + half_big:.4g} v(cpn)={cm - half_big:.4g}\n")
+        return (
+            "\n"
+            "* ---- issue #415 supplement (arm icdc): forced DC operating point ----------\n"
+            "* Appended verbatim after the issue #165 body; nothing else changed.\n"
+            "* .nodeset: at DC no current flows through rfloat, so each floating pin sits\n"
+            "* at its ideal source's value v(cm) +/- dv/2; the hint starts the DC solve\n"
+            "* there instead of letting gmin stepping fail. .ic: every branch output is\n"
+            "* seeded LOW (dout=0) -- the WRONG polarity for the programmed differential\n"
+            "* and the state the rejects already hold on their failing branch; the\n"
+            "* complementary nodes are left to the latch. No arm is forced toward the\n"
+            "* expected answer, so a 55 ns gate pass needs a real post-strobe decision.\n"
+            "* No uic on the tran: ngspice seeds (does not pin) the solve, the bistable\n"
+            "* latch lands in the seeded basin, and the realized start state is re-read\n"
+            "* from the 1 ns observables (series README).\n"
+            f"{nodeset}"
+            ".ic v(douta)=0 v(doutb)=0 v(doutc)=0\n"
+        )
+    return ""
+
+
+def probe_expected_body(cond: Condition, arm: str) -> str:
+    """The exact body this arm is allowed to write: the #165 body, plus the
+    arm's declared supplement block if it declares one."""
+    return compose_body(cond) + probe_body_supplement(cond, arm)
+
+
+def probe_input_bytes(cond: Condition, arm: str, *, issue: int = PROBE_ISSUE) -> dict[str, bytes]:
+    body = probe_body_name(arm)
+    return {body: probe_expected_body(cond, arm).encode("utf-8"),
             f"{probe_arm_tag(arm)}.request.json":
-            (json.dumps(probe_request(cond, arm), indent=2) + "\n").encode("utf-8")}
+            (json.dumps(probe_request(cond, arm, issue=issue), indent=2) + "\n").encode("utf-8")}
 
 
-def write_probe_inputs(cond: Condition, arm: str, out_dir: Path) -> list[Path]:
-    """Write body + arm request; refuse to change anything already there, and
-    refuse a body that is not byte-identical to the #165 body."""
-    files = probe_input_bytes(cond, arm)
+def write_probe_inputs(cond: Condition, arm: str, out_dir: Path,
+                       *, issue: int = PROBE_ISSUE) -> list[Path]:
+    """Write body + arm request; refuse to change anything already there. An
+    arm without a supplement block must reference the shared body and that
+    body must be byte-identical to the #165 body."""
+    files = probe_input_bytes(cond, arm, issue=issue)
     ref_body = SERIES_DIR / PROBE_REFERENCE_SERIES / cond.name / BODY_NAME
-    if ref_body.read_bytes() != files[BODY_NAME]:
+    if probe_body_name(arm) == BODY_NAME and files[BODY_NAME] != ref_body.read_bytes():
         raise KickbackCmBandError(
             f"probe body for {cond.name} differs from the #165 body {ref_body}; refusing")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -660,18 +782,22 @@ def _meas_map(corner: dict) -> dict:
     return {m["name"]: m for m in corner.get("measurements") or []}
 
 
-def probe_compare(series: Path) -> dict:
+def probe_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS,
+                  issue: int = PROBE_ISSUE) -> dict:
     """Offline comparison of every committed probe envelope against the #165
-    envelope of the same condition at the same PVT key."""
+    envelope of the same condition at the same PVT key. ``arms`` is the arm set
+    to look for: a listed arm without an envelope is a problem, so a series is
+    only ever compared against its own arm set (the #405 probe default; the
+    #415 supplement passes PROBE_ARMS_415)."""
     ref_root = SERIES_DIR / PROBE_REFERENCE_SERIES
-    out: dict = {"issue": PROBE_ISSUE, "series": series.name,
+    out: dict = {"issue": issue, "series": series.name,
                  "reference_series": PROBE_REFERENCE_SERIES, "points": [], "arms": {},
                  "problems": []}
     for cond in CONDITIONS:
         ref_env = _load(ref_root / cond.name / f"{TAG}.envelope.json")
         ref_corners, _ = load_points(ref_env)
         arm_corners: dict[str, dict] = {}
-        for arm in PROBE_ARMS:
+        for arm in arms:
             env_path = series / cond.name / f"{probe_arm_tag(arm)}.envelope.json"
             if not env_path.is_file():
                 out["problems"].append(f"missing envelope {cond.name}/{arm}")
