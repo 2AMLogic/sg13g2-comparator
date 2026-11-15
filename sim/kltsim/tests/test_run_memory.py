@@ -33,7 +33,7 @@ def _write_round(root: Path, arm: str, k: int, searches, thresholds):
                 continue
             p, supply, temp = key
             vals = {"vdd_meas": supply, "temp_meas": float(temp)}
-            mult = list(range(0, 11)) if k == 1 else list(range(1, 10))
+            mult = mem.round_mult(k == 1)
             for h in mem.HISTORIES:
                 vals[mem.meas_name("lo", h)] = float(plan[key][h]["lo"])
                 for m, probe in zip(mult, plan[key][h]["probes"]):
