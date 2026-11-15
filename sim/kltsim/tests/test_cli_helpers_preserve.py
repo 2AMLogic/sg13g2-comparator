@@ -302,5 +302,63 @@ class FleetSmokeTests(HelperBase):
         self.assertEqual(self.calls, 1)
 
 
+class CapacityWaitTests(HelperBase):
+    """``--capacity-wait-s`` reaches ``klt sim`` as ``--wait-for-capacity`` on
+    batch submissions only (issue #92: the shared fleet's vCPU budget refuses
+    a burst; 2am#6872)."""
+
+    def setUp(self):
+        super().setUp()
+        self.commands: list[list[str]] = []
+        self.out = self.root / "c1"
+        self.out.mkdir(parents=True)
+        (self.out / "regeneration.request.json").write_text(
+            json.dumps({"corners": {}}), encoding="utf-8")
+
+    def fake_run(self, cmd, **kw):
+        if "--version" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, "klt test\n", "")
+        self.commands.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0, '{"status": "ok"}\n', "")
+
+    def submit(self, capacity_wait_s, backend=None):
+        ns = argparse.Namespace(klt="klt", force=False,
+                                capacity_wait_s=capacity_wait_s)
+        err = io.StringIO()
+        with mock.patch.object(cli.subprocess, "run", self.fake_run), \
+                contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(err):
+            code = cli._submit(self.out / "regeneration.request.json",
+                               self.out, "regeneration", ns, backend=backend)
+        self.assertEqual(code, 0, err.getvalue())
+        sims = [c for c in self.commands if "sim" in c]
+        self.assertEqual(len(sims), 1)
+        return sims[0]
+
+    def test_batch_backend_forwards_the_wait(self):
+        cmd = self.submit(600, backend="batch")
+        self.assertIn("--wait-for-capacity", cmd)
+        self.assertEqual(cmd[cmd.index("--wait-for-capacity") + 1], "600")
+
+    def test_local_backend_never_waits(self):
+        cmd = self.submit(600, backend="local")
+        self.assertNotIn("--wait-for-capacity", cmd)
+
+    def test_env_batch_forwards_the_wait(self):
+        with mock.patch.dict(cli.os.environ, {"KLT_SIM_BACKEND": "batch"}):
+            cmd = self.submit(600)
+        self.assertIn("--wait-for-capacity", cmd)
+
+    def test_env_local_does_not_wait(self):
+        with mock.patch.dict(cli.os.environ, {}, clear=True):
+            cmd = self.submit(600)
+        self.assertNotIn("--wait-for-capacity", cmd)
+
+    def test_off_by_default(self):
+        with mock.patch.dict(cli.os.environ, {"KLT_SIM_BACKEND": "batch"}):
+            cmd = self.submit(None)
+        self.assertNotIn("--wait-for-capacity", cmd)
+
+
 if __name__ == "__main__":
     unittest.main()

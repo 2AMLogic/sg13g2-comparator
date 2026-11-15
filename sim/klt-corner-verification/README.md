@@ -668,3 +668,54 @@ independent-point estimate. Derivation and script:
 `sim/klt-vs-record-offset-significance/`. The remaining ~13 % method
 uncertainty note is therefore sampling-limited, not evidence of a systematic
 method difference.
+
+## Bias/latch-device study, operator-authorized option `study` (issue #92, 2026-11-15)
+
+Append-only continuation of the issue #92 sections above; nothing there is
+edited. After PR #121 closed Row 4a with `w8_l034` but left Row 2 at
+1.338 mV, the operator ruled (2026-10-15, recorded on the issue) for a
+bounded bias/latch-device study inside the DR-0001 topology and the 1.0 mV
+noise Target; the batch-fleet regression that parked it twice
+(2026-10-29/30) was cleared by the 2026-11-13 probe ruling after the fleet
+image was rebaked (v13, ngspice 47).
+
+Evidence: [`campaigns/20261115-issue92-bias/`](campaigns/20261115-issue92-bias/)
+(screening table `sizesweep.md`, finalist report
+[`sizesweep-final.md`](campaigns/20261115-issue92-bias/sizesweep-final.md),
+machine forms `.json`; finalist MC envelopes + artifacts are **stored**, not
+committed: manifest
+[`../../../manifests/artifacts/klt-corner-verification-20261115-issue92-bias-mc.manifest.json`](../../../manifests/artifacts/klt-corner-verification-20261115-issue92-bias-mc.manifest.json),
+summary [`campaigns/20261115-issue92-bias-mc.md`](campaigns/20261115-issue92-bias-mc.md)).
+
+**Fleet probe.** The unchanged `w8_l034` baseline regeneration screening
+request (byte-identical to the parked 20261029 campaign's) completed 18/18
+corners at 5.6-6.3 s/corner (job `klt-sim-5d313de2e8b6`, klt
+`0.9.2.dev1029`, ngspice 47) — the 2026-10-29/30 timeout regression is gone.
+
+**Screening** (13 candidates = `dut_ib` {10, 12.5, 15} uA x {plain, latch
+XM3-XM6 w 10u->6u, tail XMSW w 10u->20u, both}, plus the 20 uA baseline;
+18-point grid; kickback evidence for the identical requests carried verbatim
+from the 20261029 campaign): every candidate keeps Row 4a at the binding
+corner (19.7-21.5 fC <= 25). `dut_ib=10 uA` plain misses the Row 3c screen
+(t_d @ 0.1 mV worst 2.159 ns > 2.0) as the #80 ibsweep found; widening
+`XMSW` to 20 uA restores it (1.823 ns plain+sw20, 1.862 with the latch
+widening too).
+
+**Finalists** (45-point grid, MC offset N=60 / noise N=80, bench-default
+seeds committed in each request): `ib10_sw20`, `ib10_sw20lat6`,
+`ib12p5_sw20`. All three keep Rows 3a/3b/3c/4a/4b at 45/45. Row 2 stays
+FAIL for every candidate: grid mean 1.192 / 1.096 / 1.255 mV rms — the best
+the topology reaches under this study is **1.096 mV** (`ib10_sw20lat6`,
+`dut_ib=10 uA`, latch pairs 6 u, `XMSW` 20 u) against the <= 1.0 mV Target.
+Row 1 is INCOMPLETE on all three (one mismatch draw per finalist aborts in
+ngspice, `timestep_too_small` -> `analysis_aborted`, at its committed seed;
+43-44/45 points valid, worst valid point 13.4-13.8 mV, reasons in the
+grading files) — reported incomplete, not dropped.
+
+**No candidate in this study closes Row 2.** Per the operator's ruling this
+report recommends neither relaxing the Target nor re-opening DR-0001; it is
+the evidence for that next decision. Nothing is adopted:
+`design/comparator.spice`, `sim/dut.json` defaults, `spec/` and the ratified
+table are unchanged, and any adoption remains a follow-up issue plus a
+decision record (with the layout regeneration and DRC/LVS re-run that a
+sized candidate implies).

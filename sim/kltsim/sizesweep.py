@@ -114,7 +114,11 @@ def _geometry_report(sub: Path, bench_names) -> tuple[dict, list[str]]:
         if not body.is_file():
             continue
         try:
-            found[name] = build_mod.extract_geometry(body.read_text(encoding="utf-8"))
+            text = body.read_text(encoding="utf-8")
+            # a dut.json param override (issue #92 bias study) is part of the
+            # candidate's identity, so it is checked for cross-bench consistency too
+            found[name] = {**build_mod.extract_geometry(text),
+                           **build_mod.extract_param_overrides(text)}
         except build_mod.BuildError as exc:
             problems.append(f"{name}: unreadable geometry override ({exc})")
     distinct = {json.dumps(g, sort_keys=True) for g in found.values()}

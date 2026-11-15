@@ -456,6 +456,14 @@ def _submit(request_path: Path, out_dir: Path, tag: str, args,
         # KLT_SIM_BACKEND=batch is exported on dispatch hosts; a one-unit
         # fixture must say so explicitly to stay local.
         cmd += ["--backend", backend]
+    capacity_wait_s = getattr(args, "capacity_wait_s", None)
+    if capacity_wait_s and backend != "local" and (
+            backend == "batch" or os.environ.get("KLT_SIM_BACKEND") == "batch"):
+        # A tight fleet refuses a burst at its vCPU budget (batch_no_capacity);
+        # wait with backoff inside klt instead of failing the submission
+        # (2am#6872), the same contract the issue #165 probe requests carry
+        # in-request as batch.capacity_wait_s.
+        cmd += ["--wait-for-capacity", str(int(capacity_wait_s))]
     started = _dt.datetime.now(_dt.timezone.utc)
     print("$ " + " ".join(cmd), file=sys.stderr)
     proc = subprocess.run(cmd, capture_output=True, text=True, check=False,
@@ -725,6 +733,9 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--retry-refused", type=int, default=0,
                    help="resubmit up to N times when the batch fleet refuses at its instance cap")
     r.add_argument("--retry-wait", type=int, default=120)
+    r.add_argument("--capacity-wait-s", type=int, default=None,
+                   help="pass --wait-for-capacity N to klt sim on batch submissions so a "
+                        "vCPU-budget refusal (batch_no_capacity) waits instead of failing")
     r.add_argument("--force", action="store_true")
     r.set_defaults(func=cmd_run)
 
