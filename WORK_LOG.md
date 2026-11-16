@@ -2,6 +2,10 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-16
+
+- **PR #459**: chore(loom): resync installed Loom to v0.19.1302
+
 ### 2026-11-15
 
 - **PR #455**: fix: report Row 5a in the sizesweep finalist roll-up
