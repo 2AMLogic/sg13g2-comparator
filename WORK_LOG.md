@@ -4,6 +4,16 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-11-15
 
+- **PR #455**: fix: report Row 5a in the sizesweep finalist roll-up
+- **PR #456**: refactor: share one chain-loading loop between the declared-contract loaders
+- **PR #454**: fix(sim): make_delta_table reads the derived extract shape (rows[]) beside klt's delta[]
+- **PR #450**: chore: remove dead repo-root package.json stub
+- **PR #448**: ibsweep: grade swept-bias campaigns against the declared BIAS_PROBES superset
+- **Issue #447** (closed): sizesweep finalist roll-up cannot report Row 5a, hiding a PASS->INCOMPLETE regression
+- **Issue #452** (closed): No guard keeps the three copies of grade.load_campaign's chain-loading loop in sync (grade / declared_n / bias_probes)
+- **Issue #445** (closed): make_delta_table.py cannot read the batch envelope shape (rows[] vs delta[]), the last gap before a 45-corner grid table renders
+- **Issue #428** (closed): Remove the repo-root package.json stub: its last script invokes a Loom script deleted in v0.19.1244
+- **Issue #440** (closed): --check regeneration drift: six committed report pairs no longer reproduce byte-identically on main
 - **PR #449**: pin: move klayout-tools 0.9.1 -> 0.9.2, re-freeze layout evidence
 - **Issue #438** (closed): Decide whether to chase the klayout-tools 0.9.2 pin (0.9.1 landed in #430 as the measured candidate)
 - **PR #433**: refactor: route the kickback driver's smoke and probe submits through kcli
