@@ -6,7 +6,6 @@
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
-- **#461**: chore(loom): resync installed Loom to v0.19.1305
 
 ## Very Important
 
@@ -24,7 +23,7 @@ _None._
 
 Human-approved issues ready for implementation (`loom:issue`).
 
-- **#160**: Draft decision record: input common-mode range row for the ratified spec
+_None._
 
 ## In Progress
 
@@ -36,14 +35,13 @@ _None._
 
 PRs waiting on Judge (`loom:review-requested`).
 
-_None._
+- **#464**: chore(loom): resync installed Loom to v0.19.1306
 
 ## Approved (Awaiting Merge)
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
-- **#461**: chore(loom): resync installed Loom to v0.19.1305
 
 ## Proposed
 
@@ -64,13 +62,13 @@ _None._
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 2 |
+| Operator merge-risk holds | 1 |
 | Very important | 0 |
 | Important | 1 |
-| Ready (`loom:issue`) | 1 |
+| Ready (`loom:issue`) | 0 |
 | In Progress (`loom:building`) | 0 |
-| PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 2 |
+| PRs awaiting review | 1 |
+| Approved PRs awaiting merge | 1 |
 | Curated | 2 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
