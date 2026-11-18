@@ -242,6 +242,7 @@ class SparseCones(unittest.TestCase):
         return {**ENV, NESTED: "1", "EVENT_NAME": "push", "PUSH_AFTER": self.head,
                 "PUSH_BEFORE": sh(["git", "rev-parse", "HEAD~1"], dst).stdout.strip(),
                 "PR_BASE_SHA": "", "PR_HEAD_SHA": "", "GITHUB_SHA_CUR": self.head,
+                "MG_BASE_SHA": "", "MG_HEAD_SHA": "",
                 "TARGET_SHA": self.head}
 
     def _run_job(self, name):
@@ -297,6 +298,64 @@ class SparseCones(unittest.TestCase):
 
     def test_append_only_and_size_job_from_sparse_clone(self):
         self._run_job("append-only-evidence")
+
+    # --- issue #470: the merge_group arm of the append-only gate -----------
+
+    def _append_only_step_script(self):
+        script = dict(self.jobs[SIZE_JOB]["runs"]).get(
+            "Check evidence is append-only")
+        self.assertIsNotNone(script,
+                             "append-only step missing from ci.yml")
+        return script
+
+    def _merge_group_env(self, dst, base, head):
+        return {**self._env(dst), "EVENT_NAME": "merge_group",
+                "MG_BASE_SHA": base, "MG_HEAD_SHA": head}
+
+    def test_append_only_step_merge_group_compares_base_to_head(self):
+        """A merge-group run with a valid base/head passes and echoes the
+        merge_group mode; the comparison is the event's base_sha -> head_sha
+        directly (base_sha is the target-branch tip the group built on)."""
+        step = self._append_only_step_script()
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, self.jobs[SIZE_JOB]["checkout"])
+            base = sh(["git", "rev-parse", "HEAD~1"], dst).stdout.strip()
+            env = self._merge_group_env(dst, base, self.head)
+            r = sh(["bash", "-eu", "-c", step], dst, env, check=False)
+            self.assertEqual(r.returncode, 0, r.stdout[-3000:])
+            self.assertIn("mode: merge_group", r.stdout)
+
+    def test_append_only_step_merge_group_fails_closed_on_bad_shas(self):
+        """An empty base, an empty head or an unavailable (nonexistent) SHA
+        each exit 2 naming the problem -- never a silent pass."""
+        step = self._append_only_step_script()
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, self.jobs[SIZE_JOB]["checkout"])
+            base = sh(["git", "rev-parse", "HEAD~1"], dst).stdout.strip()
+            bogus = "0" * 40
+            cases = [
+                ("missing base", "", self.head, "::error::merge-group base"),
+                ("missing head", base, "", "::error::merge-group head"),
+                ("unavailable base", bogus, self.head,
+                 "::error::merge-group base"),
+            ]
+            for name, mg_base, mg_head, needle in cases:
+                with self.subTest(case=name):
+                    env = self._merge_group_env(dst, mg_base, mg_head)
+                    r = sh(["bash", "-eu", "-c", step], dst, env, check=False)
+                    self.assertEqual(r.returncode, 2, r.stdout[-3000:])
+                    self.assertIn(needle, r.stdout)
+
+    def test_target_sha_steps_fall_back_to_github_sha(self):
+        """On merge_group the PR-head expression resolves empty, so both
+        TARGET_SHA consumers (size budget, artifact manifests) must fall
+        through to `github.sha` -- the merge-group head commit. Static guard
+        on the expressions in ci.yml (the event itself cannot be simulated
+        hermetically)."""
+        hits = re.findall(
+            r"TARGET_SHA: \$\{\{ github\.event\.pull_request\.head\.sha"
+            r" \|\| github\.sha \}\}", CI.read_text())
+        self.assertGreaterEqual(len(hits), 2)
 
     def test_harness_job_from_sparse_clone(self):
         self._run_job("harness-unit-tests")

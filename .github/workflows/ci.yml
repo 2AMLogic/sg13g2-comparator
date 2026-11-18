@@ -35,6 +35,7 @@ name: CI
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
   workflow_dispatch:
@@ -481,6 +482,8 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           PUSH_AFTER: ${{ github.event.after }}
           GITHUB_SHA_CUR: ${{ github.sha }}
+          MG_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          MG_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         run: |
           set -eu
           empty_tree=4b825dc642cb6eb9a060e54bf8d69288fbee4904
@@ -510,6 +513,18 @@ jobs:
               base=$GITHUB_SHA_CUR^
               head=$GITHUB_SHA_CUR
               echo "mode: workflow_dispatch LAST-COMMIT AUDIT, $base -> $head"
+              ;;
+            merge_group)
+              # Merge queue trial merge (issue #470): base_sha is the
+              # target-branch tip the group was built on, head_sha the
+              # trial-merge commit, so the comparison is base -> head
+              # directly (no merge-base). An empty or unavailable SHA fails
+              # closed below; nothing silently passes.
+              git cat-file -e "$MG_BASE_SHA^{commit}" || { echo "::error::merge-group base $MG_BASE_SHA unavailable"; exit 2; }
+              git cat-file -e "$MG_HEAD_SHA^{commit}" || { echo "::error::merge-group head $MG_HEAD_SHA unavailable"; exit 2; }
+              base=$MG_BASE_SHA
+              head=$MG_HEAD_SHA
+              echo "mode: merge_group, $base -> $head"
               ;;
             *)
               echo "::error::unsupported event $EVENT_NAME"; exit 2 ;;

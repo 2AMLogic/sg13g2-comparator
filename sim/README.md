@@ -601,8 +601,11 @@ harness/adapter code, READMEs, the signoff manifests under `manifests/`, and
 **Comparison modes (CI):** pull request -- `git merge-base base head` to the
 actual PR head SHA; push to main -- event `before` to `after` (empty tree if
 `before` is all zeros); workflow_dispatch -- `HEAD^` to `HEAD`, a last-commit
-audit only. Missing revisions fail the job (exit 2), never skip. Exit 1 means
-a violation or an invalid exception registry. Locally:
+audit only; merge queue (`merge_group`, issue #470) -- the event's `base_sha`
+(the target-branch tip the group was built on) to `head_sha` (the trial-merge
+commit) directly, so the queued merge result is audited against the base it
+will actually land on. Missing revisions fail the job (exit 2), never skip.
+Exit 1 means a violation or an invalid exception registry. Locally:
 
 ```bash
 python3 scripts/check_append_only_evidence.py --base "$(git merge-base origin/main HEAD)" --head HEAD
