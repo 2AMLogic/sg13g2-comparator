@@ -2,6 +2,10 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-18
+
+- **PR #473**: ci: report the append-only sim evidence gate on merge_group commits (merge queue readiness)
+
 ### 2026-11-17
 
 - **PR #464**: chore(loom): resync installed Loom to v0.19.1306
