@@ -21,7 +21,7 @@ _None._
 
 ## Ready
 
-Human-approved issues ready for implementation (`loom:issue`).
+Human-approved issues (`loom:issue`) ready for implementation — excluding held (`loom:blocked`/`loom:operator`/`loom:frozen`), `loom:building`, and issues closed by an open `loom:pr` PR (listed under Approved).
 
 _None._
 
@@ -56,7 +56,7 @@ _None._
 
 ## Epics
 
-- **#3**: Gap-to-T1 tracker: sg13g2-comparator artifact-presence survey
+- **#3**: Gap-to-T1 tracker: sg13g2-comparator artifact-presence survey *(held)*
 
 ## Backlog Balance
 
