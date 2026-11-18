@@ -1,6 +1,7 @@
 # Work plan
 
 <!-- guide:plan-body:start -->
+_Generated: 2026-11-18T22:04:07Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
@@ -49,7 +50,7 @@ Issues carrying `loom:curated`.
 
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
 - **#160**: Draft decision record: input common-mode range row for the ratified spec *(curated)*
-- **#470**: Merge queue: add the merge_group trigger and adapt the PR-metadata gates *(curated)*
+- **#470**: Merge queue: add the merge_group trigger and adapt the PR-metadata gates *(curated)* *(held)*
 
 ## Proposed (Architect / Hermit)
 
