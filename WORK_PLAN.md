@@ -29,7 +29,7 @@ _None._
 
 Issues currently being built (`loom:building`).
 
-_None._
+- **#470**: Merge queue: add the merge_group trigger and adapt the PR-metadata gates
 
 ## PRs Awaiting Review
 
@@ -41,7 +41,7 @@ _None._
 
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
-- **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
+- **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified) — closes #160
 
 ## Proposed
 
@@ -49,6 +49,7 @@ Issues carrying `loom:curated`.
 
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
 - **#160**: Draft decision record: input common-mode range row for the ratified spec *(curated)*
+- **#470**: Merge queue: add the merge_group trigger and adapt the PR-metadata gates *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -66,10 +67,10 @@ _None._
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 0 |
+| In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 1 |
-| Curated | 2 |
+| Curated | 3 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
