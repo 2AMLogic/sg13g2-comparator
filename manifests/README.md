@@ -372,34 +372,83 @@ Rows 1, 3a, 3b, 3c and 4b meet their Targets at 45/45 points, and the supply
 and temperature grid (5a) is fully exercised. Row 5's power has no Target
 (DR-0002 ratifies none), and its Stretch fails.
 
-**What is cited, and why that envelope.** The pinned `klt signoff` grades
-item 5 on **one** `sim` envelope and calls it passed only when that
-envelope's own `status` is `pass`. The campaign's requests encode only
+**What is cited, and why these envelopes.** Since #478 the pinned
+`klt signoff` (0.9.2's list form, `docs/cli/signoff.md` "Item 5 with several
+citations and declared spec rows") grades item 5 on a **list of citations,
+each naming the spec rows it covers**, against the full row set declared
+under a top-level `spec_rows["5"]`. The campaign's requests encode only
 DR-0002 Target bounds and validity gates as `limits`, so an envelope's own
-status is the Target verdict of the rows it carries. The manifest cites
-`sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`,
-pinned by `content_hash`
-`sha256:5329b96594ca66668a235d8c3418b958b511fc4a17f3cf652a3bd84cc51c8af7`
-(its `provenance.input.content_hash`: the committed netlist body, which
-inlines `design/comparator.spice` byte for byte). That envelope's own status
-is `fail`: 6 pass / 39 fail / 0 error, the Row 4a Target. The grader
-re-hashes the body and renders item 5 **`unmet` / `check_failed`**
-(`critical_metric_blockers: sim__corner__failed_count = 39`). This is the
-truthful one-envelope summary.
+status is the Target verdict of the rows it carries. The manifest declares
+exactly the eight Target-bearing sub-bounds of `rows.json` and cites:
 
-**What must not be cited**, so a later change does not quietly flip the
-verdict:
+- `sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.envelope.json`
+  (status `pass`), pinned by `content_hash`
+  `sha256:2dc087ac0a1f45992387219a9a30fb1871dbdf43af094ddaf6b280c211acf437`,
+  for Rows **3a, 3b, 3c**;
+- `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`
+  (status `fail`), pinned by `content_hash`
+  `sha256:5329b96594ca66668a235d8c3418b958b511fc4a17f3cf652a3bd84cc51c8af7`
+  (its `provenance.input.content_hash`: the committed netlist body, which
+  inlines `design/comparator.spice` byte for byte), for Rows **4a, 4b**.
 
-- `regeneration.envelope.json` has status `pass`, but citing it would render
-  item 5 `met` on Rows 3 and 5 alone.
-- The offset and noise envelopes have status `pass`, but their status
-  reflects only per-sample gates. Rows 1 and 2 are caller-side population
-  statistics that klt sim cannot grade
-  ([klayout-tools#2960](https://github.com/2AMLogic/klayout-tools/issues/2960)).
+Rows **4c and 5b are deliberately not declared**: DR-0002 ratifies no Target
+for either (`rows.json` carries `target: null`), and the manifest does not
+invent bounds. They stay reported quantities in `grading.md`, nothing else.
+
+The committed requests carry no `spec_row` tags, so the grader trusts the
+manifest's row assignments and reports them as `asserted` coverage
+(`row_sources`). One consequence is honest rather than pretty: the kickback
+envelope carries Rows 4a **and** 4b under its single `status`, so its failure
+lists both in `detail.failed_rows` even though Row 4b meets its Target at
+45/45 points (2.03 … 15.63 µV against ≤ 100 µV, `grading.md`). That is the
+tool's reading of an untagged envelope; the envelope is not split or
+re-minted here (re-minting evidence is out of scope and `sim/` is
+append-only).
+
+**Rows 1, 2 and 5a are declared `gap`s**, each naming the capability the
+pinned grader lacks (a gap is never covered, and it keeps item 5 `unmet`):
+
+- **Row 1** (worst-point quantization-corrected 3σ offset) and **Row 2**
+  (grid-wide mean of the per-point probit-slope noise σ) are caller-side
+  population statistics over `by_corner[]` / cross-measurement reductions.
+  Their envelopes' `status: pass` reflects only per-sample gates — it is
+  **not** the row verdict, so those envelopes must never be cited with
+  `rows` for 1 or 2: an asserted entry would count the row covered (a
+  scratch assertion on `transient_noise.mos_tt.envelope.json` rendered Row 2
+  covered and item 5 `met` despite the 1.289 mV grid mean against the
+  1.0 mV Target). Upstream:
+  [klayout-tools#6967](https://github.com/2AMLogic/klayout-tools/issues/6967)
+  (Row 1's statistic),
+  [klayout-tools#6968](https://github.com/2AMLogic/klayout-tools/issues/6968)
+  (Row 2's), following the closed
+  [#2960](https://github.com/2AMLogic/klayout-tools/issues/2960) and
+  [#2976](https://github.com/2AMLogic/klayout-tools/issues/2976).
+- **Row 5a** (supply/temperature grid exercised, verified as applied) is a
+  joint property of **all four benches**. Its campaign PASS comes from
+  `sim/kltsim/grade.py` checking every bench over the complete grid with
+  the applied conditions; no single envelope carries that joint verdict, and
+  citing one per bench would assert coverage without the joint check. Gap
+  reason and campaign verdict both stand. Upstream:
+  [klayout-tools#6969](https://github.com/2AMLogic/klayout-tools/issues/6969).
+
+**The rendered verdict** (regenerated in the same change,
+`manifests/t1-signoff-report.json`): item 5 `unmet` / `check_failed`, with
+`detail.failed_citations` naming the kickback envelope,
+`detail.failed_rows = ["4a", "4b"]`, `detail.declared_gaps = [1, 2, 5a]`,
+no uncovered rows, and `critical_metric_blockers:
+sim__corner__failed_count = 39`. When a Row 4a fix is adopted and #476
+repoints the kickback citation to a passing envelope, the item stays
+`unmet` / `partial_coverage` on the declared gaps alone — Row 2 in
+particular is never reported covered while its Target fails.
+`scripts/tests/test_item5_spec_rows.py` (run in the
+`signoff-manifest-parity` CI job) holds that regression: a passing-kickback
+fixture with the declared gaps, and Row 2 as the sole gap, both render
+`unmet` / `partial_coverage` with Row 2 carrying no coverage source.
 
 Item 5 can honestly read `met` only when every bounded Target in `grading.md`
-passes, and the citation is then whichever envelope the tool accepts as
-covering them.
+passes and every declared row is covered — a gap declaration must be
+removed (because the grader grew the capability or the evidence was
+re-minted to carry the verdict) before the rows it names count.
 
 ## Item 8 (Characterization report) — cited, honestly `unmet` / `check_failed`
 
@@ -508,7 +557,7 @@ not committed around.
 | File | What it is |
 |---|---|
 | `sg13g2-comparator.json` | the block manifest — `block`, `kind`, per-item pinned evidence citations (items 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 and 11 cited; the rest deliberately uncited — see above). **The stable path a fleet roll-up points at.** |
-| `../sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json` | the cited item 5 evidence (`klt sim` envelope, status `fail`); the rest of that campaign, its grading and its reproduction are in `../sim/klt-corner-verification/README.md` |
+| `../sim/klt-corner-verification/campaigns/20261009-d73a9ac/{regeneration,kickback}.envelope.json` | the cited item 5 evidence (two `klt sim` envelopes, cited per row group under `spec_rows`: regeneration for Rows 3a–3c, status `pass`; kickback for Rows 4a–4b, status `fail`); the rest of that campaign, its grading and its reproduction are in `../sim/klt-corner-verification/README.md` |
 | `../layout/comparator/drc_report.json` | the cited item 3 evidence (`klt drc` envelope), regenerated by `layout/run_flow.sh` |
 | `../layout/comparator/lvs_report.json` | the cited item 4 evidence (`klt lvs` envelope), with its derived inputs `lvs_extracted.spice`, `lvs_reference.spice`, `lvs_request.json`, regenerated by `layout/run_flow.sh` |
 | `../layout/comparator/erc_report.json`, `../layout/comparator/erc_supply_spec.json` | the cited item 11 `klt erc` evidence and its derived request, regenerated by `layout/run_flow.sh` (item 11 also cites `lvs_report.json`) |

@@ -181,6 +181,27 @@
       "reason": "check_failed",
       "graded_by_build": true,
       "citation": null,
+      "citations_graded": [
+        {
+          "citation": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.envelope.json",
+          "rows": [
+            "3a",
+            "3b",
+            "3c"
+          ],
+          "status": "met",
+          "reason": null
+        },
+        {
+          "citation": "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json",
+          "rows": [
+            "4a",
+            "4b"
+          ],
+          "status": "unmet",
+          "reason": "check_failed"
+        }
+      ],
       "detail": {
         "critical_metric_blockers": [
           {
@@ -188,7 +209,35 @@
             "value": 39,
             "higher_is_better": false
           }
-        ]
+        ],
+        "failed_citations": [
+          "sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json"
+        ],
+        "failed_rows": [
+          "4a",
+          "4b"
+        ],
+        "uncovered_rows": [],
+        "declared_gaps": [
+          {
+            "id": "1",
+            "gap": "worst-point quantization-corrected 3-sigma offset is a caller-side population statistic no klt sim envelope status grades (2AMLogic/klayout-tools#6967)"
+          },
+          {
+            "id": "2",
+            "gap": "grid-wide mean of the per-point probit-slope noise sigma is a cross-measurement, cross-corner reduction no klt sim envelope status grades (2AMLogic/klayout-tools#6968)"
+          },
+          {
+            "id": "5a",
+            "gap": "joint full-grid coverage over all four benches with supply/temperature verified as applied has no gradeable item 5 citation form (2AMLogic/klayout-tools#6969)"
+          }
+        ],
+        "unratified_rows": [],
+        "row_sources": {
+          "3a": "asserted",
+          "3b": "asserted",
+          "3c": "asserted"
+        }
       }
     },
     {

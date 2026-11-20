@@ -51,25 +51,60 @@ How the verdicts are kept apart (`sim/kltsim/grade.py`):
 
 ## The citation `klt signoff` sees
 
-`klt signoff` accepts a single `sim` envelope for item 5, and it marks the
-item passed only when that one envelope's own `status` is `pass`. The
-envelopes here encode **only DR-0002 Target bounds and validity gates** as
-`limits`. Stretch bounds are deliberately not encoded, so an envelope's own
-status is the Target verdict of the rows it carries. Two consequences follow:
+Since #478 the pinned `klt signoff` (0.9.2) grades item 5 on a **list of
+citations, each naming the spec rows it covers**, against the full row set
+declared in the manifest under `spec_rows["5"]`
+(`docs/cli/signoff.md`, "Item 5 with several citations and declared spec
+rows"). The envelopes here encode **only DR-0002 Target bounds and validity
+gates** as `limits`. Stretch bounds are deliberately not encoded, so an
+envelope's own status is the Target verdict of the rows it carries. Three
+consequences follow:
 
 - `manifests/sg13g2-comparator.json` cites
-  [`campaigns/20261009-d73a9ac/kickback.envelope.json`](campaigns/20261009-d73a9ac/kickback.envelope.json).
-  Its own status is `fail` (39/45 corners over the 25 fC Q_kick Target), and
-  the grader renders item 5 `unmet` / `check_failed`. Citing the passing
-  regeneration envelope instead would have rendered item 5 **met** on one
-  row's evidence, which is a false claim.
-- The Row 1 and Row 2 statistics are caller-side reductions of klt's
-  per-corner Monte-Carlo moments. Their envelopes' `status` reflects only
-  per-sample gates and limits, never the row verdict. They therefore must
-  never be cited as item 5 passes. See
-  [klayout-tools#2960](https://github.com/2AMLogic/klayout-tools/issues/2960):
-  only a pooled mean ± kσ window is gradeable, so a per-corner population
-  statistic or a statistic over two measurements cannot be expressed.
+  [`campaigns/20261009-d73a9ac/regeneration.envelope.json`](campaigns/20261009-d73a9ac/regeneration.envelope.json)
+  for Rows **3a, 3b, 3c** and
+  [`campaigns/20261009-d73a9ac/kickback.envelope.json`](campaigns/20261009-d73a9ac/kickback.envelope.json)
+  for Rows **4a, 4b**, each pinned by `content_hash` (the netlist body's
+  `provenance.input.content_hash`, re-hashed by the grader). The kickback
+  envelope's own status is `fail` (39/45 corners over the 25 fC Q_kick
+  Target), so the grader renders item 5 `unmet` / `check_failed` with that
+  envelope as the sole failed citation. The committed requests carry no
+  `spec_row` tags, so the grader trusts the manifest's row assignments
+  (`row_sources` reports them `asserted`) and lists **both 4a and 4b** in
+  `detail.failed_rows` — one `status` covers the whole envelope, even though
+  Row 4b meets its Target at 45/45 points per `grading.md`. The envelope is
+  not split or re-minted for this; that is the tool's honest reading of an
+  untagged envelope.
+- **Rows 1, 2 and 5a are declared `gap`s in `spec_rows["5"]`** — a gap is
+  never covered and keeps item 5 `unmet`:
+  - Rows 1 and 2 are caller-side reductions of klt's per-corner
+    Monte-Carlo moments (worst-point quantization-corrected 3σ; grid-wide
+    mean of per-point probit-slope σ). Their envelopes' `status` reflects
+    only per-sample gates and limits, never the row verdict, so they must
+    never be cited with `rows` for 1 or 2 — an asserted entry counts the
+    row covered (a scratch assertion on a `transient_noise` envelope
+    rendered Row 2 covered and item 5 `met` against the failing 1.289 mV
+    grid mean). Upstream capability gaps:
+    [#6967](https://github.com/2AMLogic/klayout-tools/issues/6967),
+    [#6968](https://github.com/2AMLogic/klayout-tools/issues/6968)
+    (following the closed
+    [#2960](https://github.com/2AMLogic/klayout-tools/issues/2960) and
+    [#2976](https://github.com/2AMLogic/klayout-tools/issues/2976)).
+  - Row 5a's PASS is this campaign's own joint verdict — `grade.py` checks
+    all four benches over the complete grid with supply and temperature
+    verified as applied. No single envelope carries that joint property,
+    and per-bench citations would assert coverage without the joint check,
+    so 5a is a declared gap in the signoff manifest even though the
+    campaign verdict is PASS. Upstream:
+    [#6969](https://github.com/2AMLogic/klayout-tools/issues/6969).
+- Rows 4c and 5b carry no ratified Target (`rows.json`: `target: null`) and
+  are **not declared** in `spec_rows["5"]` — the manifest does not invent
+  bounds for them; they stay reported quantities in `grading.md`.
+
+`scripts/tests/test_item5_spec_rows.py` (in the `signoff-manifest-parity`
+CI job) holds the verdict regression: with a passing kickback citation and
+the same declared gaps, item 5 stays `unmet` / `partial_coverage`, and Row 2
+as the sole gap keeps it `unmet` with no coverage source.
 
 ## Layout
 
