@@ -474,6 +474,38 @@ class ScreeningReductionTests(unittest.TestCase):
         sizesweep.run("c1", self.root, report_name="sizesweep_validated")
         self.assertTrue((camp / "sizesweep_validated.json").is_file())
 
+    def test_markdown_only_conflict_writes_nothing(self):
+        camp = self.root / "c1"
+        camp.mkdir()
+        write_candidate(camp)
+        (camp / "sizesweep.md").write_text("historical", encoding="utf-8")
+        with self.assertRaises(FileExistsError) as cm:
+            sizesweep.run("c1", self.root)
+        self.assertIn("--report-name", str(cm.exception))
+        self.assertFalse((camp / "sizesweep.json").exists())
+        self.assertEqual((camp / "sizesweep.md").read_text(), "historical")
+
+    def test_identical_rerun_preserves_timestamps(self):
+        camp = self.root / "c1"
+        camp.mkdir()
+        write_candidate(camp)
+        sizesweep.run("c1", self.root)
+        before = {n: (camp / n).stat().st_mtime_ns for n in ("sizesweep.json", "sizesweep.md")}
+        sizesweep.run("c1", self.root)
+        after = {n: (camp / n).stat().st_mtime_ns for n in before}
+        self.assertEqual(before, after)
+
+    def test_matching_partial_pair_is_completed(self):
+        camp = self.root / "c1"
+        camp.mkdir()
+        write_candidate(camp)
+        sizesweep.run("c1", self.root)
+        (camp / "sizesweep.json").unlink()
+        md_before = (camp / "sizesweep.md").stat().st_mtime_ns
+        sizesweep.run("c1", self.root)
+        self.assertTrue((camp / "sizesweep.json").is_file())
+        self.assertEqual((camp / "sizesweep.md").stat().st_mtime_ns, md_before)
+
 
 class FullGridRegressionTests(unittest.TestCase):
     """The reduced-grid allowance must not weaken the default full-grid checks."""
