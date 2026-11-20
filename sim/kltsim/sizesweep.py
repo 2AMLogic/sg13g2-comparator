@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from . import artifacts as artifacts_mod
 from . import build as build_mod
 from . import grade as grade_mod
 from . import ibsweep as ibsweep_mod
@@ -488,22 +489,21 @@ def _met(r: dict):
     return met, failed, inc, unrun
 
 
-def _write_once(path: Path, text: str) -> None:
-    """Evidence is append-only: never replace a committed report with different bytes."""
-    if path.is_file() and path.read_text(encoding="utf-8") != text:
-        raise FileExistsError(
-            f"{path} already exists with different content; evidence is append-only. "
-            "Write the revised report under a fresh name (--report-name).")
-    path.write_text(text, encoding="utf-8")
-
-
 def run(campaign: str, campaigns_dir: Path, report_name: str = "sizesweep") -> dict:
     cdir = campaigns_dir / campaign
     result = {"campaign": campaign, "screen": screen(cdir), "full": full(cdir)}
     js = json.dumps(grade_mod.json_safe(result), indent=2, allow_nan=False) + "\n"
     md = render_markdown(result)
-    _write_once(cdir / f"{report_name}.json", js)
-    _write_once(cdir / f"{report_name}.md", md)
+    jpath, mpath = cdir / f"{report_name}.json", cdir / f"{report_name}.md"
+    try:
+        # Evidence is append-only: both members are preflighted before either is written.
+        artifacts_mod.commit(
+            [(jpath, js.encode("utf-8")), (mpath, md.encode("utf-8"))],
+            differs="already exists with different content")
+    except artifacts_mod.ArtifactConflict as exc:
+        raise FileExistsError(
+            "; ".join(exc.conflicts) + "; evidence is append-only. "
+            "Write the revised report under a fresh name (--report-name).") from exc
     return result
 
 
