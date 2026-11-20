@@ -1,7 +1,7 @@
 # Work plan
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-18T22:04:07Z (snapshot; compare against live labels)_
+_Generated: 2026-11-20T20:52:22Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
@@ -30,7 +30,7 @@ _None._
 
 Issues currently being built (`loom:building`).
 
-_None._
+- **#477**: Row 2 noise: split the front-end term (density vs decision bandwidth), then a bounded three-candidate design study and a drafting-only decision record
 
 ## PRs Awaiting Review
 
@@ -51,6 +51,9 @@ Issues carrying `loom:curated`.
 - **#61**: Post-layout: klt pex extraction and spec re-run on the extracted netlist (T1 item 7) *(curated)*
 - **#160**: Draft decision record: input common-mode range row for the ratified spec *(curated)*
 - **#470**: Merge queue: add the merge_group trigger and adapt the PR-metadata gates *(curated)* *(held)*
+- **#476**: Draft the decision record on adopting the 8 µm input pair for Row 4a kickback *(curated)*
+- **#477**: Row 2 noise: split the front-end term (density vs decision bandwidth), then a bounded three-candidate design study and a drafting-only decision record *(curated)*
+- **#478**: Item 5: declare the DR-0002 row set under spec_rows and cite each row's envelope, replacing the single-envelope citation *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -68,10 +71,10 @@ _None._
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 0 |
+| In Progress (`loom:building`) | 1 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 1 |
-| Curated | 3 |
+| Curated | 6 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
