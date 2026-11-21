@@ -8,6 +8,8 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-11-21
 
+- **PR #505**: fix: repair dangling issue-92-bias MC manifest link in corner-verification README
+- **Issue #502** (closed): Broken relative link to the issue-92-bias MC manifest in sim/klt-corner-verification/README.md
 - **PR #494**: docs: measure per-corner front-end density and complete the Row 2 factor split
 - **PR #491**: sim: replace the unusable manual dpkg-deb recipe in build-osdi.sh with install-and-rerun
 - **Issue #477** (closed): Row 2 noise: split the front-end term (density vs decision bandwidth), then a bounded three-candidate design study and a drafting-only decision record

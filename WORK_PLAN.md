@@ -1,7 +1,7 @@
 # Work plan
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-21T15:10:38Z (snapshot; compare against live labels)_
+_Generated: 2026-11-21T19:40:01Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
@@ -41,7 +41,7 @@ Issues currently being built (`loom:building`).
 
 PRs waiting on Judge (`loom:review-requested`).
 
-- **#501**: sim: measure matched PMOS load widths for Row 2 density and bench noise
+- **#504**: sim: integration-node capacitance study, negative result (issue #497)
 
 ## Approved (Awaiting Merge)
 
@@ -49,6 +49,7 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified) — closes #160
 - **#492**: fix: require exact klt version match to run item 5 spec-row tests — closes #487
+- **#501**: sim: measure matched PMOS load widths for Row 2 density and bench noise — closes #498
 
 ## Proposed
 
@@ -62,7 +63,6 @@ Issues carrying `loom:curated`.
 - **#489**: Replace raw xschem call in design/netlist.py with klt netlist *(curated)*
 - **#497**: Measure the integration-node capacitance tradeoff between Row 2 noise and Row 3c delay *(curated)*
 - **#498**: Measure how matched PMOS load widths change input-referred density and Row 2 noise *(curated)*
-- **#502**: Broken relative link to the issue-92-bias MC manifest in sim/klt-corner-verification/README.md *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -82,8 +82,8 @@ _None._
 | Ready (`loom:issue`) | 0 |
 | In Progress (`loom:building`) | 6 |
 | PRs awaiting review | 1 |
-| Approved PRs awaiting merge | 2 |
-| Curated | 9 |
+| Approved PRs awaiting merge | 3 |
+| Curated | 8 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
