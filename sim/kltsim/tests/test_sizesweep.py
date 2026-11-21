@@ -1021,3 +1021,92 @@ class CapControlTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CapFullTests(unittest.TestCase):
+    """The issue #497 finalist table: candidate expectation threading and the
+    archived 8 um baseline's Target verdicts carried beside each row."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self.cand = self.root / "cadd2f.spice"
+        self.cand.write_text(build.compose_candidate_netlist("2f"), encoding="utf-8")
+
+    def _full_dir(self, name="cadd2f"):
+        sub = self.root / f"full_{name}"
+        sub.mkdir()
+        return sub
+
+    def run_cap_full(self, graded_rows, name="cadd2f"):
+        from kltsim.benches import BENCHES as all_benches
+        sub = self._full_dir(name)
+        for bname, bench in all_benches.items():
+            (sub / f"{bname}.body.spice").write_text(
+                build.compose_body(bench, build.BATCH_OSDI_DIR,
+                                   param_overrides={"dut_ib": "1e-05"},
+                                   geometry_overrides=CAP_GEOMETRY,
+                                   candidate=(name, self.cand)), encoding="utf-8")
+        calls = []
+        orig = grade.grade_campaign
+
+        def fake_grade_campaign(campaign_dir, candidate=None):
+            calls.append((campaign_dir.name, candidate))
+            return {"rows": graded_rows, "t1_item5": {"all_target_rows_pass": True}}
+
+        grade.grade_campaign = fake_grade_campaign
+        self.addCleanup(setattr, grade, "grade_campaign", orig)
+        res = sizesweep.cap_full(self.root)
+        self.assertEqual(len(res), 1)
+        result = {"campaign": "c", "control": sizesweep.cap_control(),
+                  "screen": [], "full": res}
+        json.dumps(grade.json_safe(result), allow_nan=False)
+        return res[0], calls, sizesweep.render_capacitance_markdown(result)
+
+    def test_candidate_expectation_and_baseline_carry(self):
+        rows = [{"id": rid, "target_verdict": grade.PASS, "stretch_verdict": grade.PASS,
+                 "target_bound": 1.0, "stretch_bound": 1.0,
+                 "target": {"points_valid": 45, "points_expected": 45, "points_failing": 0,
+                            "worst": {"value": 0.5, "point": "tt_27c_1.2v"}},
+                 "stretch": {"points_failing": 0}}
+                for rid, _l, _u in sizesweep.FULL_ROWS]
+        r, calls, md = self.run_cap_full(rows)
+        self.assertEqual(r["candidate_status"], "available")
+        self.assertEqual(calls, [("full_cadd2f", "cadd2f")])  # named expectation threaded
+        # the archived 8 um baseline verdict is carried per row
+        self.assertTrue(all(c.get("baseline_w8_l034_target") is not None
+                            for c in r["rows"].values()))
+        self.assertIn("Row 2 (Target <= 1.0 mV rms)", md)
+
+    def test_baseline_broken_marked(self):
+        # rows the 8 um baseline PASSes but the finalist FAILs preserve nothing
+        def row(rid, verdict, value):
+            return {"id": rid, "target_verdict": verdict, "stretch_verdict": verdict,
+                    "target": {"points_valid": 45, "points_expected": 45,
+                               "points_failing": 0 if verdict == grade.PASS else 3,
+                               "worst": {"value": value, "point": "ff_125c_1.08v"}}}
+        rows = [row("3a", grade.PASS, 0.7), row("3c", grade.FAIL, 2.4)]
+        r, _calls, md = self.run_cap_full(rows)
+        self.assertEqual(r["rows"]["3a"]["preservation"], "held")
+        self.assertEqual(r["rows"]["3c"]["preservation"], "broken")
+        self.assertIn("baseline-broken", md)
+
+    def test_wrong_candidate_name_rejected_before_grading(self):
+        sub = self._full_dir("cadd4f")  # dir says cadd4f, bodies declare cadd2f? no:
+        # bodies are composed with name cadd4f but reference cadd2f's file ->
+        # the declaration names cadd4f with cadd2f's bytes: reference mismatch
+        from kltsim.benches import BENCHES as all_benches
+        for bname, bench in all_benches.items():
+            body = build.compose_body(bench, build.BATCH_OSDI_DIR,
+                                      param_overrides={"dut_ib": "1e-05"},
+                                      geometry_overrides=CAP_GEOMETRY,
+                                      candidate=("cadd2f", self.cand))
+            (sub / f"{bname}.body.spice").write_text(
+                body.replace("name=cadd2f ", "name=cadd4f "), encoding="utf-8")
+        r = sizesweep.cap_full(self.root)[0]
+        self.assertEqual(r["candidate_status"], "rejected")
+        self.assertTrue(r["rejection_reasons"])
+        self.assertEqual(r["rows"]["3c"]["state"], "rejected")
+
+

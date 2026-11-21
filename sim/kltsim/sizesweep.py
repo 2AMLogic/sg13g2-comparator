@@ -889,6 +889,10 @@ def cap_full(campaign_dir: Path) -> list[dict]:
         name = sub.name[len("full_"):]
         cand, cand_problems = _candidate_report(sub, tuple(grade_mod._bench_names()),
                                                 expect_name=name)
+        if cand:
+            # the reference file itself is verified before any grading spend
+            ref_problems, _bytes = grade_mod._candidate_reference(cand, name)
+            cand_problems += ref_problems
         geometry, geom_problems = _geometry_report(sub, tuple(grade_mod._bench_names()))
         problems = list(cand_problems)
         graded = None if problems else grade_mod.grade_campaign(sub, candidate=name)
