@@ -1,0 +1,25 @@
+{
+  "tag": "kickback",
+  "command": [
+    "klt",
+    "sim",
+    "sim/klt-corner-verification/campaigns/20261121-issue498/scr_w12/kickback.request.json",
+    "--format",
+    "json",
+    "-o",
+    "sim/klt-corner-verification/campaigns/20261121-issue498/scr_w12/artifacts/kickback",
+    "--wait-for-capacity",
+    "600"
+  ],
+  "cwd": ".",
+  "klt_version": "klt 0.9.3.dev2575+g6bd18bbc8637",
+  "env": {
+    "KLT_SIM_BACKEND": "batch"
+  },
+  "request_sha256": "e64b9ececf85e1c498f9d82de10932d54850c1d66e8424ae01251ed6839c40dc",
+  "started_utc": "2026-11-21T11:13:42+00:00",
+  "finished_utc": "2026-11-21T11:15:06+00:00",
+  "exit_code": 0,
+  "stderr_tail": "klt sim: warning: batch job bound 16320s (options.timeout_s 900s x 18 units + 120s; a conservative fully-serial upper bound, not a runtime estimate) exceeds the fleet's whole-job ceiling of 3600s (max_job_seconds from fleet_config); a job still running at the ceiling is killed and every unit is reported batch_job_timeout. Set request.remote.hosts to at least 6 to run one job per shard of at most 3 units, each within the ceiling\nklt: batch job klt-sim-a702ffcbfcf0 submitting to s3://<bucket>/jobs/klt-sim-a702ffcbfcf0\nklt sim: batch job klt-sim-a702ffcbfcf0: submitted\nklt sim: batch job klt-sim-a702ffcbfcf0 launched; re-attach with `klt sim <request> --backend batch --attach klt-sim-a702ffcbfcf0`\nklt sim: batch job klt-sim-a702ffcbfcf0 state=no status.json yet elapsed=1s\nklt sim: batch job klt-sim-a702ffcbfcf0: running\nklt sim: batch job klt-sim-a702ffcbfcf0 state=running elapsed=32s\nklt sim: batch job klt-sim-a702ffcbfcf0: done\n",
+  "envelope_sha256": "5279d3ab7d1683b53cd8651d2e418dfc9760346ad357967d37d99dae413ecdd9"
+}

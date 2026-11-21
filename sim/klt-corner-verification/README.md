@@ -764,3 +764,69 @@ the evidence for that next decision. Nothing is adopted:
 table are unchanged, and any adoption remains a follow-up issue plus a
 decision record (with the layout regeneration and DRC/LVS re-run that a
 sized candidate implies).
+
+## Matched PMOS load-width study (issue #498, 2026-11-21)
+
+Append-only continuation; nothing above is edited. Issue
+[#498](https://github.com/2AMLogic/sg13g2-comparator/issues/498) (part of
+#479) asked whether resizing **only** the matched PMOS loads XM5/XM6 --
+with XM3/XM4, the input pair, the switch and the 10 uA bias held at the
+archived `ib10_sw20lat6` geometry -- moves Row 2 and the input-referred
+density. Phase 1 of #477 attributed 85.4-92.4 % of differential output
+noise power to the diode-connected counterparts XM5A/XM6A, which motivated
+the experiment.
+
+Evidence: [`campaigns/20261121-issue498/`](campaigns/20261121-issue498/)
+(study report [`loadwidth.md`](campaigns/20261121-issue498/loadwidth.md),
+screen tables `sizesweep.md` / `sizesweep-final.md`, machine forms `.json`;
+candidate screen and finalist MC envelopes + artifacts are **stored**, not
+committed: manifest
+[`../../../manifests/artifacts/klt-corner-verification-20261121-issue498-mc.manifest.json`](../../../manifests/artifacts/klt-corner-verification-20261121-issue498-mc.manifest.json),
+summary [`campaigns/20261121-issue498-mc.md`](campaigns/20261121-issue498-mc.md)).
+Candidate densities (reduced model, Phase 1 method):
+[`../comparator-preamp-noise/reports/20261121-issue498/`](../comparator-preamp-noise/reports/20261121-issue498/)
+and its stored four-point batch
+[`../comparator-preamp-noise/reports/20261121-issue498-pvt.md`](../comparator-preamp-noise/reports/20261121-issue498-pvt.md).
+
+**Declared set.** XM5/XM6 widths 4, 8, 10, 12 u (3 u and 6 u were already
+measured; every width in the set is new as a PMOS load width). Screening =
+the issue #92 18-point grid: the standard kickback/regeneration requests
+plus a Row 2 transient-noise screen (N = 80 per rung) as THREE per-process
+requests per candidate -- derived from the process-specific full requests
+because the builder's `--screen` rewrite replaces the process list after
+the split (the byte-identical-file pitfall recorded in the issue). The
+screen's union check (18 points exactly once) is enforced by
+`sim/kltsim/loadwidth.py` at build time.
+
+**Characterization result.** Wider loads lower the input-referred density
+monotonically and cost front-end gain: S(TT) 39.41 / 36.78 / 35.04 / 33.76
+/ 32.74 nV/rtHz at 4 / 6 / 8 / 10 / 12 u (control row reproduces Phase 1
+at all four PVT points). The 10.1 % TT-density reduction the control's
+Row 2 projection needs is crossed between 10 u and 12 u.
+
+**Screen result** (18-point Row 2 mean, unchanged 36.27 nV/rtHz injection;
+control's 1.053 mV recomputed from the archived grades): w4 1.076 and w8
+1.065 mV do not improve on the control (eliminated); w12 improves (1.032)
+but its Row 3c screen breaches the Target (t_d @ 0.1 mV 2.044 ns > 2.0 at
+`ss_-40c_1.08v`, eliminated); **w10 advances** (1.008 mV, all Target-bound
+gates pass; 3c margin thin at 1.977 ns).
+
+**Finalist** (`full_w10`, 45-point grid, MC offset N=60 / noise N=80,
+bench-default seeds): every Target row the 8 um baseline passed is
+preserved -- Row 1 PASS 13.37 mV worst, 3a 1.188 ns, 3b 135.6 ps, 3c
+1.977 ns, 4a 19.76 fC, 4b 10.42 uV, 5a PASS at 45/45 valid points (no
+INCOMPLETE, no missing draws). **Row 2 stays FAIL: grid mean 1.041 mV rms**
+against <= 1.0 -- the best Row 2 measured in any study of this topology
+(control 1.096, 8 um baseline 1.338, previous best 1.096), a 5.0 %
+improvement on the control, but the Target is not met and w10's own-density
+TT projection (1.020 mV, labelled projection) does not meet it either. The
+next width up breaks Row 3c, so no further width in this direction can
+qualify.
+
+**No width in this family closes Row 2.** As with the earlier studies, this
+report recommends nothing, relaxes nothing, adopts nothing:
+`design/comparator.spice`, `sim/dut.json`, `spec/` and the ratified table
+are unchanged. The evidence (density lever measured to saturation of the
+timing budget, every previously passing Target verified preserved on the
+advanced finalist, Row 5a coverage complete) is what #479 needs for its
+decision even though the study's outcome is negative.

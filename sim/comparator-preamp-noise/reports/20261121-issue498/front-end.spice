@@ -1,0 +1,59 @@
+* Issue 498 characterization only. Fresh copy of the issue 477 reduced model
+* (reports/20261120-issue477/front-end.spice, same core and wrappers from
+* design/comparator.spice b31b936dd78634b224d882e5f43ceb3b43eb34e5c3400336f09213cef8a39b90).
+* Defaults are the archived ib10_sw20lat6 control: 8 um / 0.34 um pair,
+* 20 um switch, 6 um XM3-XM6, 10 uA bias.
+* The study adds load_w and applies it ONLY to the diode-connected
+* counterparts XM5A/XM6A (the measured loads). latch_w keeps XM3-XM6 of the
+* full-latch wrapper at the control's 6 um, so the request's load_w rows
+* cannot move any other device (issue 498: the Phase 1 latch_w ties NMOS and
+* PMOS widths together; reusing it would confound the result).
+.param pair_w=8u pair_l=0.34u switch_w=20u latch_w=6u load_w=6u
+.param dut_ib=10u dut_vcm=0.6 vdd_val=1.2
+.subckt comparator vinp vinn clk vbias dout doutb vdd vss
+XMT tmid vbias vss vss sg13_lv_nmos w=40u l=0.5u ng=1 m=1
+XMSW tail clk tmid vss sg13_lv_nmos w={switch_w} l=0.13u ng=1 m=1
+XM1 np vinp tail vss sg13_lv_nmos w={pair_w} l={pair_l} ng=1 m=1
+XM2 nn vinn tail vss sg13_lv_nmos w={pair_w} l={pair_l} ng=1 m=1
+XM3 ln lp np vss sg13_lv_nmos w={latch_w} l=0.13u ng=1 m=1
+XM4 lp ln nn vss sg13_lv_nmos w={latch_w} l=0.13u ng=1 m=1
+XM5 ln lp vdd vdd sg13_lv_pmos w={latch_w} l=0.13u ng=1 m=1
+XM6 lp ln vdd vdd sg13_lv_pmos w={latch_w} l=0.13u ng=1 m=1
+XM7 ln clk vdd vdd sg13_lv_pmos w=6u l=0.13u ng=1 m=1
+XM8 lp clk vdd vdd sg13_lv_pmos w=6u l=0.13u ng=1 m=1
+XM9 np clk vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XM10 nn clk vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIAP lnb ln vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIAN lnb ln vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMIBP lpb lp vdd vdd sg13_lv_pmos w=3u l=0.13u ng=1 m=1
+XMIBN lpb lp vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNAP1 na lnb vdd vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNAP2 doutb dout na vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNAN1 doutb lnb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNAN2 doutb dout vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNBP1 nb lpb vdd vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNBP2 dout doutb nb vdd sg13_lv_pmos w=4u l=0.13u ng=1 m=1
+XMNBN1 dout lpb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+XMNBN2 dout doutb vss vss sg13_lv_nmos w=1.5u l=0.13u ng=1 m=1
+.ends
+
+.subckt comparator_dut_analog vinp vinn ibias aop aon vdd vss
+XMBA ibias ibias vss vss sg13_lv_nmos w=10u l=0.5u ng=1 m=1
+XMTA tmid ibias vss vss sg13_lv_nmos w=40u l=0.5u ng=1 m=1
+XMSWA tail vdd tmid vss sg13_lv_nmos w={switch_w} l=0.13u ng=1 m=1
+XM1A aon vinp tail vss sg13_lv_nmos w={pair_w} l={pair_l} ng=1 m=1
+XM2A aop vinn tail vss sg13_lv_nmos w={pair_w} l={pair_l} ng=1 m=1
+XM5A aon aon vdd vdd sg13_lv_pmos w={load_w} l=0.13u ng=1 m=1
+XM6A aop aop vdd vdd sg13_lv_pmos w={load_w} l=0.13u ng=1 m=1
+.ends
+
+.subckt comparator_dut_latch inp inn clk dout doutb vdd vss
+x1 inp inn clk vdd dout doutb vdd vss comparator
+.ends
+
+.subckt comparator_dut vinp vinn clk ibias dout doutb vdd vss
+XMB ibias ibias vss vss sg13_lv_nmos w=10u l=0.5u ng=1 m=1
+x1 vinp vinn clk ibias dout doutb vdd vss comparator
+.ends
+
+.include "../../testbench/tb_preamp_noise.spice"

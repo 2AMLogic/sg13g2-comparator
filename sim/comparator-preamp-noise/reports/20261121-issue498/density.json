@@ -1,0 +1,175 @@
+{
+  "_comment": [
+    "Issue #498 reduced-model candidate-density table, derived from the stored four-point batch",
+    "(reports/20261121-issue498-pvt.md). Phase 1 method: white_out is ngspice's differential",
+    "output noise density at 1 MHz, gain_dc the |Av(1 Hz)|, S = white_out / gain_dc the",
+    "input-referred white density. The control row (load_w = 6u) reproduces Phase 1's",
+    "ib10_sw20lat6 densities at all four points. Generated from the batch report.json with",
+    "scripts in the summary; densities rounded to 4 decimals, raw values full precision."
+  ],
+  "netlist": "sim/comparator-preamp-noise/reports/20261121-issue498/front-end.spice",
+  "request": "sim/comparator-preamp-noise/reports/20261121-issue498/loadwidth.request.json",
+  "stored_evidence": {
+    "summary": "sim/comparator-preamp-noise/reports/20261121-issue498-pvt.md",
+    "manifest": "manifests/artifacts/comparator-preamp-noise-20261121-issue498-pvt.manifest.json"
+  },
+  "load_power_share_percent": {
+    "ctrl": {
+      "tt": 86.7,
+      "sf": 85.41,
+      "ff": 87.71,
+      "fs": 86.52
+    },
+    "w4": {
+      "tt": 88.36,
+      "sf": 87.12,
+      "ff": 89.5,
+      "fs": 88.05
+    },
+    "w8": {
+      "tt": 85.4,
+      "sf": 84.08,
+      "ff": 86.29,
+      "fs": 85.33
+    },
+    "w10": {
+      "tt": 84.3,
+      "sf": 82.96,
+      "ff": 85.09,
+      "fs": 84.34
+    },
+    "w12": {
+      "tt": 83.34,
+      "sf": 81.99,
+      "ff": 84.04,
+      "fs": 83.47
+    }
+  },
+  "widths": {
+    "ctrl": {
+      "load_w": "6u",
+      "points": {
+        "tt": {
+          "white_out_v_rthz": 3.990152e-08,
+          "gain_dc_v_per_v": 1.084931,
+          "density_nv_rthz": 36.7779
+        },
+        "sf": {
+          "white_out_v_rthz": 3.444202e-08,
+          "gain_dc_v_per_v": 1.158784,
+          "density_nv_rthz": 29.7226
+        },
+        "ff": {
+          "white_out_v_rthz": 4.462224e-08,
+          "gain_dc_v_per_v": 0.9782783,
+          "density_nv_rthz": 45.613
+        },
+        "fs": {
+          "white_out_v_rthz": 3.512511e-08,
+          "gain_dc_v_per_v": 1.151007,
+          "density_nv_rthz": 30.5169
+        }
+      }
+    },
+    "w4": {
+      "load_w": "4u",
+      "points": {
+        "tt": {
+          "white_out_v_rthz": 4.915122e-08,
+          "gain_dc_v_per_v": 1.247227,
+          "density_nv_rthz": 39.4084
+        },
+        "sf": {
+          "white_out_v_rthz": 4.262816e-08,
+          "gain_dc_v_per_v": 1.343522,
+          "density_nv_rthz": 31.7287
+        },
+        "ff": {
+          "white_out_v_rthz": 5.439743e-08,
+          "gain_dc_v_per_v": 1.100526,
+          "density_nv_rthz": 49.4286
+        },
+        "fs": {
+          "white_out_v_rthz": 4.361903e-08,
+          "gain_dc_v_per_v": 1.342196,
+          "density_nv_rthz": 32.4983
+        }
+      }
+    },
+    "w8": {
+      "load_w": "8u",
+      "points": {
+        "tt": {
+          "white_out_v_rthz": 3.458782e-08,
+          "gain_dc_v_per_v": 0.9870078,
+          "density_nv_rthz": 35.0431
+        },
+        "sf": {
+          "white_out_v_rthz": 2.973093e-08,
+          "gain_dc_v_per_v": 1.046903,
+          "density_nv_rthz": 28.3989
+        },
+        "ff": {
+          "white_out_v_rthz": 3.90177e-08,
+          "gain_dc_v_per_v": 0.9042223,
+          "density_nv_rthz": 43.1506
+        },
+        "fs": {
+          "white_out_v_rthz": 3.021346e-08,
+          "gain_dc_v_per_v": 1.034647,
+          "density_nv_rthz": 29.2017
+        }
+      }
+    },
+    "w10": {
+      "load_w": "10u",
+      "points": {
+        "tt": {
+          "white_out_v_rthz": 3.105675e-08,
+          "gain_dc_v_per_v": 0.9199826,
+          "density_nv_rthz": 33.758
+        },
+        "sf": {
+          "white_out_v_rthz": 2.659969e-08,
+          "gain_dc_v_per_v": 0.9701435,
+          "density_nv_rthz": 27.4183
+        },
+        "ff": {
+          "white_out_v_rthz": 3.529292e-08,
+          "gain_dc_v_per_v": 0.8534923,
+          "density_nv_rthz": 41.3512
+        },
+        "fs": {
+          "white_out_v_rthz": 2.694046e-08,
+          "gain_dc_v_per_v": 0.954557,
+          "density_nv_rthz": 28.223
+        }
+      }
+    },
+    "w12": {
+      "load_w": "12u",
+      "points": {
+        "tt": {
+          "white_out_v_rthz": 2.850609e-08,
+          "gain_dc_v_per_v": 0.8706259,
+          "density_nv_rthz": 32.7421
+        },
+        "sf": {
+          "white_out_v_rthz": 2.433923e-08,
+          "gain_dc_v_per_v": 0.9135279,
+          "density_nv_rthz": 26.6431
+        },
+        "ff": {
+          "white_out_v_rthz": 3.259879e-08,
+          "gain_dc_v_per_v": 0.8161312,
+          "density_nv_rthz": 39.9431
+        },
+        "fs": {
+          "white_out_v_rthz": 2.457417e-08,
+          "gain_dc_v_per_v": 0.8953443,
+          "density_nv_rthz": 27.4466
+        }
+      }
+    }
+  }
+}
