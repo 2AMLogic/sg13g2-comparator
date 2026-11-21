@@ -714,6 +714,41 @@ def _noise_screen_cell(bench_ev, reasons: list[str]) -> dict:
     }
 
 
+#: Row 2 Target (mV rms) and Row 3c Target (ns) the screen decision tests
+#: against (DR-0002; a setting advances only when the screen noise mean is at
+#: or below the Row 2 Target AND the worst screen delay is at or below Row 3c)
+ROW2_TARGET_MV = 1.0
+ROW3C_TARGET_NS = 2.0
+
+
+def _screen_decision(noise: dict, td01: dict, control: dict) -> dict:
+    """The objective advance/eliminate call for one setting (issue #497's
+    question: close Row 2 WITHIN the Row 3c limit). Deterministic from the
+    validated screen statistics; the noise side needs the full deficit, not
+    just a trend, because the screen's own sampling error is ~ +/-3 %."""
+    reasons = []
+    if noise.get("available") and noise["value"] is not None \
+            and noise["value"] <= ROW2_TARGET_MV:
+        noise_ok, noise_why = True, f"screen mean {noise['value']:.4g} mV <= {ROW2_TARGET_MV:g}"
+    else:
+        value = noise.get("value")
+        need = 100.0 * (1.0 - ROW2_TARGET_MV / control["value"]) if control.get("value") else None
+        have = 100.0 * (1.0 - value / control["value"]) if value is not None and control.get("value") else None
+        noise_ok = False
+        noise_why = (f"screen mean {value:.4g} mV rms vs control {control['value']:.4g} mV: "
+                     f"deficit {have:.2f} % against the {need:.2f} % reduction 1.0 mV requires"
+                     if value is not None else "screen noise mean unavailable")
+    reasons.append(noise_why)
+    if td01.get("available") and td01["value"] is not None and td01["value"] <= ROW3C_TARGET_NS:
+        reasons.append(f"worst t_d {td01['value']:.4g} ns <= {ROW3C_TARGET_NS:g}")
+    else:
+        reasons.append(f"worst t_d {td01.get('value')} ns exceeds {ROW3C_TARGET_NS:g}")
+    advance = noise_ok and bool(td01.get("available")) and td01["value"] <= ROW3C_TARGET_NS
+    return {"advance": advance,
+            "decision": "advance" if advance else "eliminate",
+            "reasons": reasons}
+
+
 def cap_screen(campaign_dir: Path) -> list[dict]:
     """Validated screening reduction for the capacitance study (issue #497).
 
@@ -728,6 +763,7 @@ def cap_screen(campaign_dir: Path) -> list[dict]:
     expected_set = set(EXPECTED_POINTS)
     control = _control_identity()
     control_identity = {**control["geometry"], **control["params"]}
+    control_noise = cap_control()["metrics"]["noise_mean"]
     rows = []
     for sub in sorted(p for p in campaign_dir.iterdir()
                       if p.is_dir() and p.name.startswith("scr_")):
@@ -782,6 +818,8 @@ def cap_screen(campaign_dir: Path) -> list[dict]:
         row["metrics"]["td01_worst"] = _metric_cell(vals, rej, len(d["points"]),
                                                     gates, d["reasons"])
         row["metrics"]["noise_mean"] = noise
+        row["decision"] = _screen_decision(noise, row["metrics"]["td01_worst"],
+                                           control_noise)
         rows.append(row)
     return rows
 
@@ -940,8 +978,8 @@ def render_capacitance_markdown(result: dict) -> str:
     if result.get("screen"):
         L += ["## Screening (18-point grid: noise vs worst Row 3c delay)", "",
               "| setting | C per side [fF] | noise mean sigma [mV rms] | valid/18 | "
-              "worst t_d @ 0.1 mV [ns] | its PVT point | valid/18 | candidate reference |",
-              "|---|---|---|---|---|---|---|---|"]
+              "worst t_d @ 0.1 mV [ns] | its PVT point | valid/18 | decision | candidate reference |",
+              "|---|---|---|---|---|---|---|---|---|"]
         for r in result["screen"]:
             m = r["metrics"]
             noise, td01 = m["noise_mean"], m["td01_worst"]
@@ -950,12 +988,22 @@ def render_capacitance_markdown(result: dict) -> str:
                 ref = f"`{r['candidate'].get('path')}` sha256 `{str(r['candidate'].get('sha256'))[:12]}...`"
             if r.get("candidate_problems") or r.get("identity_problems"):
                 ref += " REJECTED"
+            decision = r.get("decision") or {}
             L.append(f"| {r['name']} | {_f(r.get('cap_fF'), 3) if r.get('cap_fF') is not None else '-'} "
                      f"| {_mc(noise, True) if noise.get('available') else _f(noise.get('value'))} "
                      f"| {noise.get('valid')}/{noise.get('expected')} "
                      f"| {_mc(td01, True) if td01.get('available') else _f(td01.get('value'))} "
                      f"| {td01.get('point') or '-'} | {td01.get('valid')}/{td01.get('expected')} "
-                     f"| {ref} |")
+                     f"| {decision.get('decision', '-')} | {ref} |")
+        for r in result["screen"]:
+            decision = r.get("decision") or {}
+            for why in decision.get("reasons") or []:
+                L.append(f"- `{r['name']}` {decision.get('decision', '?')}: {why}")
+        advanced = [r for r in result["screen"] if (r.get("decision") or {}).get("advance")]
+        if result["screen"] and not advanced and not result.get("full"):
+            L += ["", "**No setting advanced to the full grid**: every setting's full-grid "
+                  "Rows 1-5 remain unmeasured (a negative result completes the study -- "
+                  "the elimination reasons above are the recorded rationale)."]
         L += ["", "### Screening evidence validation", "",
               "| setting | bench | expected | present | evidence rejections |", "|---|---|---|---|---|"]
         for r in result["screen"]:

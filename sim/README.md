@@ -112,6 +112,21 @@ strobes and +/-50 mV supply steps (45-point regeneration grid, 20-point paired
 offset grid, N = 16 draws) on the batch fleet. Characterization only; no row is
 changed.
 
+**Integration-node capacitance tradeoff (issue #497).**
+[`comparator-integration-capacitance/`](comparator-integration-capacitance/README.md)
+measures whether matched added capacitance at the input-pair drains can
+close Row 2 within the Row 3c limit (Phase 2 of #479). Candidate settings
+are structural DUT netlists (`comparator.spice` plus two matched capacitor
+pairs) bound by name/path/sha256 in each bench body and re-derived from
+today's schematic by both builder and grader; the Row 2 noise bench joins
+the 18-point screen as one six-point part per process. Result: negative --
+the noise deficit saturates at ~2-3 % against the 5 % the Target needs
+while Row 3c rises toward its limit, and the Phase 1 calibration shows the
+input-referred density itself is unchanged. No setting advanced; the graded
+screen is
+[`klt-corner-verification/campaigns/20261121-issue497/capacitance.md`](klt-corner-verification/campaigns/20261121-issue497/capacitance.md).
+Characterization only; no row is changed.
+
 Plus one supporting confirmation, not a spec-row bench:
 
 ```

@@ -116,9 +116,11 @@ python3 sim/run_klt_corner_verification.py build \
 python3 sim/run_klt_corner_verification.py run \
   --campaign 20261121-issue497/scr_cadd2f --bench regeneration \
   --capacity-wait-s 600
-python3 sim/run_klt_corner_verification.py run \
-  --campaign 20261121-issue497/scr_cadd2f --bench transient_noise \
-  --capacity-wait-s 600
+for P in mos_tt mos_ff mos_ss; do
+  python3 sim/run_klt_corner_verification.py run \
+    --campaign 20261121-issue497/scr_cadd2f --bench transient_noise \
+    --part transient_noise.$P --capacity-wait-s 600
+done
 # the study report (control + screens + finalists):
 python3 sim/run_klt_corner_verification.py capacitance --campaign 20261121-issue497
 ```
