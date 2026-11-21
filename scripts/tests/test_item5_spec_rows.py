@@ -79,24 +79,30 @@ class PinnedKltVersionGate(unittest.TestCase):
             capture_output=True, text=True, check=True)
         return json.loads(proc.stdout)["klt_version"]
 
-    @staticmethod
-    def _stub_klt(tmp, version_output):
-        stub = Path(tmp) / "klt-stub"
-        stub.write_text(
-            "#!/bin/sh\ncat <<'EOF'\n" + version_output + "\nEOF\n",
-            encoding="utf-8")
-        stub.chmod(0o755)
-        return str(stub)
+    FAKE_KLT = "/nonexistent/klt-stub"
 
     def _pinned_with(self, version_output):
-        with tempfile.TemporaryDirectory() as tmp:
-            stub = self._stub_klt(tmp, version_output)
-            with mock.patch.dict(os.environ, {"KLT_BIN": stub}):
-                return _pinned_klt()
+        """Run _pinned_klt() with ``klt --version`` answered by a stub.
+
+        The version subprocess is stubbed in-process (no shell script on
+        disk), so the comparison runs even where the temporary directory is
+        mounted noexec. Other subprocess calls (git show) pass through.
+        """
+        real_run = subprocess.run
+
+        def fake_run(cmd, *args, **kwargs):
+            if list(cmd) == [self.FAKE_KLT, "--version"]:
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout=version_output, stderr="")
+            return real_run(cmd, *args, **kwargs)
+
+        with mock.patch.dict(os.environ, {"KLT_BIN": self.FAKE_KLT}), \
+                mock.patch.object(subprocess, "run", side_effect=fake_run):
+            return _pinned_klt()
 
     def test_exact_pin_match_returns_exe(self):
         pin = self._committed_pin()
-        self.assertIsNotNone(self._pinned_with("klt " + pin))
+        self.assertEqual(self._pinned_with("klt " + pin), self.FAKE_KLT)
 
     def test_dev_build_of_pinned_release_skips(self):
         pin = self._committed_pin()
@@ -110,7 +116,8 @@ class PinnedKltVersionGate(unittest.TestCase):
 
     def test_trailing_whitespace_still_matches(self):
         pin = self._committed_pin()
-        self.assertIsNotNone(self._pinned_with("klt " + pin + "\n\n   "))
+        self.assertEqual(
+            self._pinned_with("klt " + pin + "\n\n   "), self.FAKE_KLT)
 
 
 def _input_hash(rel):
