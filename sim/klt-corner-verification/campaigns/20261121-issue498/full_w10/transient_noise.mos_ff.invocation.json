@@ -1,0 +1,25 @@
+{
+  "tag": "transient_noise.mos_ff",
+  "command": [
+    "klt",
+    "sim",
+    "sim/klt-corner-verification/campaigns/20261121-issue498/full_w10/transient_noise.mos_ff.request.json",
+    "--format",
+    "json",
+    "-o",
+    "sim/klt-corner-verification/campaigns/20261121-issue498/full_w10/artifacts/transient_noise.mos_ff",
+    "--wait-for-capacity",
+    "600"
+  ],
+  "cwd": ".",
+  "klt_version": "klt 0.9.3.dev2575+g6bd18bbc8637",
+  "env": {
+    "KLT_SIM_BACKEND": "batch"
+  },
+  "request_sha256": "392c39bf095d1218375c494fa2f3baf742b9441306dfb9a7806dc82fc91525f0",
+  "started_utc": "2026-11-21T11:54:22+00:00",
+  "finished_utc": "2026-11-21T11:57:26+00:00",
+  "exit_code": 0,
+  "stderr_tail": "warning: trnoise()/trrandom() sources are not governed by monte_carlo.seed (ngspice seeds them from the process id): re-running this request redraws their noise, and samples run in separate batch jobs or hosts may share a noise stream.\nklt sim: warning: batch job bound 216120s (options.timeout_s 300s x 720 units + 120s; a conservative fully-serial upper bound, not a runtime estimate) exceeds the fleet's whole-job ceiling of 3600s (max_job_seconds from fleet_config); a job still running at the ceiling is killed and every unit is reported batch_job_timeout. Set request.remote.hosts to at least 66 to run one job per shard of at most 11 units, each within the ceiling\nklt: batch job klt-sim-17c5c3cdcadd submitting to s3://<bucket>/jobs/klt-sim-17c5c3cdcadd\nklt sim: batch job klt-sim-17c5c3cdcadd: submitted\nklt sim: batch job klt-sim-17c5c3cdcadd launched; re-attach with `klt sim <request> --backend batch --attach klt-sim-17c5c3cdcadd`\nklt sim: batch job klt-sim-17c5c3cdcadd state=no status.json yet elapsed=1s\nklt sim: batch job klt-sim-17c5c3cdcadd: running\nklt sim: batch job klt-sim-17c5c3cdcadd state=running elapsed=31s\nklt sim: batch job klt-sim-17c5c3cdcadd: done\n",
+  "envelope_sha256": "c8db107d25805c934fa3394278e26fc28c6836d4aa2fe83b57471b12b3e888ed"
+}

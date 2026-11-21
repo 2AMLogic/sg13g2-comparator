@@ -1,7 +1,7 @@
 # Work plan
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-21T08:56:04Z (snapshot; compare against live labels)_
+_Generated: 2026-11-21T15:10:38Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
@@ -32,12 +32,16 @@ Issues currently being built (`loom:building`).
 
 - **#476**: Draft the decision record on adopting the 8 µm input pair for Row 4a kickback
 - **#487**: test_item5_spec_rows: pinned-klt skip guard uses a substring match, so a 0.9.2.dev build passes as the pin
+- **#489**: Replace raw xschem call in design/netlist.py with klt netlist
+- **#495**: Remove the empty-measurement fallback from the memory determinism repeat
+- **#497**: Measure the integration-node capacitance tradeoff between Row 2 noise and Row 3c delay
+- **#498**: Measure how matched PMOS load widths change input-referred density and Row 2 noise
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-_None._
+- **#501**: sim: measure matched PMOS load widths for Row 2 density and bench noise
 
 ## Approved (Awaiting Merge)
 
@@ -55,11 +59,14 @@ Issues carrying `loom:curated`.
 - **#470**: Merge queue: add the merge_group trigger and adapt the PR-metadata gates *(curated)* *(held)*
 - **#476**: Draft the decision record on adopting the 8 µm input pair for Row 4a kickback *(curated)*
 - **#487**: test_item5_spec_rows: pinned-klt skip guard uses a substring match, so a 0.9.2.dev build passes as the pin *(curated)*
+- **#489**: Replace raw xschem call in design/netlist.py with klt netlist *(curated)*
+- **#497**: Measure the integration-node capacitance tradeoff between Row 2 noise and Row 3c delay *(curated)*
+- **#498**: Measure how matched PMOS load widths change input-referred density and Row 2 noise *(curated)*
+- **#502**: Broken relative link to the issue-92-bias MC manifest in sim/klt-corner-verification/README.md *(curated)*
 
 ## Proposed (Architect / Hermit)
 
-- **#489**: Replace raw xschem call in design/netlist.py with klt netlist *(hermit)*
-- **#495**: Remove the empty-measurement fallback from the memory determinism repeat *(hermit)*
+_None._
 
 ## Epics
 
@@ -73,10 +80,10 @@ Issues carrying `loom:curated`.
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 2 |
-| PRs awaiting review | 0 |
+| In Progress (`loom:building`) | 6 |
+| PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 2 |
-| Curated | 5 |
-| Architect / Hermit proposals | 2 |
+| Curated | 9 |
+| Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->

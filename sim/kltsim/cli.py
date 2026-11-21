@@ -42,6 +42,7 @@ from . import artifacts as artifacts_mod
 from . import grade as grade_mod
 from . import ibsweep as ibsweep_mod
 from . import sizesweep as sizesweep_mod
+from . import loadwidth as loadwidth_mod
 from . import noise_full as noise_full_mod
 from . import benches as benches_mod
 from .benches import ALL_BENCHES, BENCHES, FIXTURE_BENCHES
@@ -749,6 +750,39 @@ def cmd_capacitance(args) -> int:
     return 0 if result["screen"] or result["full"] else 1
 
 
+def cmd_loadwidth_build(args) -> int:
+    """Issue #498: append-only write of every declared candidate's scr_
+    inputs (kickback + regeneration screens via the standard screening
+    rewrite, plus the three derived per-process transient-noise screen
+    requests), all carrying the candidate's XM5/XM6 geometry."""
+    out_dir = _campaign_dir(args.campaign)
+    planned = loadwidth_mod.plan_all_scr_inputs(out_dir)
+    if not _commit_planned(planned, args, "loadwidth-build"):
+        return 1
+    for path, _data in planned:
+        try:
+            shown = path.relative_to(build_mod.REPO_ROOT)
+        except ValueError:
+            shown = path
+        print(f"wrote {shown}")
+    return 0
+
+
+def cmd_loadwidth_report(args) -> int:
+    """Issue #498: the Row 2 screen table (derived transient-noise requests,
+    18-point grid statistic via the full-grid grader path), the control
+    comparison, the fast-bench Target gates and the advance/eliminate
+    verdict. Append-only like every derived report."""
+    try:
+        result = loadwidth_mod.run(args.campaign, CAMPAIGNS_DIR, args.report_name,
+                                   density_path=args.density)
+    except (OSError, ValueError, build_mod.BuildError) as exc:
+        print(f"loadwidth-report: {exc}", file=sys.stderr)
+        return 1
+    print((CAMPAIGNS_DIR / args.campaign / f"{args.report_name}.md").read_text(encoding="utf-8"))
+    return 1 if result["screen_status"] == grade_mod.INCOMPLETE else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     default_klt = shutil.which("klt") or "klt"
     ap = argparse.ArgumentParser(prog="run_klt_corner_verification.py", description=__doc__,
@@ -855,6 +889,23 @@ def main(argv: list[str] | None = None) -> int:
     cap.add_argument("--report-name", default="capacitance",
                      help="output stem; an existing different report is never overwritten")
     cap.set_defaults(func=cmd_capacitance)
+
+    lwb = sub.add_parser("loadwidth-build",
+                         help="write the issue #498 PMOS load-width screen inputs (scr_* dirs)")
+    lwb.add_argument("--campaign", required=True)
+    lwb.add_argument("--force", action="store_true",
+                     help="scratch use only: overwrite instead of append-only commit")
+    lwb.set_defaults(func=cmd_loadwidth_build)
+
+    lwr = sub.add_parser("loadwidth-report",
+                         help="tabulate the issue #498 PMOS load-width screen and verdict")
+    lwr.add_argument("--campaign", required=True)
+    lwr.add_argument("--report-name", default="loadwidth",
+                     help="output stem; an existing different report is never overwritten")
+    lwr.add_argument("--density", type=Path, default=None, metavar="JSON",
+                     help="reduced-model density table for projections (defaults to the matching "
+                     "comparator-preamp-noise report, when available)")
+    lwr.set_defaults(func=cmd_loadwidth_report)
 
     g = sub.add_parser("grade", help="grade a campaign's committed envelopes")
     g.add_argument("--campaign", required=True)

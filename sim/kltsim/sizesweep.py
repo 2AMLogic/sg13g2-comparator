@@ -366,7 +366,7 @@ def _metric_cell(values: dict, rejected: list[str], present: int, gates, bench_r
     }
 
 
-def screen(campaign_dir: Path) -> list[dict]:
+def screen(campaign_dir: Path, *, subdirs: list[Path] | None = None) -> list[dict]:
     """Validated screening reduction (issue #122).
 
     Per candidate and per bench: the saved request must be the bench contract
@@ -380,7 +380,9 @@ def screen(campaign_dir: Path) -> list[dict]:
     dut = grade_mod.load_dut_reference()
     expected_set = set(EXPECTED_POINTS)
     rows = []
-    for sub in sorted(p for p in campaign_dir.iterdir() if p.is_dir() and p.name.startswith("scr_")):
+    if subdirs is None:
+        subdirs = sorted(p for p in campaign_dir.iterdir() if p.is_dir() and p.name.startswith("scr_"))
+    for sub in subdirs:
         geometry, geom_problems = _geometry_report(sub, SCREEN_BENCHES)
         loaded = {}
         for name in SCREEN_BENCHES:
