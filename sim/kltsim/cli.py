@@ -118,6 +118,14 @@ def cmd_build(args) -> int:
             return 2
     overrides = _parse_overrides(args.dut_param)
     geometry = build_mod.parse_geometry(getattr(args, "geometry", None)) or None
+    candidate = None
+    if getattr(args, "candidate", None):
+        try:
+            cand_name, cand_path, _ = build_mod.load_candidate(args.candidate)
+        except build_mod.BuildError as exc:
+            print(f"build: {exc}", file=sys.stderr)
+            return 2
+        candidate = (cand_name, cand_path)
     # Compose EVERY selected bench's inputs before writing anything, then
     # commit them append-only: a conflict in any bench changes no file.
     planned: list[tuple[Path, bytes]] = []
@@ -125,12 +133,23 @@ def cmd_build(args) -> int:
         bench = benches_mod.offset_mc_with_n(offset_n) if name == "offset_mc" else ALL_BENCHES[name]
         if args.bias_probes and name == "regeneration":
             bench = benches_mod.regeneration_with_bias_probes(bench)
-        planned += build_mod.plan_bench_inputs(
+        if getattr(args, "screen", False) and bench.split_by_process:
+            # issue #497: a process-split bench's screen parts stay split --
+            # one six-point part per screening process section, so the parts
+            # tile the 18-point grid exactly once (a request-only rewrite of
+            # the five full-grid parts duplicated every point five times).
+            planned += sizesweep_mod.plan_screen_inputs(
+                bench, out_dir, param_overrides=overrides or None,
+                geometry_overrides=geometry, candidate=candidate)[2]
+            continue
+        files = build_mod.plan_bench_inputs(
             bench, out_dir, target="batch", param_overrides=overrides or None,
-            geometry_overrides=geometry)[2]
-    if getattr(args, "screen", False):
-        planned = [(path, sizesweep_mod.screen_request(data) if path.name.endswith(".request.json") else data)
-                   for path, data in planned]
+            geometry_overrides=geometry, candidate=candidate)[2]
+        if getattr(args, "screen", False):
+            files = [(path, sizesweep_mod.screen_request(data)
+                      if path.name.endswith(".request.json") else data)
+                     for path, data in files]
+        planned += files
     try:
         created = set(build_mod.commit_inputs(planned))
     except build_mod.BuildError as exc:
@@ -626,7 +645,18 @@ def cmd_grade(args) -> int:
         except ValueError as exc:
             print(f"grade: {exc}", file=sys.stderr)
             return 2
-    result = declared_n_mod.grade_campaign(out_dir, offset_n)
+    candidate = getattr(args, "candidate", None)
+    if candidate is not None:
+        try:
+            build_mod.load_candidate(candidate)
+        except build_mod.BuildError as exc:
+            print(f"grade: {exc}", file=sys.stderr)
+            return 2
+        # a named setting's benches must declare exactly that candidate
+        # (issue #497); the candidate study is not a declared-N campaign
+        result = grade_mod.grade_campaign(out_dir, candidate=candidate)
+    else:
+        result = declared_n_mod.grade_campaign(out_dir, offset_n)
     md = grade_mod.render_markdown(result)
     report_dir, md = resolve_report_dir(args, out_dir, md, result, "campaign")
     rc = artifacts_mod.publish(
@@ -706,6 +736,19 @@ def cmd_sizesweep(args) -> int:
     return 0 if result["screen"] or result["full"] else 1
 
 
+def cmd_capacitance(args) -> int:
+    """The issue #497 integration-node capacitance study report: archived
+    control + candidate screens (+ full finalists), append-only beside the
+    campaign like ``sizesweep``."""
+    try:
+        result = sizesweep_mod.cap_run(args.campaign, CAMPAIGNS_DIR, args.report_name)
+    except FileExistsError as exc:
+        print(f"capacitance: {exc}", file=sys.stderr)
+        return 1
+    print((CAMPAIGNS_DIR / args.campaign / f"{args.report_name}.md").read_text(encoding="utf-8"))
+    return 0 if result["screen"] or result["full"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     default_klt = shutil.which("klt") or "klt"
     ap = argparse.ArgumentParser(prog="run_klt_corner_verification.py", description=__doc__,
@@ -719,8 +762,14 @@ def main(argv: list[str] | None = None) -> int:
                    help="override a sim/dut.json param in the emitted body only (issue #80 sweep)")
     b.add_argument("--geometry", action="append", metavar="INST.FIELD=VALUE",
                    help="override a MOS w/l in the inlined DUT body only (issue #92 sizing study)")
+    b.add_argument("--candidate", metavar="NAME",
+                   help="inline this named structural candidate netlist (issue #497 "
+                        "integration-capacitance study) as the DUT instead of the "
+                        "schematic; geometry overrides still apply on top")
     b.add_argument("--screen", action="store_true",
-                   help="reduced screening grid (tt/ff/ss x 1.08/1.32 V x -40/27/125 C), issue #92")
+                   help="reduced screening grid (tt/ff/ss x 1.08/1.32 V x -40/27/125 C), issue #92; "
+                        "a process-split bench keeps its split (one 6-point part per "
+                        "process, issue #497)")
     b.add_argument("--bias-probes", action="store_true",
                    help="append the mirror/headroom probes to the regeneration bench")
     b.add_argument("--offset-n", type=int, metavar="N",
@@ -800,11 +849,21 @@ def main(argv: list[str] | None = None) -> int:
                     help="output stem; an existing different report is never overwritten")
     sz.set_defaults(func=cmd_sizesweep)
 
+    cap = sub.add_parser("capacitance",
+                         help="tabulate the integration-node capacitance study (issue #497)")
+    cap.add_argument("--campaign", required=True)
+    cap.add_argument("--report-name", default="capacitance",
+                     help="output stem; an existing different report is never overwritten")
+    cap.set_defaults(func=cmd_capacitance)
+
     g = sub.add_parser("grade", help="grade a campaign's committed envelopes")
     g.add_argument("--campaign", required=True)
     g.add_argument("--offset-n", type=int, metavar="N",
                    help="declared offset_mc draws per PVT point of a non-historical campaign "
                         "(issue #167); the saved requests must carry exactly this N")
+    g.add_argument("--candidate", metavar="NAME",
+                   help="the named issue #497 candidate setting this campaign holds; every "
+                        "bench body must declare exactly it (structural DUT binding)")
     g.add_argument("--report-dir", help="write grading.{json,md} here instead of the campaign "
                    "directory (new directory; cites the campaign; existing different files "
                    "are never overwritten)")

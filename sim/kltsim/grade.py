@@ -247,8 +247,57 @@ def _corner_key(corner: dict) -> tuple[str, float, float] | None:
     return (_process_name(corner.get("process")), round(v, 6), t)
 
 
-def check_dut(bench: BenchEvidence, dut: DutReference) -> list[str]:
-    """Return the reasons this bench's DUT is NOT the schematic DUT (empty = ok)."""
+def _candidate_reference(declared: dict, candidate: str | None) -> tuple[list[str], bytes | None]:
+    """Verify a body's declared structural candidate against the independent
+    reference FILE (issue #497): the named netlist must exist, hash to the
+    declared sha256, and still be today's DUT plus exactly the matched
+    capacitors. When the expected setting is a REGISTERED candidate, its
+    committed bytes are the reference the declaration must match. Returns
+    (problems, file bytes)."""
+    problems: list[str] = []
+    name = declared.get("name")
+    if candidate is not None and name != candidate:
+        problems.append(f"body declares candidate {name!r}, expected {candidate!r}")
+    declared_path = declared.get("path")
+    if not declared_path:
+        return problems + ["candidate declaration carries no path"], None
+    ref = Path(declared_path)
+    if not ref.is_absolute():
+        ref = build_mod.REPO_ROOT / ref
+    if not ref.is_file():
+        return problems + [f"candidate reference {declared_path!r} does not exist"], None
+    data = ref.read_bytes()
+    got = hashlib.sha256(data).hexdigest()
+    if declared.get("sha256") != got:
+        problems.append(
+            f"candidate reference file hashes to {got[:12]}..., body declares "
+            f"{str(declared.get('sha256'))[:12]}...")
+    try:
+        build_mod.check_candidate_netlist(data.decode("utf-8"))
+    except (build_mod.BuildError, UnicodeDecodeError) as exc:
+        problems.append(
+            f"candidate reference is not today's design/comparator.spice plus the "
+            f"matched integration-node capacitors: {exc}")
+    if candidate is not None:
+        registered = build_mod.candidate_netlist_path(candidate)
+        if registered.is_file():
+            registered_sha = hashlib.sha256(registered.read_bytes()).hexdigest()
+            if declared.get("sha256") != registered_sha:
+                problems.append(
+                    f"body declares candidate {name!r} with reference sha256 "
+                    f"{str(declared.get('sha256'))[:12]}..., but the registered "
+                    f"candidate {candidate!r} commits {registered_sha[:12]}...")
+    return problems, data
+
+
+def check_dut(bench: BenchEvidence, dut: DutReference,
+              candidate: str | None = None) -> list[str]:
+    """Return the reasons this bench's DUT is NOT the schematic DUT (empty = ok).
+
+    ``candidate`` (issue #497) additionally requires the body to inline the
+    NAMED structural candidate netlist, verified against the reference file's
+    own bytes; without it a candidate body is checked for self-consistency
+    the same way, and the plain schematic path is today's behaviour exactly."""
     problems: list[str] = []
     if dut.dut_json.get("provenance") != "schematic":
         problems.append(
@@ -260,24 +309,39 @@ def check_dut(bench: BenchEvidence, dut: DutReference) -> list[str]:
     if embedded is None:
         problems.append("netlist body embeds no DUT block")
     else:
+        declared_candidate = build_mod.extract_candidate(bench.body_text)
+        if not declared_candidate and candidate is not None:
+            problems.append(f"body declares no candidate (expected {candidate!r})")
         embedded_sha = hashlib.sha256(embedded.encode("utf-8")).hexdigest()
         reference_bytes = dut.netlist_bytes
+        if declared_candidate:
+            cand_problems, cand_bytes = _candidate_reference(declared_candidate, candidate)
+            problems += cand_problems
+            if cand_bytes is not None:
+                reference_bytes = cand_bytes
         geometry = build_mod.extract_geometry(bench.body_text)
         if geometry:
-            # issue #92 sizing candidate: today's DUT + the declared geometry
+            # issue #92 sizing candidate: the reference DUT + the declared geometry
             try:
                 reference_bytes = build_mod.apply_geometry(
-                    dut.netlist_bytes.decode("utf-8"), geometry).encode("utf-8")
+                    reference_bytes.decode("utf-8"), geometry).encode("utf-8")
             except build_mod.BuildError as exc:
                 problems.append(f"declared geometry override is not applicable: {exc}")
         reference_sha = hashlib.sha256(reference_bytes).hexdigest()
         if declared_sha != embedded_sha:
             problems.append("embedded DUT block does not match its own declared sha256")
         if embedded_sha != reference_sha:
+            base = ("candidate " + str(declared_candidate.get("name"))) if declared_candidate \
+                else f"today's {dut.netlist_rel}"
             problems.append(
-                f"embedded DUT ({embedded_sha[:12]}) is not today's {dut.netlist_rel} "
+                f"embedded DUT ({embedded_sha[:12]}) is not {base} "
                 f"({reference_sha[:12]})")
-        if path != dut.netlist_rel:
+        if declared_candidate:
+            if path != declared_candidate.get("path"):
+                problems.append(
+                    f"embedded DUT names {path!r}, not the declared candidate reference "
+                    f"{declared_candidate.get('path')!r}")
+        elif path != dut.netlist_rel:
             problems.append(f"embedded DUT names {path!r}, not {dut.netlist_rel!r}")
         placeholder = build_mod.SIM_DIR / "dut" / "placeholder_comparator.spice"
         if placeholder.is_file() and embedded.encode("utf-8") == placeholder.read_bytes():
@@ -950,9 +1014,12 @@ def _provenance(bench: BenchEvidence) -> list[dict]:
     return out
 
 
-def grade(rows_spec: dict, benches: dict[str, BenchEvidence], dut: DutReference) -> dict:
+def grade(rows_spec: dict, benches: dict[str, BenchEvidence], dut: DutReference,
+          candidate: str | None = None) -> dict:
+    """Grade a campaign's rows. ``candidate`` (issue #497) requires every
+    bench's body to inline that named structural candidate netlist."""
     grid = rows_spec["grid"]
-    dut_problems = {name: check_dut(b, dut) for name, b in benches.items()}
+    dut_problems = {name: check_dut(b, dut, candidate) for name, b in benches.items()}
     rows_out = []
     for row in rows_spec["rows"]:
         ev = row["evidence"]
@@ -1190,7 +1257,15 @@ def check_request_semantics(bench, tag: str, request: dict,
 
 def check_chain(bench, tag: str, campaign_dir: Path, envelope_sha: str,
                 problems: list[str], corners: dict | None = None) -> dict:
-    """Validate <tag>.request.json / <tag>.invocation.json against the envelope bytes."""
+    """Validate <tag>.request.json / <tag>.invocation.json against the envelope bytes.
+
+    ``corners`` may be a dict (the one intentionally different grid every
+    part is expected to carry) or a callable ``(bench, tag) -> dict | None``
+    resolving the expectation per part -- the issue #497 screening form,
+    where a process-split bench's parts each hold one process section of the
+    reduced grid."""
+    if callable(corners):
+        corners = corners(bench, tag)
     checked: dict = {"envelope_sha256": envelope_sha}
     _, inv = _load_json_file(campaign_dir / f"{tag}.invocation.json", "invocation", tag, problems)
     req_raw, req = _load_json_file(campaign_dir / f"{tag}.request.json", "request", tag, problems)
@@ -1221,7 +1296,9 @@ def load_campaign(campaign_dir: Path, corners: dict | None = None,
 
     ``corners`` / ``bench_names`` are for reduced-grid callers (issue #122):
     they pass the explicit expected grid and the benches the directory holds.
-    Defaults reproduce the full-campaign load exactly.
+    ``corners`` may resolve per part as a ``(bench, tag) -> dict | None``
+    callable (issue #497's per-process screening parts). Defaults reproduce
+    the full-campaign load exactly.
     """
     from .benches import BENCHES
 
@@ -1267,10 +1344,13 @@ def load_dut_reference() -> DutReference:
                         netlist.relative_to(build_mod.REPO_ROOT).as_posix(), dut_json)
 
 
-def grade_campaign(campaign_dir: Path) -> dict:
+def grade_campaign(campaign_dir: Path, candidate: str | None = None) -> dict:
     rows_spec = json.loads((build_mod.EXPERIMENT_DIR / "rows.json").read_text(encoding="utf-8"))
-    result = grade(rows_spec, load_campaign(campaign_dir), load_dut_reference())
+    result = grade(rows_spec, load_campaign(campaign_dir), load_dut_reference(),
+                   candidate=candidate)
     result["campaign"] = campaign_dir.name
+    if candidate is not None:
+        result["candidate"] = candidate
     return result
 
 
