@@ -255,6 +255,57 @@ class OsdiIdentityTest(PdkTestBase):
         self.assertEqual(pdk.osdi_identity(p.osdi_dir)["build_provenance"]["status"], "unknown")
 
 
+class EnsureLibLLVM21Test(PdkTestBase):
+    """Issue #488: dpkg-deb prerequisite diagnostic; cache hit needs no tools."""
+
+    _SOURCE_TOOLS = ("bash", "cat", "dirname")
+
+    def _ensure(self, cache: Path) -> subprocess.CompletedProcess:
+        # PATH holding only what sourcing the script itself needs (cat for
+        # the diagnostic heredoc, dirname for SCRIPT_DIR): dpkg-deb is off
+        # PATH by construction, whatever the host provides.
+        bin_dir = self.tmp / "bin"
+        bin_dir.mkdir()
+        for tool in self._SOURCE_TOOLS[1:]:
+            os.symlink(shutil.which(tool), bin_dir / tool)
+        # absolute bash: the custom env PATH below does not contain it
+        return subprocess.run(
+            [shutil.which("bash"), "-c", 'source "$1"; ensure_libllvm21', "t", str(BUILD_OSDI)],
+            env={"PATH": str(bin_dir), "CACHE_DIR": str(cache)},
+            capture_output=True, text=True)
+
+    @unittest.skipUnless(all(shutil.which(t) for t in _SOURCE_TOOLS),
+                         "bash/cat/dirname not available")
+    def test_cold_cache_missing_dpkg_deb_exits_3_and_names_prerequisite(self) -> None:
+        r = self._ensure(self.tmp / "cold-cache")
+        self.assertEqual(r.returncode, 3)
+        self.assertIn("dpkg-deb", r.stderr)
+        self.assertIn("apt-get install dpkg", r.stderr)
+        # The manual recipe is unusable advice when dpkg-deb is the missing
+        # tool (#488): the extractor commands must not be printed.
+        self.assertNotIn("dpkg-deb -x", r.stderr)
+        self.assertNotIn("curl", r.stderr)
+
+    @unittest.skipUnless(all(shutil.which(t) for t in _SOURCE_TOOLS),
+                         "bash/cat/dirname not available")
+    def test_cached_library_is_returned_without_dpkg_deb(self) -> None:
+        cache = self.tmp / "cache"
+        query = subprocess.run(
+            ["bash", "-c",
+             'source "$1"; echo "${CACHE_DIR}/${LIBLLVM21_DEB_ASSET%.deb}'
+             '/usr/lib/x86_64-linux-gnu"',
+             "t", str(BUILD_OSDI)],
+            env={"PATH": os.environ["PATH"], "CACHE_DIR": str(cache)},
+            capture_output=True, text=True, check=True)
+        libdir = Path(query.stdout.strip())
+        libdir.mkdir(parents=True)
+        (libdir / "libLLVM.so.21.1").write_bytes(b"\x7fELF stub\n")
+        r = self._ensure(cache)
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout.strip(), str(libdir))
+        self.assertEqual(r.stderr, "")
+
+
 def _models(root: Path, coeff: str = "1.0") -> pdk.Pdk:
     """A fake variant: release marker, OSDI bytes and a two-level SPICE model tree."""
     p = _osdi(root)
