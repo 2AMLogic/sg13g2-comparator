@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 
@@ -223,15 +224,10 @@ def tn_screen_evidence(sub: Path) -> grade_mod.BenchEvidence:
     for section in sizesweep_mod.SCREEN_PROCESSES:
         tag = f"{TRANSIENT_NOISE.name}.{section}"
         path = sub / f"{tag}.envelope.json"
-        if not path.is_file():
-            problems.append(f"{tag}: no envelope (submit the screen request first)")
+        raw, envelope = grade_mod._load_json_file(path, "envelope", tag, problems)
+        if envelope is None:
             continue
-        raw = path.read_bytes()
         shas[tag] = hashlib.sha256(raw).hexdigest()
-        envelope = json.loads(raw)
-        if not isinstance(envelope, dict):
-            problems.append(f"{tag}: envelope is not a JSON object")
-            continue
         envelopes.append((tag, envelope))
         checked[tag] = grade_mod.check_chain(TRANSIENT_NOISE, tag, sub, shas[tag],
                                              problems, corners=tn_screen_corners(section))
@@ -283,7 +279,7 @@ def control_screen_row2(campaigns_dir: Path) -> dict:
     valid = [p["sigma"] for p in selected if p["sigma"] is not None]
     out = {"campaign": CONTROL_CAMPAIGN, "dir": f"full_{CONTROL_NAME}",
            "width": CONTROL_WIDTH, "identity": candidate_identity(CONTROL_WIDTH),
-           "source": grading_path.relative_to(build_mod.REPO_ROOT).as_posix(),
+           "source": os.path.relpath(grading_path.resolve(), build_mod.REPO_ROOT),
            "points_selected": len(selected),
            "points_valid": len(valid), "grid45_mean": row2["target"]["grid_mean"]}
     out["screen_mean"] = sum(valid) / len(valid) if valid else None
@@ -320,9 +316,8 @@ def load_density(path: Path) -> dict:
 def _fast_gates(screen_row: dict) -> tuple[list[str], list[str]]:
     """(breaches, unavailable) for one candidate's fast-bench screen row,
     against the Target bounds of the gated DR-0002 rows. A MEASURED breach
-    eliminates; an unavailable metric (fewer than 18 valid points) is a
-    carried caveat, not an elimination -- the archived control itself had a
-    17/18 sigdep screen and a clean full grid."""
+    eliminates; an unavailable metric (fewer than 18 valid points) is an
+    incomplete gate and prevents the screen ranking."""
     breaches: list[str] = []
     unavailable: list[str] = []
     for metric, row_id in GATE_METRICS.items():
@@ -338,68 +333,75 @@ def _fast_gates(screen_row: dict) -> tuple[list[str], list[str]]:
                 breaches.append(f"Row {row_id} gate {metric} = {cell['value']:.4g} "
                                 f"> Target {bound:g} ({cell['point']})")
         else:
-            unavailable.append(f"{metric}: unavailable ({cell['valid']}/{cell['expected']} valid)")
+            why = next(iter(cell["rejections"]), None)
+            unavailable.append(f"{metric}: unavailable ({cell['valid']}/{cell['expected']} valid)"
+                               + (f", {why}" if why else ""))
     return breaches, unavailable
 
 
-def _verdicts(campaign_dir: Path, screen_rows: list[dict], densities: dict | None,
-              control: dict) -> list[dict]:
-    """Apply the declared advance/eliminate rule to every candidate.
+def _body_problems(sub: Path, width: str, benches: tuple[str, ...]) -> list[str]:
+    """Bind each saved body, including its effective bias, to the declared candidate."""
+    problems = []
+    for name in benches:
+        path = sub / f"{name}.body.spice"
+        if not path.is_file():
+            problems.append(f"{path.name} is missing")
+            continue
+        expected = build_mod.compose_body(
+            grade_mod._bench_spec(name), build_mod.BATCH_OSDI_DIR,
+            geometry_overrides=candidate_geometry(width), param_overrides=BASE_PARAM_OVERRIDES)
+        if path.read_bytes() != expected.encode("utf-8"):
+            problems.append(f"{path.name} differs from the declared {width} load, "
+                            "10 uA bias and fixed-geometry batch body")
+    return problems
 
-    A width is ELIMINATED when its Row 2 screen evidence is invalid, when a
-    gated fast-bench Target bound is breached at a screened point (that
-    point is in the 45-point grid, so the full verdict would fail), or when
-    its 18-point Row 2 screen mean does not improve on the control's (the
-    unchanged bench is the Target statistic; no improvement there means no
-    lever on Row 2). At most ONE width advances: the lowest screen mean
-    among the survivors (tie: lowest own TT density; then the narrower
-    width). A negative result -- every width eliminated -- completes the
-    study."""
-    by_mean = {}
-    out = []
-    for row in screen_rows:
-        sub = campaign_dir / row["dir"]
-        entry = {"name": row["name"], "geometry": row["geometry"],
-                 "geometry_problems": row["geometry_problems"]}
-        reasons: list[str] = []
-        if row["geometry_problems"]:
-            reasons.append("candidate geometry unreadable/inconsistent: "
-                           + "; ".join(row["geometry_problems"]))
-        row2 = screen_row2(sub)
-        entry["row2"] = {k: row2[k] for k in ("evidence_problems", "dut_problems")}
-        entry["row2"]["statistic"] = row2.get("statistic")
-        breaches, unavailable = _fast_gates(row)
-        if breaches:
-            reasons.extend(breaches)
-        if unavailable:
-            entry["gates_unavailable"] = unavailable
-        stat = row2.get("statistic")
-        if row2["evidence_problems"] or row2["dut_problems"]:
-            reasons.append("Row 2 screen evidence rejected: "
-                           + (row2["evidence_problems"] + row2["dut_problems"])[0])
-        elif stat is None or stat["points_valid"] != stat["points_expected"]:
-            first = (stat or {}).get("points_missing_or_invalid") or [{"why": "no statistic"}]
-            reasons.append(f"Row 2 screen incomplete ({(stat or {}).get('points_valid', 0)}/"
-                           f"{(stat or {}).get('points_expected', 18)} valid; first: "
-                           f"{first[0].get('why')})")
-        elif control["screen_mean"] is not None and stat["grid_mean"] >= control["screen_mean"]:
-            reasons.append(f"Row 2 screen mean {stat['grid_mean']:.4g} mV does not improve on "
-                           f"the control's {control['screen_mean']:.4g} mV at the same "
-                           "injection (36.27 nV/rtHz)")
-        entry["elimination_reasons"] = reasons
-        if not reasons and stat is not None:
-            density = (densities or {}).get("widths", {}).get(row["name"], {})
-            # ascending: screen mean, then own TT density, then width
-            by_mean[row["name"]] = (stat["grid_mean"],
-                                    _tt_density(density),
-                                    _width_um(row))
-        out.append(entry)
-    if by_mean:
-        best = min(by_mean, key=lambda n: by_mean[n])
-        for entry in out:
-            if entry["name"] == best:
-                entry["advanced"] = True
-    return out
+
+def _candidate_screen(sub: Path, name: str, width: str, control: dict) -> dict:
+    identity = _body_problems(sub, width, (*sizesweep_mod.SCREEN_BENCHES, TRANSIENT_NOISE.name))
+    problems = list(identity)
+    reasons = []
+    entry = {"name": name, "width": width, "geometry": candidate_identity(width),
+             "geometry_problems": identity,
+             "row2": {"statistic": None, "evidence_problems": [], "dut_problems": identity},
+             "incomplete_reasons": problems, "elimination_reasons": reasons}
+    if problems:
+        return entry
+
+    fast, = sizesweep_mod.screen(sub.parent, subdirs=[sub])
+    breaches, unavailable = _fast_gates(fast)
+    for bench, evidence in fast["benches"].items():
+        problems.extend(f"{bench}: {reason}" for reason in evidence["evidence_rejections"])
+    problems.extend(unavailable)
+    noise = screen_row2(sub)
+    entry["row2"] = {key: noise[key] for key in ("statistic", "evidence_problems", "dut_problems")}
+    problems.extend(noise["evidence_problems"] + noise["dut_problems"])
+    stat = noise["statistic"]
+    if stat and stat["points_valid"] != stat["points_expected"]:
+        for point in stat["points_missing_or_invalid"]:
+            problems.append(f"transient_noise: {point['point']}: {point['why']}")
+    elif stat and stat.get("grid_mean") is None:
+        problems.append("transient_noise: grid-wide mean unavailable")
+    if control["screen_mean"] is None or control["points_valid"] != len(sizesweep_mod.EXPECTED_POINTS):
+        problems.append("archived control requires 18 valid Row 2 screen points")
+    if problems:
+        return entry
+    reasons.extend(breaches)
+    if stat["grid_mean"] >= control["screen_mean"]:
+        reasons.append(f"Row 2 screen mean {stat['grid_mean']:.4g} mV does not improve on "
+                       f"the control's {control['screen_mean']:.4g} mV at the same "
+                       "injection (36.27 nV/rtHz)")
+    return entry
+
+
+def _select(candidates: list[dict], densities: dict) -> list[str]:
+    """Choose at most one survivor of a complete screen."""
+    survivors = [c for c in candidates if not c["elimination_reasons"]]
+    if not survivors:
+        return []
+    best = min(survivors, key=lambda c: (c["row2"]["statistic"]["grid_mean"],
+                                         _tt_density(densities.get(c["name"], {})), _width_um(c)))
+    best["advanced"] = True
+    return [best["name"]]
 
 
 def _tt_density(density_entry: dict) -> float:
@@ -416,32 +418,65 @@ def _width_um(row: dict) -> float:
     return 0.0
 
 
-def _projection(control: dict, density_nv_rthz: float) -> float | None:
-    """The Phase 1 nominal recalibration applied to a candidate: the
-    control's 45-point bench mean rescaled by the candidate's own TT
-    density ratio (PROJECTION, never a verdict)."""
-    if control.get("grid45_mean") is None:
-        return None
-    s0 = 36.27
-    return control["grid45_mean"] * density_nv_rthz / s0
+def _projection(bench_mean: float | None, density: float | None) -> float | None:
+    """Rescale a 45-point mean measured at 36.27 nV/rtHz to the TT density."""
+    return None if bench_mean is None or density is None else bench_mean * density / 36.27
+
+
+def _full_row2(sub: Path, name: str, width: str, density: float | None) -> dict:
+    """Read the archived finalist grade independently of screen availability."""
+    path = sub / "grading.json"
+    grade = json.loads(path.read_text(encoding="utf-8"))
+    row = next(r for r in grade["rows"] if r["id"] == "2")
+    stat = row.get("target") or {}
+    problems = _body_problems(sub, width, (TRANSIENT_NOISE.name,))
+    if grade["campaign"] != sub.name or grade["grid_points"] != 45:
+        problems.append("expected this candidate's 45-point grade")
+    elif not problems:
+        sha = hashlib.sha256((sub / "transient_noise.body.spice").read_bytes()).hexdigest()
+        inputs = {e.get("input_content_hash") for e in grade["benches"]["transient_noise"]["envelopes"]}
+        if inputs != {f"sha256:{sha}"}:
+            problems.append("graded noise inputs differ from the candidate body")
+    valid = stat.get("points_valid", 0)
+    if valid != 45 or stat.get("points_expected") != 45 or stat.get("grid_mean") is None:
+        problems.append(f"Row 2 grade has {valid}/45 valid points")
+    mean = None if problems else stat["grid_mean"]
+    return {"name": name, "grade": f"{sub.name}/grading.json", "points_valid": valid,
+            "verdict": grade_mod.INCOMPLETE if problems else row["target_verdict"],
+            "problems": problems, "grid45_mean": mean, "density_nv_rthz": density,
+            "own_tt_projection_mv": _projection(mean, density)}
 
 
 def run(campaign: str, campaigns_dir: Path, report_name: str = "loadwidth",
         density_path: Path | None = None) -> dict:
     cdir = campaigns_dir / campaign
-    densities = None
-    if density_path is not None and Path(density_path).is_file():
-        densities = load_density(Path(density_path))
+    if not cdir.is_dir():
+        raise ValueError(f"missing campaign directory {cdir}")
+    if density_path is None:
+        archived = build_mod.SIM_DIR / "comparator-preamp-noise" / "reports" / campaign / "density.json"
+        density_path = archived if archived.is_file() else None
+    densities = load_density(density_path)["widths"] if density_path is not None else {}
     control = control_screen_row2(campaigns_dir)
-    screen_rows = sizesweep_mod.screen(cdir)
-    candidates = _verdicts(cdir, screen_rows, densities, control)
-    advanced = [c["name"] for c in candidates if c.get("advanced")]
+    candidates = [_candidate_screen(cdir / f"scr_{name}", name, width, control)
+                  for name, width in CANDIDATES]
+    full_grades = []
+    for candidate in candidates:
+        name = candidate["name"]
+        density = densities.get(name, {}).get("points", {}).get("tt", {}).get("density_nv_rthz")
+        candidate["density_nv_rthz"] = density
+        candidate["control_bandwidth_projection_mv"] = _projection(control["grid45_mean"], density)
+        sub = cdir / f"full_{name}"
+        if (sub / "grading.json").is_file():
+            full_grades.append(_full_row2(sub, name, candidate["width"], density))
+    complete = all(not c["incomplete_reasons"] for c in candidates)
     result = {"campaign": campaign, "control": control,
-              "density_source": str(density_path) if densities else None,
-              "candidates": candidates, "advanced": advanced[:1]}
+              "density_source": os.path.relpath(density_path, build_mod.REPO_ROOT) if densities else None,
+              "screen_status": "COMPLETE" if complete else grade_mod.INCOMPLETE,
+              "candidates": candidates, "advanced": _select(candidates, densities) if complete else [],
+              "full_grades": full_grades}
     js = json.dumps(grade_mod.json_safe(result), indent=2, allow_nan=False) + "\n"
-    md = render_markdown(result, densities)
     jpath, mpath = cdir / f"{report_name}.json", cdir / f"{report_name}.md"
+    md = render_markdown(result, cdir, mpath.parent)
     try:
         artifacts_mod.commit([(jpath, js.encode("utf-8")), (mpath, md.encode("utf-8"))],
                              differs="already exists with different content")
@@ -456,70 +491,74 @@ def _fmt(x, d=4):
     return "-" if x is None else f"{x:.{d}g}"
 
 
-def render_markdown(result: dict, densities: dict | None) -> str:
+def render_markdown(result: dict, cdir: Path, report_dir: Path) -> str:
     control = result["control"]
     L = [f"# Matched PMOS load-width screen -- campaign `{result['campaign']}` (issue #498)", "",
-         "GENERATED by `python3 sim/run_klt_corner_verification.py loadwidth-report`. "
-         "Proposes no bound, changes no spec row, no DUT and not `sim/dut.json`. The study "
-         "varies only XM5/XM6 (and their reduced-model counterparts XM5A/XM6A); XM3/XM4, "
-         "the input pair, the switch and the 10 uA bias stay at the archived "
-         f"`{CONTROL_NAME}` geometry. Adopting any candidate is a #479 decision, not made "
-         "here.", "",
-         f"Control: archived `{CONTROL_CAMPAIGN}/full_{CONTROL_NAME}` "
-         f"({CONTROL_WIDTH} loads), reused, never re-run. Its Row 2 screen mean over the 18 "
-         f"screening points is {_fmt(control['screen_mean'])} mV rms at the unchanged "
-         "36.27 nV/rtHz injection (recomputed here from the committed per-point grades: "
-         f"{control['points_valid']}/{control['points_selected']} selected points valid); "
-         f"its 45-point bench mean is {_fmt(control['grid45_mean'])} mV.", "",
+         "The study varies XM5/XM6 and their reduced-model counterparts XM5A/XM6A. "
+         "XM3/XM4, the input pair, the switch and the 10 µA bias use the archived "
+         f"`{CONTROL_NAME}` settings.", "",
+         f"The 6 µm control (`{CONTROL_CAMPAIGN}/full_{CONTROL_NAME}`) averages "
+         f"{_fmt(control['screen_mean'])} mV rms across its 18 screening points "
+         f"({control['points_valid']}/{control['points_selected']} valid) and "
+         f"{_fmt(control['grid45_mean'])} mV rms across all 45 points at 36.27 nV/rtHz.", "",
          "## Row 2 screen (transient noise, 18 points, N = 80 per rung, unchanged bench)", "",
-         "The DR-designated statistic computed by the full-grid grader path on the screening "
-         "grid. The unchanged bench injects 36.27 nV/rtHz, so these numbers measure the "
-         "decision-response (bandwidth) factor at fixed density; they are NOT a 45-point "
-         "verdict. Screen requests: three per-process derived requests per candidate "
-         "(tt, ff, ss), whose union covers the 18 points exactly once.", "",
-         "| candidate | loads | valid pts | 18-pt mean [mV rms] | vs control | own S(TT) [nV/rtHz] | projected 45-pt mean [mV] |",
+         "Each candidate has three requests (TT, FF, SS) covering 18 points. The screen "
+         "averages the per-point probit-slope sigmas at 36.27 nV/rtHz. The last column "
+         "projects each candidate's TT density using the 6 µm control's 45-point mean.", "",
+         "| candidate | loads | valid pts | 18-pt mean [mV rms] | vs control | own S(TT) [nV/rtHz] | 45-pt TT projection at fixed 6 µm control bandwidth [mV rms] |",
          "|---|---|---|---|---|---|---|"]
-    densities = (densities or {}).get("widths", {})
     for cand in result["candidates"]:
         stat = cand["row2"].get("statistic")
         name = cand["name"]
-        geo = cand.get("geometry") or {}
-        loads = geo.get("XM5.w", "?")
-        if cand.get("geometry_problems"):
-            loads = "INCONSISTENT"
-        mean = (stat or {}).get("grid_mean") if stat else None
+        loads = cand["width"]
+        mean = (stat or {}).get("grid_mean")
         valid = f"{stat['points_valid']}/{stat['points_expected']}" if stat else "0/18"
         if mean is not None and control["screen_mean"] is not None:
             ratio = mean / control["screen_mean"]
             vs = f"x{ratio:.3f}"
         else:
             vs = "-"
-        density = densities.get(name, {}).get("points", {}).get("tt", {}).get("density_nv_rthz")
-        proj = _projection(control, density) if isinstance(density, (int, float)) else None
+        density = cand["density_nv_rthz"]
+        proj = cand["control_bandwidth_projection_mv"]
         L.append(f"| {name} | {loads} | {valid} | {_fmt(mean)} | {vs} | {_fmt(density)} | "
-                 f"{_fmt(proj)} (projection) |")
-    L += ["", "## Fast-bench screen gates (Target bounds at the screened points)", "",
-          "A MEASURED value above a gated Target bound eliminates the width (the screened "
-          "point is in the 45-point grid, so the full verdict would fail). An unavailable "
-          "metric is a carried caveat, not an elimination. Values: "
-          "`sizesweep.md` in this campaign.", "",
-          "| candidate | elimination reasons | carried caveats |", "|---|---|---|"]
+                 f"{_fmt(proj, 6)} |")
+    L += ["", "## Screen decisions", "",
+          "| Candidate | Decision | Evidence |", "|---|---|---|"]
     for cand in result["candidates"]:
-        reasons = "; ".join(cand["elimination_reasons"]) or "-"
-        caveats = "; ".join(cand.get("gates_unavailable") or []) or "-"
-        L.append(f"| {cand['name']} | {reasons} | {caveats} |")
-    advanced = result.get("advanced") or []
-    L += ["", "## Advance / eliminate", ""]
-    if advanced:
-        L.append(f"Advanced (at most one): **{advanced[0]}** -- lowest valid Row 2 screen mean "
-                 "among the widths not eliminated. Its full 45-point campaign is "
-                 f"`full_{advanced[0]}/`, graded by `kltsim.grade`. Full-grid rows are "
-                 "UNMEASURED (not run) for every eliminated width: `full_*` campaigns exist "
-                 "only for the advanced finalist.")
-    else:
-        L.append("No width advanced (negative result): every tested width is eliminated above. "
-                 "Per the issue, a negative result completes the study; no full-grid run "
-                 "was made for this family.")
+        if cand["incomplete_reasons"]:
+            decision, reasons = grade_mod.INCOMPLETE, cand["incomplete_reasons"]
+        elif cand["elimination_reasons"]:
+            decision, reasons = "Eliminated", cand["elimination_reasons"]
+        elif cand.get("advanced"):
+            decision, reasons = "Advanced", ["Lowest eligible 18-point mean"]
+        elif result["screen_status"] == grade_mod.INCOMPLETE:
+            decision, reasons = "Pending", ["Ranking requires all declared screens"]
+        else:
+            decision, reasons = "Not advanced", ["Another eligible width ranked first"]
+        L.append(f"| {cand['name']} | {decision} | {' / '.join(reasons)} |")
+    if result["screen_status"] == grade_mod.INCOMPLETE:
+        L += ["", "**Screen INCOMPLETE.** Restore the indicated bodies, requests, invocations "
+              "and envelopes in each candidate's `scr_<name>/` directory, or complete the "
+              "missing fleet measurements. Ranking requires valid evidence for all four widths."]
+    elif not result["advanced"]:
+        L += ["", "Every declared width was eliminated by a complete screen."]
+
+    L += ["", "## Full-grid Row 2", ""]
+    for row in result["full_grades"]:
+        path = os.path.relpath(cdir / row["grade"], report_dir)
+        line = (f"- [{row['name']} grade]({path}) — 45-point mean at 36.27 nV/rtHz "
+                f"**{_fmt(row['grid45_mean'], 6)} mV rms** (Target **{row['verdict']}**).")
+        if row["own_tt_projection_mv"] is not None:
+            line += (f" At the measured bandwidth and {row['density_nv_rthz']:.5g} nV/rtHz, "
+                     f"the TT projection is **{row['own_tt_projection_mv']:.5f} mV rms**.")
+        L.append(line)
+        L.extend(f"  {problem}" for problem in row["problems"])
+    for cand in result["candidates"]:
+        sub = cdir / f"full_{cand['name']}"
+        if not sub.exists():
+            L.append(f"- {cand['name']}: full-grid rows UNMEASURED.")
+        elif not (sub / "grading.json").is_file():
+            L.append(f"- {cand['name']}: full-grid grade unavailable. Expected `{sub.name}/grading.json`.")
     L += ["", "## Disclosures", "",
           "Monte-Carlo seeds and run counts are the bench defaults committed in each request "
           "(transient noise: N = 80 per rung, base seed 20260916; the seed is recorded "
@@ -528,17 +567,19 @@ def render_markdown(result: dict, densities: dict | None) -> str:
           "batch jobs can share noise streams "
           "([klayout-tools#5772](https://github.com/2AMLogic/klayout-tools/issues/5772), "
           "[klayout-tools#2963](https://github.com/2AMLogic/klayout-tools/issues/2963)). "
-          "Every grid ran on the batch fleet with `--wait-for-capacity`; nothing ran "
-          "locally. Candidate input-referred densities come from the reduced-model "
+          "Campaign requests target the batch fleet. Candidate densities come from the reduced-model "
           "characterization (Phase 1 method: output white density at 1 MHz divided by "
-          "|Av(1 Hz)|); see the linked report for its PVT coverage. Projections rescale "
-          "the control's 45-point mean by the candidate's own TT density ratio and are "
-          "labelled as projections, never verdicts.",
-          "",
-          "The transient-noise screen envelopes and the finalist's Monte-Carlo evidence "
-          "are stored, not committed (issue #318): summary "
-          "[`../../20261121-issue498-mc.md`](../../20261121-issue498-mc.md), manifest "
-          "`manifests/artifacts/klt-corner-verification-20261121-issue498-mc.manifest.json`. "
-          "The deterministic kickback/regeneration envelopes and the finalist's grading "
-          "are committed in this campaign directory.", ""]
+          "|Av(1 Hz)|). The screen table uses the control's 45-point mean and bandwidth. "
+          "Each graded finalist's TT projection uses its own measured 45-point mean.", ""]
+    if result["density_source"]:
+        density_link = os.path.relpath(build_mod.REPO_ROOT / result["density_source"], report_dir)
+        L.append(f"[Reduced-model densities and PVT coverage]({density_link})")
+    summary = cdir.parent / f"{cdir.name}-mc.md"
+    if summary.is_file():
+        L += ["", f"[Stored Monte Carlo evidence]({os.path.relpath(summary, report_dir)})"]
+    manifest = build_mod.REPO_ROOT / "manifests" / "artifacts" / (
+        f"klt-corner-verification-{cdir.name}-mc.manifest.json")
+    if manifest.is_file():
+        L += ["", f"[SHA-256 manifest]({os.path.relpath(manifest, report_dir)})"]
+    L.append("")
     return "\n".join(L)

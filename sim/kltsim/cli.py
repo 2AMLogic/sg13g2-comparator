@@ -733,11 +733,11 @@ def cmd_loadwidth_report(args) -> int:
     try:
         result = loadwidth_mod.run(args.campaign, CAMPAIGNS_DIR, args.report_name,
                                    density_path=args.density)
-    except (FileExistsError, ValueError, build_mod.BuildError) as exc:
+    except (OSError, ValueError, build_mod.BuildError) as exc:
         print(f"loadwidth-report: {exc}", file=sys.stderr)
         return 1
     print((CAMPAIGNS_DIR / args.campaign / f"{args.report_name}.md").read_text(encoding="utf-8"))
-    return 0 if result["candidates"] else 1
+    return 1 if result["screen_status"] == grade_mod.INCOMPLETE else 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -847,8 +847,8 @@ def main(argv: list[str] | None = None) -> int:
     lwr.add_argument("--report-name", default="loadwidth",
                      help="output stem; an existing different report is never overwritten")
     lwr.add_argument("--density", type=Path, default=None, metavar="JSON",
-                     help="committed reduced-model density table (issue #498 characterization); "
-                     "the report links it and derives the labelled projections from it")
+                     help="reduced-model density table for projections (defaults to the matching "
+                     "comparator-preamp-noise report, when available)")
     lwr.set_defaults(func=cmd_loadwidth_report)
 
     g = sub.add_parser("grade", help="grade a campaign's committed envelopes")

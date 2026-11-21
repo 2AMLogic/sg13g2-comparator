@@ -11,16 +11,20 @@ reads the committed archived grading record the study compares against.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from statistics import NormalDist
+from unittest import mock
 
-from kltsim import build, grade, loadwidth, sizesweep
+from kltsim import build, cli, grade, loadwidth, sizesweep
 from kltsim.benches import BENCHES, TRANSIENT_NOISE
 from kltsim.tests.test_grade import _corner, _probe_values
+from kltsim.tests.test_sizesweep import write_candidate
 
 GRADE_PATH = (build.EXPERIMENT_DIR / "campaigns" / loadwidth.CONTROL_CAMPAIGN
               / f"full_{loadwidth.CONTROL_NAME}" / "grading.json")
@@ -205,6 +209,107 @@ class ScreenRow2Tests(unittest.TestCase):
         result = loadwidth.screen_row2(self.sub)
         self.assertTrue(any("mos_ss" in p for p in result["evidence_problems"]))
         self.assertIsNone(result["statistic"])
+
+
+class ReportTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.campaign = self.root / "study"
+        self.campaign.mkdir()
+        (self.root / loadwidth.CONTROL_CAMPAIGN).symlink_to(GRADE_PATH.parents[1])
+
+    def report(self):
+        with mock.patch.object(cli, "CAMPAIGNS_DIR", self.root), contextlib.redirect_stdout(io.StringIO()):
+            code = cli.main(["loadwidth-report", "--campaign", self.campaign.name])
+        return code, json.loads((self.campaign / "loadwidth.json").read_text())
+
+    def candidate(self, name="w10", fast_width="10u", noise_width="10u", **noise_options):
+        sub = write_candidate(self.campaign, name, geometry=loadwidth.candidate_geometry(fast_width),
+                              param_overrides=loadwidth.BASE_PARAM_OVERRIDES)
+        noise = loadwidth.plan_scr_inputs(self.campaign, name, noise_width)
+        _write_tn_screen_evidence(sub, noise, **noise_options)
+        return sub
+
+    def test_mixed_width_valid_chains_cannot_grade_the_declared_candidate(self):
+        sub = self.candidate(noise_width="4u")
+        self.assertEqual(loadwidth.screen_row2(sub)["statistic"]["points_valid"], 18)
+        self.assertTrue(sizesweep.screen(self.campaign)[0]["metrics"]["td01_worst"]["available"])
+        rc, report = self.report()
+        w10 = next(c for c in report["candidates"] if c["name"] == "w10")
+        self.assertEqual((rc, report["screen_status"], report["advanced"]), (1, grade.INCOMPLETE, []))
+        self.assertIn("transient_noise.body.spice", w10["incomplete_reasons"][0])
+        self.assertIsNone(w10["row2"]["statistic"])
+        self.assertEqual(w10["elimination_reasons"], [])
+
+    def test_all_bodies_for_the_wrong_width_and_effective_bias_are_rejected(self):
+        sub = self.candidate(fast_width="4u", noise_width="4u")
+        names = (*sizesweep.SCREEN_BENCHES, TRANSIENT_NOISE.name)
+        self.assertEqual(len(loadwidth._body_problems(sub, "10u", names)), 3)
+        body = sub / "kickback.body.spice"
+        body.write_text(body.read_text().replace(".param dut_ib=1e-05", ".param dut_ib=2e-05"))
+        problems = loadwidth._body_problems(sub, "4u", names)
+        self.assertEqual(len(problems), 1)
+        self.assertIn(body.name, problems[0])
+
+    def test_request_only_cli_names_the_missing_evidence(self):
+        build.commit_inputs(loadwidth.plan_all_scr_inputs(self.campaign))
+        rc, report = self.report()
+        self.assertEqual((rc, report["screen_status"], report["advanced"]), (1, grade.INCOMPLETE, []))
+        for candidate in report["candidates"]:
+            reasons = " ".join(candidate["incomplete_reasons"])
+            for bench in ("regeneration", "kickback", "transient_noise.mos_ss.envelope.json"):
+                self.assertIn(bench, reasons)
+            self.assertFalse(candidate["elimination_reasons"])
+
+    def test_missing_draw_keeps_the_family_unranked_even_with_a_complete_survivor(self):
+        def drop_one_draw(envelope):
+            if envelope["corners"][0]["process"] == "mos_ff":
+                envelope["corners"].pop()
+                envelope["corner_count"] -= 1
+
+        self.candidate("w4", "4u", "4u", kplus=72, kminus=8)
+        self.candidate(mutate=drop_one_draw)
+        rc, report = self.report()
+        by_name = {c["name"]: c for c in report["candidates"]}
+        self.assertEqual(by_name["w4"]["incomplete_reasons"] + by_name["w4"]["elimination_reasons"], [])
+        self.assertEqual(by_name["w10"]["row2"]["statistic"]["points_valid"], 17)
+        self.assertIn("ff_125c_1.32v", " ".join(by_name["w10"]["incomplete_reasons"]))
+        self.assertEqual((rc, report["advanced"]), (1, []))
+
+    def test_complete_negative_screen_can_eliminate_every_width(self):
+        for name, width in loadwidth.CANDIDATES:
+            self.candidate(name, width, width)
+        rc, report = self.report()
+        self.assertEqual((rc, report["screen_status"], report["advanced"]), (0, "COMPLETE", []))
+        self.assertTrue(all(c["elimination_reasons"] for c in report["candidates"]))
+
+    def test_archived_grade_uses_finalist_bandwidth_even_if_screen_is_incomplete(self):
+        full = self.campaign / "full_w10"
+        full.mkdir()
+        body = build.compose_body(TRANSIENT_NOISE, build.BATCH_OSDI_DIR,
+                                  geometry_overrides=loadwidth.candidate_geometry("10u"),
+                                  param_overrides=loadwidth.BASE_PARAM_OVERRIDES).encode()
+        (full / "transient_noise.body.spice").write_bytes(body)
+        noise_input = {"input_content_hash": "sha256:" + hashlib.sha256(body).hexdigest()}
+        (full / "grading.json").write_text(json.dumps({
+            "campaign": full.name, "grid_points": 45,
+            "benches": {"transient_noise": {"envelopes": [noise_input]}},
+            "rows": [{"id": "2", "target_verdict": "FAIL",
+                      "target": {"points_valid": 45, "points_expected": 45, "grid_mean": 1.04143154}}]}))
+        density = self.root / "density.json"
+        density.write_text(json.dumps({"widths": {"w10": {"points": {"tt": {
+            "white_out_v_rthz": 3.105675e-8, "gain_dc_v_per_v": 0.9199826,
+            "density_nv_rthz": 33.758}}}}}))
+        report = loadwidth.run("study", self.root, density_path=density)
+        self.assertEqual(report["screen_status"], grade.INCOMPLETE)
+        finalist, = report["full_grades"]
+        self.assertEqual(finalist["verdict"], "FAIL")
+        self.assertAlmostEqual(finalist["own_tt_projection_mv"], 0.96930, places=5)
+        candidate = next(c for c in report["candidates"] if c["name"] == "w10")
+        self.assertAlmostEqual(candidate["control_bandwidth_projection_mv"], 1.02035, places=5)
+        self.assertIn("full_w10/grading.json", (self.campaign / "loadwidth.md").read_text())
 
 
 class ControlTests(unittest.TestCase):

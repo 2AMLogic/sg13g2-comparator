@@ -777,11 +777,11 @@ noise power to the diode-connected counterparts XM5A/XM6A, which motivated
 the experiment.
 
 Evidence: [`campaigns/20261121-issue498/`](campaigns/20261121-issue498/)
-(study report [`loadwidth.md`](campaigns/20261121-issue498/loadwidth.md),
-screen tables `sizesweep.md` / `sizesweep-final.md`, machine forms `.json`;
+(corrected [screen report](campaigns/20261121-issue498/loadwidth-final.md) and
+[finalist comparison](campaigns/20261121-issue498/sizesweep-final-comparison.md);
 candidate screen and finalist MC envelopes + artifacts are **stored**, not
 committed: manifest
-[`../../../manifests/artifacts/klt-corner-verification-20261121-issue498-mc.manifest.json`](../../../manifests/artifacts/klt-corner-verification-20261121-issue498-mc.manifest.json),
+[`../../manifests/artifacts/klt-corner-verification-20261121-issue498-mc.manifest.json`](../../manifests/artifacts/klt-corner-verification-20261121-issue498-mc.manifest.json),
 summary [`campaigns/20261121-issue498-mc.md`](campaigns/20261121-issue498-mc.md)).
 Candidate densities (reduced model, Phase 1 method):
 [`../comparator-preamp-noise/reports/20261121-issue498/`](../comparator-preamp-noise/reports/20261121-issue498/)
@@ -811,22 +811,30 @@ but its Row 3c screen breaches the Target (t_d @ 0.1 mV 2.044 ns > 2.0 at
 `ss_-40c_1.08v`, eliminated); **w10 advances** (1.008 mV, all Target-bound
 gates pass; 3c margin thin at 1.977 ns).
 
-**Finalist** (`full_w10`, 45-point grid, MC offset N=60 / noise N=80,
-bench-default seeds): every Target row the 8 um baseline passed is
-preserved -- Row 1 PASS 13.37 mV worst, 3a 1.188 ns, 3b 135.6 ps, 3c
-1.977 ns, 4a 19.76 fC, 4b 10.42 uV, 5a PASS at 45/45 valid points (no
-INCOMPLETE, no missing draws). **Row 2 stays FAIL: grid mean 1.041 mV rms**
-against <= 1.0 -- the best Row 2 measured in any study of this topology
-(control 1.096, 8 um baseline 1.338, previous best 1.096), a 5.0 %
-improvement on the control, but the Target is not met and w10's own-density
-TT projection (1.020 mV, labelled projection) does not meet it either. The
-next width up breaks Row 3c, so no further width in this direction can
-qualify.
+**Full-grid comparison.** w10 preserves every passing Target of the 8 µm
+input-pair baseline. Both grades cover 45/45 points in every bench, with
+complete offset and noise draw counts and no INCOMPLETE rows. Row 2 uses
+the 45-point mean at the 36.27 nV/√Hz bench injection. Row 4c is a reporting
+requirement. A dash denotes an unspecified bound.
+[8 µm baseline grade](campaigns/20261009-issue92/full_w8_l034/grading.md) · [w10 grade](campaigns/20261121-issue498/full_w10/grading.md)
 
-**No width in this family closes Row 2.** As with the earlier studies, this
-report recommends nothing, relaxes nothing, adopts nothing:
-`design/comparator.spice`, `sim/dut.json`, `spec/` and the ratified table
-are unchanged. The evidence (density lever measured to saturation of the
-timing budget, every previously passing Target verified preserved on the
-advanced finalist, Row 5a coverage complete) is what #479 needs for its
-decision even though the study's outcome is negative.
+| Row | Measurement | 8 µm baseline | w10 | Target / Stretch (both designs) |
+|---|---|---:|---:|---|
+| 1 | Offset, worst 3σ (mV) | 13.93 | 13.37 | PASS / FAIL |
+| 2 | Decision noise, grid mean (mV rms) | 1.33778 | 1.04143 | FAIL / FAIL |
+| 3a | Decision time at 50 mV, max (ns) | 0.8664 | 1.188 | PASS / FAIL |
+| 3b | Regeneration time constant, max (ps) | 168.7 | 135.6 | PASS / — |
+| 3c | Decision time at 0.1 mV, max (ns) | 1.705 | 1.977 | PASS / — |
+| 4a | Injected charge per side, max (fC) | 21.2 | 19.76 | PASS / FAIL |
+| 4b | Signal-dependent residue, max (µV) | 10.29 | 10.42 | PASS / PASS |
+| 4c | Single-ended excursion, max (mV) | 96.03 | 97.95 | REPORTED / — |
+| 5a | PVT coverage, all four benches | 45/45 per bench | 45/45 per bench | PASS / — |
+| 5b | Average power at 33.3 MHz, max (µW) | 37.61 | 25.67 | — / FAIL |
+
+At its measured 45-point bandwidth, w10's TT-density projection is
+**0.96930 mV rms** (1.04143154 × 33.758 / 36.27). Holding the 6 µm
+control bandwidth fixed gives **1.02035 mV rms** (1.09627632 × 33.758 /
+36.27). The measured w10 mean at 36.27 nV/√Hz is **1.04143 mV rms**, so
+Row 2 fails the 1.0 mV Target despite a 5.0% improvement over the control.
+The 12 µm screen breached Row 3c at
+2.044 ns. Widths between 10 and 12 µm have no timing grade.
