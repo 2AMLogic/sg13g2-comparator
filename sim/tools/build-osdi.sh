@@ -162,36 +162,6 @@ report_provenance() {
   fi
 }
 
-# Sourced (tests): stop after the definitions above.
-if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
-
-CHECK_ONLY=0
-FORCE=0
-for arg in "$@"; do
-  case "${arg}" in
-    --check) CHECK_ONLY=1 ;;
-    --force) FORCE=1 ;;
-    -h|--help) sed -n '2,40p' "${BASH_SOURCE[0]}"; exit 0 ;;
-    *) echo "build-osdi.sh: unknown argument '${arg}'" >&2; exit 2 ;;
-  esac
-done
-
-# shellcheck source=/dev/null
-source "${SIM_DIR}/env.sh"
-
-if [[ -z "${PDK_ROOT:-}" || ! -d "${PDK_ROOT}/${PDK}/libs.tech/ngspice" ]]; then
-  echo "build-osdi.sh: no resolvable ${PDK:-ihp-sg13g2} install -- see sim/env.sh output above." >&2
-  exit 3
-fi
-
-VA_DIR="${PDK_ROOT}/${PDK}/libs.tech/verilog-a"
-OSDI_DIR="${PDK_ROOT}/${PDK}/libs.tech/ngspice/osdi"
-
-if [[ ! -d "${VA_DIR}" ]]; then
-  echo "build-osdi.sh: ${VA_DIR} not found -- is PDK_ROOT really an IHP-Open-PDK install?" >&2
-  exit 3
-fi
-
 # --------------------------------------------------------------------------
 # Linux/x86_64 only: fetch, checksum-verify, and unpack the real
 # libLLVM.so.21 shared library that the pinned openvaf-r release expects the
@@ -213,14 +183,9 @@ build-osdi.sh: openvaf-r (${OPENVAF_TAG}, linux-x86_64) needs libLLVM.so.21,
   which this host does not provide as a system package (no current Ubuntu LTS
   ships libllvm21; 24.04/noble tops out at libllvm20), and dpkg-deb -- needed
   to extract it from the official LLVM apt repo's .deb without root -- is not
-  on PATH. Install dpkg-deb (Debian/Ubuntu: already present; otherwise
-  'apt-get install dpkg') or apply the workaround manually:
-
-    curl -fsSL -o libllvm21.deb '${LIBLLVM21_DEB_URL}'
-    sha256sum libllvm21.deb   # expect ${LIBLLVM21_DEB_SHA256}
-    dpkg-deb -x libllvm21.deb /tmp/libllvm21
-    export LD_LIBRARY_PATH=/tmp/libllvm21/usr/lib/x86_64-linux-gnu
-    sim/tools/build-osdi.sh
+  on PATH. Install the package that provides dpkg-deb (Debian/Ubuntu:
+  'apt-get install dpkg') and rerun this build: the script then fetches,
+  checksum-verifies and caches the library itself, no root needed.
 EOF
       exit 3
     fi
@@ -254,6 +219,36 @@ EOF
   }
   echo "${libdir}"
 }
+
+# Sourced (tests): stop after the definitions above.
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then return 0; fi
+
+CHECK_ONLY=0
+FORCE=0
+for arg in "$@"; do
+  case "${arg}" in
+    --check) CHECK_ONLY=1 ;;
+    --force) FORCE=1 ;;
+    -h|--help) sed -n '2,40p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *) echo "build-osdi.sh: unknown argument '${arg}'" >&2; exit 2 ;;
+  esac
+done
+
+# shellcheck source=/dev/null
+source "${SIM_DIR}/env.sh"
+
+if [[ -z "${PDK_ROOT:-}" || ! -d "${PDK_ROOT}/${PDK}/libs.tech/ngspice" ]]; then
+  echo "build-osdi.sh: no resolvable ${PDK:-ihp-sg13g2} install -- see sim/env.sh output above." >&2
+  exit 3
+fi
+
+VA_DIR="${PDK_ROOT}/${PDK}/libs.tech/verilog-a"
+OSDI_DIR="${PDK_ROOT}/${PDK}/libs.tech/ngspice/osdi"
+
+if [[ ! -d "${VA_DIR}" ]]; then
+  echo "build-osdi.sh: ${VA_DIR} not found -- is PDK_ROOT really an IHP-Open-PDK install?" >&2
+  exit 3
+fi
 
 # --------------------------------------------------------------------------
 # --check: assert every model this repo's testbenches load is present and
