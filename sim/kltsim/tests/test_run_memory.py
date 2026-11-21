@@ -123,6 +123,106 @@ class RecordTests(unittest.TestCase):
                          + md.count("| fs/") + md.count("| sf/"), 45)
 
 
+class DeterminismRepeatEvidenceTests(unittest.TestCase):
+    """Issue #495: a determinism round whose inputs carry no measurements at
+    the repeat point is insufficient evidence, never agreement."""
+
+    EMPTY_CORNER = {"corner_id": "tt/1.200V/27C", "process": "mos_tt",
+                    "supply_v": {"vsup": 1.2}, "temperature_c": 27, "status": "pass",
+                    "measurements": []}
+
+    def bare_record(self, nominal_corners, repeat_corners):
+        """build_record over a series holding only round-1 tt envelopes."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for arm, corners in (("nominal", nominal_corners), ("repeat", repeat_corners)):
+                rdir = root / SERIES / arm / "round1"
+                rdir.mkdir(parents=True)
+                (rdir / f"{rm.tag_for('mos_tt')}.envelope.json").write_text(
+                    json.dumps({"status": "pass", "corner_count": len(corners), "corners": corners}))
+            with mock.patch.object(mem, "CAMPAIGNS_DIR", root):
+                return rm.build_record(SERIES)
+
+    def populated_record(self, make_repeat_corner):
+        """Full synthetic campaign plus a round-1 repeat envelope built from the
+        nominal round-1 repeat-point corner (None drops the corner)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with mock.patch.object(mem, "CAMPAIGNS_DIR", root):
+                build_campaign(root, lambda key, h: 0, lambda key, h: 0, lambda key, h: 0)
+                nominal = json.loads((root / SERIES / "nominal" / "round1" /
+                                      f"{rm.tag_for('mos_tt')}.envelope.json").read_text())
+                corner = next(c for c in nominal["corners"]
+                              if (c["process"], c["supply_v"]["vsup"], c["temperature_c"])
+                              == rm.REPEAT_POINT)
+                corner = make_repeat_corner(corner)
+                corners = [] if corner is None else [corner]
+                rdir = root / SERIES / "repeat" / "round1"
+                rdir.mkdir(parents=True)
+                (rdir / f"{rm.tag_for('mos_tt')}.envelope.json").write_text(
+                    json.dumps({"status": "pass", "corner_count": len(corners), "corners": corners}))
+                return rm.build_record(SERIES)
+
+    def round1(self, rec):
+        rounds = rec["determinism_repeat"]["rounds"]
+        self.assertEqual(len(rounds), 1)
+        self.assertEqual(rounds[0]["round"], 1)
+        return rounds[0]
+
+    def test_absent_corner_on_both_sides_is_insufficient_evidence(self):
+        rec = self.bare_record([], [])
+        r = self.round1(rec)
+        self.assertIsNone(r["identical"])
+        self.assertEqual(r["values_compared"], 0)
+        self.assertEqual(r["missing_measurements"], ["nominal", "repeat"])
+        self.assertEqual(r["differences"], {})
+        self.assertFalse(rec["determinism_repeat"]["all_identical"])
+        md = rm.render_markdown(rec)
+        self.assertIn("INSUFFICIENT EVIDENCE", md)
+        self.assertIn("nominal and repeat envelope", md)
+        self.assertNotIn("All rounds bit-identical: **True**", md)
+
+    def test_matching_corners_with_empty_measurements_is_insufficient_evidence(self):
+        rec = self.bare_record([self.EMPTY_CORNER], [dict(self.EMPTY_CORNER)])
+        r = self.round1(rec)
+        self.assertIsNone(r["identical"])
+        self.assertEqual(r["values_compared"], 0)
+        self.assertEqual(r["missing_measurements"], ["nominal", "repeat"])
+        self.assertFalse(rec["determinism_repeat"]["all_identical"])
+        self.assertIn("INSUFFICIENT EVIDENCE", rm.render_markdown(rec))
+
+    def test_one_sided_absence_names_the_input_without_measurements(self):
+        rec = self.populated_record(lambda c: None)
+        r = self.round1(rec)
+        self.assertIsNone(r["identical"])
+        self.assertEqual(r["missing_measurements"], ["repeat"])
+        self.assertFalse(rec["determinism_repeat"]["all_identical"])
+        self.assertIn("repeat envelope", rm.render_markdown(rec))
+
+    def test_populated_equal_rounds_still_report_agreement(self):
+        rec = self.populated_record(lambda c: c)
+        r = self.round1(rec)
+        self.assertIs(r["identical"], True)
+        self.assertGreater(r["values_compared"], 0)
+        self.assertEqual(r["differences"], {})
+        self.assertEqual(r["max_abs_difference"], 0.0)
+        self.assertTrue(rec["determinism_repeat"]["all_identical"])
+        self.assertIn("All rounds bit-identical: **True**", rm.render_markdown(rec))
+
+    def test_populated_unequal_round_reports_the_difference(self):
+        def bumped(c):
+            return {**c, "measurements": [{**m, "value": m["value"] + 1.0}
+                                          for m in c["measurements"]]}
+        rec = self.populated_record(bumped)
+        r = self.round1(rec)
+        self.assertIs(r["identical"], False)
+        self.assertGreater(r["values_compared"], 0)
+        self.assertTrue(r["differences"])
+        self.assertGreater(r["max_abs_difference"], 0.0)
+        self.assertFalse(rec["determinism_repeat"]["all_identical"])
+        self.assertIn("All rounds bit-identical: **False**", rm.render_markdown(rec))
+
+
 class RepeatByteIdentityTests(unittest.TestCase):
     """Issue #426: cmd_repeat's planned request bytes must be identical to the
     pre-refactor output (the committed 20261010-08e31bed1 determinism repeat).
