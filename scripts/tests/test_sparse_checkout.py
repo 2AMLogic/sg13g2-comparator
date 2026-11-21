@@ -392,15 +392,26 @@ class SparseCones(unittest.TestCase):
     def test_netlist_job_inputs_are_in_its_cone(self):
         """Issue #224: the cone holds the generator, schematics, symbols, the
         committed netlist, imported harness modules, the PDK pin and the
-        provisioner. Runs the job's real check step only when a real xschem
-        and PDK are available (SKIPPED, never passed, otherwise; CI always
-        provisions both). A cone missing an input fails the real command."""
+        provisioner. Runs the job's real check step only when a real xschem,
+        the PDK and the pinned klt (issue #489: the generator drives
+        `klt netlist`) are available (SKIPPED, never passed, otherwise; CI
+        always provisions all three). The generator's own mocked unit tests
+        need none of them and always run. A cone missing an input fails the
+        real command."""
         job = self.jobs[NETLIST_JOB]
+        # issue #489: mocked-klt generator unit tests are a repo input of
+        # this job; they must pass inside its cone with no tools installed.
+        unittests = next(s for n, s in job["runs"] if "design/tests" in s)
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, job["checkout"])
+            r = sh(["bash", "-eu", "-c", unittests], dst, self._env(dst), check=False)
+            self.assertEqual(r.returncode, 0, f"generator unit tests failed in cone:\n{r.stdout[-3000:]}")
         check = next(s for n, s in job["runs"] if "netlist.py --check" in s)
         xs = shutil.which("xschem")
         pdk_root = os.environ.get("PDK_ROOT")
-        if not xs or not pdk_root:
-            self.skipTest("real xschem and PDK_ROOT not available (CI provisions both)")
+        if not xs or not pdk_root or not klt_matches_pin():
+            self.skipTest("real xschem, PDK_ROOT and the pinned klt not all "
+                          "available (CI provisions all three)")
         # same step as ci.yml, with the ambient xschem standing in for the
         # provisioned one (the provisioned-path assertion line is dropped)
         script = "\n".join(l for l in check.splitlines() if "command -v" not in l)

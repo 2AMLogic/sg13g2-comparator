@@ -158,11 +158,20 @@ python3 design/netlist.py            # writes design/comparator.spice
 python3 design/netlist.py --check    # CI-style staleness check, exit nonzero if stale
 ```
 
-Requires `xschem` on `PATH` and a resolvable SG13G2 PDK install (same
-resolution order as `sim/harness/pdk.py`; see `sim/README.md` "Cold start").
-A missing `xschem`, PDK, or hierarchical symbol is a hard failure (nonzero
-exit), never a skipped check. xschem's PDK `xschemrc` reads `$PWD`, so run it
-from a normal shell (a bare `env -i` without `PWD` makes xschem exit 10).
+Requires the pinned `klt` on `PATH` (the generator drives `klt netlist`,
+which owns the headless xschem invocation, its timeout and its kill
+escalation — never a raw `xschem`), a resolvable SG13G2 PDK install for the
+rcfile (same resolution order as `sim/harness/pdk.py`; see `sim/README.md`
+"Cold start"), and `xschem` on `PATH` for `klt` to drive:
+
+```bash
+python3 -m pip install "klayout-tools==0.9.2"   # the pinned klt, manifests/klt-pin.json
+```
+
+A missing `klt`, `xschem`, PDK, or hierarchical symbol is a hard failure
+(nonzero exit), never a skipped check. xschem's PDK `xschemrc` reads `$PWD`,
+so run it from a normal shell (a bare `env -i` without `PWD` makes xschem
+exit 10).
 
 ### CI: `netlist-regeneration` (issue #224)
 
@@ -172,9 +181,13 @@ from a normal shell (a bare `env -i` without `PWD` makes xschem exit 10).
 python3 design/netlist.py --check
 ```
 
-with a **real** xschem and the pinned PDK, so a schematic-only edit that was
-not re-netlisted turns CI red. (The mocked tests in `design/tests/` still run
-in `harness-unit-tests`; they cover generator logic, not this schematic.)
+with a **real** xschem, the pinned `klt` (issue #489: the generator invokes
+`klt netlist`, so the job installs the same `klayout-tools` release pin as
+every other klt-using job) and the pinned PDK, so a schematic-only edit that
+was not re-netlisted turns CI red. The job also runs the generator's own
+unit tests (`design/tests/`, mocked klt boundary) in the same clean runner.
+(The mocked tests also run in `harness-unit-tests`; they cover generator
+logic, not this schematic.)
 Provisioning is [`scripts/provision_netlist_env.sh`](../scripts/provision_netlist_env.sh):
 
 - `xschem <prefix>` builds xschem 3.4.7 from its sha256-verified release
@@ -192,16 +205,20 @@ Provisioning is [`scripts/provision_netlist_env.sh`](../scripts/provision_netlis
 Local reproduction (nothing host-wide; scratch prefix):
 
 ```bash
+python3 -m pip install "klayout-tools==0.9.2"                    # the pinned klt
 scripts/provision_netlist_env.sh xschem /tmp/nl/xschem   # needs tcl/tk/X11/cairo dev libs, bison, flex, gawk
 scripts/provision_netlist_env.sh pdk /tmp/nl/pdk
 PATH=/tmp/nl/xschem/bin:$PATH PDK_ROOT=/tmp/nl/pdk python3 design/netlist.py --check
 ```
 
-or, with xschem and the pinned PDK already installed, just
+or, with `klt`, xschem and the pinned PDK already installed, just
 `python3 design/netlist.py --check`. If it reports stale, run
 `python3 design/netlist.py` and refresh the four bound files (see
 [`manifests/README.md`](../manifests/README.md)).
-`design/netlist.py` points `XSCHEM_USER_LIBRARY_PATH` at this directory so
+`design/netlist.py` passes this directory to `klt netlist --symbol-path` so
 xschem can resolve the hierarchical-cell symbols above (`comparator_dut.sym`
-etc. live next to their `.sch`, not under the PDK's own symbol tree) — see
-that script's own comments for what goes wrong without it.
+etc. live next to their `.sch`, not under the PDK's own symbol tree), and
+clears any ambient `XSCHEM_USER_LIBRARY_PATH` from the child environment
+first — `klt` prepends `--symbol-path` to that variable rather than
+replacing it, and a stray user library must not leak into regeneration — see
+that script's own comments for what goes wrong without the symbol path.
