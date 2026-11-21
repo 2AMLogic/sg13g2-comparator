@@ -90,9 +90,11 @@ jobs:
             /sim/dut.json
             /sim/klt-corner-verification/benches/
             /sim/klt-corner-verification/rows.json
+            /scripts/tests/test_item5_spec_rows.py
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.json
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.jsonl
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.spice
+            /sim/klt-corner-verification/campaigns/20261009-issue92/full_w8_l034/kickback.envelope.json
             /sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md
             /sim/klt-corner-verification/campaigns/20261009-issue81/noise_full.json
             /sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json
@@ -131,6 +133,15 @@ jobs:
 
       - name: Fresh-render parity check vs committed report
         run: python3 scripts/check_signoff_report.py
+
+      # Issue #478: verdict regression for the item 5 per-row citations and
+      # declared spec_rows. Exercises the real pinned grader: the committed
+      # manifest (kickback fails, Rows 1/2/5a declared gaps, Row 2 never
+      # covered), a passing-kickback fixture (partial_coverage held by the
+      # gaps alone) and Row 2 as the sole gap. Scratch manifests cite only
+      # committed envelopes; no simulation runs.
+      - name: Item 5 spec_rows verdict regression (issue #478)
+        run: python3 -m unittest scripts.tests.test_item5_spec_rows
 
       # Issue #174: README target-spec-table figures vs the committed report
       # (stdlib only). Unmapped claims are listed as UNCHECKED, never passed.
