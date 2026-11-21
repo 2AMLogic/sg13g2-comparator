@@ -2,6 +2,17 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+### 2026-11-21
+
+- **PR #485**: signoff: declare item 5 spec_rows and cite per-row envelopes with gaps for ungradeable rows
+- **Issue #478** (closed): Item 5: declare the DR-0002 row set under spec_rows and cite each row's envelope, replacing the single-envelope citation
+
+### 2026-11-20
+
+- **PR #486**: docs: characterize Row 2 decision bandwidth and prepare candidate noise measurements
+- **PR #484**: fix: write sizesweep JSON and Markdown as one preflighted append-only pair
+- **Issue #483** (closed): Remove the per-file sizesweep writer and preflight the report pair
+
 ### 2026-11-18
 
 - **PR #473**: ci: report the append-only sim evidence gate on merge_group commits (merge queue readiness)
