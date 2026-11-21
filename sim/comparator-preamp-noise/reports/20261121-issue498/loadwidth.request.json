@@ -1,0 +1,132 @@
+{
+  "engine": "ngspice",
+  "netlist": "front-end.spice",
+  "models": {
+    "pdk": "ihp-sg13g2",
+    "lib": "libs.tech/ngspice/models/cornerMOSlv.lib"
+  },
+  "corners": {
+    "process": [
+      "mos_tt"
+    ],
+    "supply_v": {
+      "vsup": [
+        1.2
+      ]
+    },
+    "temperature_c": [
+      27
+    ],
+    "params": {
+      "pair_w": [
+        8e-06,
+        8e-06,
+        8e-06,
+        8e-06,
+        8e-06
+      ],
+      "pair_l": [
+        3.4e-07,
+        3.4e-07,
+        3.4e-07,
+        3.4e-07,
+        3.4e-07
+      ],
+      "switch_w": [
+        2e-05,
+        2e-05,
+        2e-05,
+        2e-05,
+        2e-05
+      ],
+      "latch_w": [
+        6e-06,
+        6e-06,
+        6e-06,
+        6e-06,
+        6e-06
+      ],
+      "load_w": [
+        6e-06,
+        4e-06,
+        8e-06,
+        1e-05,
+        1.2e-05
+      ],
+      "dut_ib": [
+        1e-05,
+        1e-05,
+        1e-05,
+        1e-05,
+        1e-05
+      ]
+    }
+  },
+  "analysis": {
+    "kind": "noise",
+    "args": "v(aop,aon) vd dec 20 1 1e9 1"
+  },
+  "measurements": [
+    {
+      "name": "white_out",
+      "noise": {
+        "quantity": "onoise",
+        "at_hz": 1000000.0
+      },
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "gain_dc",
+      "expr": "noise1.onoise_spectrum[0]/noise1.inoise_spectrum[0]",
+      "unit": "V/V"
+    },
+    {
+      "name": "xm1a",
+      "expr": "noise1.onoise_n.xa.xm1a.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xm2a",
+      "expr": "noise1.onoise_n.xa.xm2a.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xmta",
+      "expr": "noise1.onoise_n.xa.xmta.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xmswa",
+      "expr": "noise1.onoise_n.xa.xmswa.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xmba",
+      "expr": "noise1.onoise_n.xa.xmba.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xm5a",
+      "expr": "noise1.onoise_n.xa.xm5a.nsg13_lv_pmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xm6a",
+      "expr": "noise1.onoise_n.xa.xm6a.nsg13_lv_pmos[120]",
+      "unit": "V/rtHz"
+    }
+  ],
+  "options": {
+    "osdi_preload": [
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/psp103.osdi",
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/psp103_nqs.osdi"
+    ],
+    "timeout_s": 30,
+    "keep_artifacts": true
+  },
+  "_comment": [
+    "One PVT point (tt / 1.20 V / 27 C). Each zipped parameter row is one issue 498 setting on the archived ib10_sw20lat6 geometry and bias: load_w 6u control first, then the declared candidates 4u, 8u, 10u, 12u. load_w reaches ONLY XM5A/XM6A; latch_w keeps XM3-XM6 of the wrapper at the control's 6u.",
+    "The output spectrum and per-device totals are measured at 1 MHz; gain_dc is the magnitude of the differential transfer at 1 Hz. Input-referred density S = white_out / gain_dc (Phase 1 method, reports/20261120-issue477/pvt-batch.md).",
+    "For the four-point PVT coverage (tt 27/1.20, sf -40/1.32, ff 125/1.08, fs -40/1.20) derive one request per point exactly as the Phase 1 reproduce block does, and submit with klt sim --batch-set --wait-for-capacity 600."
+  ]
+}
