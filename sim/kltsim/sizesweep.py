@@ -80,6 +80,97 @@ def screen_request(data: bytes) -> bytes:
     return (json.dumps(request, indent=2) + "\n").encode("utf-8")
 
 
+#: the screening grid a process-split bench's ONE part carries (issue #497):
+#: a single process section x the screening supplies/temperatures = 6 points,
+#: so the three parts (tt/ff/ss) tile the 18-point screen exactly once. A
+#: request-only screen build used to rewrite EACH of the bench's five
+#: full-grid parts to the whole 18-point grid (5 x 18 = 90 entries, every
+#: point five times); this per-part form is the correction.
+SCREEN_PART_COMMENT = (
+    "SCREENING GRID part {section} (issue #497): {section} x 1.08/1.32 V x "
+    "-40/27/125 C = 6 points; the tt/ff/ss parts tile the 18-point screen "
+    "exactly once. Not a 45-point verdict; never graded as one.")
+
+
+def screen_part_request(bench, section: str, body_name: str | None = None) -> dict:
+    """The screening request of ONE part: for a process-split bench the named
+    section only; for an unsplit bench the whole screening grid (identical to
+    what :func:`screen_request` writes for it)."""
+    processes = (section,) if bench.split_by_process else tuple(SCREEN_PROCESSES)
+    request = build_mod.compose_request(
+        bench, body_name or f"{bench.name}.body.spice", "batch", processes=processes)
+    request["corners"] = {
+        "process": list(processes),
+        "supply_v": {k: list(SCREEN_SUPPLIES_V) for k in bench.supply_keys},
+        "temperature_c": list(SCREEN_TEMPERATURES_C),
+    }
+    request.pop("remote", None)
+    request["_comment"].append(
+        SCREEN_PART_COMMENT.format(section=section) if bench.split_by_process else
+        "SCREENING GRID (issue #92): tt/ff/ss x 1.08/1.32 V x -40/27/125 C = 18 points. "
+        "Not a 45-point verdict; never graded as one.")
+    return request
+
+
+def plan_screen_inputs(
+    bench, out_dir: Path, *,
+    param_overrides: dict | None = None,
+    geometry_overrides: dict | None = None,
+    candidate: tuple[str, Path] | None = None,
+) -> tuple[Path, list[Path], list[tuple[Path, bytes]]]:
+    """Compose (without writing) a bench's SCREENING inputs with the process
+    split preserved (issue #497): a ``split_by_process`` bench gets one
+    six-point part per screening process section (tt/ff/ss, 18 distinct
+    points in total), an unsplit bench the single 18-point request
+    :func:`screen_request` writes. One body shared by all parts."""
+    body_name = f"{bench.name}.body.spice"
+    body_path = out_dir / body_name
+    files: list[tuple[Path, bytes]] = [(
+        body_path,
+        build_mod.compose_body(bench, build_mod.BATCH_OSDI_DIR,
+                               param_overrides=param_overrides,
+                               geometry_overrides=geometry_overrides,
+                               candidate=candidate).encode("utf-8"))]
+    sections = list(SCREEN_PROCESSES) if bench.split_by_process else [SCREEN_PROCESSES[0]]
+    requests: list[Path] = []
+    union: set[tuple] = set()
+    for section in sections:
+        tag = f"{bench.name}.{section}" if bench.split_by_process else bench.name
+        request = screen_part_request(bench, section, body_name)
+        grid = request["corners"]
+        for p in grid["process"]:
+            for k in grid["supply_v"]:
+                for v in grid["supply_v"][k]:
+                    for t in grid["temperature_c"]:
+                        union.add((p, k, round(float(v), 6), float(t)))
+        requests.append(out_dir / f"{tag}.request.json")
+        files.append((requests[-1], (json.dumps(request, indent=2) + "\n").encode("utf-8")))
+    expected = {(p, k, v, t) for p in SCREEN_PROCESSES for k in bench.supply_keys
+                for v in SCREEN_SUPPLIES_V for t in SCREEN_TEMPERATURES_C}
+    if union != expected:
+        raise build_mod.BuildError(
+            f"screening parts for {bench.name} do not tile the 18-point grid "
+            f"exactly once: {len(union)} distinct point/supply entries vs "
+            f"{len(expected)} expected")
+    return body_path, requests, files
+
+
+def screen_corners_for(bench, tag: str) -> dict:
+    """The screening grid the SAVED request of one part must carry: for a
+    process-split bench the tag's own section (6 points), for an unsplit
+    bench the whole 18-point grid. A ``corners`` callable for
+    ``grade.load_campaign`` (issue #497)."""
+    sections = [SCREEN_PROCESSES[0]]
+    if bench.split_by_process:
+        section = tag.split(".", 1)[1] if "." in tag else None
+        sections = [section] if section in SCREEN_PROCESSES else []
+    return {
+        "process": sections,
+        "supply_v": {k: list(SCREEN_SUPPLIES_V) for k in bench.supply_keys},
+        "temperature_c": list(SCREEN_TEMPERATURES_C),
+    }
+
+
 def screen_corners(bench) -> dict:
     """The expected screening grid for ``bench`` (what :func:`screen_request`
     writes): 3 processes x 2 supplies x 3 temperatures = 18 points."""
@@ -252,11 +343,11 @@ def _reduce_metric(points: dict, bench_name: str, meas: str, scale: float, gates
     return values, rejected
 
 
-def _bench_reasons(ev, dut) -> list[str]:
+def _bench_reasons(ev, dut, candidate: str | None = None) -> list[str]:
     reasons = list(ev.chain_problems)
     if not ev.envelopes:
         reasons.append("no envelope present")
-    reasons += grade_mod.check_dut(ev, dut)
+    reasons += grade_mod.check_dut(ev, dut, candidate)
     return reasons
 
 
@@ -507,4 +598,438 @@ def run(campaign: str, campaigns_dir: Path, report_name: str = "sizesweep") -> d
     return result
 
 
-__all__ = ["run", "screen", "full", "render_markdown", "screen_request"]
+# --------------------------------------------------------------------------- #
+# issue #497: integration-node capacitance study (Row 2 noise vs Row 3c delay)
+# --------------------------------------------------------------------------- #
+
+#: the benches a capacitance-study screen carries: the Row 3c delay bench and
+#: the Row 2 noise bench (the tradeoff under study). Kickback is not part of
+#: this family's decision.
+CAP_STUDY_BENCHES = ("regeneration", "transient_noise")
+
+#: the noise bench's screening grid in ``rows.json`` grid form (bare process
+#: names, flat supply list), for ``grade.mc_probit_noise``
+CAP_SCREEN_GRID = {
+    "process": ["tt", "ff", "ss"],
+    "supply_v": list(SCREEN_SUPPLIES_V),
+    "temperature_c": list(SCREEN_TEMPERATURES_C),
+}
+
+#: Every Row 2 figure this study publishes is labelled with this statistic.
+NOISE_SCREEN_STATISTIC = (
+    "mean of the per-point two-rung probit-slope sigma over the 18 screening "
+    "points (tt/ff/ss x 1.08/1.32 V x -40/27/125 C), N = 80 trials per rung, "
+    "injected density 36.27 nV/rtHz (the unchanged compliance bench)")
+
+#: the archived zero-added-capacitance control (issue #92 bias study): the
+#: geometry + 10 uA bias every candidate setting must hold, and the source of
+#: the control's own screen numbers
+CONTROL_CAMPAIGN = "20261115-issue92-bias"
+CONTROL_SCR = "scr_ib10_sw20lat6"
+CONTROL_FULL = "full_ib10_sw20lat6"
+#: the 8 um baseline a finalist's Target rows are compared against
+BASELINE_CAMPAIGN = "20261009-issue92"
+BASELINE_FULL = "full_w8_l034"
+
+
+def _control_identity() -> dict:
+    """The archived control's geometry + dut.json param overrides, read back
+    from its committed screen body (so the identity cannot drift from the
+    archived evidence)."""
+    body = (build_mod.EXPERIMENT_DIR / "campaigns" / CONTROL_CAMPAIGN
+            / CONTROL_SCR / "regeneration.body.spice")
+    text = body.read_text(encoding="utf-8")
+    return {"geometry": build_mod.extract_geometry(text),
+            "params": build_mod.extract_param_overrides(text)}
+
+
+def _candidate_report(sub: Path, bench_names, expect_name: str | None = None
+                      ) -> tuple[dict, list[str]]:
+    """(candidate declaration, problems): every bench body must declare the
+    SAME structural candidate, and (when ``expect_name`` is given, derived
+    from the ``scr_/full_`` directory name) exactly that named setting."""
+    found: dict[str, dict] = {}
+    problems: list[str] = []
+    for name in bench_names:
+        body = sub / f"{name}.body.spice"
+        if not body.is_file():
+            continue
+        found[name] = build_mod.extract_candidate(body.read_text(encoding="utf-8"))
+    missing = sorted(n for n, c in found.items() if not c)
+    if missing:
+        problems.append(f"bench body/bodies declare no candidate: {', '.join(missing)}")
+    declared = {json.dumps(c, sort_keys=True) for c in found.values() if c}
+    if len(declared) > 1:
+        problems.append("inconsistent candidate declaration across benches: " + "; ".join(
+            f"{n} {json.dumps(c, sort_keys=True)}" for n, c in sorted(found.items())))
+        return {}, problems
+    cand = next(iter(declared)) if declared else {}
+    cand = json.loads(cand) if cand else {}
+    if expect_name and cand and cand.get("name") != expect_name:
+        problems.append(f"directory names candidate {expect_name!r} but the benches "
+                        f"declare {cand.get('name')!r}")
+    return cand, problems
+
+
+def _candidate_cap_fF(cand: dict, problems: list[str]) -> float | None:
+    """The per-side capacitance (fF) of the candidate's reference netlist,
+    re-read from the reference FILE so the table cannot disagree with what
+    was simulated. Appends to ``problems`` when the reference is unusable."""
+    if not cand:
+        return None
+    ref = Path(cand.get("path") or "")
+    if not ref.is_absolute():
+        ref = build_mod.REPO_ROOT / ref
+    if not ref.is_file():
+        problems.append(f"candidate reference {cand.get('path')!r} does not exist")
+        return None
+    try:
+        value = build_mod.check_candidate_netlist(ref.read_text(encoding="utf-8"))
+    except (build_mod.BuildError, UnicodeDecodeError) as exc:
+        problems.append(f"candidate reference unusable: {exc}")
+        return None
+    return build_mod.cap_to_farads(value) * 1e15
+
+
+def _noise_screen_cell(bench_ev, reasons: list[str]) -> dict:
+    """The Row 2 screening statistic: the mean per-point probit sigma over
+    the 18-point grid, N = 80 per rung, unchanged 36.27 nV/rtHz bench."""
+    rows_spec = json.loads(
+        (build_mod.EXPERIMENT_DIR / "rows.json").read_text(encoding="utf-8"))
+    ev = next(r for r in rows_spec["rows"] if r["id"] == "2")["evidence"]
+    details, notes = grade_mod.mc_probit_noise(bench_ev, ev, CAP_SCREEN_GRID)
+    valid = [d for d in details if d["sigma"] is not None]
+    expected = len(grade_mod.grid_keys(CAP_SCREEN_GRID))
+    mean = sum(d["sigma"] for d in valid) / len(valid) if valid else None
+    return {
+        "available": not reasons and len(valid) == expected,
+        "value": mean, "point": None,
+        "expected": expected, "present": len({d["point"] for d in details}),
+        "valid": 0 if reasons else len(valid),
+        "required_gates": [],
+        "rejections": [] if reasons else
+        [f"{d['point']}: {d['problem']}" for d in details if d["problem"]],
+        "notes": list(notes),
+        "noise_statistic": NOISE_SCREEN_STATISTIC,
+    }
+
+
+def cap_screen(campaign_dir: Path) -> list[dict]:
+    """Validated screening reduction for the capacitance study (issue #497).
+
+    Per candidate setting: both benches' request/invocation/envelope chains
+    must hash-match, the body's DUT must be the NAMED structural candidate
+    (verified against its reference file) carrying the archived control's
+    geometry and 10 uA bias, and the noise bench's three saved parts must be
+    the per-process screening parts. Statistics publish only with complete,
+    valid point coverage; every rejection reason is retained.
+    """
+    dut = grade_mod.load_dut_reference()
+    expected_set = set(EXPECTED_POINTS)
+    control = _control_identity()
+    control_identity = {**control["geometry"], **control["params"]}
+    rows = []
+    for sub in sorted(p for p in campaign_dir.iterdir()
+                      if p.is_dir() and p.name.startswith("scr_")):
+        name = sub.name[len("scr_"):]
+        geometry, geom_problems = _geometry_report(sub, CAP_STUDY_BENCHES)
+        cand, cand_problems = _candidate_report(sub, CAP_STUDY_BENCHES, expect_name=name)
+        identity_problems = []
+        if geometry != control_identity:
+            identity_problems.append(
+                "every setting must hold the archived control identity ("
+                + _geom(control_identity) + "); the body declares " + _geom(geometry))
+        cap_fF = _candidate_cap_fF(cand, cand_problems)
+        loaded = {}
+        for bname in CAP_STUDY_BENCHES:
+            bench = grade_mod._bench_spec(bname)
+            corners = screen_corners(bench) if bname == "regeneration" else screen_corners_for
+            ev = grade_mod.load_campaign(sub, corners=corners, bench_names=(bname,))[bname]
+            points, notes = (_bench_points(ev, expected_set) if bname == "regeneration"
+                             else ({}, []))
+            reasons = (_bench_reasons(ev, dut, candidate=name) + geom_problems
+                       + identity_problems)
+            cand_problems += [r for r in reasons if "candidate" in r]
+            loaded[bname] = {
+                "points": points, "notes": notes, "reasons": reasons, "ev": ev,
+                "ppb": {k: _point_problem(c, bname)
+                        for k, c in points.items() if c is not None},
+            }
+        noise = _noise_screen_cell(loaded["transient_noise"]["ev"],
+                                   loaded["transient_noise"]["reasons"])
+        row = {"name": name, "dir": sub.name,
+               "candidate": cand, "candidate_problems": cand_problems,
+               "cap_fF": cap_fF,
+               "geometry": geometry, "geometry_problems": geom_problems,
+               "identity_problems": identity_problems, "metrics": {}, "benches": {}}
+        for bname, d in loaded.items():
+            if bname == "regeneration":
+                bench_cell = {
+                    "expected": len(EXPECTED_POINTS), "present": len(d["points"]),
+                    "missing_points": [_fmt_pt(k) for k in EXPECTED_POINTS
+                                       if k not in d["points"]],
+                }
+            else:
+                bench_cell = {"expected": noise["expected"], "present": noise["present"],
+                              "missing_points": []}
+            row["benches"][bname] = {
+                **bench_cell,
+                "evidence_rejections": d["reasons"], "notes": d["notes"]}
+        d = loaded["regeneration"]
+        gates = ("dout_od01_first", "dout_od01_end")
+        vals, rej = _reduce_metric(d["points"], "regeneration", "td_od01_ns", 1.0,
+                                   gates, d["ppb"])
+        row["metrics"]["td01_worst"] = _metric_cell(vals, rej, len(d["points"]),
+                                                    gates, d["reasons"])
+        row["metrics"]["noise_mean"] = noise
+        rows.append(row)
+    return rows
+
+
+def cap_control() -> dict:
+    """The archived zero-added-capacitance control (`ib10_sw20lat6` geometry,
+    10 uA bias, no added capacitance): its screen delays re-derived from the
+    committed screen campaign, its 18-point noise mean from the committed
+    45-point grading of the full campaign. Chain-validated where envelopes
+    are committed."""
+    root = build_mod.EXPERIMENT_DIR / "campaigns"
+    scr = root / CONTROL_CAMPAIGN / CONTROL_SCR
+    full = root / CONTROL_CAMPAIGN / CONTROL_FULL
+    bench = grade_mod._bench_spec("regeneration")
+    ev = grade_mod.load_campaign(scr, corners=screen_corners(bench),
+                                  bench_names=("regeneration",))["regeneration"]
+    points, notes = _bench_points(ev, set(EXPECTED_POINTS))
+    reasons = _bench_reasons(ev, grade_mod.load_dut_reference())
+    ppb = {k: _point_problem(c, "regeneration") for k, c in points.items() if c is not None}
+    gates = ("dout_od01_first", "dout_od01_end")
+    vals, rej = _reduce_metric(points, "regeneration", "td_od01_ns", 1.0, gates, ppb)
+    td01 = _metric_cell(vals, rej, len(points), gates, reasons)
+    grading = json.loads((full / "grading.json").read_text(encoding="utf-8"))
+    row2 = next(r for r in grading["rows"] if r["id"] == "2")
+    screen_labels = {grade_mod.key_label(k) for k in EXPECTED_POINTS}
+    per_point = row2.get("monte_carlo_per_point") or []
+    sel = [d for d in per_point if d.get("point") in screen_labels]
+    valid = [d for d in sel if d.get("sigma") is not None]
+    identity = _control_identity()
+    return {
+        "name": "ib10_sw20lat6 (archived)", "archived": CONTROL_CAMPAIGN,
+        "control_dirs": {"screen": f"{CONTROL_CAMPAIGN}/{CONTROL_SCR}",
+                         "full": f"{CONTROL_CAMPAIGN}/{CONTROL_FULL}"},
+        "cap_fF": 0.0,
+        "geometry": identity["geometry"], "params": identity["params"],
+        "metrics": {
+            "td01_worst": td01,
+            "noise_mean": {
+                "available": bool(valid) and len(valid) == len(screen_labels),
+                "value": sum(d["sigma"] for d in valid) / len(valid) if valid else None,
+                "point": None, "expected": len(screen_labels), "present": len(sel),
+                "valid": len(valid), "required_gates": [], "rejections": [
+                    f"{d.get('point')}: {d.get('problem')}" for d in sel if d.get("problem")],
+                "notes": ["source: committed grading.json of the archived 45-point "
+                          "campaign, filtered to the 18 screening points"],
+                "noise_statistic": NOISE_SCREEN_STATISTIC + " (re-derived from the "
+                                   "archived 45-point grading, not re-run)",
+            },
+        },
+        "benches": {"regeneration": {"expected": len(EXPECTED_POINTS),
+                                     "present": len(points),
+                                     "missing_points": [], "evidence_rejections": reasons,
+                                     "notes": notes}},
+    }
+
+
+def cap_full(campaign_dir: Path) -> list[dict]:
+    """The finalist table: full 45-point Rows 1-5 graded by ``kltsim.grade``
+    with the candidate expectation, plus the archived 8 um baseline's Target
+    verdicts carried alongside for the preservation question."""
+    baseline = json.loads((build_mod.EXPERIMENT_DIR / "campaigns" / BASELINE_CAMPAIGN
+                           / BASELINE_FULL / "grading.json").read_text(encoding="utf-8"))
+    base_by_id = {r["id"]: r for r in baseline["rows"]}
+    out = []
+    for sub in sorted(p for p in campaign_dir.iterdir()
+                      if p.is_dir() and p.name.startswith("full_")):
+        name = sub.name[len("full_"):]
+        cand, cand_problems = _candidate_report(sub, tuple(grade_mod._bench_names()),
+                                                expect_name=name)
+        geometry, geom_problems = _geometry_report(sub, tuple(grade_mod._bench_names()))
+        problems = list(cand_problems)
+        graded = None if problems else grade_mod.grade_campaign(sub, candidate=name)
+        by_id = {r["id"]: r for r in (graded or {}).get("rows", [])}
+        verdict_rows = _verdict_rows()
+        cells = {}
+        for row_id in verdict_rows:
+            entry = by_id.get(row_id)
+            if entry is not None and entry.get("evidence_kind") != "coverage" \
+                    and entry["target_verdict"] == grade_mod.INCOMPLETE \
+                    and ((entry.get("target") or {}).get("points_valid") or 0) == 0:
+                entry = None
+            cell = ibsweep_mod._cell(entry)
+            base = base_by_id.get(row_id) or {}
+            cell["baseline_w8_l034_target"] = base.get("target_verdict")
+            if base.get("target_verdict") == grade_mod.PASS \
+                    and cell["state"] == "measured" \
+                    and cell["target_verdict"] != grade_mod.PASS:
+                cell["preservation"] = "broken"
+            elif cell["state"] == "measured" and cell["target_verdict"] == grade_mod.PASS:
+                cell["preservation"] = "held"
+            else:
+                cell["preservation"] = None
+            cells[row_id] = cell
+        out.append({
+            "name": name, "dir": sub.name,
+            "candidate": cand, "candidate_problems": cand_problems,
+            "cap_fF": _candidate_cap_fF(cand, []),
+            "geometry": geometry, "geometry_problems": geom_problems,
+            "candidate_status": "rejected" if problems else "available",
+            "rejection_reasons": problems,
+            "rows": cells if not problems else
+            {rid: {"state": "rejected", "reason": "; ".join(problems)}
+             for rid in verdict_rows},
+            "diagnostic_rows": cells if problems else None,
+            "grading_verdicts": {
+                "target_rows_pass": (graded or {}).get("t1_item5", {}).get(
+                    "all_target_rows_pass"),
+                "row2": _full_row_summary(by_id.get("2")),
+            } if graded else None,
+        })
+    return out
+
+
+def _full_row_summary(entry: dict | None) -> dict | None:
+    if not entry:
+        return None
+    target = entry.get("target") or {}
+    return {"target_verdict": entry.get("target_verdict"),
+            "value": target.get("value") if isinstance(target, dict) else None,
+            "points_valid": target.get("points_valid") if isinstance(target, dict) else None,
+            "points_expected": target.get("points_expected")
+            if isinstance(target, dict) else None}
+
+
+def render_capacitance_markdown(result: dict) -> str:
+    L = ["# Integration-node capacitance study -- campaign "
+         f"`{result['campaign']}` (issue #497)", "",
+         "GENERATED by `python3 sim/run_klt_corner_verification.py capacitance`. "
+         "Measures whether matched added capacitance at the input-pair drains "
+         "(`np`/`nn`, each capacitor node-to-vss, equal per side) can narrow the "
+         "effective decision bandwidth enough to close Row 2 within the Row 3c "
+         "delay limit. Proposes no bound, changes no spec row, no DUT and not "
+         "`sim/dut.json`. A screen row is NOT a 45-point verdict.", "",
+         "Row 2 labelling: every noise figure below is `" + NOISE_SCREEN_STATISTIC + "`. "
+         "The unchanged-bench comparison against the control holds the injected "
+         "density at 36.27 nV/rtHz; candidate-own-density figures (Phase 1 method: "
+         "differential output density at 1 MHz divided by |Av(1 Hz)|) are "
+         "PROJECTIONS, labelled as such, and never a Row 2 Target verdict. Only a "
+         "complete 45-point unchanged-bench mean supports a Row 2 Target verdict.", ""]
+    control = result.get("control") or {}
+    if control:
+        m = control.get("metrics") or {}
+        L += ["## Archived control (zero added capacitance)", "",
+              f"Control: `ib10_sw20lat6` geometry at 10 uA bias, campaign "
+              f"`{control.get('archived')}` "
+              f"({control.get('control_dirs', {}).get('screen')} / "
+              f"{control.get('control_dirs', {}).get('full')}), "
+              f"cap {control.get('cap_fF'):g} fF per side.", "",
+              "| control statistic | value | valid/expected |", "|---|---|---|"]
+        noise, td01 = m.get("noise_mean") or {}, m.get("td01_worst") or {}
+        L.append(f"| noise {noise.get('noise_statistic', 'mean probit sigma')} "
+                 f"| {_f(noise.get('value'))} mV rms | {noise.get('valid')}/{noise.get('expected')} |")
+        L.append(f"| worst Row 3c t_d @ 0.1 mV | {_mc(td01, True) if td01.get('available') else 'unavailable'}"
+                 f" @ {td01.get('point')} | {td01.get('valid')}/{td01.get('expected')} |")
+        L.append("")
+    if result.get("screen"):
+        L += ["## Screening (18-point grid: noise vs worst Row 3c delay)", "",
+              "| setting | C per side [fF] | noise mean sigma [mV rms] | valid/18 | "
+              "worst t_d @ 0.1 mV [ns] | its PVT point | valid/18 | candidate reference |",
+              "|---|---|---|---|---|---|---|---|"]
+        for r in result["screen"]:
+            m = r["metrics"]
+            noise, td01 = m["noise_mean"], m["td01_worst"]
+            ref = "-"
+            if r.get("candidate"):
+                ref = f"`{r['candidate'].get('path')}` sha256 `{str(r['candidate'].get('sha256'))[:12]}...`"
+            if r.get("candidate_problems") or r.get("identity_problems"):
+                ref += " REJECTED"
+            L.append(f"| {r['name']} | {_f(r.get('cap_fF'), 3) if r.get('cap_fF') is not None else '-'} "
+                     f"| {_mc(noise, True) if noise.get('available') else _f(noise.get('value'))} "
+                     f"| {noise.get('valid')}/{noise.get('expected')} "
+                     f"| {_mc(td01, True) if td01.get('available') else _f(td01.get('value'))} "
+                     f"| {td01.get('point') or '-'} | {td01.get('valid')}/{td01.get('expected')} "
+                     f"| {ref} |")
+        L += ["", "### Screening evidence validation", "",
+              "| setting | bench | expected | present | evidence rejections |", "|---|---|---|---|---|"]
+        for r in result["screen"]:
+            for bname, b in (r.get("benches") or {}).items():
+                L.append(f"| {r['name']} | {bname} | {b.get('expected')} | {b.get('present')} | "
+                         f"{'; '.join(b.get('evidence_rejections') or [])[:400] or '-'} |")
+        for r in result["screen"]:
+            problems = (r.get("candidate_problems") or []) + (r.get("identity_problems") or [])
+            for p in problems:
+                L.append(f"- `{r['name']}`: {p}")
+        L.append("")
+    if result.get("full"):
+        L += ["## Finalist: full 45-point grid, Rows 1-5 graded by `kltsim.grade`", "",
+              "Baseline for Target preservation: the archived 8 um study baseline "
+              f"`{BASELINE_CAMPAIGN}/{BASELINE_FULL}`; a Target row it PASSes must "
+              "still PASS for the finalist to advance.", "",
+              "| finalist | C per side [fF] | " + " | ".join(f"{l} [{u}]" for _i, l, u in FULL_ROWS) + " |",
+              "|---|---|---|" + "---|" * len(FULL_ROWS)]
+        for r in result["full"]:
+            cells = []
+            for row_id, _l, _u in FULL_ROWS:
+                c = r["rows"].get(row_id) or {}
+                if c.get("state") == "rejected":
+                    cells.append("REJECTED")
+                elif c.get("state") != "measured":
+                    cells.append("not run")
+                else:
+                    tv = "n/a" if c["target_verdict"] == grade_mod.NOT_SPECIFIED else c["target_verdict"]
+                    base = c.get("baseline_w8_l034_target")
+                    mark = ""
+                    if c.get("preservation") == "broken":
+                        mark = " **baseline-broken**"
+                    elif base == grade_mod.PASS:
+                        mark = " (baseline PASS held)" if c.get("preservation") == "held" else ""
+                    cells.append(f"{_f(c['value'])} @ {c['at']} (T {tv}; "
+                                 f"{c['points_valid']}/{c['points_expected']} valid; "
+                                 f"{c['points_failing_target']} pts fail T){mark}")
+            L.append(f"| {r['name']} | {_f(r.get('cap_fF'), 3) if r.get('cap_fF') is not None else '-'} | "
+                     + " | ".join(cells) + " |")
+        for r in result["full"]:
+            gv = r.get("grading_verdicts") or {}
+            row2 = gv.get("row2") or {}
+            if row2:
+                L += ["", f"### `{r['name']}` Row 2 (Target <= 1.0 mV rms)", "",
+                      f"- 45-point unchanged-bench grid mean: **{_f(row2.get('value'))} mV rms**, "
+                      f"Target verdict **{row2.get('target_verdict')}** "
+                      f"({row2.get('points_valid')}/{row2.get('points_expected')} valid points).",
+                      "- This is the DR-designated statistic (grid-wide mean of the "
+                      "per-point two-rung probit-slope sigma, N = 80 per rung, injected "
+                      "36.27 nV/rtHz); the screen's 18-point figure above is a "
+                      "projection-scale comparison only."]
+        L.append("")
+    return "\n".join(L)
+
+
+def cap_run(campaign: str, campaigns_dir: Path, report_name: str = "capacitance") -> dict:
+    """The issue #497 capacitance-study report: control + screen (+ full
+    finalists), written append-only beside the campaign like ``run``."""
+    cdir = campaigns_dir / campaign
+    result = {"campaign": campaign, "control": cap_control(),
+              "screen": cap_screen(cdir), "full": cap_full(cdir)}
+    js = json.dumps(grade_mod.json_safe(result), indent=2, allow_nan=False) + "\n"
+    md = render_capacitance_markdown(result)
+    jpath, mpath = cdir / f"{report_name}.json", cdir / f"{report_name}.md"
+    try:
+        artifacts_mod.commit(
+            [(jpath, js.encode("utf-8")), (mpath, md.encode("utf-8"))],
+            differs="already exists with different content")
+    except artifacts_mod.ArtifactConflict as exc:
+        raise FileExistsError(
+            "; ".join(exc.conflicts) + "; evidence is append-only. "
+            "Write the revised report under a fresh name (--report-name).") from exc
+    return result
+
+
+__all__ = ["run", "screen", "full", "render_markdown", "screen_request",
+           "cap_run", "cap_screen", "cap_full", "cap_control"]
