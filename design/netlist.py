@@ -15,11 +15,12 @@ How it works, and why it is shaped this way:
 
 * ``design/comparator_netlist_top.sch`` is a NETLIST-ASSEMBLY CELL.  It
   instantiates all three contract subcircuits once each so that a SINGLE
-  xschem run emits every ``.subckt`` block (including the shared
-  ``comparator`` core, emitted once) with no hand-merging of three separate
-  netlists.  The assembly cell itself is never simulated: this script keeps
-  only the ``.subckt`` ... ``.ends`` blocks and discards everything else,
-  which is also what strips xschem's ``.end`` line.
+  netlisting run (``klt netlist``, which drives xschem headlessly) emits
+  every ``.subckt`` block (including the shared ``comparator`` core,
+  emitted once) with no hand-merging of three separate netlists.  The
+  assembly cell itself is never simulated: this script keeps only the
+  ``.subckt`` ... ``.ends`` blocks and discards everything else, which
+  is also what strips xschem's ``.end`` line.
 
 * **The interface contract is imported, not restated.**  ``REQUIRED_SUBCKTS``
   comes from ``sim/harness/dut.py`` itself, so this generator and the
@@ -116,40 +117,60 @@ def _xschemrc() -> Path:
     return rc
 
 
-def _run_xschem(outdir: Path) -> str:
-    if not shutil.which("xschem"):
+#: Wall-clock bound handed to ``klt netlist --timeout-s``.  A real netlist
+#: takes well under a second; the bound exists so a wedged xschem (the Tk
+#: hang ``klt netlist``'s own help documents) is an error, never an idle
+#: process.  Generous on purpose: a cold runner's first xschem start is
+#: slower than a warm one, and a spurious timeout here would fail CI.
+KLT_TIMEOUT_S = 300
+
+
+def _run_klt_netlist(outdir: Path) -> str:
+    """Netlist the assembly cell through the pinned ``klt netlist``.
+
+    ``klt`` owns the xschem invocation -- the headless flag set, the
+    process-group kill on timeout, and success judged by a freshly written
+    output file rather than xschem's (uninformative, non-zero even on
+    success) exit status.  Never call ``xschem`` directly: without its
+    no-GUI flag xschem initialises Tk and can hang past SIGTERM (2am#4263,
+    2am#4265; klt issue #55), which is exactly what a raw
+    ``subprocess.run`` here cannot bound.
+    """
+    if not shutil.which("klt"):
         raise SystemExit(
-            "xschem not found on PATH.  design/comparator.spice is derived from "
-            "the xschem sources in design/; see sim/README.md 'Cold start'."
+            "klt not found on PATH.  design/comparator.spice is derived from "
+            "the xschem sources in design/ via `klt netlist`; install the "
+            "pinned klayout-tools (manifests/klt-pin.json; see design/README.md "
+            "'Regenerating the netlist')."
         )
+    produced = outdir / (TOP_CELL.stem + ".spice")
     cmd = [
-        "xschem",
+        "klt", "netlist",
+        "--output", str(produced),
         "--rcfile", str(_xschemrc()),
-        "-n", "-s", "-q", "-x",
-        "-o", str(outdir),
+        # design/*.sym (comparator_dut.sym, comparator_dut_analog.sym, ...)
+        # live next to their .sch, NOT under the PDK's own library tree, so
+        # xschem needs this directory on its symbol search path or it
+        # resolves every instance of them to an EMPTY subcircuit and still
+        # exits nonzero ("IS MISSING !!!!", one per instance).
+        "--symbol-path", str(DESIGN_DIR),
+        "--timeout-s", str(KLT_TIMEOUT_S),
+        # Keep the export byte-identical to xschem's own output: no
+        # `** klt-netlist-inputs:` provenance line (this repo hash-pins the
+        # committed netlist).
+        "--no-provenance-header",
         str(TOP_CELL),
     ]
-    env = dict(os.environ)
-    # The PDK's own xschemrc flushes XSCHEM_LIBRARY_PATH to its own
-    # directories and then appends whatever XSCHEM_USER_LIBRARY_PATH names
-    # (see the installed checkout's libs.tech/xschem/xschemrc, bottom
-    # "allow a user-specific path add-on" block). design/*.sym files
-    # (comparator_dut.sym, comparator_dut_analog.sym, comparator_dut_latch.sym,
-    # comparator.sym) live next to their .sch, NOT under the PDK's own
-    # library tree, so without this xschem resolves every instance of them
-    # to an EMPTY subcircuit with no error at all -- it prints
-    # "IS MISSING !!!!" per missing instance and still exits nonzero, which
-    # is what a first cut of this script (before this fix) hit. Pointing
-    # XSCHEM_USER_LIBRARY_PATH at DESIGN_DIR, rather than blanking it, is
-    # the fix; a stray real user library cannot leak in here regardless,
-    # because this assignment always overwrites whatever the ambient
-    # environment set.
-    env["XSCHEM_USER_LIBRARY_PATH"] = str(DESIGN_DIR)
+    # `klt netlist --symbol-path` PREPENDS to any ambient
+    # XSCHEM_USER_LIBRARY_PATH rather than replacing it, so a stray user
+    # library on this host would leak into regeneration.  Drop the variable
+    # from the child environment and let --symbol-path be the only entry,
+    # which is the isolation the previous direct-xschem code had.
+    env = {k: v for k, v in os.environ.items() if k != "XSCHEM_USER_LIBRARY_PATH"}
     proc = subprocess.run(cmd, capture_output=True, text=True, env=env, check=False)
-    produced = outdir / (TOP_CELL.stem + ".spice")
     if proc.returncode != 0 or not produced.is_file():
         sys.stderr.write(proc.stdout + proc.stderr)
-        raise SystemExit(f"xschem netlisting failed (exit {proc.returncode})")
+        raise SystemExit(f"klt netlist failed (exit {proc.returncode})")
     return produced.read_text()
 
 
@@ -213,7 +234,7 @@ def _assert_no_forbidden(lines: list[str]) -> None:
 
 def build() -> str:
     with tempfile.TemporaryDirectory(prefix="sg13g2-netlist-") as tmp:
-        raw = _run_xschem(Path(tmp))
+        raw = _run_klt_netlist(Path(tmp))
     blocks = _extract_subckts(raw)
     _assert_contract(blocks)
     unknown = sorted(set(blocks) - set(SUBCKT_ORDER))

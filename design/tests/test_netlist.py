@@ -1,8 +1,11 @@
-"""Tests for design/netlist.py (issue #117).
+"""Tests for design/netlist.py (issues #117, #489).
 
-stdlib only. ``_run_xschem`` is always mocked: xschem and the PDK are never
-needed. The fixture netlist is built from the harness's own REQUIRED_SUBCKTS
-so the test cannot drift from the pin-order contract.
+stdlib only. ``_run_klt_netlist`` is always mocked in the build/contract
+tests: klt, xschem and the PDK are never needed there. The fixture netlist
+is built from the harness's own REQUIRED_SUBCKTS so the test cannot drift
+from the pin-order contract. ``TestRunKltNetlist`` mocks the ``subprocess``
+boundary to exercise the real ``klt netlist`` command shape and its failure
+paths -- still no klt, xschem or PDK required.
 """
 
 import contextlib
@@ -43,7 +46,7 @@ def fixture_text(skip=(), swap=None, extra_blocks=(), forbidden_line=None):
 
 
 def build_from(text):
-    with mock.patch.object(nl, "_run_xschem", return_value=text):
+    with mock.patch.object(nl, "_run_klt_netlist", return_value=text):
         return nl.build()
 
 
@@ -134,7 +137,7 @@ class TestBuild(unittest.TestCase):
             seen.append(str(outdir))
             return fixture_text()
 
-        with mock.patch.object(nl, "_run_xschem", side_effect=fake):
+        with mock.patch.object(nl, "_run_klt_netlist", side_effect=fake):
             a, b = nl.build(), nl.build()
         self.assertNotEqual(seen[0], seen[1])
         self.assertEqual(a, b)
@@ -164,12 +167,82 @@ class TestBuild(unittest.TestCase):
             build_from(fixture_text(forbidden_line=".include foo.lib"))
 
 
-class TestRunXschem(unittest.TestCase):
+class RunResult:
+    """Stand-in for subprocess.run's return value."""
+
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class TestRunKltNetlist(unittest.TestCase):
+    """The klt tool boundary, with subprocess.run and _xschemrc mocked."""
+
+    def run_klt(self, result, produced_text=None):
+        """Capture the invocation; write `produced_text` to -o on exit 0."""
+        seen = {}
+
+        def fake_run(cmd, **kwargs):
+            seen["cmd"] = cmd
+            seen["env"] = kwargs.get("env")
+            if produced_text is not None:
+                out = cmd[cmd.index("--output") + 1]
+                Path(out).write_text(produced_text)
+            return result
+
+        with tempfile.TemporaryDirectory() as outdir:
+            seen["outdir"] = outdir
+            with mock.patch.object(nl.shutil, "which", return_value="/usr/bin/klt"), \
+                    mock.patch.object(nl.subprocess, "run", side_effect=fake_run), \
+                    mock.patch.object(nl, "_xschemrc",
+                                      return_value=Path("/pdk/xschemrc")):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    nl._run_klt_netlist(Path(outdir))
+        return seen
+
+    def test_command_shape(self):
+        seen = self.run_klt(RunResult(), produced_text="netlist\n")
+        cmd = seen["cmd"]
+        self.assertEqual(cmd[0:2], ["klt", "netlist"])
+        for flag in ("--rcfile", "--symbol-path", "--timeout-s",
+                     "--no-provenance-header", "--output"):
+            self.assertIn(flag, cmd, f"missing {flag}")
+        self.assertEqual(cmd[cmd.index("--rcfile") + 1], "/pdk/xschemrc")
+        self.assertEqual(cmd[cmd.index("--symbol-path") + 1], str(nl.DESIGN_DIR))
+        self.assertEqual(cmd[cmd.index("--timeout-s") + 1], str(nl.KLT_TIMEOUT_S))
+        self.assertEqual(cmd[-1], str(nl.TOP_CELL))
+        # output lands inside the caller's temp dir, not the repo
+        out = Path(cmd[cmd.index("--output") + 1])
+        self.assertEqual(str(out.parent), seen["outdir"])
+
+    def test_no_ambient_user_library_leaks_into_child_env(self):
+        seen = self.run_klt(RunResult(), produced_text="netlist\n")
+        env = seen["env"]
+        self.assertIsNotNone(env)
+        self.assertNotIn("XSCHEM_USER_LIBRARY_PATH", env)
+        # the rest of the ambient environment is passed through
+        for key in ("PATH", "HOME"):
+            self.assertIn(key, env)
+
+    def test_klt_failure_dumps_output_and_raises(self):
+        with self.assertRaises(SystemExit) as cm:
+            self.run_klt(RunResult(returncode=7, stdout="boom-out", stderr="boom-err"))
+        self.assertIn("klt netlist failed", str(cm.exception))
+        self.assertIn("exit 7", str(cm.exception))
+
+    def test_missing_output_file_is_a_failure(self):
+        # exit 0 but no freshly written netlist: klt's contract broken
+        with self.assertRaises(SystemExit) as cm:
+            self.run_klt(RunResult(returncode=0))
+        self.assertIn("klt netlist failed", str(cm.exception))
+
     def test_missing_tool(self):
         with mock.patch.object(nl.shutil, "which", return_value=None):
             with self.assertRaises(SystemExit) as cm:
-                nl._run_xschem(Path("/nonexistent"))
-        self.assertIn("xschem not found", str(cm.exception))
+                nl._run_klt_netlist(Path("/nonexistent"))
+        self.assertIn("klt not found", str(cm.exception))
+        self.assertIn("klt-pin.json", str(cm.exception))
 
 
 class TestMainCheck(unittest.TestCase):
