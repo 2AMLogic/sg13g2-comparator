@@ -1,12 +1,10 @@
 # Phase 1 completion: measured per-corner front-end density and the two factors of Row 2
 
-**Characterization, not a compliance figure.** This addendum completes the
-Phase 1 evidence for [#477](https://github.com/2AMLogic/sg13g2-comparator/issues/477)
-by running the bounded four-point `klt sim` batch invocation documented above
-("Measuring the candidate density") on the batch fleet and deriving the split
-the issue asks for. The compliance bench, its injected 36.27 nV/√Hz density,
-the DUT files and the grader are untouched; nothing already committed under
-`sim/` was modified.
+**Row 2 characterization.** The four-point batch separates measured
+front-end density from effective decision bandwidth for three designs.
+The single-PVT run gives a nominal density for every #92 finalist.
+Both use the archived Row 2 grades, whose injection was 36.27 nV/√Hz.
+[Phase 1 scope](https://github.com/2AMLogic/sg13g2-comparator/issues/477)
 
 **Provenance.** Submitted 2026-11-21 with `--wait-for-capacity 600` from a
 dispatch worker with fleet credentials; four jobs (one per PVT point, first
@@ -56,12 +54,11 @@ batch:
 | `ff_125c_1.08v` | 47.13 | 54.53 | 45.61 |
 | `fs_-40c_1.20v` | 29.53 | 34.50 | 30.52 |
 
-The 8 µm/0.34 µm baseline's own density is 16–17 % higher than the
-committed design's at every point (narrowing the pair from 12 µm to 8 µm
-costs transconductance faster than it cuts pair noise). `ib10_sw20lat6` —
-same 8 µm pair — sits within ±3.4 % of the committed design at every point
-(+1.4 % at tt, −3.2 % at ff): its 6 µm latch loads and halved bias leave the
-front-end density it presents essentially the committed one.
+Narrowing only the input pair from 12 µm to 8 µm raises the input-referred
+density by 16–17 % at each of these points. At TT the gain falls from 1.639
+to 1.434 V/V while the output density rises from 59.46 to 60.45 nV/√Hz.
+Dividing output density by gain gives 36.27 and 42.16 nV/√Hz at the
+input, a 16.2 % increase.
 
 ## Per-device power shares (percent of output noise power at 1 MHz)
 
@@ -79,11 +76,13 @@ for the whole density:
 | `ff_125c_1.08v` | 7.6 / 92.4 | 8.3 / 91.7 | 12.3 / 87.7 |
 | `fs_-40c_1.20v` | 9.6 / 90.4 | 10.4 / 89.6 | 13.5 / 86.5 |
 
-**The load devices, not the input pair, own ~85–92 % of the front-end noise
-power at every design and every point.** Even the doubled 6 µm loads of
-`ib10_sw20lat6` leave the load share at 85–88 %. The input pair — the only
-devices the #92 W/L study swept — holds 8–15 % of the power, i.e. at most a
-±3 % amplitude lever even if eliminated outright.
+**XM5A/XM6A contribute 85.4–92.4 % of differential output noise power** in
+these 12 cells. The input pair contributes 7.6–14.6 %. If its noise alone
+were removed with gain and every other contribution held fixed, the fractional
+amplitude reduction would be `1 − √(1 − f)` for power fraction `f`, or
+3.9–7.6 %. Resizing the pair also changes gain and can change how other
+sources reach the output. Its output power share therefore cannot bound the
+change in input-referred density from resizing.
 
 ## The bandwidth factor: sigma / ENBW from the committed #92 campaigns
 
@@ -118,43 +117,58 @@ linearly with source amplitude:
 The committed-design column reproduces the projection in the README above
 (0.677 / 1.361 / 2.395 / 0.870 mV), which was derived from the published
 record's densities — an independent cross-check, since this batch measured
-them again. The equivalent nominal recalibration (grid mean ×
-S_own(tt)/S₀) gives **1.289 mV** (committed, unchanged by construction),
-**1.555 mV** (8 µm baseline) and **1.112 mV** (`ib10_sw20lat6`).
+them again. These four-point means characterize the selected bounding points.
+The ratified Target uses the 45-point grid mean.
 
-## What this says
+## Nominal recalibration for the six #92 finalists
 
-**Which factor did #92 move, and which factor must a design change move?**
+At TT, 27 °C, 1.20 V, the full nominal request measures the committed
+control and all six finalists. Each design below links to its archived
+Row 2 grade. The projected mean is `grid_mean × S(TT) / 36.27`, holding
+that design's TT density constant across its 45 decision bandwidths.
+Calculations use the unrounded measurements. The stored nominal report
+contains `white_out` and `gain_dc` for all seven parameter rows in table
+order. [Nominal run and stored evidence](../20261120-issue477-nominal.md)
 
-- The #92 geometry studies moved only the **bandwidth** factor.
-  `ib10_sw20lat6` reached 1.096 mV by narrowing its effective decision
-  bandwidth — ENBW at `ff_125c_1.08v` falls from 2.582 GHz (committed) to
-  0.862 GHz — while its own density stayed within +1.4 % of the injected
-  one. Its improvement survives the per-candidate correction (1.112 mV
-  nominal recal): it is real, and it is a bandwidth effect.
-- The 8 µm/0.34 µm baseline (the [#476](https://github.com/2AMLogic/sg13g2-comparator/issues/476)
-  adoption candidate) is **worse than its bench number**: its own density is
-  16–17 % higher, so a per-candidate calibration turns its 1.338 mV bench
-  mean into ≈ 1.555 mV. Any Row 2 argument built on that baseline should
-  carry its own density.
-- The **density** factor cannot be moved by input-pair geometry: the pair
-  holds 8–15 % of the front-end noise power (a ≤ ±3 % amplitude lever),
-  which is exactly why the #92 W/L sweep spanned only 1.27–1.34 mV. The
-  density term to attack is the load/reset device pair XM5A/XM6A — the
-  reduced-model counterparts of the latch loads XM5/XM6 — with 85–92 % of
-  the power at every measured cell. Candidate classes that change S at all
-  must change those devices or add elements ahead of the latch (the #479
-  candidates 1 and 3 both do).
-- **Neither factor closes Row 2 as measured.** The best design's
-  characterization mean (1.147 mV over the four bounding points, 1.112 mV
-  nominal recal) still misses the 1.0 mV Target. Reaching 1.0 mV from
-  `ib10_sw20lat6` needs either a further ~9 % bandwidth narrowing at fixed
-  density (× 0.832 on every point) or ~10 % off the density at fixed
-  bandwidth (33.09 nV/√Hz) — and the density route must find that 10 % in
-  the load devices, since the pair and tail terms cannot supply it.
+| Design / grading record | S(TT) (nV/√Hz) | 45-point bench mean (mV) | Nominally recalibrated mean (mV) |
+|---|---:|---:|---:|
+| [12 µm committed](../../../klt-corner-verification/campaigns/20261009-d73a9ac/grading.json) | 36.27 | 1.289 | 1.289 |
+| [`w8_l034`](../../../klt-corner-verification/campaigns/20261009-issue92/full_w8_l034/grading.json) | 42.16 | 1.338 | 1.555 |
+| [`ib10_sw20lat6`](../../../klt-corner-verification/campaigns/20261115-issue92-bias/full_ib10_sw20lat6/grading.json) | 36.78 | 1.096 | 1.112 |
+| [`w6_l034`](../../../klt-corner-verification/campaigns/20261009-issue92/full_w6_l034/grading.json) | 47.10 | 1.333 | 1.731 |
+| [`w8_l020`](../../../klt-corner-verification/campaigns/20261009-issue92/full_w8_l020/grading.json) | 38.94 | 1.265 | 1.358 |
+| [`ib10_sw20`](../../../klt-corner-verification/campaigns/20261115-issue92-bias/full_ib10_sw20/grading.json) | 41.45 | 1.192 | 1.363 |
+| [`ib12p5_sw20`](../../../klt-corner-verification/campaigns/20261115-issue92-bias/full_ib12p5_sw20/grading.json) | 41.58 | 1.255 | 1.439 |
 
-This is characterization evidence for the #479 candidate study and the #480
-drafting-only record; it is not a compliance verdict and relaxes nothing.
+## Implications for the 1.0 mV Target
+
+The #92 bench held the injection fixed, so its σ differences measure
+differences in effective decision bandwidth. For example, at FF the
+bandwidth falls from 2.582 GHz (committed) to 0.862 GHz (`ib10_sw20lat6`).
+The finalist's own TT density of 36.78 nV/√Hz is 1.4 % above the fixed
+36.27 nV/√Hz injection. Its FF density of 45.61 nV/√Hz is 25.8 % above
+that injection and 3.2 % below the committed design's 47.13 nV/√Hz at FF.
+
+`ib10_sw20lat6` retains the lowest projected mean of the six finalists
+when each uses its own TT density (1.112 mV). The 8 µm baseline proposed
+in #476 goes from 1.338 to 1.555 mV. For #479, either lower input-referred
+density, narrower effective decision bandwidth, or a combination can lower
+Row 2. The measured load share identifies the largest direct noise source.
+The measured width dependence also makes gain relevant when comparing designs.
+
+For `ib10_sw20lat6`, let `r = 1.0 mV / starting mean`. Reaching 1.0 mV
+at fixed bandwidth requires multiplying every point's density by `r`.
+At fixed density, scaling each bandwidth by `r²` gives the same uniform
+reduction in σ. The table uses the displayed starting means.
+
+| Starting mean and density reference | Starting σ (mV) | Density reduction at fixed bandwidth | Bandwidth multiplier at fixed density | Bandwidth reduction |
+|---|---:|---:|---:|---:|
+| 45-point bench, fixed 36.27 nV/√Hz injection | 1.096 | 8.8 % (to 33.09 nV/√Hz) | 0.832 | 16.8 % |
+| 45-point nominal recalibration, 36.78 nV/√Hz at TT | 1.112 | 10.1 % | 0.809 | 19.1 % |
+| Four bounding points, each at its measured density | 1.147 | 12.8 % at each point | 0.760 | 24.0 % |
+
+The last row scales a four-point characterization mean. Establishing
+compliance requires the grid-wide statistic specified for Row 2.
 
 ## Tooling note
 
@@ -167,11 +181,11 @@ that issue being fixed.
 
 ## Reproduce
 
-Run the invocation in [`README.md`](README.md) § "Measuring the candidate
-density" from this directory on a worker with batch-submission credentials
-and artifact-broker access; the stored run is
-[`reports/20261121-issue477-pvt.md`](../20261121-issue477-pvt.md). Every
-table above is arithmetic on those stored bytes plus the committed `#92`
-grading files: S = `white_out/gain_dc`; shares = device power ÷
-`white_out²`; ENBW = (σ/36.27 nV)²; σ_char = S·√ENBW; nominal recal =
-grid mean × S(tt)/36.27.
+For the 12 design/PVT cells, use the bounded batch invocation from this
+directory on a worker with batch-submission credentials and artifact-broker
+access. [Batch invocation](README.md#measuring-the-candidate-density) ·
+[Four-point stored evidence](../20261121-issue477-pvt.md)
+
+For the seven-row nominal table, use the full single-PVT request and the
+linked grading records above. The stored nominal report gives the exact
+parameter set and measurements for each row. [Nominal reproduction and stored evidence](../20261120-issue477-nominal.md)
