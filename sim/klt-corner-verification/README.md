@@ -726,7 +726,7 @@ Evidence: [`campaigns/20261115-issue92-bias/`](campaigns/20261115-issue92-bias/)
 [`sizesweep-final.md`](campaigns/20261115-issue92-bias/sizesweep-final.md),
 machine forms `.json`; finalist MC envelopes + artifacts are **stored**, not
 committed: manifest
-[`../../../manifests/artifacts/klt-corner-verification-20261115-issue92-bias-mc.manifest.json`](../../../manifests/artifacts/klt-corner-verification-20261115-issue92-bias-mc.manifest.json),
+[`../../manifests/artifacts/klt-corner-verification-20261115-issue92-bias-mc.manifest.json`](../../manifests/artifacts/klt-corner-verification-20261115-issue92-bias-mc.manifest.json),
 summary [`campaigns/20261115-issue92-bias-mc.md`](campaigns/20261115-issue92-bias-mc.md)).
 Note (issue #447): the committed roll-ups here predate the roll-up fix and
 omit Row 5a entirely; Row 5a's per-candidate verdict is in each finalist's
