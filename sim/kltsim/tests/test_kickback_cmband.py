@@ -7,7 +7,9 @@ fixture and perturbs deep copies of it.
 
 from __future__ import annotations
 
+import contextlib
 import copy
+import io
 import json
 import re
 import sys
@@ -546,6 +548,96 @@ class Evidence(unittest.TestCase):
                 with self.assertRaises(kb.KickbackCmBandError):
                     kb.write_probe_inputs(M050, "repro", out)
             self.assertFalse((out / "kickback-repro.request.json").exists())
+
+    def test_write_condition_inputs_refuses_non_directory_out_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "vcm-nom"
+            out.write_text("not a directory", encoding="utf-8")
+            with self.assertRaises(kb.KickbackCmBandError) as caught:
+                kb.write_condition_inputs(NOM, out)
+            self.assertIn(f"{out}: exists and is not a directory", str(caught.exception))
+            self.assertEqual(out.read_text(encoding="utf-8"), "not a directory")
+            self.assertEqual([p.name for p in Path(d).iterdir()], ["vcm-nom"])
+
+    def test_write_probe_inputs_refuses_non_directory_out_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d)
+            out = series / "vcm-m050"
+            out.write_text("not a directory", encoding="utf-8")
+            seed_probe_ref_body(series, M050)
+            with mock.patch.object(kb, "SERIES_DIR", series):
+                with self.assertRaises(kb.KickbackCmBandError) as caught:
+                    kb.write_probe_inputs(M050, "repro", out)
+            self.assertIn(f"{out}: exists and is not a directory", str(caught.exception))
+            self.assertEqual(out.read_text(encoding="utf-8"), "not a directory")
+            self.assertEqual(sorted(p.name for p in series.iterdir()),
+                             sorted([kb.PROBE_REFERENCE_SERIES, "vcm-m050"]))
+
+    def test_commit_inputs_refuses_non_directory_parents_in_batch(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "vcm-m050").mkdir()
+            (root / "vcm-nom").write_text("x", encoding="utf-8")
+            (root / "vcm-p050").symlink_to(root / "vcm-m050")
+            planned = [(root / cond.name / name, data)
+                       for cond in kb.CONDITIONS for name, data in kb.input_bytes(cond).items()]
+            with self.assertRaises(kb.KickbackCmBandError) as caught:
+                kb.commit_inputs(planned, evidence="campaign evidence")
+            for name in ("vcm-nom", "vcm-p050"):
+                self.assertIn(f"{root / name}: exists and is not a directory",
+                              str(caught.exception))
+            self.assertEqual(sorted(p.name for p in root.iterdir()),
+                             ["vcm-m050", "vcm-nom", "vcm-p050"])
+            self.assertEqual(list((root / "vcm-m050").iterdir()), [])
+
+    def test_commit_inputs_refuses_non_directory_ancestor(self):
+        for as_symlink in (False, True):
+            with self.subTest(symlink=as_symlink), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                series = root / "series"
+                if as_symlink:
+                    series.symlink_to(root / "gone")
+                else:
+                    series.write_text("x", encoding="utf-8")
+                with self.assertRaises(kb.KickbackCmBandError) as caught:
+                    kb.commit_inputs([(series / "vcm-nom" / kb.BODY_NAME, b"body")])
+                self.assertIn(f"{series}: exists and is not a directory", str(caught.exception))
+                self.assertFalse((root / "gone").exists())
+                self.assertEqual([p.name for p in root.iterdir()], ["series"])
+
+    def test_commit_inputs_follows_a_symlinked_ancestor(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "real").mkdir()
+            (root / "link").symlink_to(root / "real", target_is_directory=True)
+            kb.write_condition_inputs(NOM, root / "link" / "series" / "vcm-nom")
+            written = root / "real" / "series" / "vcm-nom"
+            self.assertEqual(sorted(p.name for p in written.iterdir()),
+                             sorted(kb.input_bytes(NOM)))
+
+    def test_cmd_build_reports_non_directory_condition_dir(self):
+        with tempfile.TemporaryDirectory(dir=rkb.build_mod.SIM_DIR) as d, \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            series = Path(d)
+            (series / "vcm-nom").write_text("x", encoding="utf-8")
+            args = mock.Mock(series="s", condition=None)
+            with mock.patch.object(rkb, "_series", return_value=series):
+                self.assertEqual(rkb.cmd_build(args), 1)
+            self.assertIn(f"{series / 'vcm-nom'}: exists and is not a directory", err.getvalue())
+            self.assertNotIn("Traceback", err.getvalue())
+            self.assertEqual([p.name for p in series.iterdir()], ["vcm-nom"])
+
+    def test_cmd_probe_build_reports_non_directory_condition_dir(self):
+        with tempfile.TemporaryDirectory(dir=rkb.build_mod.SIM_DIR) as d, \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            series = Path(d)
+            (series / "vcm-nom").write_text("x", encoding="utf-8")
+            args = mock.Mock(series="20261114-x", condition=None, arm=None)
+            with mock.patch.object(rkb, "_series", return_value=series):
+                self.assertEqual(rkb.cmd_probe_build(args), 1)
+            self.assertIn(f"{series / 'vcm-nom'}: exists and is not a directory", err.getvalue())
+            self.assertNotIn("Traceback", err.getvalue())
+            self.assertEqual([p.name for p in series.iterdir()], ["vcm-nom"])
 
     def test_run_refuses_existing_envelope_and_completed_attempt(self):
         with tempfile.TemporaryDirectory() as d:
