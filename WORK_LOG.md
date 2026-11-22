@@ -8,6 +8,8 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-11-22
 
+- **PR #509**: refactor: source the transient-noise injected density from one constant
+- **Issue #506** (closed): Source the 36.27 nV/√Hz bench injection from one place instead of per-module literals
 - **PR #510**: fix: hash supplement envelopes from the bytes used to parse them
 - **Issue #508** (closed): Hash offset supplement envelopes from the bytes used to parse them
 

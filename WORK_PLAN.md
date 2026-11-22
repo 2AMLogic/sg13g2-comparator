@@ -1,7 +1,7 @@
 # Work plan
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-22T03:17:26Z (snapshot; compare against live labels)_
+_Generated: 2026-11-22T08:11:04Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
@@ -24,7 +24,8 @@ _None._
 
 Human-approved issues (`loom:issue`) ready for implementation — excluding held (`loom:blocked`/`loom:operator`/`loom:frozen`), `loom:building`, and issues closed by an open `loom:pr` PR (listed under Approved).
 
-_None._
+- **#489**: Replace raw xschem call in design/netlist.py with klt netlist — changes requested on PR #500
+- **#495**: Remove the empty-measurement fallback from the memory determinism repeat — changes requested on PR #499
 
 ## In Progress
 
@@ -32,10 +33,7 @@ Issues currently being built (`loom:building`).
 
 - **#476**: Draft the decision record on adopting the 8 µm input pair for Row 4a kickback
 - **#487**: test_item5_spec_rows: pinned-klt skip guard uses a substring match, so a 0.9.2.dev build passes as the pin
-- **#489**: Replace raw xschem call in design/netlist.py with klt netlist
-- **#495**: Remove the empty-measurement fallback from the memory determinism repeat
 - **#497**: Measure the integration-node capacitance tradeoff between Row 2 noise and Row 3c delay
-- **#506**: Source the 36.27 nV/√Hz bench injection from one place instead of per-module literals
 
 ## PRs Awaiting Review
 
@@ -49,7 +47,6 @@ PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified) — closes #160
 - **#492**: fix: require exact klt version match to run item 5 spec-row tests — closes #487
-- **#509**: refactor: source the transient-noise injected density from one constant — closes #506
 
 ## Proposed
 
@@ -62,7 +59,6 @@ Issues carrying `loom:curated`.
 - **#487**: test_item5_spec_rows: pinned-klt skip guard uses a substring match, so a 0.9.2.dev build passes as the pin *(curated)*
 - **#489**: Replace raw xschem call in design/netlist.py with klt netlist *(curated)*
 - **#497**: Measure the integration-node capacitance tradeoff between Row 2 noise and Row 3c delay *(curated)*
-- **#506**: Source the 36.27 nV/√Hz bench injection from one place instead of per-module literals *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -79,11 +75,11 @@ _None._
 | Operator merge-risk holds | 1 |
 | Very important | 0 |
 | Important | 1 |
-| Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 6 |
+| Ready (`loom:issue`) | 2 |
+| In Progress (`loom:building`) | 3 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 3 |
-| Curated | 8 |
+| Approved PRs awaiting merge | 2 |
+| Curated | 7 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
