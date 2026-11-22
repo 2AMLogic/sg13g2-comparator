@@ -48,7 +48,7 @@ from . import artifacts as artifacts_mod
 from . import build as build_mod
 from . import grade as grade_mod
 from . import sizesweep as sizesweep_mod
-from .benches import TRANSIENT_NOISE
+from .benches import TRANSIENT_NOISE, TRANSIENT_NOISE_INJECTED_DENSITY_NV_RTHZ
 
 #: the archived control: full 45-point grid AND its 18-point screen subset
 #: already exist in the issue #92 bias campaign, so the control is reused,
@@ -389,7 +389,7 @@ def _candidate_screen(sub: Path, name: str, width: str, control: dict) -> dict:
     if stat["grid_mean"] >= control["screen_mean"]:
         reasons.append(f"Row 2 screen mean {stat['grid_mean']:.4g} mV does not improve on "
                        f"the control's {control['screen_mean']:.4g} mV at the same "
-                       "injection (36.27 nV/rtHz)")
+                       f"injection ({TRANSIENT_NOISE_INJECTED_DENSITY_NV_RTHZ} nV/rtHz)")
     return entry
 
 
@@ -419,8 +419,10 @@ def _width_um(row: dict) -> float:
 
 
 def _projection(bench_mean: float | None, density: float | None) -> float | None:
-    """Rescale a 45-point mean measured at 36.27 nV/rtHz to the TT density."""
-    return None if bench_mean is None or density is None else bench_mean * density / 36.27
+    """Rescale a 45-point mean measured at
+    TRANSIENT_NOISE_INJECTED_DENSITY_NV_RTHZ nV/rtHz to the TT density."""
+    return (None if bench_mean is None or density is None
+            else bench_mean * density / TRANSIENT_NOISE_INJECTED_DENSITY_NV_RTHZ)
 
 
 def _full_row2(sub: Path, name: str, width: str, density: float | None) -> dict:
@@ -500,10 +502,12 @@ def render_markdown(result: dict, cdir: Path, report_dir: Path) -> str:
          f"The 6 µm control (`{CONTROL_CAMPAIGN}/full_{CONTROL_NAME}`) averages "
          f"{_fmt(control['screen_mean'])} mV rms across its 18 screening points "
          f"({control['points_valid']}/{control['points_selected']} valid) and "
-         f"{_fmt(control['grid45_mean'])} mV rms across all 45 points at 36.27 nV/rtHz.", "",
+         f"{_fmt(control['grid45_mean'])} mV rms across all 45 points at "
+         f"{TRANSIENT_NOISE_INJECTED_DENSITY_NV_RTHZ} nV/rtHz.", "",
          "## Row 2 screen (transient noise, 18 points, N = 80 per rung, unchanged bench)", "",
          "Each candidate has three requests (TT, FF, SS) covering 18 points. The screen "
-         "averages the per-point probit-slope sigmas at 36.27 nV/rtHz. The last column "
+         f"averages the per-point probit-slope sigmas at "
+         f"{TRANSIENT_NOISE_INJECTED_DENSITY_NV_RTHZ} nV/rtHz. The last column "
          "projects each candidate's TT density using the 6 µm control's 45-point mean.", "",
          "| candidate | loads | valid pts | 18-pt mean [mV rms] | vs control | own S(TT) [nV/rtHz] | 45-pt TT projection at fixed 6 µm control bandwidth [mV rms] |",
          "|---|---|---|---|---|---|---|"]
@@ -546,7 +550,8 @@ def render_markdown(result: dict, cdir: Path, report_dir: Path) -> str:
     L += ["", "## Full-grid Row 2", ""]
     for row in result["full_grades"]:
         path = os.path.relpath(cdir / row["grade"], report_dir)
-        line = (f"- [{row['name']} grade]({path}) — 45-point mean at 36.27 nV/rtHz "
+        line = (f"- [{row['name']} grade]({path}) — 45-point mean at "
+                f"{TRANSIENT_NOISE_INJECTED_DENSITY_NV_RTHZ} nV/rtHz "
                 f"**{_fmt(row['grid45_mean'], 6)} mV rms** (Target **{row['verdict']}**).")
         if row["own_tt_projection_mv"] is not None:
             line += (f" At the measured bandwidth and {row['density_nv_rthz']:.5g} nV/rtHz, "
