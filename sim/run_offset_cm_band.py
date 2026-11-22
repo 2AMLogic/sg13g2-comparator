@@ -10,6 +10,7 @@
     python3 sim/run_offset_cm_band.py supplement-build --series ID [--condition C ...]
     python3 sim/run_offset_cm_band.py supplement-run  --series ID [--condition C] [--klt KLT]
     python3 sim/run_offset_cm_band.py supplement-report --series ID [--parent ID]
+        [--report-dir DIR] [--check]
 
 Conditions: vcm-m050 (dut_vcm - 50 mV), vcm-nom (dut_vcm), vcm-p050
 (dut_vcm + 50 mV). Each condition is one campaign under
@@ -263,10 +264,18 @@ def cmd_supplement_run(args) -> int:
 def cmd_supplement_report(args) -> int:
     series = _series(args)
     result = cmband.compare_supplement(series, parent_campaign=args.parent)
-    (series / "supplement-report.json").write_text(
-        json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    (series / "supplement-report.md").write_text(
-        cmband.render_supplement_markdown(result), encoding="utf-8")
+    md = cmband.render_supplement_markdown(result)
+    report_dir, md = kcli.resolve_report_dir(args, series, md, result, "series")
+    rc = artifacts_mod.publish(
+        "supplement-report",
+        [(report_dir / "supplement-report.json",
+          (json.dumps(result, indent=2) + "\n").encode("utf-8")),
+         (report_dir / "supplement-report.md", md.encode("utf-8"))],
+        check_only=args.check,
+        namespace_hint=kcli.SERIES_NAMESPACE_HINT,
+        require_dir=report_dir)
+    if rc or args.check:
+        return rc
     c = result["conclusion"]
     print(f"targets complete: {sum(1 for t in c['targets_complete'] if t['valid'])}"
           f"/{c['targets_expected']}; pairs identical {c['pairs_identical']}"
@@ -365,6 +374,11 @@ def main(argv: list[str] | None = None) -> int:
     sg = sub.add_parser("supplement-report")
     sg.add_argument("--series", required=True)
     sg.add_argument("--parent", default=cmband.SUPPLEMENT_PARENT)
+    sg.add_argument("--report-dir", help="write supplement-report.{json,md} here instead "
+                   "of the series directory (new directory; cites the series; different "
+                   "existing files are never overwritten)")
+    sg.add_argument("--check", action="store_true",
+                    help="read-only: exit 1 if the reports are missing, stale or unsafe")
     sg.set_defaults(func=cmd_supplement_report)
 
     args = ap.parse_args(argv)
