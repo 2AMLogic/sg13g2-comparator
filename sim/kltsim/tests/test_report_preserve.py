@@ -14,6 +14,7 @@ from unittest import mock
 
 import run_clock_supply_sensitivity as clock
 import run_decision_cm_band as decision
+import run_kickback_cm_band as kickback
 import run_offset_cm_band as offset
 from kltsim import artifacts
 from kltsim import cli
@@ -24,6 +25,7 @@ from kltsim import clocksupply_report as rep
 from kltsim import declared_n
 from kltsim import grade as grade_mod
 from kltsim import ibsweep
+from kltsim import kickback_cmband as kb
 from kltsim import noise_full
 
 SIDE = {"grade": ("grading.json", "grading.md"),
@@ -31,8 +33,13 @@ SIDE = {"grade": ("grading.json", "grading.md"),
         "clock": ("comparison.json", "comparison.md"),
         "offset": ("comparison.json", "comparison.md"),
         "decision": ("comparison.json", "comparison.md"),
+        "kickback": ("comparison.json", "comparison.md"),
+        "kickback-probe": ("comparison.json", "comparison.md"),
         "ibsweep": ("ibsweep.json", "ibsweep.md")}
-SERIES_RUNNERS = {"clock": clock, "offset": offset, "decision": decision}
+SERIES_RUNNERS = {"clock": (clock, "compare"), "offset": (offset, "compare"),
+                  "decision": (decision, "compare"),
+                  "kickback": (kickback, "compare"),
+                  "kickback-probe": (kickback, "probe-compare")}
 
 
 class Harness(unittest.TestCase):
@@ -68,6 +75,18 @@ class Harness(unittest.TestCase):
             stack.enter_context(mock.patch.object(
                 mod, "compare_series", lambda d, **kw: {**self.result, "conditions": {}}))
             stack.enter_context(mock.patch.object(mod, "render_markdown", lambda r: self.md))
+        stack.enter_context(mock.patch.object(kb, "SERIES_DIR", self.campaigns))
+        stack.enter_context(mock.patch.object(
+            kb, "compare_series",
+            lambda d, ref=None: {**self.result, "conditions": {},
+                                 "reproduction": {"ok": True, "values_compared": 0,
+                                                  "expected_values": 0, "mismatches": [],
+                                                  "problems": []}}))
+        stack.enter_context(mock.patch.object(kb, "render_markdown", lambda r: self.md))
+        stack.enter_context(mock.patch.object(
+            kb, "probe_compare",
+            lambda d, **kw: {**self.result, "problems": [], "points": []}))
+        stack.enter_context(mock.patch.object(kb, "probe_render_markdown", lambda r: self.md))
         stack.enter_context(mock.patch.object(
             ibsweep, "sweep", lambda d: {**self.result, "points": [1]}))
         stack.enter_context(mock.patch.object(ibsweep, "render_markdown", lambda r: self.md))
@@ -80,7 +99,8 @@ class Harness(unittest.TestCase):
         err, out = io.StringIO(), io.StringIO()
         with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
             if self.kind in SERIES_RUNNERS:
-                rc = SERIES_RUNNERS[self.kind].main(["compare", "--series", "C1", *extra])
+                mod, sub = SERIES_RUNNERS[self.kind]
+                rc = mod.main([sub, "--series", "C1", *extra])
             else:
                 rc = cli.main(self.argv(*extra))
         return rc, out.getvalue(), err.getvalue()
@@ -234,6 +254,33 @@ class OffsetCmBandTest(_Cases, Harness):
 
 class DecisionCmBandTest(_Cases, Harness):
     kind = "decision"
+
+
+class KickbackTest(_Cases, Harness):
+    kind = "kickback"
+
+
+class KickbackProbeTest(_Cases, Harness):
+    kind = "kickback-probe"
+
+    def test_report_dir_allows_frozen_series_with_other_arms(self):
+        # the frozen-#405 guard refuses only in-place rewrites: a redirected
+        # publish cites the series and leaves its committed pair untouched.
+        self.src = self.campaigns / "20261108-405-probe"
+        self.src.mkdir()
+        rc, _, _ = self.run_cmd("--series", "20261108-405-probe", "--arm", "icdc",
+                                "--report-dir", str(self.root / "new-ns"))
+        self.assertEqual(rc, 0)
+        self.assertEqual(list(self.src.iterdir()), [])
+        self.assertEqual({p.name for p in (self.root / "new-ns").iterdir()}, set(self.names))
+
+    def test_in_place_frozen_series_with_other_arms_refused(self):
+        self.src = self.campaigns / "20261108-405-probe"
+        self.src.mkdir()
+        rc, _, err = self.run_cmd("--series", "20261108-405-probe", "--arm", "icdc")
+        self.assertEqual(rc, 1)
+        self.assertIn("frozen #405 probe series", err)
+        self.assertEqual(list(self.src.iterdir()), [])
 
 
 class IbsweepTest(_Cases, Harness):
