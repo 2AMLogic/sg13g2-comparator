@@ -125,7 +125,10 @@ class RecordTests(unittest.TestCase):
 
 class DeterminismRepeatEvidenceTests(unittest.TestCase):
     """Issue #495: a determinism round whose inputs carry no measurements at
-    the repeat point is insufficient evidence, never agreement."""
+    the repeat point is insufficient evidence, never agreement.
+
+    Issue #525: within a round that has measurements, a name with no value on
+    both sides is unmeasured, never a compared value."""
 
     EMPTY_CORNER = {"corner_id": "tt/1.200V/27C", "process": "mos_tt",
                     "supply_v": {"vsup": 1.2}, "temperature_c": 27, "status": "pass",
@@ -263,6 +266,78 @@ class DeterminismRepeatEvidenceTests(unittest.TestCase):
         self.assertGreater(r["max_abs_difference"], 0.0)
         self.assertFalse(rec["determinism_repeat"]["all_identical"])
         self.assertIn("All rounds bit-identical: **False**", rm.render_markdown(rec))
+
+    PARTIAL_CORNER = {**EMPTY_CORNER, "measurements": [
+        {"name": "a", "value": None, "status": "error"},
+        {"name": "b", "value": None, "status": "error"},
+        {"name": "c", "value": 1.5, "status": "pass"}]}
+
+    def test_null_on_both_sides_is_unmeasured_not_a_compared_value(self):
+        rec = self.bare_record([self.PARTIAL_CORNER], [dict(self.PARTIAL_CORNER)])
+        r = self.round1(rec)
+        self.assertIs(r["identical"], True)
+        self.assertEqual(r["values_compared"], 1)
+        self.assertEqual(r["unmeasured"], ["a", "b"])
+        self.assertEqual(r["differences"], {})
+        self.assertTrue(rec["determinism_repeat"]["all_identical"])
+        md = rm.render_markdown(rec)
+        self.assertIn("round 1: PARTIALLY MEASURED", md)
+        self.assertIn("a, b", md)
+        self.assertNotIn("All rounds bit-identical", md)
+
+    def test_unmeasured_names_do_not_hide_a_real_difference(self):
+        def bumped(c):
+            return {**c, "measurements": [{**m, "value": None if m["value"] is None
+                                           else m["value"] + 1.0} for m in c["measurements"]]}
+        rec = self.bare_record([self.PARTIAL_CORNER], [bumped(self.PARTIAL_CORNER)])
+        r = self.round1(rec)
+        self.assertIs(r["identical"], False)
+        self.assertEqual(r["values_compared"], 1)
+        self.assertEqual(r["unmeasured"], ["a", "b"])
+        self.assertEqual(r["differences"], {"c": [1.5, 2.5]})
+        self.assertAlmostEqual(r["max_abs_difference"], 1.0)
+        self.assertNotIn("All rounds bit-identical", rm.render_markdown(rec))
+
+    def test_value_on_one_side_only_is_unmeasured_and_still_a_difference(self):
+        def one_nulled(c):
+            ms = [dict(m) for m in c["measurements"]]
+            ms[0].update(value=None, status="error")
+            return {**c, "measurements": ms}
+        full = self.round1(self.populated_record(lambda c: c))
+        rec = self.populated_record(one_nulled)
+        r = self.round1(rec)
+        self.assertIs(r["identical"], False)
+        self.assertEqual(r["differences"], {"vdd_meas": [1.2, None]})
+        self.assertEqual(r["unmeasured"], ["vdd_meas"])
+        self.assertEqual(r["values_compared"], full["values_compared"] - 1)
+
+    def test_fully_measured_round_lists_nothing_unmeasured(self):
+        rec = self.populated_record(lambda c: c)
+        r = self.round1(rec)
+        self.assertEqual(r["unmeasured"], [])
+        self.assertIn("All rounds bit-identical: **True**", rm.render_markdown(rec))
+        self.assertNotIn("PARTIALLY MEASURED", rm.render_markdown(rec))
+
+    def test_error_status_with_a_numeric_value_counts_as_evidence(self):
+        errored = {**self.EMPTY_CORNER, "measurements": [
+            {"name": "x", "value": 1.5, "status": "error"}]}
+        rec = self.bare_record([errored], [dict(errored)])
+        r = self.round1(rec)
+        self.assertIs(r["identical"], True)
+        self.assertEqual(r["values_compared"], 1)
+        self.assertEqual(r["unmeasured"], [])
+        self.assertIn("All rounds bit-identical: **True**", rm.render_markdown(rec))
+
+    def test_partially_measured_round_is_named_beside_an_insufficient_one(self):
+        rec = self.bare_record([self.PARTIAL_CORNER], [dict(self.PARTIAL_CORNER)])
+        rec["determinism_repeat"]["rounds"].append(
+            {"round": 2, "values_compared": 0, "identical": None, "missing_measurements": ["repeat"],
+             "max_abs_difference": None, "differences": {}})
+        md = rm.render_markdown(rec)
+        self.assertIn("round 2: INSUFFICIENT EVIDENCE", md)
+        self.assertIn("round 1: PARTIALLY MEASURED", md)
+        self.assertIn("Compared rounds bit-identical", md)
+        self.assertNotIn("All rounds bit-identical", md)
 
 
 class RepeatByteIdentityTests(unittest.TestCase):

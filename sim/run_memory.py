@@ -417,9 +417,11 @@ def build_record(series: str) -> dict:
                         "missing_measurements": missing,
                         "max_abs_difference": None, "differences": {}})
             continue
-        diffs = {n: [va.get(n), vb.get(n)] for n in sorted(set(va) | set(vb))
-                 if va.get(n) != vb.get(n)}
-        rep.append({"round": k, "values_compared": len(vb), "identical": not diffs,
+        names = sorted(set(va) | set(vb))
+        unmeasured = [n for n in names if va.get(n) is None or vb.get(n) is None]
+        diffs = {n: [va.get(n), vb.get(n)] for n in names if va.get(n) != vb.get(n)}
+        rep.append({"round": k, "values_compared": len(names) - len(unmeasured),
+                    "identical": not diffs, "unmeasured": unmeasured,
                     "max_abs_difference": max((abs(x[0] - x[1]) for x in diffs.values()
                                                if x[0] is not None and x[1] is not None), default=0.0),
                     "differences": diffs})
@@ -432,7 +434,13 @@ def _repeat_values(env: dict) -> dict | None:
     """Measurement map at the repeat point, or None when no corner matches it:
     an absent corner (or an empty measurement set) is missing evidence, not an
     empty-and-therefore-identical comparison. An input whose measurements all lack
-    a value (failed simulations) counts as missing too."""
+    a value (failed simulations) counts as missing too.
+
+    Evidence is keyed on the value alone, never on ``status``: a non-null value
+    counts whatever its status, so a ``status: "error"`` entry that nonetheless
+    carries a number is evidence. That is how klt reports a failed measurement
+    (``status: "error"`` with a null value) and how the search itself reads the
+    same envelope (:func:`kltsim.memory.corner_values`)."""
     for c in env.get("corners") or []:
         if c.get("process") == REPEAT_POINT[0] and abs(c["supply_v"]["vsup"] - REPEAT_POINT[1]) < 1e-6 \
                 and abs(c["temperature_c"] - REPEAT_POINT[2]) < 1e-6:
@@ -494,17 +502,30 @@ def render_markdown(rec: dict) -> str:
     else:
         incomplete = [r for r in d["rounds"] if r["identical"] is None]
         complete = [r for r in d["rounds"] if r["identical"] is not None]
+        partial = [r for r in complete if r["unmeasured"]]
+        partial_note = (f"; round(s) {', '.join(str(r['round']) for r in partial)} partially measured"
+                        if partial else "")
         for r in incomplete:
             L.append(f"- round {r['round']}: INSUFFICIENT EVIDENCE, no measured values at the repeat "
                      f"point in the {' and '.join(r['missing_measurements'])} envelope; "
                      "no identity verdict for this round.")
+        for r in partial:
+            L.append(f"- round {r['round']}: PARTIALLY MEASURED, {r['values_compared']} of "
+                     f"{r['values_compared'] + len(r['unmeasured'])} values compared; no value on "
+                     f"at least one side for: {', '.join(r['unmeasured'])}.")
         if not complete:
             L.append("No round has measurements on both sides; the repeat is undecided on this "
                      "evidence.")
         elif incomplete:
             L.append(f"Compared rounds bit-identical: **{all(r['identical'] for r in complete)}** "
                      f"(rounds {', '.join(str(r['round']) for r in complete)} of {len(d['rounds'])}; "
-                     f"round(s) {', '.join(str(r['round']) for r in incomplete)} lack measurements).")
+                     f"round(s) {', '.join(str(r['round']) for r in incomplete)} lack measurements"
+                     f"{partial_note}).")
+        elif partial:
+            L.append(f"Compared values bit-identical: **{d['all_identical']}** "
+                     f"(rounds: {', '.join(str(r['round']) for r in d['rounds'])}); "
+                     f"round(s) {', '.join(str(r['round']) for r in partial)} partially measured, "
+                     "so this is no verdict on their unmeasured values.")
         else:
             L.append(f"All rounds bit-identical: **{d['all_identical']}** "
                      f"(rounds: {', '.join(str(r['round']) for r in d['rounds'])}).")
