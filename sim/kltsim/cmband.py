@@ -1082,18 +1082,21 @@ def _envelope_bytes(path: Path) -> bytes:
         return gzip.decompress(gz.read_bytes())
 
 
-def _supplement_envelope(path: Path) -> tuple[dict | None, str | None]:
-    """Load one supplementary envelope; (None, reason) when missing/malformed."""
+def _supplement_envelope(path: Path) -> tuple[dict | None, bytes | None, str | None]:
+    """Load one supplementary envelope; ``(envelope, exact bytes parsed, None)``,
+    or ``(None, None, reason)`` when missing/malformed. The bytes are the
+    buffer ``json.loads`` read, so a digest over them describes the reported
+    measurements without re-reading the file."""
     try:
         raw = _envelope_bytes(path)
     except FileNotFoundError:
-        return None, "envelope not found (part not run)"
+        return None, None, "envelope not found (part not run)"
     except (OSError, EOFError) as exc:
-        return None, f"unreadable: {exc}"
+        return None, None, f"unreadable: {exc}"
     try:
-        return json.loads(raw), None
+        return json.loads(raw), raw, None
     except json.JSONDecodeError as exc:
-        return None, f"malformed JSON: {exc}"
+        return None, None, f"malformed JSON: {exc}"
 
 
 def _pair_check(sup: list[dict] | None, par: list[dict] | None) -> dict:
@@ -1158,9 +1161,9 @@ def compare_supplement(series_dir: Path, *,
         for section in supplement_sections():
             tag = f"{BENCH_NAME}.{section}"
             sup_path = series_dir / cond.name / f"{tag}.envelope.json"
-            env, problem = _supplement_envelope(sup_path)
+            env, raw, problem = _supplement_envelope(sup_path)
             if env is not None:
-                sha = hashlib.sha256(_envelope_bytes(sup_path)).hexdigest()
+                sha = hashlib.sha256(raw).hexdigest()
                 sources[f"{cond.name}/{tag}"] = {
                     "status": env.get("status"),
                     "job_id": ((env.get("environment") or {}).get("remote") or {}).get("job_id"),
@@ -1171,7 +1174,7 @@ def compare_supplement(series_dir: Path, *,
             else:
                 missing.append(f"{cond.name}/{tag}: {problem}")
             par_path = parent_dir / cond.name / f"{tag}.envelope.json"
-            par_env, par_problem = _supplement_envelope(par_path)
+            par_env, _, par_problem = _supplement_envelope(par_path)
             if par_env is not None:
                 parent_loaded.update(load_points([par_env], vcm_v=cond.vcm_v()))
             else:

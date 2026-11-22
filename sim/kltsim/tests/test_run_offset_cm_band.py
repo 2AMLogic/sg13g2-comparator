@@ -688,7 +688,19 @@ class SupplementReportTests(Base):
         raw = gz_path.read_bytes()
         gz_path.with_name(gz_path.name + ".gz").write_bytes(gzip.compress(raw))
         gz_path.unlink()
-        result = cmband.compare_supplement(self.supp)
+        # one load per envelope path: the digest must come from the same
+        # bytes the parser saw, not a second, independently-timed read
+        loads = []
+        real_bytes = cmband._envelope_bytes
+        with mock.patch.object(cmband, "_envelope_bytes",
+                               side_effect=lambda p: (loads.append(str(p)),
+                                                      real_bytes(p))[1]):
+            result = cmband.compare_supplement(self.supp)
+        expected = sorted(
+            str(root / c.name / f"offset_cm.{s}.envelope.json")
+            for root in (self.supp, self.parent)
+            for s in cmband.supplement_sections() for c in cmband.CONDITIONS)
+        self.assertEqual(sorted(loads), expected)
         self.assertEqual(result["missing_envelopes"], [])
         self.assertEqual(result["sources"]["vcm-nom/offset_cm.mos_tt_mismatch"]
                          ["envelope_sha256"], hashlib.sha256(raw).hexdigest())
