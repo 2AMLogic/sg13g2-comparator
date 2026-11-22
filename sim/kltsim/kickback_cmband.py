@@ -194,31 +194,6 @@ def input_bytes(cond: Condition, osdi_dir: str = build_mod.BATCH_OSDI_DIR,
     }
 
 
-def _non_directory_ancestors(files: list[tuple[Path, bytes]]) -> list[str]:
-    """Destination directories ``mkdir -p`` could not create or enter, one
-    ``"<path>: exists and is not a directory"`` per offending directory in
-    first-seen order (issue #515). A destination directory must be a real
-    directory: a symlink is refused, as ``artifacts.commit``'s ``require_dir``
-    refuses one. The ancestors above it need only resolve to a directory, so a
-    symlinked prefix is still followed: walking up from the destination, the
-    first existing entry decides, exactly where ``mkdir(parents=True)`` stops.
-    Read-only."""
-    problems: list[str] = []
-    checked: set[Path] = set()
-    for path, _ in files:
-        dest = path.parent
-        if dest in checked:
-            continue
-        checked.add(dest)
-        for entry in (dest, *dest.parents):
-            if not entry.exists() and not entry.is_symlink():
-                continue
-            if not entry.is_dir() or (entry == dest and entry.is_symlink()):
-                problems.append(f"{entry}: exists and is not a directory")
-            break
-    return problems
-
-
 def commit_inputs(files: list[tuple[Path, bytes]], *, evidence: str = "evidence") -> list[Path]:
     """Append-only batch write of a complete, precomputed input set through
     the shared ``artifacts.commit`` contract: a symlink or non-regular
@@ -229,9 +204,6 @@ def commit_inputs(files: list[tuple[Path, bytes]], *, evidence: str = "evidence"
     non-directory ancestor, rejects the whole set the same way (issue #515)
     instead of escaping as a bare ``FileExistsError`` / ``NotADirectoryError``
     from ``mkdir``. Returns the paths newly created."""
-    problems = _non_directory_ancestors(files)
-    if problems:
-        raise KickbackCmBandError("; ".join(problems))
     try:
         return artifacts_mod.commit(
             files,
