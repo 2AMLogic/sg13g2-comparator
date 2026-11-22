@@ -16,6 +16,7 @@ import hashlib
 import json
 import math
 import unittest
+from unittest import mock
 
 from kltsim import bias_probes, build, declared_n, grade
 from kltsim.benches import BENCHES, BIAS_PROBES, OFFSET_MC_N, PROCESSES, SUPPLIES_V, TEMPERATURES_C
@@ -555,8 +556,24 @@ class CandidateDutTests(unittest.TestCase):
 
     def test_candidate_body_accepted_with_and_without_expectation(self):
         body = self._cand_body(self.cand2f, self.GEOMETRY)
-        self.assertEqual(self._grade(body)["target_verdict"], grade.PASS)
         self.assertEqual(self._grade(body, candidate="cadd2f")["target_verdict"], grade.PASS)
+
+    def test_candidate_body_refused_as_ordinary_schematic_grade(self):
+        body = self._cand_body(self.cand2f, self.GEOMETRY)
+        row = self._grade(body)
+        self.assertEqual(row["target_verdict"], grade.INVALID_DUT)
+        self.assertTrue(any("no registered candidate was requested" in p
+                            for p in row["dut_problems"]), row["dut_problems"])
+
+    def test_unregistered_candidate_refused(self):
+        body = self._cand_body(self.cand2f, self.GEOMETRY)
+        reg = build.candidate_netlist_path("cadd2f")
+        with mock.patch.object(build, "candidate_netlist_path",
+                               return_value=reg.with_name("nope-unlisted.spice")):
+            row = self._grade(body, candidate="cadd2f")
+        self.assertEqual(row["target_verdict"], grade.INVALID_DUT)
+        self.assertTrue(any("is not registered" in p for p in row["dut_problems"]),
+                        row["dut_problems"])
 
     def test_substituted_candidate_body_rejected(self):
         # another setting's VALID body (self-consistent path, sha and

@@ -99,7 +99,7 @@ separate transient sources additionally cannot be independently seeded
 Draws are therefore independent but not reproducible; the grader refuses any
 point whose samples repeat a raw noise draw. Generic `klt` capability gaps
 found by this study are filed under the
-[friction protocol](../CLAUDE.md) and linked from the report.
+[friction protocol](../../CLAUDE.md) and linked from the report.
 
 ## Reproduce
 

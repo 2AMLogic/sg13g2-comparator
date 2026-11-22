@@ -524,6 +524,12 @@ def cmd_run(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     bench = ALL_BENCHES[args.bench]
     tags = build_mod.part_tags(bench)
+    # a screening campaign (build --screen) holds only the tt/ff/ss parts of a
+    # process-split bench; read the tags the screen builder wrote (issue #497)
+    screen_tags = sizesweep_mod.screen_part_tags(bench)
+    if (not all((out_dir / f"{t}.request.json").is_file() for t in tags)
+            and all((out_dir / f"{t}.request.json").is_file() for t in screen_tags)):
+        tags = screen_tags
     if args.part:
         tags = [tag for tag in tags if tag in args.part]
     rc = 0
@@ -648,6 +654,11 @@ def cmd_grade(args) -> int:
             return 2
     candidate = getattr(args, "candidate", None)
     if candidate is not None:
+        if offset_n is not None:
+            print("grade: --offset-n cannot be combined with --candidate (the candidate "
+                  "study is graded at the committed grid; a declared N would be ignored)",
+                  file=sys.stderr)
+            return 2
         try:
             build_mod.load_candidate(candidate)
         except build_mod.BuildError as exc:

@@ -7,6 +7,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from kltsim import build, grade, sizesweep
 from kltsim.benches import KICKBACK, REGENERATION
@@ -788,6 +789,50 @@ class CapScreenPlanningTests(unittest.TestCase):
             ev = benches["transient_noise"]
             self.assertEqual(ev.chain_problems, [], ev.chain_problems)
 
+    def test_offset_mc_screen_uses_the_benches_mismatch_sections(self):
+        from kltsim.benches import OFFSET_MC
+        with tempfile.TemporaryDirectory() as tmp:
+            _b, requests, files = sizesweep.plan_screen_inputs(OFFSET_MC, Path(tmp))
+        self.assertEqual(
+            sorted(p.name for p in requests),
+            [f"offset_mc.mos_{p}_mismatch.request.json" for p in ("ff", "ss", "tt")])
+        self.assertEqual(sorted(sizesweep.screen_part_tags(OFFSET_MC)),
+                         sorted(p.name[:-len(".request.json")] for p in requests))
+
+    def test_screen_part_tags_are_a_subset_of_the_benches_full_tags(self):
+        for bench in (TRANSIENT_NOISE, KICKBACK, REGENERATION):
+            self.assertTrue(set(sizesweep.screen_part_tags(bench))
+                            <= set(build.part_tags(bench)), bench.name)
+
+    def test_tiling_preflight_counts_duplicates(self):
+        real = sizesweep.screen_part_request
+
+        def whole_grid(bench, section, body_name=None):
+            return real(bench, section, body_name) | {
+                "corners": sizesweep.screen_corners(bench)}
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(sizesweep, "screen_part_request", whole_grid):
+            with self.assertRaises(build.BuildError):
+                sizesweep.plan_screen_inputs(TRANSIENT_NOISE, Path(tmp))
+
+    def test_run_reads_the_screen_tags_the_builder_wrote(self):
+        import argparse
+        from kltsim import cli
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            _b, _r, files = sizesweep.plan_screen_inputs(TRANSIENT_NOISE, out)
+            for path, data in files:
+                path.write_bytes(data)
+            seen = []
+            args = argparse.Namespace(bench="transient_noise", campaign=str(out),
+                                      part=None, skip_existing=False)
+            with mock.patch.object(cli, "_campaign_dir", return_value=out), \
+                    mock.patch.object(cli, "_submit_with_retry",
+                                      side_effect=lambda r, o, tag, a, **k: seen.append(tag) or 0):
+                self.assertEqual(cli.cmd_run(args), 0)
+            self.assertEqual(sorted(seen), sorted(sizesweep.screen_part_tags(TRANSIENT_NOISE)))
+
     def test_unsplit_screen_bytes_unchanged(self):
         # kickback/regeneration screens keep today's exact request bytes
         # (plan + screen_request), so a rebuild of an archived screen is a
@@ -963,6 +1008,38 @@ class CapScreenReductionTests(unittest.TestCase):
         self.assertEqual(noise["valid"], 17)
         self.assertTrue(any("no Monte-Carlo population" in r for r in noise["rejections"]))
 
+    def test_incomplete_screen_is_not_an_elimination(self):
+        row = self.reduce(drop_point=("mos_ff", 1.32, 125))
+        noise = row["metrics"]["noise_mean"]
+        self.assertIsNone(noise["value"])           # no partial mean as the statistic
+        self.assertIsNotNone(noise["partial_mean"])
+        self.assertTrue(noise["missing_points"])
+        self.assertEqual(row["decision"]["decision"], "incomplete")
+        self.assertFalse(row["decision"]["advance"])
+        result = {"campaign": "c", "control": sizesweep.cap_control(),
+                  "screen": [row], "full": []}
+        md = sizesweep.render_capacitance_markdown(result)
+        self.assertIn("Screen INCOMPLETE", md)
+        self.assertNotIn("No setting advanced", md)
+
+    def test_unregistered_candidate_does_not_advance(self):
+        row = self.reduce(name="unlisted-setting", cap="2f")
+        self.assertTrue(any("not registered" in r for r in
+                            row["benches"]["regeneration"]["evidence_rejections"]),
+                        row["benches"]["regeneration"]["evidence_rejections"])
+        self.assertNotEqual(row["decision"]["decision"], "advance")
+
+    def test_at_most_one_finalist(self):
+        def qualifying(name, noise):
+            return {"name": name, "cap_fF": 2.0,
+                    "metrics": {"noise_mean": {"value": noise}},
+                    "decision": {"advance": True, "decision": "advance", "reasons": []}}
+        rows = [qualifying("cadd4f", 0.9), qualifying("cadd2f", 0.8)]
+        sizesweep._select_finalist(rows)
+        self.assertEqual([r["decision"]["decision"] for r in rows],
+                         ["not-selected", "advance"])
+        self.assertEqual(sum(1 for r in rows if r["decision"]["advance"]), 1)
+
     def test_substituted_candidate_setting_rejected(self):
         # scr_cadd2f/ whose regeneration bench is a valid cadd4f body+chain
         sub = write_cap_screen(self.root, name="cadd2f", cap="2f")
@@ -1093,6 +1170,58 @@ class CapFullTests(unittest.TestCase):
         self.assertEqual(r["rows"]["3c"]["preservation"], "broken")
         self.assertIn("baseline-broken", md)
 
+    def test_incomplete_row_is_unverified_not_broken(self):
+        incomplete = {"id": "3a", "target_verdict": grade.INCOMPLETE,
+                      "stretch_verdict": grade.INCOMPLETE,
+                      "target": {"points_valid": 30, "points_expected": 45,
+                                 "points_failing": 0,
+                                 "binding": {"value": 0.7, "point": "tt_27c_1.2v"}}}
+        empty = {"id": "3c", "target_verdict": grade.INCOMPLETE,
+                 "stretch_verdict": grade.INCOMPLETE,
+                 "target": {"points_valid": 0, "points_expected": 45}}
+        r, _calls, md = self.run_cap_full([incomplete, empty])
+        self.assertEqual(r["rows"]["3a"]["state"], "incomplete")
+        self.assertEqual(r["rows"]["3a"]["preservation"], "unverified")
+        self.assertEqual(r["rows"]["3c"]["preservation"], "unverified")
+        self.assertNotIn("baseline-broken", md)
+
+    def test_row2_summary_keeps_the_graders_grid_mean(self):
+        entry = {"id": "2", "target_verdict": grade.FAIL,
+                 "target": {"grid_mean": 1.0962763220245755, "points_valid": 45,
+                            "points_expected": 45}}
+        s = sizesweep._full_row_summary(entry)
+        self.assertEqual(s["value"], 1.0962763220245755)
+        self.assertEqual((s["points_valid"], s["points_expected"]), (45, 45))
+
+    def test_table_includes_reporting_and_coverage_rows(self):
+        ids = [i for i, _l, _u in sizesweep._table_rows()]
+        self.assertIn("4c", ids)
+        self.assertIn("5a", ids)
+        r, _calls, md = self.run_cap_full([])
+        self.assertIn("4c", r["rows"])
+        self.assertIn("5a", r["rows"])
+        self.assertIn("5a grid coverage", md)
+
+    def test_finalist_with_other_geometry_rejected_before_grading(self):
+        from kltsim.benches import BENCHES as all_benches
+        sub = self._full_dir("cadd2f")
+        bad = dict(CAP_GEOMETRY)
+        bad["XM1.w"] = "9u"
+        for bname, bench in all_benches.items():
+            (sub / f"{bname}.body.spice").write_text(
+                build.compose_body(bench, build.BATCH_OSDI_DIR,
+                                   param_overrides={"dut_ib": "1e-05"},
+                                   geometry_overrides=bad,
+                                   candidate=("cadd2f", self.cand)), encoding="utf-8")
+        called = []
+        orig = grade.grade_campaign
+        grade.grade_campaign = lambda *a, **k: called.append(1) or {"rows": []}
+        self.addCleanup(setattr, grade, "grade_campaign", orig)
+        r = sizesweep.cap_full(self.root)[0]
+        self.assertEqual(called, [])
+        self.assertEqual(r["candidate_status"], "rejected")
+        self.assertTrue(any("archived control identity" in x for x in r["rejection_reasons"]))
+
     def test_wrong_candidate_name_rejected_before_grading(self):
         sub = self._full_dir("cadd4f")  # dir says cadd4f, bodies declare cadd2f? no:
         # bodies are composed with name cadd4f but reference cadd2f's file ->
@@ -1111,3 +1240,16 @@ class CapFullTests(unittest.TestCase):
         self.assertEqual(r["rows"]["3c"]["state"], "rejected")
 
 
+
+
+class GradeCliCandidateTests(unittest.TestCase):
+    def test_offset_n_with_candidate_is_rejected(self):
+        import argparse
+        import contextlib
+        import io
+        from kltsim import cli
+        args = argparse.Namespace(campaign="x", offset_n=100, candidate="cadd2f")
+        with mock.patch.object(cli, "_campaign_dir", return_value=Path("/nonexistent")), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(cli.cmd_grade(args), 2)
+        self.assertIn("--offset-n", err.getvalue())

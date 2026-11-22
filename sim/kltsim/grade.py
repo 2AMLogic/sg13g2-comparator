@@ -280,7 +280,11 @@ def _candidate_reference(declared: dict, candidate: str | None) -> tuple[list[st
             f"matched integration-node capacitors: {exc}")
     if candidate is not None:
         registered = build_mod.candidate_netlist_path(candidate)
-        if registered.is_file():
+        if not registered.is_file():
+            problems.append(
+                f"candidate {candidate!r} is not registered: no committed "
+                f"reference netlist at {registered}")
+        else:
             registered_sha = hashlib.sha256(registered.read_bytes()).hexdigest()
             if declared.get("sha256") != registered_sha:
                 problems.append(
@@ -314,6 +318,11 @@ def check_dut(bench: BenchEvidence, dut: DutReference,
             problems.append(f"body declares no candidate (expected {candidate!r})")
         embedded_sha = hashlib.sha256(embedded.encode("utf-8")).hexdigest()
         reference_bytes = dut.netlist_bytes
+        if declared_candidate and candidate is None:
+            problems.append(
+                f"body declares structural candidate {declared_candidate.get('name')!r} "
+                "but no registered candidate was requested; candidate evidence is "
+                "graded only with an explicit candidate")
         if declared_candidate:
             cand_problems, cand_bytes = _candidate_reference(declared_candidate, candidate)
             problems += cand_problems

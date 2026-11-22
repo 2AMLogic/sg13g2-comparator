@@ -18,7 +18,7 @@ integration nodes under model names: `np` (XM1 drain, vinp side) is `aon`
 characterization circuit with a `c_add` parameter and one matched
 capacitor pair per subckt at those nodes, each capacitor node-to-`vss` —
 the same declaration the candidate netlists carry
-([`candidates/`](../candidates/)). The request
+([`candidates/`](../../candidates/)). The request
 ([`calibration.request.json`](calibration.request.json)) zips four
 parameter rows — control (`c_add = 0`), `cadd1f`, `cadd2f`, `cadd4f` — every
 row at the archived `ib10_sw20lat6` geometry (8 µm/0.34 µm pair, 20 µm
