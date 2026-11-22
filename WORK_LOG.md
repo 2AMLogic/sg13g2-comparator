@@ -6,8 +6,15 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 - [2026-09](work_log/WORK_LOG_2026-09.md)
 
+### 2026-11-22
+
+- **PR #510**: fix: hash supplement envelopes from the bytes used to parse them
+- **Issue #508** (closed): Hash offset supplement envelopes from the bytes used to parse them
+
 ### 2026-11-21
 
+- **PR #501**: sim: measure matched PMOS load widths for Row 2 density and bench noise
+- **Issue #498** (closed): Measure how matched PMOS load widths change input-referred density and Row 2 noise
 - **PR #505**: fix: repair dangling issue-92-bias MC manifest link in corner-verification README
 - **Issue #502** (closed): Broken relative link to the issue-92-bias MC manifest in sim/klt-corner-verification/README.md
 - **PR #494**: docs: measure per-corner front-end density and complete the Row 2 factor split
