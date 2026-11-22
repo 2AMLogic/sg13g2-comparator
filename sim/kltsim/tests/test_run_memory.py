@@ -199,6 +199,48 @@ class DeterminismRepeatEvidenceTests(unittest.TestCase):
         self.assertFalse(rec["determinism_repeat"]["all_identical"])
         self.assertIn("repeat envelope", rm.render_markdown(rec))
 
+    NULL_CORNER = {**EMPTY_CORNER, "measurements": [
+        {"name": "vdd_meas", "value": None, "status": "error"}]}
+
+    def test_all_null_measurements_on_both_sides_is_insufficient_evidence(self):
+        rec = self.bare_record([self.NULL_CORNER], [dict(self.NULL_CORNER)])
+        r = self.round1(rec)
+        self.assertIsNone(r["identical"])
+        self.assertEqual(r["values_compared"], 0)
+        self.assertEqual(r["missing_measurements"], ["nominal", "repeat"])
+        self.assertEqual(r["differences"], {})
+        self.assertFalse(rec["determinism_repeat"]["all_identical"])
+        md = rm.render_markdown(rec)
+        self.assertIn("INSUFFICIENT EVIDENCE", md)
+        self.assertNotIn("bit-identical: **True**", md)
+
+    def test_absent_or_null_measurement_list_is_insufficient_evidence(self):
+        absent = {k: v for k, v in self.EMPTY_CORNER.items() if k != "measurements"}
+        null = {**self.EMPTY_CORNER, "measurements": None}
+        rec = self.bare_record([absent], [null])
+        r = self.round1(rec)
+        self.assertIsNone(r["identical"])
+        self.assertEqual(r["missing_measurements"], ["nominal", "repeat"])
+
+    def test_all_null_input_paired_with_populated_input_is_insufficient_evidence(self):
+        def nulled(c):
+            return {**c, "measurements": [{**m, "value": None, "status": "error"}
+                                          for m in c["measurements"]]}
+        rec = self.populated_record(nulled)
+        r = self.round1(rec)
+        self.assertIsNone(r["identical"])
+        self.assertEqual(r["values_compared"], 0)
+        self.assertEqual(r["missing_measurements"], ["repeat"])
+        self.assertFalse(rec["determinism_repeat"]["all_identical"])
+        self.assertIn("repeat envelope", rm.render_markdown(rec))
+
+    def test_numeric_zero_is_evidence(self):
+        zero = {**self.EMPTY_CORNER, "measurements": [{"name": "x", "value": 0.0}]}
+        rec = self.bare_record([zero], [dict(zero)])
+        r = self.round1(rec)
+        self.assertIs(r["identical"], True)
+        self.assertEqual(r["values_compared"], 1)
+
     def test_populated_equal_rounds_still_report_agreement(self):
         rec = self.populated_record(lambda c: c)
         r = self.round1(rec)

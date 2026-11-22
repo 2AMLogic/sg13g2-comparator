@@ -431,11 +431,15 @@ def build_record(series: str) -> dict:
 def _repeat_values(env: dict) -> dict | None:
     """Measurement map at the repeat point, or None when no corner matches it:
     an absent corner (or an empty measurement set) is missing evidence, not an
-    empty-and-therefore-identical comparison."""
+    empty-and-therefore-identical comparison. An input whose measurements all lack
+    a value (failed simulations) counts as missing too."""
     for c in env.get("corners") or []:
         if c.get("process") == REPEAT_POINT[0] and abs(c["supply_v"]["vsup"] - REPEAT_POINT[1]) < 1e-6 \
                 and abs(c["temperature_c"] - REPEAT_POINT[2]) < 1e-6:
-            return {m["name"]: m.get("value") for m in c["measurements"]}
+            vals = {m["name"]: m.get("value") for m in (c.get("measurements") or [])}
+            # No measured value at all (absent/null list, or every measurement failed
+            # with a null value) is missing evidence; numeric zero is evidence.
+            return vals if any(v is not None for v in vals.values()) else None
     return None
 
 
@@ -491,7 +495,7 @@ def render_markdown(rec: dict) -> str:
         incomplete = [r for r in d["rounds"] if r["identical"] is None]
         complete = [r for r in d["rounds"] if r["identical"] is not None]
         for r in incomplete:
-            L.append(f"- round {r['round']}: INSUFFICIENT EVIDENCE, no measurements at the repeat "
+            L.append(f"- round {r['round']}: INSUFFICIENT EVIDENCE, no measured values at the repeat "
                      f"point in the {' and '.join(r['missing_measurements'])} envelope; "
                      "no identity verdict for this round.")
         if not complete:
