@@ -8,6 +8,24 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-11-22
 
+- **PR #531**: fix: drop kickback_cmband's duplicate non-directory preflight
+- **PR #528**: fix: publish supplement-report pair append-only
+- **PR #526**: fix: preflight non-directory destination dirs in artifacts commit/check
+- **PR #524**: fix: kickback commit_inputs refuses non-directory destination dirs
+- **PR #522**: chore: ignore daemon-owned .loom/account-ranking.* dispatch state
+- **PR #517**: refactor: route CM-band campaign input writers through build.commit_inputs append-only
+- **PR #514**: refactor: route kickback CM-band input writers through artifacts.commit
+- **PR #500**: refactor: drive netlist regeneration through pinned klt netlist, not raw xschem
+- **PR #499**: fix: report insufficient evidence for empty determinism-repeat rounds
+- **Issue #527** (closed): kickback_cmband._non_directory_ancestors is now redundant with the artifacts preflight
+- **Issue #523** (closed): build.commit_inputs: campaign dir existing as a regular file raises a bare FileExistsError, not BuildError
+- **Issue #521** (closed): gitignore: daemon-owned .loom/account-ranking.* trips check-main-clean for every builder
+- **Issue #518** (closed): Route cmd_supplement_report's derived report pair through artifacts.publish
+- **Issue #516** (closed): Route remaining CM-band input writers in cmband and cmdecision through build.commit_inputs
+- **Issue #515** (closed): kickback_cmband.commit_inputs: out_dir existing as a regular file raises a bare FileExistsError, not KickbackCmBandError
+- **Issue #513** (closed): Replace duplicated append-only input writers in kickback_cmband with artifacts.commit
+- **Issue #495** (closed): Remove the empty-measurement fallback from the memory determinism repeat
+- **Issue #489** (closed): Replace raw xschem call in design/netlist.py with klt netlist
 - **PR #509**: refactor: source the transient-noise injected density from one constant
 - **Issue #506** (closed): Source the 36.27 nV/√Hz bench injection from one place instead of per-module literals
 - **PR #510**: fix: hash supplement envelopes from the bytes used to parse them
