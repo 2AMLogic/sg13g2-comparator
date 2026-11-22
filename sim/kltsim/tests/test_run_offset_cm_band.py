@@ -723,25 +723,95 @@ class SupplementReportTests(Base):
         md = cmband.render_supplement_markdown(result)
         self.assertIn("Failures, reported as-is", md)
 
+    def report_args(self, **kw):
+        d = dict(series=self.supp.name, parent=cmband.SUPPLEMENT_PARENT,
+                 check=False, report_dir=None)
+        d.update(kw)
+        return argparse.Namespace(**d)
+
+    def full_series(self, **kw):
+        for section in cmband.supplement_sections():
+            for cond in cmband.CONDITIONS:
+                self.full_pair(section, cond, **kw)
+
     def test_missing_envelope_fails_the_command(self):
         self.full_pair("mos_tt_mismatch", cmband.condition("vcm-m050"))
-        args = argparse.Namespace(series=self.supp.name, parent=cmband.SUPPLEMENT_PARENT)
-        self.assertEqual(rcb.cmd_supplement_report(args), 1)
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 1)
         result = json.loads((self.supp / "supplement-report.json").read_text())
         self.assertEqual(len(result["missing_envelopes"]), 5)
         md = (self.supp / "supplement-report.md").read_text()
         self.assertIn("Missing or malformed envelopes", md)
 
     def test_malformed_envelope_fails_the_command(self):
-        for section in cmband.supplement_sections():
-            for cond in cmband.CONDITIONS:
-                self.full_pair(section, cond)
+        self.full_series()
         d = self.supp / "vcm-nom"
         (d / "offset_cm.mos_tt_mismatch.envelope.json").write_text("{not json")
-        args = argparse.Namespace(series=self.supp.name, parent=cmband.SUPPLEMENT_PARENT)
-        self.assertEqual(rcb.cmd_supplement_report(args), 1)
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 1)
         result = json.loads((self.supp / "supplement-report.json").read_text())
         self.assertTrue(any("malformed" in m for m in result["missing_envelopes"]))
+
+    def test_rerun_with_identical_bytes_is_noop(self):
+        self.full_series()
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 0)
+        before = {p.name: p.read_bytes()
+                  for p in self.supp.glob("supplement-report.*")}
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 0)
+        after = {p.name: p.read_bytes()
+                 for p in self.supp.glob("supplement-report.*")}
+        self.assertEqual(before, after)
+
+    def test_rerun_after_envelope_change_is_refused_untouched(self):
+        self.full_series()
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 0)
+        first = {p.name: p.read_bytes()
+                 for p in self.supp.glob("supplement-report.*")}
+        self.full_pair("mos_tt_mismatch", cmband.condition("vcm-m050"), shift=1.25)
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 1)
+        after = {p.name: p.read_bytes()
+                 for p in self.supp.glob("supplement-report.*")}
+        self.assertEqual(after, first)
+
+    def test_check_ok_when_reports_match_fresh_regeneration(self):
+        self.full_series()
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 0)
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args(check=True)), 0)
+
+    def test_check_stale_report_returns_1_without_writing(self):
+        self.full_series()
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 0)
+        victim = self.supp / "supplement-report.md"
+        victim.write_text("stale\n")
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args(check=True)), 1)
+        self.assertEqual(victim.read_text(), "stale\n")
+
+    def test_check_missing_report_returns_1_and_creates_nothing(self):
+        self.full_series()
+        self.assertFalse((self.supp / "supplement-report.json").exists())
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args(check=True)), 1)
+        self.assertFalse((self.supp / "supplement-report.json").exists())
+        self.assertFalse((self.supp / "supplement-report.md").exists())
+
+    def test_check_missing_report_creates_no_report_dir(self):
+        self.full_series()
+        with tempfile.TemporaryDirectory() as td:
+            elsewhere = Path(td) / "redirected-missing"
+            self.assertEqual(rcb.cmd_supplement_report(
+                self.report_args(check=True, report_dir=str(elsewhere))), 1)
+            self.assertFalse(elsewhere.exists())
+
+    def test_report_dir_redirect_writes_pair_with_citation(self):
+        self.full_series()
+        with tempfile.TemporaryDirectory() as td:
+            elsewhere = Path(td) / "redirected"
+            self.assertEqual(rcb.cmd_supplement_report(
+                self.report_args(report_dir=str(elsewhere))), 0)
+            self.assertTrue((elsewhere / "supplement-report.json").is_file())
+            self.assertTrue((elsewhere / "supplement-report.md").is_file())
+            self.assertFalse((self.supp / "supplement-report.json").exists())
+            result = json.loads((elsewhere / "supplement-report.json").read_text())
+            self.assertEqual(result["source_series_dir"], str(self.supp.resolve()))
+            self.assertIn("Source series",
+                          (elsewhere / "supplement-report.md").read_text())
 
     def test_no_data_run_reads_zero_valid_and_gzip_envelopes(self):
         """A batch run that produced no draws: N valid is 0/60 (not the
