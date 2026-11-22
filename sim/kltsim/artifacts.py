@@ -10,6 +10,11 @@ Contract (stdlib only):
 * Preflight the whole set: an existing member must be a regular, non-symlink
   file holding exactly the proposed bytes, otherwise the whole set is
   rejected (:class:`ArtifactConflict`) before ANY member is touched.
+* Every destination directory (and ``require_dir``) is preflighted the same
+  way: one that is not a real directory, or that sits under a non-directory
+  or dangling-symlink ancestor, rejects the whole set before any write
+  instead of escaping as a bare ``FileExistsError`` / ``NotADirectoryError``
+  from ``mkdir`` (issue #523).
 * Identical members are left alone (bytes and timestamps preserved).
 * Absent members are created with exclusive creation (``x``), so a concurrent
   writer is never clobbered. A concurrent winner with different bytes raises
@@ -45,15 +50,51 @@ def _dedupe(files: Files, dup: str) -> tuple[dict[Path, bytes], list[str]]:
     return proposed, problems
 
 
+def _non_directory_ancestors(dests: list[Path]) -> tuple[list[str], set[Path]]:
+    """Preflight the directory side of an append-only commit (issue #523).
+
+    Destination directories ``mkdir(parents=True)`` could not create or
+    enter, one ``"<path>: exists and is not a directory"`` per offending
+    directory in first-seen order, plus the set of unusable destination
+    directories. A destination directory must be a real directory: a
+    symlink is refused, as ``require_dir`` refuses one. The ancestors above
+    it need only resolve to a directory, so a symlinked prefix is still
+    followed: walking up from the destination, the first existing entry
+    decides, exactly where ``mkdir(parents=True)`` stops. Read-only.
+    """
+    problems: list[str] = []
+    unusable: set[Path] = set()
+    checked: set[Path] = set()
+    reported: set[Path] = set()
+    for dest in dests:
+        if dest in checked:
+            continue
+        checked.add(dest)
+        for entry in (dest, *dest.parents):
+            if not entry.exists() and not entry.is_symlink():
+                continue
+            if not entry.is_dir() or (entry == dest and entry.is_symlink()):
+                unusable.add(dest)
+                if entry not in reported:
+                    reported.add(entry)
+                    problems.append(f"{entry}: exists and is not a directory")
+            break
+    return problems, unusable
+
+
 def _inspect(proposed: dict[Path, bytes], differs: str,
              require_dir: Path | None) -> tuple[list[str], list[Path]]:
     """Return (unsafe-or-different problems, absent paths). Never writes."""
     problems: list[str] = []
     absent: list[Path] = []
-    if require_dir is not None and (
-            require_dir.is_symlink() or (require_dir.exists() and not require_dir.is_dir())):
-        return [f"{require_dir}: exists and is not a directory"], absent
+    dests = ([] if require_dir is None else [require_dir]) + [p.parent for p in proposed]
+    dir_problems, unusable = _non_directory_ancestors(dests)
+    if require_dir is not None and require_dir in unusable:
+        return dir_problems[:1], absent
+    problems += dir_problems
     for path, data in proposed.items():
+        if path.parent in unusable:
+            continue
         if path.is_symlink() or (path.exists() and not path.is_file()):
             problems.append(f"{path}: exists and is not a regular file")
         elif path.exists():
