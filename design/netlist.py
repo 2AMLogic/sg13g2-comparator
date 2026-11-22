@@ -168,9 +168,15 @@ def _run_klt_netlist(outdir: Path) -> str:
     # which is the isolation the previous direct-xschem code had.
     env = {k: v for k, v in os.environ.items() if k != "XSCHEM_USER_LIBRARY_PATH"}
     proc = subprocess.run(cmd, capture_output=True, text=True, env=env, check=False)
-    if proc.returncode != 0 or not produced.is_file():
+    if proc.returncode != 0:
         sys.stderr.write(proc.stdout + proc.stderr)
         raise SystemExit(f"klt netlist failed (exit {proc.returncode})")
+    if not produced.is_file():
+        sys.stderr.write(proc.stdout + proc.stderr)
+        raise SystemExit(
+            f"klt netlist exited 0 but did not write the expected output file "
+            f"{produced} (missing netlist)"
+        )
     return produced.read_text()
 
 

@@ -11,6 +11,7 @@ paths -- still no klt, xschem or PDK required.
 import contextlib
 import importlib.util
 import io
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -217,7 +218,9 @@ class TestRunKltNetlist(unittest.TestCase):
         self.assertEqual(str(out.parent), seen["outdir"])
 
     def test_no_ambient_user_library_leaks_into_child_env(self):
-        seen = self.run_klt(RunResult(), produced_text="netlist\n")
+        # Seed the parent environment so a filter regression is observable.
+        with mock.patch.dict(os.environ, {"XSCHEM_USER_LIBRARY_PATH": "/ambient/sentinel"}):
+            seen = self.run_klt(RunResult(), produced_text="netlist\n")
         env = seen["env"]
         self.assertIsNotNone(env)
         self.assertNotIn("XSCHEM_USER_LIBRARY_PATH", env)
@@ -235,7 +238,10 @@ class TestRunKltNetlist(unittest.TestCase):
         # exit 0 but no freshly written netlist: klt's contract broken
         with self.assertRaises(SystemExit) as cm:
             self.run_klt(RunResult(returncode=0))
-        self.assertIn("klt netlist failed", str(cm.exception))
+        msg = str(cm.exception)
+        self.assertIn("exited 0 but did not write the expected output file", msg)
+        self.assertIn("missing netlist", msg)
+        self.assertIn(nl.TOP_CELL.stem + ".spice", msg)
 
     def test_missing_tool(self):
         with mock.patch.object(nl.shutil, "which", return_value=None):

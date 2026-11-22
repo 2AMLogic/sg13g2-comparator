@@ -32,6 +32,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -131,16 +132,29 @@ def sh(args, cwd, env=None, check=True):
     return r
 
 
+def version_gate_passes(pin_version, returncode, output):
+    """True only if `klt --version` succeeded and reported exactly the pin.
+
+    The complete version token must equal the pin: a development build such as
+    ``0.9.2.dev111+g978f7464fae1`` contains the release string ``0.9.2`` but is
+    a different build and may lack flags the pinned release has.
+    """
+    if returncode != 0:
+        return False
+    m = re.fullmatch(r"klt\s+(\S+)", (output or "").strip())
+    return bool(m) and m.group(1) == pin_version
+
+
 def klt_matches_pin():
     import json
     # Read from the commit, not the working tree: this test itself runs in the
     # append-only job's sparse cone, which does not contain manifests/.
     pin = json.loads(sh(["git", "show", "HEAD:manifests/klt-pin.json"], ROOT).stdout)
     try:
-        out = sh(["klt", "--version"], ROOT, check=False).stdout
+        r = sh(["klt", "--version"], ROOT, check=False)
     except OSError:
         return False
-    return pin["klt_version"].split("+g")[-1][:12] in out
+    return version_gate_passes(pin["klt_version"], r.returncode, r.stdout)
 
 
 @unittest.skipIf(os.environ.get(NESTED), "nested run inside a sparse clone")
@@ -555,6 +569,34 @@ class SparseCones(unittest.TestCase):
             self.assertNotEqual(r2.returncode, 0, r2.stdout[-3000:])
             self.assertIn("F821", r2.stdout)
             self.assertIn("sim/device-mismatch-confirm/summarize_dvgs.py", r2.stdout)
+
+
+class KltPinGate(unittest.TestCase):
+    def test_exact_release_passes(self):
+        self.assertTrue(version_gate_passes("0.9.2", 0, "klt 0.9.2\n"))
+
+    def test_dev_build_of_same_release_fails(self):
+        self.assertFalse(version_gate_passes("0.9.2", 0, "klt 0.9.2.dev111+g978f7464fae1\n"))
+
+    def test_other_versions_fail(self):
+        for out in ("klt 0.9.3\n", "klt 0.9.20\n", "klt 10.9.2\n"):
+            self.assertFalse(version_gate_passes("0.9.2", 0, out), out)
+
+    def test_garbage_output_fails(self):
+        for out in ("", "command not found", "klt\n", "klt 0.9.2 extra\n"):
+            self.assertFalse(version_gate_passes("0.9.2", 0, out), out)
+
+    def test_commit_form_pin_requires_the_same_build(self):
+        pin = "0.9.2.dev111+g978f7464fae1"
+        self.assertTrue(version_gate_passes(pin, 0, f"klt {pin}\n"))
+        self.assertFalse(version_gate_passes(pin, 0, "klt 0.9.2.dev112+gabcdef012345\n"))
+
+    def test_failed_version_command_fails_even_with_matching_text(self):
+        self.assertFalse(version_gate_passes("0.9.2", 1, "klt 0.9.2\n"))
+
+    def test_missing_executable_fails(self):
+        with mock.patch.dict(os.environ, {"PATH": "/nonexistent"}):
+            self.assertFalse(klt_matches_pin())
 
 
 class ShDiagnostics(unittest.TestCase):
