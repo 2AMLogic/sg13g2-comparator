@@ -205,7 +205,8 @@ Provisioning is [`scripts/provision_netlist_env.sh`](../scripts/provision_netlis
 Local reproduction (nothing host-wide; scratch prefix):
 
 ```bash
-python3 -m pip install "klayout-tools==0.9.2"                    # the pinned klt
+python3 -m venv /tmp/nl/venv && /tmp/nl/venv/bin/pip install "klayout-tools==0.9.2"   # the pinned klt, scratch venv
+export PATH=/tmp/nl/venv/bin:$PATH
 scripts/provision_netlist_env.sh xschem /tmp/nl/xschem   # needs tcl/tk/X11/cairo dev libs, bison, flex, gawk
 scripts/provision_netlist_env.sh pdk /tmp/nl/pdk
 PATH=/tmp/nl/xschem/bin:$PATH PDK_ROOT=/tmp/nl/pdk python3 design/netlist.py --check

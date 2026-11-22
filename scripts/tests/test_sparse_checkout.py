@@ -595,7 +595,12 @@ class KltPinGate(unittest.TestCase):
         self.assertFalse(version_gate_passes("0.9.2", 1, "klt 0.9.2\n"))
 
     def test_missing_executable_fails(self):
-        with mock.patch.dict(os.environ, {"PATH": "/nonexistent"}):
+        # sh() runs with the module-level ENV (a copy captured at import), so
+        # patching os.environ would not remove klt from the subprocess PATH.
+        # Keep git resolvable: the pin is read via `git show` before the
+        # OSError branch, and an unresolvable git would error, not fail.
+        git_dir = os.path.dirname(shutil.which("git"))
+        with mock.patch.dict(ENV, {"PATH": git_dir}):
             self.assertFalse(klt_matches_pin())
 
 
