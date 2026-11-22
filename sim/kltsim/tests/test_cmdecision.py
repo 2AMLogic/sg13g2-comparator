@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 import unittest
+from pathlib import Path
 
+from kltsim import build
 from kltsim import cmdecision as cd
 from kltsim.benches import REGENERATION
 
@@ -68,6 +72,42 @@ class BodyTests(unittest.TestCase):
         self.assertEqual(req["analysis"], {"kind": "tran", "args": "5p 60n"})
         self.assertEqual(req["_condition"]["vcm_delta_v"], -0.05)
         self.assertAlmostEqual(req["_condition"]["vcm_v"], 0.55)
+
+
+class AppendOnlyConditionInputs(unittest.TestCase):
+    """Issue #516: ``write_condition_inputs`` commits append-only through
+    ``build.commit_inputs``: a conflict refuses before anything is written,
+    an identical rebuild touches nothing."""
+
+    def write(self, tmp, name="vcm-m050"):
+        return cd.write_condition_inputs(cd.condition(name), Path(tmp))
+
+    def test_conflicting_input_refused_nothing_written(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            victim = Path(tmp) / cd.BODY_NAME
+            victim.write_text("tampered\n", encoding="utf-8")
+            with self.assertRaises(build.BuildError):
+                self.write(tmp)
+            self.assertEqual(list(Path(tmp).iterdir()), [victim])
+            self.assertEqual(victim.read_text(), "tampered\n")
+
+    def test_identical_rerun_preserves_timestamps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            body, req = self.write(tmp)
+            for p in (body, req):  # push mtimes into the past so a rewrite is visible
+                os.utime(p, (1_000_000_000, 1_000_000_000))
+            self.assertEqual(self.write(tmp), (body, req))
+            self.assertEqual({p.stat().st_mtime for p in (body, req)}, {1_000_000_000})
+
+    def test_dangling_symlink_destination_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            target = out / "elsewhere" / cd.BODY_NAME
+            (out / cd.BODY_NAME).symlink_to(target)
+            with self.assertRaises(build.BuildError):
+                self.write(tmp, "vcm-nom")
+            self.assertFalse(target.exists())  # the symlink was not followed
+            self.assertEqual([p.name for p in out.iterdir()], [cd.BODY_NAME])
 
 
 class AnalysisTests(unittest.TestCase):

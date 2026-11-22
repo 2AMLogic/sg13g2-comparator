@@ -328,6 +328,79 @@ class ControlRepeatGuardTests(Base):
         self.guard(rcb.cmd_repeat, f"repeat.{COND}.mos_tt")
 
 
+class BuildTests(Base):
+    """Issue #516: ``build`` commits every selected condition as ONE
+    append-only batch; a conflict on any condition writes nothing."""
+
+    def args_all(self):
+        return argparse.Namespace(series=self.series.name, condition=None)
+
+    def test_build_writes_body_and_requests_per_condition(self):
+        self.assertEqual(rcb.cmd_build(self.args_all()), 0)
+        expected = sorted([cmband.BODY_NAME] + [f"{t}.request.json" for t in TAGS])
+        for cond in cmband.CONDITIONS:
+            self.assertEqual(sorted(p.name for p in (self.series / cond.name).iterdir()),
+                             expected)
+
+    def test_build_is_idempotent(self):
+        self.assertEqual(rcb.cmd_build(self.args_all()), 0)
+        before = {p: p.read_bytes() for p in self.series.rglob("*") if p.is_file()}
+        self.assertEqual(rcb.cmd_build(self.args_all()), 0)
+        after = {p: p.read_bytes() for p in self.series.rglob("*") if p.is_file()}
+        self.assertEqual(before, after)
+
+    def test_conflict_on_later_condition_writes_nothing(self):
+        nom = self.series / "vcm-nom"
+        nom.mkdir(parents=True)
+        conflicting = nom / cmband.BODY_NAME
+        conflicting.write_bytes(b"tampered")
+        self.assertEqual(rcb.cmd_build(self.args_all()), 1)
+        self.assertEqual([p for p in self.series.rglob("*") if p.is_file()], [conflicting])
+        self.assertFalse((self.series / "vcm-m050").exists())  # earlier condition absent
+        self.assertEqual(conflicting.read_bytes(), b"tampered")
+
+
+class ControlRepeatCommitTests(Base):
+    """Issue #516: control/repeat inputs commit append-only through
+    ``kcli._commit_planned``; a modified shared body in ``controls/`` refuses
+    the submit, and ``--force`` cannot clobber it."""
+
+    def shared_body(self):
+        ctl = self.series / "controls"
+        ctl.mkdir(parents=True)
+        shared = ctl / f"{cmband.BENCH_NAME}.{COND}.body.spice"
+        shared.write_text("tampered\n", encoding="utf-8")
+        return ctl, shared
+
+    def test_repeat_commits_inputs_then_submits(self):
+        self.assertEqual(rcb.cmd_repeat(self.args), 0)
+        self.assertEqual([c[0] for c in self.calls], [f"repeat.{COND}.mos_tt"])
+        ctl = self.series / "controls"
+        self.assertEqual(sorted(p.name for p in ctl.iterdir()),
+                         sorted([f"{cmband.BENCH_NAME}.{COND}.body.spice",
+                                 f"repeat.{COND}.mos_tt.request.json"]))
+
+    def test_repeat_refuses_modified_shared_body_without_submitting(self):
+        ctl, shared = self.shared_body()
+        self.args.force = True  # even --force must not clobber controls/ inputs
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(rcb.cmd_repeat(self.args), 1)
+        self.assertEqual(self.calls, [])
+        self.assertEqual([p.name for p in ctl.iterdir()], [shared.name])
+        self.assertEqual(shared.read_text(), "tampered\n")
+
+    def test_control_refuses_modified_shared_body_without_submitting(self):
+        ctl, shared = self.shared_body()
+        self.args.supply, self.args.temperature, self.args.n = 1.2, 27, 4
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(rcb.cmd_control(self.args), 1)
+        self.assertEqual(self.calls, [])
+        self.assertEqual([p.name for p in ctl.iterdir()], [shared.name])
+        self.assertEqual(shared.read_text(), "tampered\n")
+
+
 if __name__ == "__main__":
     unittest.main()
 

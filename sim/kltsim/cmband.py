@@ -246,19 +246,31 @@ def compose_cm_request(cond: Condition, body_name: str, section: str,
     return request
 
 
+def plan_condition_inputs(cond: Condition, out_dir: Path, *,
+                          osdi_dir: str = build_mod.BATCH_OSDI_DIR,
+                          backend: str = "batch") -> list[tuple[Path, bytes]]:
+    """Every (destination, bytes) pair of the condition's campaign inputs,
+    body first -- for ``commit_inputs``' append-only write."""
+    planned: list[tuple[Path, bytes]] = [(
+        out_dir / BODY_NAME,
+        compose_cm_body(cond, osdi_dir).encode("utf-8"))]
+    for section in OFFSET_MC.process_sections:
+        req = compose_cm_request(cond, BODY_NAME, section, backend)
+        planned.append((out_dir / f"{BENCH_NAME}.{section}.request.json",
+                        (json.dumps(req, indent=2) + "\n").encode("utf-8")))
+    return planned
+
+
 def write_condition_inputs(cond: Condition, out_dir: Path, *,
                            osdi_dir: str = build_mod.BATCH_OSDI_DIR,
                            backend: str = "batch") -> tuple[Path, list[Path]]:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    body = out_dir / BODY_NAME
-    body.write_text(compose_cm_body(cond, osdi_dir), encoding="utf-8")
-    requests = []
-    for section in OFFSET_MC.process_sections:
-        path = out_dir / f"{BENCH_NAME}.{section}.request.json"
-        req = compose_cm_request(cond, BODY_NAME, section, backend)
-        path.write_text(json.dumps(req, indent=2) + "\n", encoding="utf-8")
-        requests.append(path)
-    return body, requests
+    """Write the condition's campaign inputs append-only: a conflicting
+    rebuild is refused before anything is touched (``commit_inputs``)."""
+    planned = plan_condition_inputs(cond, out_dir, osdi_dir=osdi_dir, backend=backend)
+    build_mod.commit_inputs(planned)
+    return (out_dir / BODY_NAME,
+            [out_dir / f"{BENCH_NAME}.{section}.request.json"
+             for section in OFFSET_MC.process_sections])
 
 
 def part_tags() -> list[str]:
@@ -406,7 +418,6 @@ def write_supplement_inputs(cond: Condition, out_dir: Path, *,
                             backend: str = "batch") -> tuple[list[Path], set[Path]]:
     """Write the condition's supplementary inputs append-only: a conflicting
     rebuild is refused before anything is touched (``commit_inputs``)."""
-    out_dir.mkdir(parents=True, exist_ok=True)
     planned = plan_supplement_inputs(cond, out_dir, osdi_dir=osdi_dir, backend=backend)
     created = build_mod.commit_inputs(planned)
     return [path for path, _ in planned], created

@@ -131,14 +131,24 @@ def compose_request(cond: Condition, backend: str = "batch") -> dict:
     return request
 
 
+def plan_condition_inputs(cond: Condition, out_dir: Path, *, backend: str = "batch"
+                          ) -> list[tuple[Path, bytes]]:
+    """Every (destination, bytes) pair of the condition's campaign inputs,
+    body first -- for ``commit_inputs``' append-only write."""
+    return [
+        (out_dir / BODY_NAME, compose_body(cond).encode("utf-8")),
+        (out_dir / REQUEST_NAME,
+         (json.dumps(compose_request(cond, backend), indent=2) + "\n").encode("utf-8")),
+    ]
+
+
 def write_condition_inputs(cond: Condition, out_dir: Path, *, backend: str = "batch"
                            ) -> tuple[Path, Path]:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    body = out_dir / BODY_NAME
-    body.write_text(compose_body(cond), encoding="utf-8")
-    req = out_dir / REQUEST_NAME
-    req.write_text(json.dumps(compose_request(cond, backend), indent=2) + "\n", encoding="utf-8")
-    return body, req
+    """Write the condition's campaign inputs append-only: a conflicting
+    rebuild is refused before anything is touched (``commit_inputs``)."""
+    planned = plan_condition_inputs(cond, out_dir, backend=backend)
+    build_mod.commit_inputs(planned)
+    return out_dir / BODY_NAME, out_dir / REQUEST_NAME
 
 
 # --------------------------------------------------------------------------- #
