@@ -66,12 +66,21 @@ def _extra(cond: cmband.Condition, kind: str) -> dict:
 
 
 def cmd_build(args) -> int:
-    for name in args.condition or [c.name for c in cmband.CONDITIONS]:
-        cond = cmband.condition(name)
-        body, requests = cmband.write_condition_inputs(cond, _series(args) / cond.name)
-        print(f"wrote {body.relative_to(build_mod.REPO_ROOT)}")
-        for r in requests:
-            print(f"wrote {r.relative_to(build_mod.REPO_ROOT)}")
+    # Plan every selected condition first, then commit the whole build as one
+    # batch: a conflict on any condition writes nothing (no partial build).
+    series = _series(args)
+    planned: list[tuple[Path, bytes]] = []
+    try:
+        for name in args.condition or [c.name for c in cmband.CONDITIONS]:
+            cond = cmband.condition(name)
+            planned += cmband.plan_condition_inputs(cond, series / cond.name)
+        created = set(build_mod.commit_inputs(planned))
+    except build_mod.BuildError as exc:
+        print(f"build: {exc}", file=sys.stderr)
+        return 1
+    for path, _ in planned:
+        verb = "wrote" if path in created else "unchanged"
+        print(f"{verb} {kcli._rel(path)}")
     return 0
 
 
@@ -115,11 +124,12 @@ def cmd_run(args) -> int:
 
 
 def _reduced_request(cond: cmband.Condition, out_dir: Path, tag: str, *, section: str,
-                     supply: float, temperature: float, n: int, note: str) -> Path:
-    out_dir.mkdir(parents=True, exist_ok=True)
+                     supply: float, temperature: float, n: int,
+                     note: str) -> tuple[Path, list[tuple[Path, bytes]]]:
+    """The control/repeat inputs as ``(request path, planned files)``: the
+    shared condition body plus the reduced request, composed without touching
+    disk (the caller commits them append-only)."""
     body_name = f"{cmband.BENCH_NAME}.{cond.name}.body.spice"
-    (out_dir / body_name).write_text(
-        cmband.compose_cm_body(cond, build_mod.BATCH_OSDI_DIR), encoding="utf-8")
     req = cmband.compose_cm_request(cond, body_name, section)
     req["corners"]["process"] = [section]
     req["corners"]["supply_v"] = {k: [supply] for k in OFFSET_MC.supply_keys}
@@ -127,8 +137,12 @@ def _reduced_request(cond: cmband.Condition, out_dir: Path, tag: str, *, section
     req["monte_carlo"]["n"] = n
     req["_comment"].append(note)
     path = out_dir / f"{tag}.request.json"
-    path.write_text(json.dumps(req, indent=2) + "\n", encoding="utf-8")
-    return path
+    planned = [
+        (out_dir / body_name,
+         cmband.compose_cm_body(cond, build_mod.BATCH_OSDI_DIR).encode("utf-8")),
+        (path, (json.dumps(req, indent=2) + "\n").encode("utf-8")),
+    ]
+    return path, planned
 
 
 def cmd_control(args) -> int:
@@ -138,11 +152,14 @@ def cmd_control(args) -> int:
     if (out_dir / f"{tag}.envelope.json").exists():
         print(f"{tag}: envelope present (append-only)", file=sys.stderr)
         return 1
-    request = _reduced_request(
+    request, planned = _reduced_request(
         cond, out_dir, tag, section=args.process, supply=args.supply,
         temperature=args.temperature, n=args.n,
         note=(f"MISMATCH-OFF NEGATIVE CONTROL: plain `{args.process}` section, so every "
               "sample must report the same offset (sigma = 0). Not spec evidence."))
+    # force=False on purpose: --force never clobbers the shared controls/ inputs.
+    if not kcli._commit_planned(planned, argparse.Namespace(force=False), tag):
+        return 1
     return kcli._submit_with_retry(request, out_dir, tag, args, _extra(cond, "negative-control"))
 
 
@@ -156,12 +173,15 @@ def cmd_repeat(args) -> int:
     # The FIRST grid point of the per-process request (lowest supply, lowest
     # temperature) is corner_index 0 there and here, so klt derives the same
     # per-sample seeds: a same-seed repeat of the campaign's draws.
-    request = _reduced_request(
+    request, planned = _reduced_request(
         cond, out_dir, tag, section=args.process, supply=SUPPLIES_V[0],
         temperature=TEMPERATURES_C[0], n=OFFSET_MC.monte_carlo["n"],
         note=("SAME-SEED REPEAT: the campaign's first grid point of this process (corner "
               "index 0 in both requests), full N, resubmitted as a separate batch job; every "
               "draw must reproduce the campaign's. Not additional spec evidence."))
+    # force=False on purpose: --force never clobbers the shared controls/ inputs.
+    if not kcli._commit_planned(planned, argparse.Namespace(force=False), tag):
+        return 1
     return kcli._submit_with_retry(request, out_dir, tag, args, _extra(cond, "same-seed-repeat"))
 
 
@@ -201,20 +221,21 @@ def cmd_compare(args) -> int:
 
 
 def cmd_supplement_build(args) -> int:
+    # Plan every selected condition first, then commit the whole build as one
+    # batch: a conflict on any condition writes nothing (no partial build).
+    series = _series(args)
+    planned: list[tuple[Path, bytes]] = []
     try:
         for name in args.condition or [c.name for c in cmband.CONDITIONS]:
             cond = cmband.condition(name)
-            paths, created = cmband.write_supplement_inputs(cond, _series(args) / cond.name)
-            for p in paths:
-                verb = "wrote" if p in created else "unchanged"
-                try:
-                    shown = p.relative_to(build_mod.REPO_ROOT)
-                except ValueError:  # a series dir outside the repo (tests)
-                    shown = p
-                print(f"{verb} {shown}")
+            planned += cmband.plan_supplement_inputs(cond, series / cond.name)
+        created = set(build_mod.commit_inputs(planned))
     except build_mod.BuildError as exc:
         print(f"supplement-build: {exc}", file=sys.stderr)
         return 1
+    for path, _ in planned:
+        verb = "wrote" if path in created else "unchanged"
+        print(f"{verb} {kcli._rel(path)}")
     return 0
 
 
