@@ -435,6 +435,22 @@ class SupplementRunner(unittest.TestCase):
             self.assertEqual(req["_condition"]["issue"], 415)
             self.assertEqual(req["netlist"], "kickback-icdc.body.spice")
 
+    def test_probe_build_conflict_writes_nothing(self):
+        # a conflict on a later arm must not leave the earlier arms written
+        with tempfile.TemporaryDirectory(dir=rkb.build_mod.SIM_DIR) as d:
+            series = Path(d)
+            conflicting = series / "vcm-m050" / "kickback-icdc.request.json"
+            conflicting.parent.mkdir(parents=True)
+            conflicting.write_bytes(b"tampered")
+            with mock.patch.object(rkb, "_series", return_value=series):
+                self.assertEqual(
+                    rkb.cmd_probe_build(self.build_args("20261114-x")), 1)
+            self.assertEqual(sorted(p.name for p in (series / "vcm-m050").iterdir()),
+                             ["kickback-icdc.request.json"])
+            self.assertFalse((series / "vcm-nom").exists())
+            self.assertFalse((series / "vcm-p050").exists())
+            self.assertEqual(conflicting.read_bytes(), b"tampered")
+
     def test_probe_compare_refuses_frozen_series_with_other_arms(self):
         with tempfile.TemporaryDirectory() as d:
             series = Path(d)
@@ -459,6 +475,20 @@ class SupplementRunner(unittest.TestCase):
 
 
 class Evidence(unittest.TestCase):
+    def test_cmd_build_conflict_writes_nothing(self):
+        # a conflict on a later condition must not leave earlier conditions
+        # written (the whole build is one preflighted batch)
+        with tempfile.TemporaryDirectory(dir=rkb.build_mod.SIM_DIR) as d:
+            series = Path(d)
+            conflicting = series / "vcm-p050" / kb.BODY_NAME
+            conflicting.parent.mkdir(parents=True)
+            conflicting.write_bytes(b"tampered")
+            args = mock.Mock(series="s", condition=None)
+            with mock.patch.object(rkb, "_series", return_value=series):
+                self.assertEqual(rkb.cmd_build(args), 1)
+            self.assertEqual([p for p in series.rglob("*") if p.is_file()], [conflicting])
+            self.assertEqual(conflicting.read_bytes(), b"tampered")
+
     def test_build_is_append_only(self):
         with tempfile.TemporaryDirectory() as d:
             out = Path(d) / "vcm-nom"
@@ -470,6 +500,52 @@ class Evidence(unittest.TestCase):
                 kb.write_condition_inputs(NOM, out)
             self.assertEqual((out / kb.BODY_NAME).read_text(), "tampered")
             self.assertEqual(set(before), {kb.BODY_NAME, "kickback.request.json"})
+
+    def test_write_condition_inputs_refuses_dangling_symlink(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            out = root / "vcm-nom"
+            out.mkdir()
+            outside = root / "outside" / "stolen.spice"
+            (out / kb.BODY_NAME).symlink_to(outside)
+            with self.assertRaises(kb.KickbackCmBandError):
+                kb.write_condition_inputs(NOM, out)
+            self.assertFalse(outside.exists())  # the symlink target was NOT created
+            self.assertEqual([p.name for p in out.iterdir()], [kb.BODY_NAME])
+
+    def test_write_condition_inputs_refuses_directory_destination(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "vcm-nom"
+            (out / kb.BODY_NAME).mkdir(parents=True)
+            with self.assertRaises(kb.KickbackCmBandError):  # not a bare IsADirectoryError
+                kb.write_condition_inputs(NOM, out)
+            self.assertFalse((out / "kickback.request.json").exists())
+
+    def test_write_probe_inputs_refuses_dangling_symlink(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            series = root / "series"
+            out = series / "vcm-m050"
+            out.mkdir(parents=True)
+            seed_probe_ref_body(series, M050)
+            outside = root / "outside" / "stolen.spice"
+            (out / kb.BODY_NAME).symlink_to(outside)
+            with mock.patch.object(kb, "SERIES_DIR", series):
+                with self.assertRaises(kb.KickbackCmBandError):
+                    kb.write_probe_inputs(M050, "repro", out)
+            self.assertFalse(outside.exists())
+            self.assertEqual([p.name for p in out.iterdir()], [kb.BODY_NAME])
+
+    def test_write_probe_inputs_refuses_directory_destination(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d)
+            out = series / "vcm-m050"
+            (out / kb.BODY_NAME).mkdir(parents=True)
+            seed_probe_ref_body(series, M050)
+            with mock.patch.object(kb, "SERIES_DIR", series):
+                with self.assertRaises(kb.KickbackCmBandError):
+                    kb.write_probe_inputs(M050, "repro", out)
+            self.assertFalse((out / "kickback-repro.request.json").exists())
 
     def test_run_refuses_existing_envelope_and_completed_attempt(self):
         with tempfile.TemporaryDirectory() as d:
