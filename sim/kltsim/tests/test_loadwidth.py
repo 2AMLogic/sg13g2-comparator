@@ -315,7 +315,8 @@ class ReportTests(unittest.TestCase):
 class ControlTests(unittest.TestCase):
     def test_archived_control_screen_mean_matches_the_issue_figure(self):
         # Issue #498's verified correction: the control's 18-point mean is
-        # 1.053 mV rms at the 36.27 nV/rtHz injection (45-point mean 1.096).
+        # 1.053 mV rms at the injected density
+        # (TRANSIENT_NOISE_INJECTED_DENSITY_NV_RTHZ; 45-point mean 1.096).
         control = loadwidth.control_screen_row2(build.EXPERIMENT_DIR / "campaigns")
         self.assertEqual((control["points_selected"], control["points_valid"]), (18, 18))
         self.assertAlmostEqual(control["screen_mean"], 1.0526, delta=1e-3)
