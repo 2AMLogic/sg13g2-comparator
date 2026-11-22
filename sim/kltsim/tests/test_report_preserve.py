@@ -280,6 +280,99 @@ class WriterTest(unittest.TestCase):
         self.assertEqual(len(artifacts.check([(p, b"1")])), 1)
         self.assertFalse(p.parent.exists())
 
+    def test_commit_refuses_non_directory_destination_dir(self):
+        dest = self.d / "camp"
+        dest.write_text("not a directory", encoding="utf-8")
+        with self.assertRaises(artifacts.ArtifactConflict) as caught:
+            artifacts.commit([(dest / "a.spice", b"body")])
+        self.assertIn(f"{dest}: exists and is not a directory", str(caught.exception))
+        self.assertEqual(dest.read_text(), "not a directory")
+        self.assertEqual([p.name for p in self.d.iterdir()], ["camp"])
+
+    def test_commit_refuses_symlinked_destination_dir(self):
+        real = self.d / "real"
+        real.mkdir()
+        dest = self.d / "camp"
+        dest.symlink_to(real, target_is_directory=True)
+        with self.assertRaises(artifacts.ArtifactConflict) as caught:
+            artifacts.commit([(dest / "a.spice", b"body")])
+        self.assertIn(f"{dest}: exists and is not a directory", str(caught.exception))
+        self.assertEqual(list(real.iterdir()), [])
+
+    def test_commit_refuses_non_directory_ancestor(self):
+        for kind in ("file", "dangling-symlink", "symlink-to-file"):
+            with self.subTest(kind=kind):
+                root = self.d / kind.replace("-", "_")
+                root.mkdir()
+                ancestor = root / "camp"
+                if kind == "file":
+                    ancestor.write_text("x", encoding="utf-8")
+                elif kind == "dangling-symlink":
+                    ancestor.symlink_to(root / "gone")
+                else:
+                    (root / "afile").write_text("x", encoding="utf-8")
+                    ancestor.symlink_to(root / "afile")
+                with self.assertRaises(artifacts.ArtifactConflict) as caught:
+                    artifacts.commit([(ancestor / "bench" / "a.spice", b"body")])
+                self.assertIn(f"{ancestor}: exists and is not a directory",
+                              str(caught.exception))
+                self.assertFalse((root / "gone").exists())
+                leftovers = {"file": ["camp"], "dangling-symlink": ["camp"],
+                             "symlink-to-file": ["afile", "camp"]}[kind]
+                self.assertEqual(sorted(p.name for p in root.iterdir()), leftovers)
+
+    def test_commit_follows_symlinked_ancestor_to_directory(self):
+        real = self.d / "real"
+        real.mkdir()
+        link = self.d / "link"
+        link.symlink_to(real, target_is_directory=True)
+        created = artifacts.commit([(link / "camp" / "a.spice", b"body")])
+        self.assertEqual(created, [link / "camp" / "a.spice"])
+        self.assertEqual((real / "camp" / "a.spice").read_bytes(), b"body")
+
+    def test_commit_multi_dir_batch_rejects_whole_set(self):
+        bad = self.d / "bad"
+        bad.write_text("x", encoding="utf-8")
+        good = self.d / "good"
+        with self.assertRaises(artifacts.ArtifactConflict) as caught:
+            artifacts.commit([(bad / "a", b"1"), (good / "b", b"2")])
+        self.assertIn(f"{bad}: exists and is not a directory", str(caught.exception))
+        self.assertFalse(good.exists())
+
+    def test_commit_reports_shared_bad_ancestor_once(self):
+        ancestor = self.d / "camp"
+        ancestor.write_text("x", encoding="utf-8")
+        with self.assertRaises(artifacts.ArtifactConflict) as caught:
+            artifacts.commit([(ancestor / "one" / "a", b"1"), (ancestor / "two" / "b", b"2")])
+        self.assertEqual(
+            str(caught.exception).count(f"{ancestor}: exists and is not a directory"), 1)
+
+    def test_check_reports_directory_conflict_without_spurious_missing(self):
+        bad = self.d / "bad"
+        bad.write_text("x", encoding="utf-8")
+        good = self.d / "good"
+        good.mkdir()
+        problems = artifacts.check([(bad / "a", b"1"), (good / "b", b"2")])
+        self.assertEqual(problems,
+                         [f"{bad}: exists and is not a directory", f"{good / 'b'}: missing"])
+        self.assertFalse((good / "b").exists())
+
+    def test_require_dir_short_circuit_preserved(self):
+        f = self.d / "afile"
+        f.write_text("x", encoding="utf-8")
+        self.assertEqual(artifacts.check([], require_dir=f),
+                         [f"{f}: exists and is not a directory"])
+        real = self.d / "real"
+        real.mkdir()
+        link = self.d / "link"
+        link.symlink_to(real, target_is_directory=True)
+        self.assertEqual(artifacts.check([], require_dir=link),
+                         [f"{link}: exists and is not a directory"])
+        with self.assertRaises(artifacts.ArtifactConflict) as caught:
+            artifacts.commit([(self.d / "other" / "a", b"1")], require_dir=f)
+        self.assertEqual(str(caught.exception), f"{f}: exists and is not a directory")
+        self.assertFalse((self.d / "other").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -73,15 +73,24 @@ def _extra(cond: kb.Condition) -> dict:
 
 
 def cmd_build(args) -> int:
-    for name in args.condition or [c.name for c in kb.CONDITIONS]:
-        cond = kb.condition(name)
-        try:
-            paths = kb.write_condition_inputs(cond, _series(args) / cond.name)
-        except kb.KickbackCmBandError as exc:
-            print(str(exc), file=sys.stderr)
-            return 1
-        for p in paths:
-            print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
+    # Plan every selected condition first, then commit the whole build as one
+    # batch: a conflict on any condition writes nothing (no partial build).
+    series = _series(args)
+    planned: list[tuple[Path, bytes]] = []
+    paths: list[Path] = []
+    try:
+        for name in args.condition or [c.name for c in kb.CONDITIONS]:
+            cond = kb.condition(name)
+            out_dir = series / cond.name
+            files = kb.input_bytes(cond)
+            planned.extend((out_dir / n, data) for n, data in files.items())
+            paths.extend(out_dir / n for n in files)
+        kb.commit_inputs(planned, evidence="campaign evidence")
+    except kb.KickbackCmBandError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    for p in paths:
+        print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
     return 0
 
 
@@ -167,17 +176,33 @@ def cmd_compare(args) -> int:
 
 
 def cmd_probe_build(args) -> int:
+    # Plan every arm of every selected condition first (running the #165
+    # reference-body check per shared-body arm), then commit the whole build
+    # as one batch: a conflict on any arm writes nothing (no partial build).
     issue = _issue_for(args.series)
-    for name in args.condition or [c.name for c in kb.CONDITIONS]:
-        cond = kb.condition(name)
-        for arm in _arms_for(args.series, args.arm):
-            try:
-                paths = kb.write_probe_inputs(cond, arm, _series(args) / cond.name, issue=issue)
-            except kb.KickbackCmBandError as exc:
-                print(str(exc), file=sys.stderr)
-                return 1
-            for p in paths:
-                print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
+    series = _series(args)
+    planned: list[tuple[Path, bytes]] = []
+    seen: set[Path] = set()
+    paths: list[Path] = []
+    try:
+        for name in args.condition or [c.name for c in kb.CONDITIONS]:
+            cond = kb.condition(name)
+            out_dir = series / cond.name
+            for arm in _arms_for(args.series, args.arm):
+                files = kb.probe_input_bytes(cond, arm, issue=issue)
+                kb.check_probe_reference_body(cond, arm, files)
+                for fname, data in files.items():
+                    path = out_dir / fname
+                    planned.append((path, data))
+                    if path not in seen:  # the shared body prints once per condition
+                        seen.add(path)
+                        paths.append(path)
+        kb.commit_inputs(planned)
+    except kb.KickbackCmBandError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    for p in paths:
+        print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
     return 0
 
 

@@ -35,15 +35,20 @@ def _series(args) -> Path:
 
 
 def cmd_build(args) -> int:
-    for name in args.condition or [c.name for c in cd.CONDITIONS]:
-        out = _series(args) / name
-        for p in (out / cd.BODY_NAME, out / cd.REQUEST_NAME):
-            if p.exists():
-                print(f"{p} exists -- append-only; use a new --series", file=sys.stderr)
-                return 1
-        body, req = cd.write_condition_inputs(cd.condition(name), out)
-        print(f"wrote {body.relative_to(build_mod.REPO_ROOT)}")
-        print(f"wrote {req.relative_to(build_mod.REPO_ROOT)}")
+    # Plan every selected condition first, then commit the whole build as one
+    # batch: a conflict on any condition writes nothing (no partial build).
+    series = _series(args)
+    planned: list[tuple[Path, bytes]] = []
+    try:
+        for name in args.condition or [c.name for c in cd.CONDITIONS]:
+            planned += cd.plan_condition_inputs(cd.condition(name), series / name)
+        created = set(build_mod.commit_inputs(planned))
+    except build_mod.BuildError as exc:
+        print(f"build: {exc}", file=sys.stderr)
+        return 1
+    for path, _ in planned:
+        verb = "wrote" if path in created else "unchanged"
+        print(f"{verb} {kcli._rel(path)}")
     return 0
 
 
