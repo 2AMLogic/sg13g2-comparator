@@ -319,9 +319,6 @@ def short_reset_verdict(shift_uv, long_shift_uv) -> dict:
 # netlist
 # --------------------------------------------------------------------------- #
 
-def _corner_key(process: str, supply: float, temp: float) -> tuple:
-    return (process, round(float(supply), 3), float(temp))
-
 
 def clock_times_ns(period_ns: float) -> dict:
     rise = [FIRST_RISE_NS + k * period_ns for k in range(N_CONDITIONING + 1)]
@@ -632,9 +629,6 @@ class PointSearch:
 
     def active(self) -> bool:
         return self.problem is None and (self.P.active or self.N.active)
-
-    def plan(self) -> dict:
-        return {h: getattr(self, h).next_probes() for h in HISTORIES}
 
 
 def new_searches(keys) -> dict[tuple, PointSearch]:
