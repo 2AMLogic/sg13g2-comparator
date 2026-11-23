@@ -316,9 +316,10 @@ inconsistent inputs are refused and write nothing. The manifest pins the hash of
 ## Derived report pairs (grading, noise-full, comparison, ibsweep)
 
 `grade` (`grading.{json,md}`), `noise-full` (`noise_full.{json,md}`),
-`ibsweep` (`ibsweep.{json,md}`) and the `compare` subcommands of
-`run_clock_supply_sensitivity.py`, `run_offset_cm_band.py` and
-`run_decision_cm_band.py` (`comparison.{json,md}`) write append-only evidence through the one planned-byte writer
+`ibsweep` (`ibsweep.{json,md}`) and the `compare` / `probe-compare`
+subcommands of `run_clock_supply_sensitivity.py`, `run_offset_cm_band.py`,
+`run_decision_cm_band.py` and `run_kickback_cm_band.py`
+(`comparison.{json,md}`) write append-only evidence through the one planned-byte writer
 `sim/kltsim/artifacts.py` (also used by `build` and `characterize.sh report`).
 Both members are composed in memory first, then:
 
@@ -361,6 +362,9 @@ changed; they are deliberately NOT re-published.
 | `run_offset_cm_band.py compare --series 20261009-5185f52` | 1 | predates the repeat-control accounting (`controls.repeat[].{expected_draws,missing_draws,rejected_draws,verdict}`) |
 | `run_clock_supply_sensitivity.py compare --series 20261011-ce8cb93` | 1 | predates per-condition coverage (`offset.*.coverage.*`) |
 | `run_decision_cm_band.py compare --series 20261011-94b6bc5b4` | 0 | reproduces |
+| `run_kickback_cm_band.py compare --series 20261011-165` | 0 | reproduces |
+| `run_kickback_cm_band.py probe-compare --series 20261108-405-probe` | 0 | reproduces |
+| `run_kickback_cm_band.py probe-compare --series 20261114-415-forceddc` | 0 | reproduces |
 
 ## Reproducing one record
 
