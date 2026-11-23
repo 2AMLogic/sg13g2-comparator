@@ -6,8 +6,16 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 - [2026-09](work_log/WORK_LOG_2026-09.md)
 
+### 2026-11-23
+
+- **PR #534**: fix: exclude null-valued pairs from values_compared in cmdecision and kickback reproduction checks
+- **PR #520**: refactor: route kickback CM-band comparisons through artifacts.publish
+- **Issue #532** (closed): Sibling values_compared paths still count null-vs-null pairs as compared values (kickback, cmdecision)
+- **Issue #519** (closed): Route kickback CM-band comparison writers through artifacts.publish
+
 ### 2026-11-22
 
+- **PR #530**: fix: count only measured pairs as compared values in the memory determinism repeat
 - **PR #531**: fix: drop kickback_cmband's duplicate non-directory preflight
 - **PR #528**: fix: publish supplement-report pair append-only
 - **PR #526**: fix: preflight non-directory destination dirs in artifacts commit/check
@@ -17,6 +25,7 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 - **PR #514**: refactor: route kickback CM-band input writers through artifacts.commit
 - **PR #500**: refactor: drive netlist regeneration through pinned klt netlist, not raw xschem
 - **PR #499**: fix: report insufficient evidence for empty determinism-repeat rounds
+- **Issue #525** (closed): Determinism repeat counts null-vs-null measurement pairs as compared values
 - **Issue #527** (closed): kickback_cmband._non_directory_ancestors is now redundant with the artifacts preflight
 - **Issue #523** (closed): build.commit_inputs: campaign dir existing as a regular file raises a bare FileExistsError, not BuildError
 - **Issue #521** (closed): gitignore: daemon-owned .loom/account-ranking.* trips check-main-clean for every builder
