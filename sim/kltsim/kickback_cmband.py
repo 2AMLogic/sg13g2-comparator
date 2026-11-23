@@ -193,24 +193,6 @@ def input_bytes(cond: Condition, osdi_dir: str = build_mod.BATCH_OSDI_DIR,
     }
 
 
-def write_condition_inputs(cond: Condition, out_dir: Path, **kw) -> list[Path]:
-    """Write body + request; refuse to change anything already there."""
-    files = input_bytes(cond, **kw)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for name, data in files.items():
-        path = out_dir / name
-        if path.exists() and path.read_bytes() != data:
-            raise KickbackCmBandError(
-                f"{path} exists and differs -- campaign evidence is append-only; use a new --series")
-    paths = []
-    for name, data in files.items():
-        path = out_dir / name
-        if not path.exists():
-            path.write_bytes(data)
-        paths.append(path)
-    return paths
-
-
 # --------------------------------------------------------------------------- #
 # validity
 # --------------------------------------------------------------------------- #
@@ -401,6 +383,11 @@ def reproduction_check(nominal_env: dict, nominal_request: dict, nominal_body: s
             x, y = ai.get(name), bi.get(name)
             if x is None or y is None:
                 problems.append(f"{key_str(key)}: {name} missing")
+                continue
+            if x.get("value") is None or y.get("value") is None:
+                side = "both sides" if (x.get("value") is None and y.get("value") is None) \
+                    else "one side"
+                problems.append(f"{key_str(key)}: {name} unmeasured (no value on {side})")
                 continue
             compared += 1
             if x.get("value") != y.get("value") or x.get("status") != y.get("status"):
@@ -753,29 +740,13 @@ def probe_input_bytes(cond: Condition, arm: str, *, issue: int = PROBE_ISSUE) ->
             (json.dumps(probe_request(cond, arm, issue=issue), indent=2) + "\n").encode("utf-8")}
 
 
-def write_probe_inputs(cond: Condition, arm: str, out_dir: Path,
-                       *, issue: int = PROBE_ISSUE) -> list[Path]:
-    """Write body + arm request; refuse to change anything already there. An
-    arm without a supplement block must reference the shared body and that
-    body must be byte-identical to the #165 body."""
-    files = probe_input_bytes(cond, arm, issue=issue)
+def check_probe_reference_body(cond: Condition, arm: str, files: dict[str, bytes]) -> None:
+    """An arm without a supplement block must reference the shared body and
+    that body must be byte-identical to the #165 body."""
     ref_body = SERIES_DIR / PROBE_REFERENCE_SERIES / cond.name / BODY_NAME
     if probe_body_name(arm) == BODY_NAME and files[BODY_NAME] != ref_body.read_bytes():
         raise KickbackCmBandError(
             f"probe body for {cond.name} differs from the #165 body {ref_body}; refusing")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for name, data in files.items():
-        path = out_dir / name
-        if path.exists() and path.read_bytes() != data:
-            raise KickbackCmBandError(
-                f"{path} exists and differs -- evidence is append-only; use a new --series")
-    paths = []
-    for name, data in files.items():
-        path = out_dir / name
-        if not path.exists():
-            path.write_bytes(data)
-        paths.append(path)
-    return paths
 
 
 def _meas_map(corner: dict) -> dict:
@@ -788,7 +759,12 @@ def probe_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS,
     envelope of the same condition at the same PVT key. ``arms`` is the arm set
     to look for: a listed arm without an envelope is a problem, so a series is
     only ever compared against its own arm set (the #405 probe default; the
-    #415 supplement passes PROBE_ARMS_415)."""
+    #415 supplement passes PROBE_ARMS_415).
+
+    A missing value on just one side is a difference, as recorded for #415.
+    When both values are missing, list the card in ``unmeasured_on_original_cards``.
+    Equality requires at least one original card and matching, measured values
+    for every original card."""
     ref_root = SERIES_DIR / PROBE_REFERENCE_SERIES
     out: dict = {"issue": issue, "series": series.name,
                  "reference_series": PROBE_REFERENCE_SERIES, "points": [], "arms": {},
@@ -820,16 +796,25 @@ def probe_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS,
                     row["arms"][arm] = {"present": False}
                     continue
                 m = _meas_map(c)
-                orig = [n for n in ref_m]
-                diffs = [n for n in orig if (m.get(n) or {}).get("value") != ref_m[n].get("value")]
-                row["arms"][arm] = {
+                diffs = []
+                unmeasured = []
+                for name, ref_card in ref_m.items():
+                    value = m.get(name, {}).get("value")
+                    if value != ref_card.get("value"):
+                        diffs.append(name)
+                    elif value is None:
+                        unmeasured.append(name)
+                arm_row = {
                     "present": True, "corner_status": c.get("status"),
                     "corner_id": c.get("corner_id"),
                     "values": {n: x.get("value") for n, x in m.items()},
                     "statuses": {n: x.get("status") for n, x in m.items()
                                  if x.get("status") not in (None, "pass")},
-                    "equals_165_on_original_cards": not diffs and bool(orig),
+                    "equals_165_on_original_cards": (bool(ref_m) and not diffs and not unmeasured),
                     "differs_from_165": diffs}
+                if unmeasured:
+                    arm_row["unmeasured_on_original_cards"] = unmeasured
+                row["arms"][arm] = arm_row
             out["points"].append(row)
     return out
 
@@ -858,9 +843,15 @@ def probe_render_markdown(res: dict) -> str:
           "|---|---|---|---|---|"]
     for r in res["points"]:
         for arm, a in r["arms"].items():
-            if a.get("present"):
-                o.append(f"| `{r['condition']}` | {r['key']} | {arm} | "
-                         f"{a['equals_165_on_original_cards']} | {', '.join(a['differs_from_165']) or '-'} |")
+            if not a.get("present"):
+                continue
+            details = []
+            if a["differs_from_165"]:
+                details.append(", ".join(a["differs_from_165"]))
+            if a.get("unmeasured_on_original_cards"):
+                details.append("unmeasured: " + ", ".join(a["unmeasured_on_original_cards"]))
+            o.append(f"| `{r['condition']}` | {r['key']} | {arm} | "
+                     f"{a['equals_165_on_original_cards']} | {'; '.join(details) or '-'} |")
     o += ["", "## Decision gates and per-branch outputs", "",
           "| condition | point | arm | " + " | ".join(PROBE_GATES) + " | b dp/dn @55n | c dp/dn @55n |",
           "|---|---|---|---|---|---|---|---|---|"]

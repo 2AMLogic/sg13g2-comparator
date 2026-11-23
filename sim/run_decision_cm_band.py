@@ -25,7 +25,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from kltsim import artifacts as artifacts_mod  # noqa: E402
-from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import cmdecision as cd  # noqa: E402
 
@@ -35,16 +34,17 @@ def _series(args) -> Path:
 
 
 def cmd_build(args) -> int:
-    for name in args.condition or [c.name for c in cd.CONDITIONS]:
-        out = _series(args) / name
-        for p in (out / cd.BODY_NAME, out / cd.REQUEST_NAME):
-            if p.exists():
-                print(f"{p} exists -- append-only; use a new --series", file=sys.stderr)
-                return 1
-        body, req = cd.write_condition_inputs(cd.condition(name), out)
-        print(f"wrote {body.relative_to(build_mod.REPO_ROOT)}")
-        print(f"wrote {req.relative_to(build_mod.REPO_ROOT)}")
-    return 0
+    # Plan every selected condition first, then commit the whole build as one
+    # batch: a conflict on any condition writes nothing (no partial build).
+    series = _series(args)
+
+    def plan() -> list[tuple[Path, bytes]]:
+        planned: list[tuple[Path, bytes]] = []
+        for name in args.condition or [c.name for c in cd.CONDITIONS]:
+            planned += cd.plan_condition_inputs(cd.condition(name), series / name)
+        return planned
+
+    return kcli.commit_build("build", plan)
 
 
 def cmd_run(args) -> int:
@@ -84,8 +84,11 @@ def cmd_compare(args) -> int:
               + ", ".join(f"{q} {g['min']:.4g}..{g['max']:.4g}" for q, g in c["grid"].items()))
     rep = result.get("reproduction")
     if rep:
+        unmeasured = len(rep.get("unmeasured") or [])
         print(f"vcm-nom reproduction: bit_identical={rep['bit_identical']} "
-              f"({len(rep['mismatches'])} mismatches)")
+              f"({len(rep['mismatches'])} mismatches"
+              + (f", {unmeasured} unmeasured value pair(s) excluded" if unmeasured else "")
+              + ")")
     return 0
 
 

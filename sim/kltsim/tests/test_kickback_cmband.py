@@ -7,7 +7,9 @@ fixture and perturbs deep copies of it.
 
 from __future__ import annotations
 
+import contextlib
 import copy
+import io
 import json
 import re
 import sys
@@ -47,11 +49,34 @@ def meas(corner, name):
 
 def seed_probe_ref_body(series, cond):
     """Materialize the #165 probe reference body inside the tempdir so the
-    byte-identity check in write_probe_inputs stays independent of campaign
-    evidence outside the CI sparse cone (see test_run_offset_cm_band)."""
+    byte-identity check in ``check_probe_reference_body`` stays independent of
+    campaign evidence outside the CI sparse cone (see test_run_offset_cm_band)."""
     ref = series / kb.PROBE_REFERENCE_SERIES / cond.name / kb.BODY_NAME
     ref.parent.mkdir(parents=True, exist_ok=True)
     ref.write_text(kb.compose_body(cond))
+
+
+def commit_build_inputs(planned, *, evidence="campaign evidence"):
+    """The kickback CLIs' commit path (issue #543): ``kcli.commit_build``
+    with the series evidence wording. Returns (exit code, stderr)."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        rc = kcli.commit_build("build", planned, evidence=evidence)
+    return rc, err.getvalue()
+
+
+def commit_condition_inputs(cond, out_dir):
+    """What ``run_kickback_cm_band build`` commits for one condition."""
+    return commit_build_inputs([(out_dir / n, data)
+                                for n, data in kb.input_bytes(cond).items()])
+
+
+def commit_probe_inputs(cond, arm, out_dir, issue=kb.PROBE_ISSUE):
+    """What ``run_kickback_cm_band probe-build`` commits for one arm."""
+    files = kb.probe_input_bytes(cond, arm, issue=issue)
+    kb.check_probe_reference_body(cond, arm, files)
+    return commit_build_inputs([(out_dir / n, data) for n, data in files.items()],
+                               evidence="probe evidence")
 
 
 class Transform(unittest.TestCase):
@@ -226,6 +251,34 @@ class Reproduction(unittest.TestCase):
             env["corners"].pop()
         self.assertFalse(self.check(env=env_for(NOM, m))["ok"])
 
+    def _null(self, env, name, corner_idx=0):
+        meas(env["corners"][corner_idx], name)["value"] = None
+
+    def test_null_null_pair_is_problem_not_compared(self):
+        # issue #532: a null/null pair is a missing measurement, not compared
+        nom = env_for(NOM)
+        ref = copy.deepcopy(REF_ENV)
+        self._null(nom, "kick_sigdep_uv")
+        self._null(ref, "kick_sigdep_uv")
+        r = kb.reproduction_check(nom, kb.compose_request(NOM), kb.compose_body(NOM),
+                                  ref, REF_REQ, REF_BODY)
+        self.assertFalse(r["ok"], r)
+        self.assertEqual(r["values_compared"], r["expected_values"] - 1)
+        self.assertEqual(r["mismatches"], [])
+        self.assertEqual(len(r["problems"]), 1)
+        self.assertIn("unmeasured", r["problems"][0])
+        self.assertIn("both sides", r["problems"][0])
+
+    def test_null_on_one_side_is_problem_not_compared(self):
+        nom = env_for(NOM)
+        self._null(nom, "kick_sigdep_uv")
+        r = self.check(env=nom)
+        self.assertFalse(r["ok"], r)
+        self.assertEqual(r["values_compared"], r["expected_values"] - 1)
+        self.assertEqual(r["mismatches"], [])
+        self.assertEqual(len(r["problems"]), 1)
+        self.assertIn("one side", r["problems"][0])
+
 
 class Probe405(unittest.TestCase):
     """Issue #405 supplementary probe requests."""
@@ -353,11 +406,11 @@ class Supplement415(unittest.TestCase):
         # and never a supply value (0 V is the one supply-independent rail).
         self.assertIn(".ic v(douta)=0 v(doutb)=0 v(doutc)=0\n", block)
 
-    def test_write_probe_inputs_append_only_and_supplement_paths(self):
+    def test_commit_probe_inputs_append_only_and_supplement_paths(self):
         with tempfile.TemporaryDirectory() as d:
             out = Path(d) / "vcm-m050"
             for arm in kb.PROBE_ARMS_415:
-                kb.write_probe_inputs(M050, arm, out, issue=self.ISSUE)
+                self.assertEqual(commit_probe_inputs(M050, arm, out, issue=self.ISSUE)[0], 0)
             before = {p.name: p.read_bytes() for p in out.iterdir()}
             ref = (kb.SERIES_DIR / "20261108-405-probe" / "vcm-m050" / kb.BODY_NAME).read_bytes()
             # shared body = #165 body (written by repro/obs); per-arm bodies =
@@ -369,11 +422,10 @@ class Supplement415(unittest.TestCase):
                              ref + kb.probe_body_supplement(M050, "optdc").encode("utf-8"))
             self.assertIn("kickback-icdc.request.json", before)
             for arm in kb.PROBE_ARMS_415:  # identical rebuild: no-op
-                kb.write_probe_inputs(M050, arm, out, issue=self.ISSUE)
+                self.assertEqual(commit_probe_inputs(M050, arm, out, issue=self.ISSUE)[0], 0)
             self.assertEqual({p.name: p.read_bytes() for p in out.iterdir()}, before)
             (out / kb.BODY_NAME).write_bytes(b"tampered")
-            with self.assertRaises(kb.KickbackCmBandError):
-                kb.write_probe_inputs(M050, "repro", out, issue=self.ISSUE)
+            self.assertEqual(commit_probe_inputs(M050, "repro", out, issue=self.ISSUE)[0], 1)
 
     def test_compare_with_supplement_arm_set_labels_issue_415(self):
         with tempfile.TemporaryDirectory() as d:
@@ -381,7 +433,7 @@ class Supplement415(unittest.TestCase):
             for cond in kb.CONDITIONS:
                 out = series / cond.name
                 for arm in kb.PROBE_ARMS_415:
-                    kb.write_probe_inputs(cond, arm, out, issue=self.ISSUE)
+                    self.assertEqual(commit_probe_inputs(cond, arm, out, issue=self.ISSUE)[0], 0)
                 env = env_for(cond)
                 for arm in kb.PROBE_ARMS_415:
                     (out / f"{kb.probe_arm_tag(arm)}.envelope.json").write_text(
@@ -399,9 +451,142 @@ class Supplement415(unittest.TestCase):
     def test_unknown_supplement_arm_refused_everywhere(self):
         with self.assertRaises(kb.KickbackCmBandError):
             kb.probe_request(M050, "icdc2")
+        with self.assertRaises(kb.KickbackCmBandError):
+            kb.probe_input_bytes(M050, "icdc2")
+
+
+class ProbeCompareNulls(unittest.TestCase):
+    """Issue #535: a null-valued original card must not certify equality."""
+
+    @staticmethod
+    def ref_env(cond):
+        return json.loads(
+            (kb.SERIES_DIR / kb.PROBE_REFERENCE_SERIES / cond.name
+             / f"{kb.TAG}.envelope.json").read_text(encoding="utf-8"))
+
+    def write_series(self, series, arm_env):
+        for cond in kb.CONDITIONS:
+            out = series / cond.name
+            out.mkdir(parents=True)
+            for arm in kb.PROBE_ARMS:
+                for name, data in kb.probe_input_bytes(cond, arm).items():
+                    (out / name).write_bytes(data)
+                (out / f"{kb.probe_arm_tag(arm)}.envelope.json").write_text(
+                    json.dumps(arm_env(cond)), encoding="utf-8")
+
+    def write_reference(self, base, ref_env):
+        for cond in kb.CONDITIONS:
+            out = base / kb.PROBE_REFERENCE_SERIES / cond.name
+            out.mkdir(parents=True)
+            (out / f"{kb.TAG}.envelope.json").write_text(
+                json.dumps(ref_env(cond)), encoding="utf-8")
+
+    @staticmethod
+    def null(env, name):
+        for c in env["corners"]:
+            meas(c, name)["value"] = None
+        return env
+
+    @staticmethod
+    def rows(res):
+        return [a for r in res["points"] for a in r["arms"].values()
+                if a.get("present")]
+
+    def test_null_on_only_one_side_is_a_diff(self):
+        def with_null(cond):
+            return self.null(self.ref_env(cond), "kick_sigdep_uv")
+
+        for side in ("arm", "reference"):
+            with self.subTest(null_side=side), tempfile.TemporaryDirectory() as d:
+                base = Path(d)
+                series = base / "series"
+                self.write_reference(base, with_null if side == "reference" else self.ref_env)
+                self.write_series(series, with_null if side == "arm" else self.ref_env)
+                with mock.patch.object(kb, "SERIES_DIR", base):
+                    res = kb.probe_compare(series, arms=kb.PROBE_ARMS)
+                self.assertEqual(res["problems"], [])
+                for a in self.rows(res):
+                    self.assertEqual(a["differs_from_165"], ["kick_sigdep_uv"])
+                    self.assertNotIn("unmeasured_on_original_cards", a)
+                    self.assertFalse(a["equals_165_on_original_cards"], a)
+                self.assertIn("| False | kick_sigdep_uv |", kb.probe_render_markdown(res))
+
+    def test_null_null_original_card_is_unmeasured_not_equal(self):
+        # None == None is not evidence of equality: with the card null on both
+        # sides the flag must fall without inventing a diff
         with tempfile.TemporaryDirectory() as d:
-            with self.assertRaises(kb.KickbackCmBandError):
-                kb.write_probe_inputs(M050, "icdc2", Path(d))
+            base = Path(d)
+            self.write_reference(
+                base, lambda cond: self.null(self.ref_env(cond), "kick_sigdep_uv"))
+            series = base / "series"
+            self.write_series(
+                series, lambda cond: self.null(self.ref_env(cond), "kick_sigdep_uv"))
+            with mock.patch.object(kb, "SERIES_DIR", base):
+                res = kb.probe_compare(series, arms=kb.PROBE_ARMS)
+            self.assertEqual(res["problems"], [])
+            for a in self.rows(res):
+                self.assertEqual(a["unmeasured_on_original_cards"],
+                                 ["kick_sigdep_uv"])
+                self.assertFalse(a["equals_165_on_original_cards"], a)
+                self.assertEqual(a["differs_from_165"], [])
+            self.assertIn("| False | unmeasured: kick_sigdep_uv |",
+                          kb.probe_render_markdown(res))
+
+    def test_all_measured_baseline_emits_no_unmeasured_field(self):
+        # conditional emission keeps committed comparisons byte-identical
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d) / "series"
+            self.write_series(series, self.ref_env)
+            res = kb.probe_compare(series, arms=kb.PROBE_ARMS)
+            self.assertEqual(res["problems"], [])
+            self.assertNotIn("unmeasured_on_original_cards", json.dumps(res))
+            md = kb.probe_render_markdown(res)
+            self.assertNotIn("unmeasured:", md)
+            for a in self.rows(res):
+                self.assertTrue(a["equals_165_on_original_cards"], a)
+                self.assertEqual(a["differs_from_165"], [])
+
+    def test_empty_original_cards_stay_false(self):
+        # a reference corner with no measurement cards gives no equality basis
+        def no_cards(cond):
+            env = self.ref_env(cond)
+            for c in env["corners"]:
+                c["measurements"] = []
+            return env
+
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            self.write_reference(base, no_cards)
+            series = base / "series"
+            self.write_series(series, self.ref_env)
+            with mock.patch.object(kb, "SERIES_DIR", base):
+                res = kb.probe_compare(series, arms=kb.PROBE_ARMS)
+            self.assertEqual(res["problems"], [])
+            for a in self.rows(res):
+                self.assertFalse(a["equals_165_on_original_cards"], a)
+                self.assertNotIn("unmeasured_on_original_cards", a)
+                self.assertEqual(a["differs_from_165"], [])
+
+    def test_null_added_card_keeps_equality(self):
+        # a null on a probe-added card (not an original #165 card) is not the
+        # flag's concern, as in the committed xing rows
+        def null_added(cond):
+            env = self.ref_env(cond)
+            for c in env["corners"]:
+                c["measurements"].append(
+                    {"name": "vcm_probe", "value": None, "unit": "V",
+                     "status": "pass", "margin": None})
+            return env
+
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d) / "series"
+            self.write_series(series, null_added)
+            res = kb.probe_compare(series, arms=kb.PROBE_ARMS)
+            self.assertEqual(res["problems"], [])
+            for a in self.rows(res):
+                self.assertTrue(a["equals_165_on_original_cards"], a)
+                self.assertNotIn("unmeasured_on_original_cards", a)
+                self.assertIsNone(a["values"]["vcm_probe"])
 
 
 class SupplementRunner(unittest.TestCase):
@@ -409,7 +594,10 @@ class SupplementRunner(unittest.TestCase):
 
     @staticmethod
     def build_args(series, arm=None):
-        return mock.Mock(series=series, condition=None, arm=arm)
+        # report_dir/check are explicit (never Mock-synthesized) so the
+        # in-place frozen-series guard sees a real in-place probe-compare.
+        return mock.Mock(series=series, condition=None, arm=arm,
+                         report_dir=None, check=False)
 
     def test_default_arms_by_series(self):
         self.assertEqual(rkb._arms_for("20261108-405-probe", None), kb.PROBE_ARMS)
@@ -423,7 +611,7 @@ class SupplementRunner(unittest.TestCase):
     def test_probe_build_defaults_write_the_supplement_arm_set(self):
         # inside the repo tree: cmd_probe_build prints repo-relative paths and
         # compose_body derives its declared hashes from REPO_ROOT-relative paths
-        with tempfile.TemporaryDirectory(dir=rkb.build_mod.SIM_DIR) as d:
+        with tempfile.TemporaryDirectory(dir=kb.build_mod.SIM_DIR) as d:
             series = Path(d)
             with mock.patch.object(rkb, "_series", return_value=series):
                 self.assertEqual(rkb.cmd_probe_build(self.build_args("20261114-x")), 0)
@@ -434,6 +622,22 @@ class SupplementRunner(unittest.TestCase):
                              .read_text(encoding="utf-8"))
             self.assertEqual(req["_condition"]["issue"], 415)
             self.assertEqual(req["netlist"], "kickback-icdc.body.spice")
+
+    def test_probe_build_conflict_writes_nothing(self):
+        # a conflict on a later arm must not leave the earlier arms written
+        with tempfile.TemporaryDirectory(dir=kb.build_mod.SIM_DIR) as d:
+            series = Path(d)
+            conflicting = series / "vcm-m050" / "kickback-icdc.request.json"
+            conflicting.parent.mkdir(parents=True)
+            conflicting.write_bytes(b"tampered")
+            with mock.patch.object(rkb, "_series", return_value=series):
+                self.assertEqual(
+                    rkb.cmd_probe_build(self.build_args("20261114-x")), 1)
+            self.assertEqual(sorted(p.name for p in (series / "vcm-m050").iterdir()),
+                             ["kickback-icdc.request.json"])
+            self.assertFalse((series / "vcm-nom").exists())
+            self.assertFalse((series / "vcm-p050").exists())
+            self.assertEqual(conflicting.read_bytes(), b"tampered")
 
     def test_probe_compare_refuses_frozen_series_with_other_arms(self):
         with tempfile.TemporaryDirectory() as d:
@@ -457,25 +661,179 @@ class SupplementRunner(unittest.TestCase):
                          (kb.SERIES_DIR / "20261108-405-probe" / "comparison.md")
                          .read_text(encoding="utf-8"))
 
+    def test_frozen_415_comparison_reproduces_byte_for_byte(self):
+        series = kb.SERIES_DIR / "20261114-415-forceddc"
+        res = kb.probe_compare(series, arms=kb.PROBE_ARMS_415, issue=kb.SUPPLEMENT_ISSUE)
+        self.assertEqual(res["problems"], [])
+        self.assertEqual((json.dumps(res, indent=2) + "\n").encode("utf-8"),
+                         (series / "comparison.json").read_bytes())
+        self.assertEqual(kb.probe_render_markdown(res).encode("utf-8"),
+                         (series / "comparison.md").read_bytes())
+
 
 class Evidence(unittest.TestCase):
+    def test_cmd_build_conflict_writes_nothing(self):
+        # a conflict on a later condition must not leave earlier conditions
+        # written (the whole build is one preflighted batch)
+        with tempfile.TemporaryDirectory(dir=kb.build_mod.SIM_DIR) as d:
+            series = Path(d)
+            conflicting = series / "vcm-p050" / kb.BODY_NAME
+            conflicting.parent.mkdir(parents=True)
+            conflicting.write_bytes(b"tampered")
+            args = mock.Mock(series="s", condition=None)
+            with mock.patch.object(rkb, "_series", return_value=series):
+                self.assertEqual(rkb.cmd_build(args), 1)
+            self.assertEqual([p for p in series.rglob("*") if p.is_file()], [conflicting])
+            self.assertEqual(conflicting.read_bytes(), b"tampered")
+
     def test_build_is_append_only(self):
         with tempfile.TemporaryDirectory() as d:
             out = Path(d) / "vcm-nom"
-            kb.write_condition_inputs(NOM, out)
+            self.assertEqual(commit_condition_inputs(NOM, out)[0], 0)
             before = {p.name: p.read_bytes() for p in out.iterdir()}
-            kb.write_condition_inputs(NOM, out)  # identical rebuild: no-op
+            self.assertEqual(commit_condition_inputs(NOM, out)[0], 0)  # identical rebuild
             (out / kb.BODY_NAME).write_text("tampered", encoding="utf-8")
-            with self.assertRaises(kb.KickbackCmBandError):
-                kb.write_condition_inputs(NOM, out)
+            self.assertEqual(commit_condition_inputs(NOM, out)[0], 1)
             self.assertEqual((out / kb.BODY_NAME).read_text(), "tampered")
             self.assertEqual(set(before), {kb.BODY_NAME, "kickback.request.json"})
+
+    def test_commit_condition_inputs_refuses_dangling_symlink(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            out = root / "vcm-nom"
+            out.mkdir()
+            outside = root / "outside" / "stolen.spice"
+            (out / kb.BODY_NAME).symlink_to(outside)
+            self.assertEqual(commit_condition_inputs(NOM, out)[0], 1)
+            self.assertFalse(outside.exists())  # the symlink target was NOT created
+            self.assertEqual([p.name for p in out.iterdir()], [kb.BODY_NAME])
+
+    def test_commit_condition_inputs_refuses_directory_destination(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "vcm-nom"
+            (out / kb.BODY_NAME).mkdir(parents=True)
+            self.assertEqual(commit_condition_inputs(NOM, out)[0], 1)  # not IsADirectoryError
+            self.assertFalse((out / "kickback.request.json").exists())
+
+    def test_commit_probe_inputs_refuses_dangling_symlink(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            series = root / "series"
+            out = series / "vcm-m050"
+            out.mkdir(parents=True)
+            seed_probe_ref_body(series, M050)
+            outside = root / "outside" / "stolen.spice"
+            (out / kb.BODY_NAME).symlink_to(outside)
+            with mock.patch.object(kb, "SERIES_DIR", series):
+                self.assertEqual(commit_probe_inputs(M050, "repro", out)[0], 1)
+            self.assertFalse(outside.exists())
+            self.assertEqual([p.name for p in out.iterdir()], [kb.BODY_NAME])
+
+    def test_commit_probe_inputs_refuses_directory_destination(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d)
+            out = series / "vcm-m050"
+            (out / kb.BODY_NAME).mkdir(parents=True)
+            seed_probe_ref_body(series, M050)
+            with mock.patch.object(kb, "SERIES_DIR", series):
+                self.assertEqual(commit_probe_inputs(M050, "repro", out)[0], 1)
+            self.assertFalse((out / "kickback-repro.request.json").exists())
+
+    def test_commit_condition_inputs_refuses_non_directory_out_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "vcm-nom"
+            out.write_text("not a directory", encoding="utf-8")
+            rc, err = commit_condition_inputs(NOM, out)
+            self.assertEqual(rc, 1)
+            self.assertIn(f"{out}: exists and is not a directory", err)
+            self.assertEqual(out.read_text(encoding="utf-8"), "not a directory")
+            self.assertEqual([p.name for p in Path(d).iterdir()], ["vcm-nom"])
+
+    def test_commit_probe_inputs_refuses_non_directory_out_dir(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d)
+            out = series / "vcm-m050"
+            out.write_text("not a directory", encoding="utf-8")
+            seed_probe_ref_body(series, M050)
+            with mock.patch.object(kb, "SERIES_DIR", series):
+                rc, err = commit_probe_inputs(M050, "repro", out)
+            self.assertEqual(rc, 1)
+            self.assertIn(f"{out}: exists and is not a directory", err)
+            self.assertEqual(out.read_text(encoding="utf-8"), "not a directory")
+            self.assertEqual(sorted(p.name for p in series.iterdir()),
+                             sorted([kb.PROBE_REFERENCE_SERIES, "vcm-m050"]))
+
+    def test_commit_build_refuses_non_directory_parents_in_batch(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "vcm-m050").mkdir()
+            (root / "vcm-nom").write_text("x", encoding="utf-8")
+            (root / "vcm-p050").symlink_to(root / "vcm-m050")
+            planned = [(root / cond.name / name, data)
+                       for cond in kb.CONDITIONS for name, data in kb.input_bytes(cond).items()]
+            rc, err = commit_build_inputs(planned)
+            self.assertEqual(rc, 1)
+            for name in ("vcm-nom", "vcm-p050"):
+                self.assertIn(f"{root / name}: exists and is not a directory", err)
+            self.assertEqual(sorted(p.name for p in root.iterdir()),
+                             ["vcm-m050", "vcm-nom", "vcm-p050"])
+            self.assertEqual(list((root / "vcm-m050").iterdir()), [])
+
+    def test_commit_build_refuses_non_directory_ancestor(self):
+        for as_symlink in (False, True):
+            with self.subTest(symlink=as_symlink), tempfile.TemporaryDirectory() as d:
+                root = Path(d)
+                series = root / "series"
+                if as_symlink:
+                    series.symlink_to(root / "gone")
+                else:
+                    series.write_text("x", encoding="utf-8")
+                rc, err = commit_build_inputs([(series / "vcm-nom" / kb.BODY_NAME, b"body")])
+                self.assertEqual(rc, 1)
+                self.assertIn(f"{series}: exists and is not a directory", err)
+                self.assertFalse((root / "gone").exists())
+                self.assertEqual([p.name for p in root.iterdir()], ["series"])
+
+    def test_commit_follows_a_symlinked_ancestor(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "real").mkdir()
+            (root / "link").symlink_to(root / "real", target_is_directory=True)
+            self.assertEqual(commit_condition_inputs(NOM, root / "link" / "series" / "vcm-nom")[0],
+                             0)
+            written = root / "real" / "series" / "vcm-nom"
+            self.assertEqual(sorted(p.name for p in written.iterdir()),
+                             sorted(kb.input_bytes(NOM)))
+
+    def test_cmd_build_reports_non_directory_condition_dir(self):
+        with tempfile.TemporaryDirectory(dir=kb.build_mod.SIM_DIR) as d, \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            series = Path(d)
+            (series / "vcm-nom").write_text("x", encoding="utf-8")
+            args = mock.Mock(series="s", condition=None)
+            with mock.patch.object(rkb, "_series", return_value=series):
+                self.assertEqual(rkb.cmd_build(args), 1)
+            self.assertIn(f"{series / 'vcm-nom'}: exists and is not a directory", err.getvalue())
+            self.assertNotIn("Traceback", err.getvalue())
+            self.assertEqual([p.name for p in series.iterdir()], ["vcm-nom"])
+
+    def test_cmd_probe_build_reports_non_directory_condition_dir(self):
+        with tempfile.TemporaryDirectory(dir=kb.build_mod.SIM_DIR) as d, \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            series = Path(d)
+            (series / "vcm-nom").write_text("x", encoding="utf-8")
+            args = mock.Mock(series="20261114-x", condition=None, arm=None)
+            with mock.patch.object(rkb, "_series", return_value=series):
+                self.assertEqual(rkb.cmd_probe_build(args), 1)
+            self.assertIn(f"{series / 'vcm-nom'}: exists and is not a directory", err.getvalue())
+            self.assertNotIn("Traceback", err.getvalue())
+            self.assertEqual([p.name for p in series.iterdir()], ["vcm-nom"])
 
     def test_run_refuses_existing_envelope_and_completed_attempt(self):
         with tempfile.TemporaryDirectory() as d:
             series = Path(d)
             out = series / "vcm-nom"
-            kb.write_condition_inputs(NOM, out)
+            self.assertEqual(commit_condition_inputs(NOM, out)[0], 0)
             args = mock.Mock(series="s", condition="vcm-nom", skip_existing=False,
                              retry_refused=0, retry_wait=0, klt="klt", force=False)
             with mock.patch.object(rkb, "_series", return_value=series), \
@@ -501,7 +859,7 @@ class Evidence(unittest.TestCase):
             seed_probe_ref_body(series, NOM)
             out = series / NOM.name
             with mock.patch.object(kb, "SERIES_DIR", series):
-                kb.write_probe_inputs(NOM, arm, out)
+                self.assertEqual(commit_probe_inputs(NOM, arm, out)[0], 0)
             args = mock.Mock(series="s", condition=NOM.name, arm=arm, skip_existing=False,
                              retry_refused=2, retry_wait=5, klt="klt", force=False)
             with mock.patch.object(rkb, "_series", return_value=series), \
@@ -523,7 +881,7 @@ class Evidence(unittest.TestCase):
             seed_probe_ref_body(series, NOM)
             out = series / NOM.name
             with mock.patch.object(kb, "SERIES_DIR", series):
-                kb.write_probe_inputs(NOM, arm, out)
+                self.assertEqual(commit_probe_inputs(NOM, arm, out)[0], 0)
             args = mock.Mock(series="s", condition=NOM.name, arm=arm, skip_existing=False,
                              retry_refused=2, retry_wait=5, klt="klt", force=False)
             sleeps = []
@@ -543,7 +901,7 @@ class Evidence(unittest.TestCase):
             series = Path(d)
             for cond in kb.CONDITIONS:
                 out = series / cond.name
-                kb.write_condition_inputs(cond, out)
+                self.assertEqual(commit_condition_inputs(cond, out)[0], 0)
                 (out / "kickback.envelope.json").write_text(json.dumps(env_for(cond)))
             a = kb.compare_series(series)
             b = kb.compare_series(series)

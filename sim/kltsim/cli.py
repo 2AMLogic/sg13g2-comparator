@@ -32,6 +32,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from . import build as build_mod
@@ -42,6 +43,7 @@ from . import artifacts as artifacts_mod
 from . import grade as grade_mod
 from . import ibsweep as ibsweep_mod
 from . import sizesweep as sizesweep_mod
+from . import loadwidth as loadwidth_mod
 from . import noise_full as noise_full_mod
 from . import benches as benches_mod
 from .benches import ALL_BENCHES, BENCHES, FIXTURE_BENCHES
@@ -79,25 +81,73 @@ def _json_bytes(obj) -> bytes:
     return (json.dumps(obj, indent=2) + "\n").encode("utf-8")
 
 
-def _commit_planned(planned, args, label: str) -> bool:
-    """Write a helper command's precomputed inputs append-only (issue #105).
+def _commit_planned_paths(planned, force: bool, label: str,
+                          evidence: str | None = None) -> set[Path] | None:
+    """Write a precomputed input set append-only (issue #105).
 
     Every destination that exists must already hold exactly the proposed
     bytes, else nothing is written (an identical regeneration leaves bytes and
-    timestamps alone). ``--force`` keeps its explicit scratch contract and
-    overwrites. Returns False (after printing why) on a refusal.
+    timestamps alone). ``force`` keeps the explicit scratch contract and
+    overwrites. ``evidence`` names the append-only input class of a
+    ``--series`` driver (issue #543): the refusal is then the shared
+    artifacts contract's, instead of the bench-campaign builder's wording.
+    Returns the paths written, or None (after printing why) on a refusal.
     """
-    if getattr(args, "force", False):
+    if force:
         for path, data in planned:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
-        return True
+        return {path for path, _ in planned}
     try:
-        build_mod.commit_inputs(planned)
+        if evidence is None:
+            return set(build_mod.commit_inputs(planned))
+        return set(artifacts_mod.commit(
+            planned,
+            differs=f"exists and differs -- {evidence} is append-only; use a new --series",
+            dup="two different contents proposed for one input file"))
     except build_mod.BuildError as exc:
         print(f"{label}: {exc}", file=sys.stderr)
-        return False
-    return True
+        return None
+    except artifacts_mod.ArtifactConflict as exc:
+        print(f"{label}: {exc}", file=sys.stderr)
+        return None
+
+
+def _commit_planned(planned, args, label: str) -> bool:
+    """Write a helper command's precomputed inputs append-only (issue #105);
+    ``--force`` keeps its explicit scratch contract and overwrites. Returns
+    False (after printing why) on a refusal."""
+    return _commit_planned_paths(planned, getattr(args, "force", False), label) is not None
+
+
+def commit_build(label: str,
+                 planned: list[tuple[Path, bytes]] | Callable[[], list[tuple[Path, bytes]]],
+                 *, force: bool = False, evidence: str | None = None) -> int:
+    """Commit a ``build`` command's inputs and report every planned path.
+
+    ``planned`` is the (destination, bytes) list, or a zero-argument callable
+    returning it when the planning itself can refuse with ``BuildError`` (it
+    is then evaluated under the same guard). A refusal prints
+    ``<label>: <reason>`` to stderr and returns 1 with nothing written;
+    otherwise each path is reported as ``wrote`` (newly created) or
+    ``unchanged`` (already held exactly these bytes) and 0 is returned.
+    ``evidence`` names the append-only input class of a ``--series`` driver
+    (e.g. ``"campaign evidence"``): the commit then goes through the shared
+    artifacts contract with that wording instead of the bench-campaign
+    builder's (issue #543).
+    """
+    if callable(planned):
+        try:
+            planned = planned()
+        except build_mod.BuildError as exc:
+            print(f"{label}: {exc}", file=sys.stderr)
+            return 1
+    created = _commit_planned_paths(planned, force, label, evidence=evidence)
+    if created is None:
+        return 1
+    for path, _ in planned:
+        print(f"{'wrote' if path in created else 'unchanged'} {_rel(path)}")
+    return 0
 
 
 def cmd_build(args) -> int:
@@ -131,19 +181,7 @@ def cmd_build(args) -> int:
     if getattr(args, "screen", False):
         planned = [(path, sizesweep_mod.screen_request(data) if path.name.endswith(".request.json") else data)
                    for path, data in planned]
-    try:
-        created = set(build_mod.commit_inputs(planned))
-    except build_mod.BuildError as exc:
-        print(f"build: {exc}", file=sys.stderr)
-        return 1
-    for path, _ in planned:
-        verb = "wrote" if path in created else "unchanged"
-        try:
-            shown = path.relative_to(build_mod.REPO_ROOT)
-        except ValueError:  # a campaigns dir outside the repo (tests)
-            shown = path
-        print(f"{verb} {shown}")
-    return 0
+    return commit_build("build", planned)
 
 
 def cmd_smoke(args) -> int:
@@ -706,6 +744,31 @@ def cmd_sizesweep(args) -> int:
     return 0 if result["screen"] or result["full"] else 1
 
 
+def cmd_loadwidth_build(args) -> int:
+    """Issue #498: append-only write of every declared candidate's scr_
+    inputs (kickback + regeneration screens via the standard screening
+    rewrite, plus the three derived per-process transient-noise screen
+    requests), all carrying the candidate's XM5/XM6 geometry."""
+    out_dir = _campaign_dir(args.campaign)
+    planned = loadwidth_mod.plan_all_scr_inputs(out_dir)
+    return commit_build("loadwidth-build", planned, force=getattr(args, "force", False))
+
+
+def cmd_loadwidth_report(args) -> int:
+    """Issue #498: the Row 2 screen table (derived transient-noise requests,
+    18-point grid statistic via the full-grid grader path), the control
+    comparison, the fast-bench Target gates and the advance/eliminate
+    verdict. Append-only like every derived report."""
+    try:
+        result = loadwidth_mod.run(args.campaign, CAMPAIGNS_DIR, args.report_name,
+                                   density_path=args.density)
+    except (OSError, ValueError, build_mod.BuildError) as exc:
+        print(f"loadwidth-report: {exc}", file=sys.stderr)
+        return 1
+    print((CAMPAIGNS_DIR / args.campaign / f"{args.report_name}.md").read_text(encoding="utf-8"))
+    return 1 if result["screen_status"] == grade_mod.INCOMPLETE else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     default_klt = shutil.which("klt") or "klt"
     ap = argparse.ArgumentParser(prog="run_klt_corner_verification.py", description=__doc__,
@@ -799,6 +862,23 @@ def main(argv: list[str] | None = None) -> int:
     sz.add_argument("--report-name", default="sizesweep",
                     help="output stem; an existing different report is never overwritten")
     sz.set_defaults(func=cmd_sizesweep)
+
+    lwb = sub.add_parser("loadwidth-build",
+                         help="write the issue #498 PMOS load-width screen inputs (scr_* dirs)")
+    lwb.add_argument("--campaign", required=True)
+    lwb.add_argument("--force", action="store_true",
+                     help="scratch use only: overwrite instead of append-only commit")
+    lwb.set_defaults(func=cmd_loadwidth_build)
+
+    lwr = sub.add_parser("loadwidth-report",
+                         help="tabulate the issue #498 PMOS load-width screen and verdict")
+    lwr.add_argument("--campaign", required=True)
+    lwr.add_argument("--report-name", default="loadwidth",
+                     help="output stem; an existing different report is never overwritten")
+    lwr.add_argument("--density", type=Path, default=None, metavar="JSON",
+                     help="reduced-model density table for projections (defaults to the matching "
+                     "comparator-preamp-noise report, when available)")
+    lwr.set_defaults(func=cmd_loadwidth_report)
 
     g = sub.add_parser("grade", help="grade a campaign's committed envelopes")
     g.add_argument("--campaign", required=True)

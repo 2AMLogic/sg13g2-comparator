@@ -32,6 +32,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -131,16 +132,29 @@ def sh(args, cwd, env=None, check=True):
     return r
 
 
+def version_gate_passes(pin_version, returncode, output):
+    """True only if `klt --version` succeeded and reported exactly the pin.
+
+    The complete version token must equal the pin: a development build such as
+    ``0.9.2.dev111+g978f7464fae1`` contains the release string ``0.9.2`` but is
+    a different build and may lack flags the pinned release has.
+    """
+    if returncode != 0:
+        return False
+    m = re.fullmatch(r"klt\s+(\S+)", (output or "").strip())
+    return bool(m) and m.group(1) == pin_version
+
+
 def klt_matches_pin():
     import json
     # Read from the commit, not the working tree: this test itself runs in the
     # append-only job's sparse cone, which does not contain manifests/.
     pin = json.loads(sh(["git", "show", "HEAD:manifests/klt-pin.json"], ROOT).stdout)
     try:
-        out = sh(["klt", "--version"], ROOT, check=False).stdout
+        r = sh(["klt", "--version"], ROOT, check=False)
     except OSError:
         return False
-    return pin["klt_version"].split("+g")[-1][:12] in out
+    return version_gate_passes(pin["klt_version"], r.returncode, r.stdout)
 
 
 @unittest.skipIf(os.environ.get(NESTED), "nested run inside a sparse clone")
@@ -392,15 +406,26 @@ class SparseCones(unittest.TestCase):
     def test_netlist_job_inputs_are_in_its_cone(self):
         """Issue #224: the cone holds the generator, schematics, symbols, the
         committed netlist, imported harness modules, the PDK pin and the
-        provisioner. Runs the job's real check step only when a real xschem
-        and PDK are available (SKIPPED, never passed, otherwise; CI always
-        provisions both). A cone missing an input fails the real command."""
+        provisioner. Runs the job's real check step only when a real xschem,
+        the PDK and the pinned klt (issue #489: the generator drives
+        `klt netlist`) are available (SKIPPED, never passed, otherwise; CI
+        always provisions all three). The generator's own mocked unit tests
+        need none of them and always run. A cone missing an input fails the
+        real command."""
         job = self.jobs[NETLIST_JOB]
+        # issue #489: mocked-klt generator unit tests are a repo input of
+        # this job; they must pass inside its cone with no tools installed.
+        unittests = next(s for n, s in job["runs"] if "design/tests" in s)
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, job["checkout"])
+            r = sh(["bash", "-eu", "-c", unittests], dst, self._env(dst), check=False)
+            self.assertEqual(r.returncode, 0, f"generator unit tests failed in cone:\n{r.stdout[-3000:]}")
         check = next(s for n, s in job["runs"] if "netlist.py --check" in s)
         xs = shutil.which("xschem")
         pdk_root = os.environ.get("PDK_ROOT")
-        if not xs or not pdk_root:
-            self.skipTest("real xschem and PDK_ROOT not available (CI provisions both)")
+        if not xs or not pdk_root or not klt_matches_pin():
+            self.skipTest("real xschem, PDK_ROOT and the pinned klt not all "
+                          "available (CI provisions all three)")
         # same step as ci.yml, with the ambient xschem standing in for the
         # provisioned one (the provisioned-path assertion line is dropped)
         script = "\n".join(l for l in check.splitlines() if "command -v" not in l)
@@ -544,6 +569,39 @@ class SparseCones(unittest.TestCase):
             self.assertNotEqual(r2.returncode, 0, r2.stdout[-3000:])
             self.assertIn("F821", r2.stdout)
             self.assertIn("sim/device-mismatch-confirm/summarize_dvgs.py", r2.stdout)
+
+
+class KltPinGate(unittest.TestCase):
+    def test_exact_release_passes(self):
+        self.assertTrue(version_gate_passes("0.9.2", 0, "klt 0.9.2\n"))
+
+    def test_dev_build_of_same_release_fails(self):
+        self.assertFalse(version_gate_passes("0.9.2", 0, "klt 0.9.2.dev111+g978f7464fae1\n"))
+
+    def test_other_versions_fail(self):
+        for out in ("klt 0.9.3\n", "klt 0.9.20\n", "klt 10.9.2\n"):
+            self.assertFalse(version_gate_passes("0.9.2", 0, out), out)
+
+    def test_garbage_output_fails(self):
+        for out in ("", "command not found", "klt\n", "klt 0.9.2 extra\n"):
+            self.assertFalse(version_gate_passes("0.9.2", 0, out), out)
+
+    def test_commit_form_pin_requires_the_same_build(self):
+        pin = "0.9.2.dev111+g978f7464fae1"
+        self.assertTrue(version_gate_passes(pin, 0, f"klt {pin}\n"))
+        self.assertFalse(version_gate_passes(pin, 0, "klt 0.9.2.dev112+gabcdef012345\n"))
+
+    def test_failed_version_command_fails_even_with_matching_text(self):
+        self.assertFalse(version_gate_passes("0.9.2", 1, "klt 0.9.2\n"))
+
+    def test_missing_executable_fails(self):
+        # sh() runs with the module-level ENV (a copy captured at import), so
+        # patching os.environ would not remove klt from the subprocess PATH.
+        # Keep git resolvable: the pin is read via `git show` before the
+        # OSError branch, and an unresolvable git would error, not fail.
+        git_dir = os.path.dirname(shutil.which("git"))
+        with mock.patch.dict(ENV, {"PATH": git_dir}):
+            self.assertFalse(klt_matches_pin())
 
 
 class ShDiagnostics(unittest.TestCase):

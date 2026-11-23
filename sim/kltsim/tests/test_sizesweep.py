@@ -132,14 +132,15 @@ def _is_binding(c):
 
 
 def write_candidate(root: Path, name="x", geometry=None, mutate=None, geometry_by_bench=None,
-                    full_grid_request=False):
+                    full_grid_request=False, param_overrides=None):
     """Write scr_<name>/ with a self-consistent request/body/envelope/invocation
     chain per bench. ``mutate(bench_name, corners)`` edits the corner list."""
     sub = root / f"scr_{name}"
     sub.mkdir(parents=True)
     for bname, bench in BENCH_SPECS.items():
         geo = (geometry_by_bench or {}).get(bname, geometry)
-        body = build.compose_body(bench, build.BATCH_OSDI_DIR, geometry_overrides=geo)
+        body = build.compose_body(bench, build.BATCH_OSDI_DIR, geometry_overrides=geo,
+                                  param_overrides=param_overrides)
         (sub / f"{bname}.body.spice").write_text(body, encoding="utf-8")
         req = build.compose_request(bench, f"{bname}.body.spice", "batch")
         req_bytes = (json.dumps(req, indent=2) + "\n").encode()

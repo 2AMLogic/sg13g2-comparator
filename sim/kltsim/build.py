@@ -410,9 +410,13 @@ def commit_inputs(files: list[tuple[Path, bytes]]) -> list[Path]:
     Preflight first: every destination that already exists must hold exactly
     the proposed bytes, else the whole set is rejected (``BuildError`` naming
     each conflicting input and pointing at a new campaign ID) before ANY file
-    is touched. Identical files are reused without a write; absent files are
-    created with exclusive creation (``x``), so a concurrent writer cannot be
-    clobbered between check and write. Returns the paths newly created.
+    is touched. A destination directory that is not a real directory, or that
+    sits under a non-directory ancestor, is rejected the same way (issue
+    #523) rather than escaping as a bare ``FileExistsError`` /
+    ``NotADirectoryError``. Identical files are reused without a write;
+    absent files are created with exclusive creation (``x``), so a
+    concurrent writer cannot be clobbered between check and write. Returns
+    the paths newly created.
     """
     try:
         return artifacts_mod.commit(

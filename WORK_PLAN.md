@@ -1,7 +1,7 @@
 # Work plan
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-20T20:52:22Z (snapshot; compare against live labels)_
+_Generated: 2026-11-23T04:39:56Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
@@ -24,13 +24,15 @@ _None._
 
 Human-approved issues (`loom:issue`) ready for implementation — excluding held (`loom:blocked`/`loom:operator`/`loom:frozen`), `loom:building`, and issues closed by an open `loom:pr` PR (listed under Approved).
 
-_None._
+- **#543**: Remove test-only write_*_inputs wrappers in kltsim; finish commit_build move for kickback driver
 
 ## In Progress
 
 Issues currently being built (`loom:building`).
 
-- **#477**: Row 2 noise: split the front-end term (density vs decision bandwidth), then a bounded three-candidate design study and a drafting-only decision record
+- **#476**: Draft the decision record on adopting the 8 µm input pair for Row 4a kickback
+- **#487**: test_item5_spec_rows: pinned-klt skip guard uses a substring match, so a 0.9.2.dev build passes as the pin
+- **#497**: Measure the integration-node capacitance tradeoff between Row 2 noise and Row 3c delay
 
 ## PRs Awaiting Review
 
@@ -43,6 +45,7 @@ _None._
 PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified) — closes #160
+- **#492**: fix: require exact klt version match to run item 5 spec-row tests — closes #487
 
 ## Proposed
 
@@ -52,8 +55,8 @@ Issues carrying `loom:curated`.
 - **#160**: Draft decision record: input common-mode range row for the ratified spec *(curated)*
 - **#470**: Merge queue: add the merge_group trigger and adapt the PR-metadata gates *(curated)* *(held)*
 - **#476**: Draft the decision record on adopting the 8 µm input pair for Row 4a kickback *(curated)*
-- **#477**: Row 2 noise: split the front-end term (density vs decision bandwidth), then a bounded three-candidate design study and a drafting-only decision record *(curated)*
-- **#478**: Item 5: declare the DR-0002 row set under spec_rows and cite each row's envelope, replacing the single-envelope citation *(curated)*
+- **#487**: test_item5_spec_rows: pinned-klt skip guard uses a substring match, so a 0.9.2.dev build passes as the pin *(curated)*
+- **#497**: Measure the integration-node capacitance tradeoff between Row 2 noise and Row 3c delay *(curated)*
 
 ## Proposed (Architect / Hermit)
 
@@ -70,10 +73,10 @@ _None._
 | Operator merge-risk holds | 1 |
 | Very important | 0 |
 | Important | 1 |
-| Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 1 |
+| Ready (`loom:issue`) | 1 |
+| In Progress (`loom:building`) | 3 |
 | PRs awaiting review | 0 |
-| Approved PRs awaiting merge | 1 |
+| Approved PRs awaiting merge | 2 |
 | Curated | 6 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
