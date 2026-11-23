@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import argparse
+import contextlib
+import io
 import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+import run_decision_cm_band as rdcb  # noqa: E402
 from kltsim import build
 from kltsim import cmdecision as cd
 from kltsim.benches import REGENERATION
@@ -108,6 +116,65 @@ class AppendOnlyConditionInputs(unittest.TestCase):
                 self.write(tmp, "vcm-nom")
             self.assertFalse(target.exists())  # the symlink was not followed
             self.assertEqual([p.name for p in out.iterdir()], [cd.BODY_NAME])
+
+
+class BuildCommandTests(unittest.TestCase):
+    """Issue #540: ``run_decision_cm_band.cmd_build`` commits every selected
+    condition as ONE append-only batch through ``cli.commit_build``; a
+    conflict on any condition writes nothing."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.series = self.root / "s"
+        p = mock.patch.object(cd, "SERIES_DIR", self.root)
+        p.start()
+        self.addCleanup(p.stop)
+        self.args = argparse.Namespace(series="s", condition=None)
+
+    def build(self):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = rdcb.cmd_build(self.args)
+        return rc, out.getvalue(), err.getvalue()
+
+    def tree(self):
+        return {p.relative_to(self.root): p.read_bytes()
+                for p in self.root.rglob("*") if p.is_file()}
+
+    def test_fresh_build_writes_every_condition(self):
+        rc, out, err = self.build()
+        self.assertEqual((rc, err), (0, ""))
+        expected = sorted([cd.BODY_NAME, cd.REQUEST_NAME])
+        self.assertEqual(sorted(p.name for p in self.series.iterdir()),
+                         sorted(c.name for c in cd.CONDITIONS))
+        for cond in cd.CONDITIONS:
+            self.assertEqual(sorted(p.name for p in (self.series / cond.name).iterdir()),
+                             expected)
+        self.assertEqual([line.split()[0] for line in out.splitlines()],
+                         ["wrote"] * 2 * len(cd.CONDITIONS))
+
+    def test_identical_rebuild_is_byte_identical(self):
+        self.assertEqual(self.build()[0], 0)
+        before = self.tree()
+        rc, out, err = self.build()
+        self.assertEqual((rc, err), (0, ""))
+        self.assertEqual(self.tree(), before)
+        self.assertEqual([line.split()[0] for line in out.splitlines()],
+                         ["unchanged"] * 2 * len(cd.CONDITIONS))
+
+    def test_conflict_on_later_condition_writes_nothing(self):
+        earlier, later = cd.CONDITIONS[0], cd.CONDITIONS[1]
+        victim = self.series / later.name / cd.BODY_NAME
+        victim.parent.mkdir(parents=True)
+        victim.write_bytes(b"tampered\n")
+        rc, out, err = self.build()
+        self.assertEqual(rc, 1)
+        self.assertEqual(out, "")
+        self.assertIn("build: ", err)
+        self.assertEqual(self.tree(), {victim.relative_to(self.root): b"tampered\n"})
+        self.assertFalse((self.series / earlier.name).exists())
 
 
 class AnalysisTests(unittest.TestCase):
