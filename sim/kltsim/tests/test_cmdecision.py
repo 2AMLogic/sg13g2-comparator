@@ -253,6 +253,55 @@ class AnalysisTests(unittest.TestCase):
         a["corners"][3]["measurements"] = "bad"
         self.assertFalse(cd.reproduction(a, b)["bit_identical"])
 
+    def _null(self, env, name, only=None):
+        for i, c in enumerate(env["corners"]):
+            if only is None or i == only:
+                for m in c["measurements"]:
+                    if m["name"] == name:
+                        m["value"] = None
+
+    def test_reproduction_null_null_pair_not_compared(self):
+        # issue #532: a None/None pair is not evidence of identity
+        a, b = _env(), _env()
+        self._null(a, "td_od1_ns", only=7)
+        self._null(b, "td_od1_ns", only=7)
+        rep = cd.reproduction(a, b)
+        self.assertEqual(rep["values_compared"], 45 * 10 + 45 * len(cd.GATES) - 1)
+        self.assertEqual(rep["unmeasured"],
+                         [{"point": cd.key_label(cd.expected_keys()[7]),
+                           "measurement": "td_od1_ns"}])
+        self.assertEqual(rep["mismatches"], [])
+
+    def test_reproduction_null_on_one_side_is_mismatch(self):
+        a, b = _env(), _env()
+        self._null(a, "td_od1_ns", only=7)
+        rep = cd.reproduction(a, b)
+        self.assertFalse(rep["bit_identical"])
+        self.assertEqual(rep["values_compared"], 45 * 10 + 45 * len(cd.GATES) - 1)
+        self.assertEqual(rep["unmeasured"], [])
+        self.assertEqual(len(rep["mismatches"]), 1)
+        self.assertEqual(rep["mismatches"][0]["measurement"], "td_od1_ns")
+
+    def test_reproduction_all_null_values_not_bit_identical(self):
+        a, b = _env(), _env()
+        for env in (a, b):
+            for c in env["corners"]:
+                for m in c["measurements"]:
+                    m["value"] = None
+        rep = cd.reproduction(a, b)
+        self.assertEqual(rep["values_compared"], 0)
+        self.assertFalse(rep["bit_identical"])
+        self.assertEqual(len(rep["unmeasured"]), 45 * (10 + len(cd.GATES)))
+
+    def test_reproduction_markdown_names_unmeasured(self):
+        a, b = _env(), _env()
+        self._null(a, "td_od1_ns", only=7)
+        self._null(b, "td_od1_ns", only=7)
+        md = cd.render_markdown({"series": "s", "reference_campaign": "c", "conditions": {},
+                                 "reproduction": cd.reproduction(a, b)})
+        self.assertIn("1 unmeasured value pair", md)
+        self.assertNotIn("BIT-IDENTICAL", md)
+
     def test_vcm_probe_rejections(self):
         keys = cd.expected_keys()
         bad = [float("nan"), float("inf"), float("-inf"), True, False, None, "0.6", [0.6], {}]
