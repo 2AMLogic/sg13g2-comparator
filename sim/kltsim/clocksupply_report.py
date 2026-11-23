@@ -134,12 +134,6 @@ def compare_series(series_dir: Path) -> dict:
     return result
 
 
-def dumps_report(result: dict) -> str:
-    """Strict JSON (RFC 8259): ``allow_nan=False``; any stray non-finite
-    float is written as null rather than a NaN/Infinity token."""
-    return grade_mod.dumps_strict(result, indent=2) + "\n"
-
-
 def _f(x, nd=3) -> str:
     return "—" if x is None else (f"{x:.{nd}f}" if isinstance(x, float) else str(x))
 

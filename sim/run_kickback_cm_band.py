@@ -47,9 +47,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from kltsim import artifacts as artifacts_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
-from kltsim import grade as grade_mod  # noqa: E402
 from kltsim import kickback_cmband as kb  # noqa: E402
 
 #: The frozen issue #405 probe series: default arm set, and the one series
@@ -158,25 +156,11 @@ def cmd_smoke(args) -> int:
     return kcli.run_local_smoke(req, work, args.klt)
 
 
-def _publish_comparison(label: str, args, series: Path, payload: dict, md: str) -> int:
-    """Append-only comparison.{json,md} pair (issue #519): in place by default,
-    into a NEW citing namespace via --report-dir, or read-only via --check."""
-    report_dir, md = kcli.resolve_report_dir(args, series, md, payload, "series")
-    # Strict JSON (issue #250): a non-finite float is null, never a NaN token.
-    return artifacts_mod.publish(
-        label,
-        [(report_dir / "comparison.json",
-          (grade_mod.dumps_strict(payload, indent=2) + "\n").encode("utf-8")),
-         (report_dir / "comparison.md", md.encode("utf-8"))],
-        check_only=getattr(args, "check", False),
-        namespace_hint=kcli.SERIES_NAMESPACE_HINT,
-        require_dir=report_dir)
-
-
 def cmd_compare(args) -> int:
     series = _series(args)
     result = kb.compare_series(series, kb.REFERENCE_DIR)
-    rc = _publish_comparison("compare", args, series, result, kb.render_markdown(result))
+    rc = kcli.publish_report_pair("compare", args, series, "comparison", result,
+                                  kb.render_markdown(result), "series")
     if rc or getattr(args, "check", False):
         return rc
     r = result["reproduction"]
@@ -248,8 +232,8 @@ def cmd_probe_compare(args) -> int:
               "publish under a NEW --report-dir instead)", file=sys.stderr)
         return 1
     res = kb.probe_compare(series, arms=arms, issue=_issue_for(args.series))
-    rc = _publish_comparison("probe-compare", args, series, res,
-                             kb.probe_render_markdown(res))
+    rc = kcli.publish_report_pair("probe-compare", args, series, "comparison", res,
+                                  kb.probe_render_markdown(res), "series")
     if rc or getattr(args, "check", False):
         return rc
     for p in res["problems"]:
@@ -297,11 +281,7 @@ def main(argv: list[str] | None = None) -> int:
 
     g = sub.add_parser("compare")
     g.add_argument("--series", required=True)
-    g.add_argument("--report-dir", help="write comparison.{json,md} here instead of the "
-                   "series directory (new directory; cites the series; different existing "
-                   "files are never overwritten)")
-    g.add_argument("--check", action="store_true",
-                   help="read-only: exit 1 if the reports are missing, stale or unsafe")
+    kcli.add_report_pair_args(g, "comparison", "series")
     g.set_defaults(func=cmd_compare)
 
     pb = sub.add_parser("probe-build")
@@ -324,11 +304,7 @@ def main(argv: list[str] | None = None) -> int:
     pc.add_argument("--series", required=True)
     pc.add_argument("--arm", action="append", choices=list(kb.ALL_PROBE_ARMS),
                     help="arm set to compare (default: by series, see --help)")
-    pc.add_argument("--report-dir", help="write comparison.{json,md} here instead of the "
-                    "series directory (new directory; cites the series; different existing "
-                    "files are never overwritten)")
-    pc.add_argument("--check", action="store_true",
-                    help="read-only: exit 1 if the reports are missing, stale or unsafe")
+    kcli.add_report_pair_args(pc, "comparison", "series")
     pc.set_defaults(func=cmd_probe_compare)
 
     args = ap.parse_args(argv)

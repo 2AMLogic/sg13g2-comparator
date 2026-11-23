@@ -25,7 +25,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from kltsim import artifacts as artifacts_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import clocksupply as cs  # noqa: E402
 from kltsim import clocksupply_report as rep  # noqa: E402
@@ -90,16 +89,11 @@ def cmd_smoke(args) -> int:
 def cmd_compare(args) -> int:
     series = _series(args)
     result = rep.compare_series(series)
-    md = rep.render_markdown(result)
-    report_dir, md = kcli.resolve_report_dir(args, series, md, result, "series")
-    rc = artifacts_mod.publish(
-        "compare",
-        [(report_dir / "comparison.json", rep.dumps_report(result).encode("utf-8")),
-         (report_dir / "comparison.md", md.encode("utf-8"))],
-        check_only=args.check, namespace_hint=kcli.SERIES_NAMESPACE_HINT,
-        require_dir=report_dir)
-    if rc == 0 and not args.check:
-        print(f"comparison reports preserved under {report_dir}")
+    rc = kcli.publish_report_pair("compare", args, series, "comparison", result,
+                                  rep.render_markdown(result), "series")
+    if rc == 0 and not getattr(args, "check", False):
+        print(f"comparison reports preserved under "
+              f"{Path(getattr(args, 'report_dir', None) or series)}")
     return rc
 
 
@@ -139,11 +133,7 @@ def main(argv: list[str] | None = None) -> int:
 
     g = sub.add_parser("compare")
     g.add_argument("--series", required=True)
-    g.add_argument("--report-dir", help="write comparison.{json,md} here instead of the series "
-                   "directory (new directory; cites the series; different existing files are "
-                   "never overwritten)")
-    g.add_argument("--check", action="store_true",
-                   help="read-only: exit 1 if the reports are missing, stale or unsafe")
+    kcli.add_report_pair_args(g, "comparison", "series")
     g.set_defaults(func=cmd_compare)
 
     args = ap.parse_args(argv)

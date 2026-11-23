@@ -50,11 +50,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from kltsim import artifacts as artifacts_mod  # noqa: E402
 from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import cmband  # noqa: E402
-from kltsim import grade as grade_mod  # noqa: E402
 from kltsim.benches import OFFSET_MC, SUPPLIES_V, TEMPERATURES_C  # noqa: E402
 
 
@@ -198,17 +196,9 @@ def cmd_compare(args) -> int:
     series = _series(args)
     result = cmband.compare_series(series, reference_campaign=args.reference_campaign,
                                    harness_record=cmband.HARNESS_RECORD)
-    md = cmband.render_markdown(result)
-    report_dir, md = kcli.resolve_report_dir(args, series, md, result, "series")
-    # Strict JSON (issue #250): a non-finite float is null, never a NaN token.
-    rc = artifacts_mod.publish(
-        "compare",
-        [(report_dir / "comparison.json", (grade_mod.dumps_strict(result, indent=2) + "\n").encode("utf-8")),
-         (report_dir / "comparison.md", md.encode("utf-8"))],
-        check_only=args.check,
-        namespace_hint=kcli.SERIES_NAMESPACE_HINT,
-        require_dir=report_dir)
-    if rc or args.check:
+    rc = kcli.publish_report_pair("compare", args, series, "comparison", result,
+                                  cmband.render_markdown(result), "series")
+    if rc or getattr(args, "check", False):
         return rc
     for name, c in result["conditions"].items():
         t = c["three_sigma_mv"]
@@ -256,17 +246,10 @@ def cmd_supplement_run(args) -> int:
 def cmd_supplement_report(args) -> int:
     series = _series(args)
     result = cmband.compare_supplement(series, parent_campaign=args.parent)
-    md = cmband.render_supplement_markdown(result)
-    report_dir, md = kcli.resolve_report_dir(args, series, md, result, "series")
-    rc = artifacts_mod.publish(
-        "supplement-report",
-        [(report_dir / "supplement-report.json",
-          (json.dumps(result, indent=2) + "\n").encode("utf-8")),
-         (report_dir / "supplement-report.md", md.encode("utf-8"))],
-        check_only=args.check,
-        namespace_hint=kcli.SERIES_NAMESPACE_HINT,
-        require_dir=report_dir)
-    if rc or args.check:
+    rc = kcli.publish_report_pair("supplement-report", args, series, "supplement-report",
+                                  result, cmband.render_supplement_markdown(result),
+                                  "series")
+    if rc or getattr(args, "check", False):
         return rc
     c = result["conclusion"]
     print(f"targets complete: {sum(1 for t in c['targets_complete'] if t['valid'])}"
@@ -345,11 +328,7 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("compare")
     g.add_argument("--series", required=True)
     g.add_argument("--reference-campaign", default=cmband.REFERENCE_CAMPAIGN)
-    g.add_argument("--report-dir", help="write comparison.{json,md} here instead of the series "
-                   "directory (new directory; cites the series; different existing files are "
-                   "never overwritten)")
-    g.add_argument("--check", action="store_true",
-                   help="read-only: exit 1 if the reports are missing, stale or unsafe")
+    kcli.add_report_pair_args(g, "comparison", "series")
     g.set_defaults(func=cmd_compare)
 
     sb = sub.add_parser("supplement-build")
@@ -366,11 +345,7 @@ def main(argv: list[str] | None = None) -> int:
     sg = sub.add_parser("supplement-report")
     sg.add_argument("--series", required=True)
     sg.add_argument("--parent", default=cmband.SUPPLEMENT_PARENT)
-    sg.add_argument("--report-dir", help="write supplement-report.{json,md} here instead "
-                   "of the series directory (new directory; cites the series; different "
-                   "existing files are never overwritten)")
-    sg.add_argument("--check", action="store_true",
-                    help="read-only: exit 1 if the reports are missing, stale or unsafe")
+    kcli.add_report_pair_args(sg, "supplement-report", "series")
     sg.set_defaults(func=cmd_supplement_report)
 
     args = ap.parse_args(argv)

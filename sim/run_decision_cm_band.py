@@ -17,14 +17,12 @@ See sim/kltsim/cmdecision.py and sim/comparator-decision-cm-band/README.md.
 from __future__ import annotations
 
 import argparse
-import json
 import shutil
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from kltsim import artifacts as artifacts_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import cmdecision as cd  # noqa: E402
 
@@ -64,16 +62,9 @@ def cmd_run(args) -> int:
 def cmd_compare(args) -> int:
     series = _series(args)
     result = cd.compare_series(series, reference_campaign=args.reference_campaign)
-    md = cd.render_markdown(result)
-    report_dir, md = kcli.resolve_report_dir(args, series, md, result, "series")
-    rc = artifacts_mod.publish(
-        "compare",
-        [(report_dir / "comparison.json", (json.dumps(result, indent=2) + "\n").encode("utf-8")),
-         (report_dir / "comparison.md", md.encode("utf-8"))],
-        check_only=args.check,
-        namespace_hint=kcli.SERIES_NAMESPACE_HINT,
-        require_dir=report_dir)
-    if rc or args.check:
+    rc = kcli.publish_report_pair("compare", args, series, "comparison", result,
+                                  cd.render_markdown(result), "series")
+    if rc or getattr(args, "check", False):
         return rc
     for name, c in result["conditions"].items():
         if c.get("missing"):
@@ -114,11 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("compare")
     g.add_argument("--series", required=True)
     g.add_argument("--reference-campaign", default=cd.REFERENCE_CAMPAIGN)
-    g.add_argument("--report-dir", help="write comparison.{json,md} here instead of the series "
-                   "directory (new directory; cites the series; different existing files are "
-                   "never overwritten)")
-    g.add_argument("--check", action="store_true",
-                   help="read-only: exit 1 if the reports are missing, stale or unsafe")
+    kcli.add_report_pair_args(g, "comparison", "series")
     g.set_defaults(func=cmd_compare)
     args = ap.parse_args(argv)
     return args.func(args)

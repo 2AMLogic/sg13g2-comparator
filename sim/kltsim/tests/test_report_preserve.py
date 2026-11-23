@@ -4,8 +4,10 @@ Only analysis/rendering is mocked; every test drives the public CLI entry
 points against a temporary directory. No simulator, no network.
 """
 
+import argparse
 import contextlib
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -32,11 +34,13 @@ SIDE = {"grade": ("grading.json", "grading.md"),
         "noise": ("noise_full.json", "noise_full.md"),
         "clock": ("comparison.json", "comparison.md"),
         "offset": ("comparison.json", "comparison.md"),
+        "offset-supplement": ("supplement-report.json", "supplement-report.md"),
         "decision": ("comparison.json", "comparison.md"),
         "kickback": ("comparison.json", "comparison.md"),
         "kickback-probe": ("comparison.json", "comparison.md"),
         "ibsweep": ("ibsweep.json", "ibsweep.md")}
 SERIES_RUNNERS = {"clock": (clock, "compare"), "offset": (offset, "compare"),
+                  "offset-supplement": (offset, "supplement-report"),
                   "decision": (decision, "compare"),
                   "kickback": (kickback, "compare"),
                   "kickback-probe": (kickback, "probe-compare")}
@@ -75,6 +79,15 @@ class Harness(unittest.TestCase):
             stack.enter_context(mock.patch.object(
                 mod, "compare_series", lambda d, **kw: {**self.result, "conditions": {}}))
             stack.enter_context(mock.patch.object(mod, "render_markdown", lambda r: self.md))
+        stack.enter_context(mock.patch.object(
+            cmband, "compare_supplement",
+            lambda d, **kw: {**self.result, "conditions": {},
+                             "conclusion": {"targets_complete": [], "targets_expected": 0,
+                                            "pairs_identical": 0, "pairs_compared": 0,
+                                            "max_abs_delta_mv": None},
+                             "populations": [], "missing_envelopes": []}))
+        stack.enter_context(mock.patch.object(
+            cmband, "render_supplement_markdown", lambda r: self.md))
         stack.enter_context(mock.patch.object(kb, "SERIES_DIR", self.campaigns))
         stack.enter_context(mock.patch.object(
             kb, "compare_series",
@@ -201,6 +214,20 @@ class _Cases:
         self.assertEqual(rc, 1)
         self.assertIn("not a regular file", err)
 
+    def test_nonfinite_floats_are_null_never_tokens(self):
+        # Issue #250/#546: every derived-report writer serializes through
+        # grade_mod.dumps_strict, so NaN/Infinity become null in the
+        # published JSON, never literal tokens.
+        self.result = {**self.result, "nan": float("nan"), "inf": float("inf")}
+        rc, _, _ = self.run_cmd()
+        self.assertEqual(rc, 0)
+        text = (self.src / self.names[0]).read_text(encoding="utf-8")
+        self.assertNotIn("NaN", text)
+        self.assertNotIn("Infinity", text)
+        parsed = json.loads(text, parse_constant=lambda c: self.fail(c))
+        self.assertIsNone(parsed["nan"])
+        self.assertIsNone(parsed["inf"])
+
     def test_report_dir_publishes_changed_analysis_and_keeps_original(self):
         self.run_cmd()
         before = self.snapshot(self.src)
@@ -285,6 +312,22 @@ class KickbackProbeTest(_Cases, Harness):
 
 class IbsweepTest(_Cases, Harness):
     kind = "ibsweep"
+
+
+class MinimalNamespaceTest(unittest.TestCase):
+    """Issue #546: the shared publish helper reads ``check`` and ``report_dir``
+    defensively, so a programmatic minimal ``argparse.Namespace`` works."""
+
+    def test_publish_report_pair_without_check_attribute(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = Path(d) / "src"
+            src.mkdir()
+            rc = cli.publish_report_pair(
+                "compare", argparse.Namespace(report_dir=None), src, "comparison",
+                {"series": "S", "v": 1}, "# md\n", "series")
+            self.assertEqual(rc, 0)
+            self.assertEqual({p.name for p in src.iterdir()},
+                             {"comparison.json", "comparison.md"})
 
 
 class WriterTest(unittest.TestCase):
