@@ -15,7 +15,6 @@ import sys
 from pathlib import Path
 
 DELAYS = {"td_a": "50 mV overdrive", "td_b": "1 mV overdrive", "td_c": "0.1 mV overdrive"}
-STATE = {"da": "50 mV", "db": "1 mV", "dc": "0.1 mV"}
 
 
 def fmt(v, unit=1e-9):

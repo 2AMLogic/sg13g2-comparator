@@ -251,10 +251,6 @@ CIRCUITS = {"regen": regeneration_circuit, "offset": offset_circuit}
 BASE_BENCH = {"regen": REGENERATION, "offset": OFFSET_MC}
 
 
-def tag(kind: str) -> str:
-    return f"{kind}"
-
-
 # --------------------------------------------------------------------------- #
 # body + request
 # --------------------------------------------------------------------------- #

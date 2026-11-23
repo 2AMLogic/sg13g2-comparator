@@ -67,8 +67,6 @@ ROW3 = {
 }
 GATES = ["dout_od50_first", "dout_od1_first", "dout_od01_first",
          "dout_od50_end", "dout_od1_end", "dout_od01_end"]
-REPORTED = ("td_od50_ns", "td_od1_ns", "td_od01_ns", "tau_ps", "resolve_decades", "p_avg_uw")
-EXPECTED_POINTS = 45
 
 
 class DecisionCmError(RuntimeError):
