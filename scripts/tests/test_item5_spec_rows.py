@@ -29,11 +29,13 @@ input below. No simulation is ever run.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "manifests" / "sg13g2-comparator.json"
@@ -58,7 +60,64 @@ def _pinned_klt():
                                  check=True).stdout
     except (subprocess.CalledProcessError, OSError, ValueError):
         return None
-    return exe if pin["klt_version"] in version else None
+    match = re.fullmatch(r"klt\s+(\S+)", version.strip())
+    return exe if match and match.group(1) == pin["klt_version"] else None
+
+
+class PinnedKltVersionGate(unittest.TestCase):
+    """_pinned_klt() gates on an exact klt --version match (issue #487).
+
+    A dev build of the pinned release must skip (its grading rules differ
+    from the release the report was frozen with), and only the full pinned
+    version string -- release or dev form -- may run the item 5 tests.
+    """
+
+    @staticmethod
+    def _committed_pin():
+        proc = subprocess.run(
+            ["git", "show", "HEAD:manifests/klt-pin.json"], cwd=ROOT,
+            capture_output=True, text=True, check=True)
+        return json.loads(proc.stdout)["klt_version"]
+
+    FAKE_KLT = "/nonexistent/klt-stub"
+
+    def _pinned_with(self, version_output):
+        """Run _pinned_klt() with ``klt --version`` answered by a stub.
+
+        The version subprocess is stubbed in-process (no shell script on
+        disk), so the comparison runs even where the temporary directory is
+        mounted noexec. Other subprocess calls (git show) pass through.
+        """
+        real_run = subprocess.run
+
+        def fake_run(cmd, *args, **kwargs):
+            if list(cmd) == [self.FAKE_KLT, "--version"]:
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout=version_output, stderr="")
+            return real_run(cmd, *args, **kwargs)
+
+        with mock.patch.dict(os.environ, {"KLT_BIN": self.FAKE_KLT}), \
+                mock.patch.object(subprocess, "run", side_effect=fake_run):
+            return _pinned_klt()
+
+    def test_exact_pin_match_returns_exe(self):
+        pin = self._committed_pin()
+        self.assertEqual(self._pinned_with("klt " + pin), self.FAKE_KLT)
+
+    def test_dev_build_of_pinned_release_skips(self):
+        pin = self._committed_pin()
+        outcome = self._pinned_with(
+            "klt " + pin + ".dev1029+g76f47afa48f1")
+        self.assertIsNone(outcome)
+
+    def test_extra_tokens_after_version_skip(self):
+        pin = self._committed_pin()
+        self.assertIsNone(self._pinned_with("klt " + pin + " extra tokens"))
+
+    def test_trailing_whitespace_still_matches(self):
+        pin = self._committed_pin()
+        self.assertEqual(
+            self._pinned_with("klt " + pin + "\n\n   "), self.FAKE_KLT)
 
 
 def _input_hash(rel):
