@@ -798,7 +798,14 @@ def probe_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS,
     envelope of the same condition at the same PVT key. ``arms`` is the arm set
     to look for: a listed arm without an envelope is a problem, so a series is
     only ever compared against its own arm set (the #405 probe default; the
-    #415 supplement passes PROBE_ARMS_415)."""
+    #415 supplement passes PROBE_ARMS_415).
+
+    An original card whose value is ``None`` on either side is not evidence of
+    equality (issue #535): it is excluded from ``differs_from_165`` and listed
+    in ``unmeasured_on_original_cards`` (emitted only when non-empty, so the
+    committed comparisons reproduce byte-identically).
+    ``equals_165_on_original_cards`` requires every original card measured
+    (non-None) on both sides, equal, and at least one original card present."""
     ref_root = SERIES_DIR / PROBE_REFERENCE_SERIES
     out: dict = {"issue": issue, "series": series.name,
                  "reference_series": PROBE_REFERENCE_SERIES, "points": [], "arms": {},
@@ -831,15 +838,24 @@ def probe_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS,
                     continue
                 m = _meas_map(c)
                 orig = [n for n in ref_m]
-                diffs = [n for n in orig if (m.get(n) or {}).get("value") != ref_m[n].get("value")]
-                row["arms"][arm] = {
+                unmeasured = [n for n in orig
+                              if (m.get(n) or {}).get("value") is None
+                              or ref_m[n].get("value") is None]
+                measured = [n for n in orig if n not in set(unmeasured)]
+                diffs = [n for n in measured
+                         if (m.get(n) or {}).get("value") != ref_m[n].get("value")]
+                arm_row = {
                     "present": True, "corner_status": c.get("status"),
                     "corner_id": c.get("corner_id"),
                     "values": {n: x.get("value") for n, x in m.items()},
                     "statuses": {n: x.get("status") for n, x in m.items()
                                  if x.get("status") not in (None, "pass")},
-                    "equals_165_on_original_cards": not diffs and bool(orig),
+                    "equals_165_on_original_cards": not diffs and not unmeasured
+                    and bool(measured),
                     "differs_from_165": diffs}
+                if unmeasured:
+                    arm_row["unmeasured_on_original_cards"] = unmeasured
+                row["arms"][arm] = arm_row
             out["points"].append(row)
     return out
 
@@ -868,9 +884,13 @@ def probe_render_markdown(res: dict) -> str:
           "|---|---|---|---|---|"]
     for r in res["points"]:
         for arm, a in r["arms"].items():
-            if a.get("present"):
-                o.append(f"| `{r['condition']}` | {r['key']} | {arm} | "
-                         f"{a['equals_165_on_original_cards']} | {', '.join(a['differs_from_165']) or '-'} |")
+            if not a.get("present"):
+                continue
+            unm = a.get("unmeasured_on_original_cards") or []
+            o.append(f"| `{r['condition']}` | {r['key']} | {arm} | "
+                     f"{a['equals_165_on_original_cards']} | "
+                     f"{', '.join(a['differs_from_165']) or '-'}"
+                     + (f"; unmeasured: {', '.join(unm)}" if unm else "") + " |")
     o += ["", "## Decision gates and per-branch outputs", "",
           "| condition | point | arm | " + " | ".join(PROBE_GATES) + " | b dp/dn @55n | c dp/dn @55n |",
           "|---|---|---|---|---|---|---|---|---|"]
