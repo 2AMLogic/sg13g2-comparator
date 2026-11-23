@@ -676,15 +676,17 @@ def publish_report_pair(label: str, args, source: Path, stem: str, result: dict,
         require_dir=report_dir)
 
 
-def add_report_pair_args(parser, stem: str, kind: str) -> None:
+def add_report_pair_args(parser, stem: str, kind: str, cite: bool = True) -> None:
     """The shared ``--report-dir`` / ``--check`` flags of a derived-report
     subcommand (issue #546): ``stem`` names the ``stem.{json,md}`` pair and
-    ``kind`` the cited source directory (``campaign`` or ``series``)."""
+    ``kind`` the cited source directory (``campaign`` or ``series``); ``cite``
+    is False for a writer that publishes without a provenance line (``noise-full``,
+    issue #423), so its help does not claim a citation."""
     parser.add_argument(
         "--report-dir",
         help=f"write {stem}.{{json,md}} here instead of the {kind} directory (new "
-             f"directory; cites the {kind}; different existing files are never "
-             "overwritten)")
+             f"directory; {f'cites the {kind}; ' if cite else ''}different existing files "
+             "are never overwritten)")
     parser.add_argument("--check", action="store_true",
                         help="read-only: exit 1 if the reports are missing, stale or unsafe")
 
@@ -911,7 +913,7 @@ def main(argv: list[str] | None = None) -> int:
 
     nf = sub.add_parser("noise-full", help="issue #81: analyse the tn_full_* configurations of a campaign")
     nf.add_argument("--campaign", required=True)
-    add_report_pair_args(nf, "noise_full", "campaign")
+    add_report_pair_args(nf, "noise_full", "campaign", cite=False)
     nf.set_defaults(func=cmd_noise_full)
 
     args = ap.parse_args(argv)

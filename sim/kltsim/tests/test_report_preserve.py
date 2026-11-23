@@ -283,6 +283,10 @@ class DecisionCmBandTest(_Cases, Harness):
     kind = "decision"
 
 
+class OffsetSupplementTest(_Cases, Harness):
+    kind = "offset-supplement"
+
+
 class KickbackTest(_Cases, Harness):
     kind = "kickback"
 
