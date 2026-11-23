@@ -26,7 +26,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from kltsim import artifacts as artifacts_mod  # noqa: E402
-from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import clocksupply as cs  # noqa: E402
 from kltsim import clocksupply_report as rep  # noqa: E402
@@ -47,14 +46,11 @@ def _kinds(args):
 
 
 def cmd_build(args) -> int:
-    files = []
+    files: list[tuple[Path, bytes]] = []
     for c in _conds(args):
         for kind in _kinds(args):
-            files += cs.write_inputs(kind, c, _series(args) / c.name)
-    created = build_mod.commit_inputs(files)
-    for p in created:
-        print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
-    return 0
+            files += cs.plan_inputs(kind, c, _series(args) / c.name)
+    return kcli.commit_build("build", files)
 
 
 def cmd_run(args) -> int:

@@ -32,6 +32,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from . import build as build_mod
@@ -80,25 +81,58 @@ def _json_bytes(obj) -> bytes:
     return (json.dumps(obj, indent=2) + "\n").encode("utf-8")
 
 
-def _commit_planned(planned, args, label: str) -> bool:
-    """Write a helper command's precomputed inputs append-only (issue #105).
+def _commit_planned_paths(planned, force: bool, label: str) -> set[Path] | None:
+    """Write a precomputed input set append-only (issue #105).
 
     Every destination that exists must already hold exactly the proposed
     bytes, else nothing is written (an identical regeneration leaves bytes and
-    timestamps alone). ``--force`` keeps its explicit scratch contract and
-    overwrites. Returns False (after printing why) on a refusal.
+    timestamps alone). ``force`` keeps the explicit scratch contract and
+    overwrites. Returns the paths written, or None (after printing why) on a
+    refusal.
     """
-    if getattr(args, "force", False):
+    if force:
         for path, data in planned:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
-        return True
+        return {path for path, _ in planned}
     try:
-        build_mod.commit_inputs(planned)
+        return set(build_mod.commit_inputs(planned))
     except build_mod.BuildError as exc:
         print(f"{label}: {exc}", file=sys.stderr)
-        return False
-    return True
+        return None
+
+
+def _commit_planned(planned, args, label: str) -> bool:
+    """Write a helper command's precomputed inputs append-only (issue #105);
+    ``--force`` keeps its explicit scratch contract and overwrites. Returns
+    False (after printing why) on a refusal."""
+    return _commit_planned_paths(planned, getattr(args, "force", False), label) is not None
+
+
+def commit_build(label: str,
+                 planned: list[tuple[Path, bytes]] | Callable[[], list[tuple[Path, bytes]]],
+                 *, force: bool = False) -> int:
+    """Commit a ``build`` command's inputs and report every planned path.
+
+    ``planned`` is the (destination, bytes) list, or a zero-argument callable
+    returning it when the planning itself can refuse with ``BuildError`` (it
+    is then evaluated under the same guard). A refusal prints
+    ``<label>: <reason>`` to stderr and returns 1 with nothing written;
+    otherwise each path is reported as ``wrote`` (newly created) or
+    ``unchanged`` (already held exactly these bytes) and 0 is returned.
+    """
+    if callable(planned):
+        try:
+            planned = planned()
+        except build_mod.BuildError as exc:
+            print(f"{label}: {exc}", file=sys.stderr)
+            return 1
+    created = _commit_planned_paths(planned, force, label)
+    if created is None:
+        return 1
+    for path, _ in planned:
+        print(f"{'wrote' if path in created else 'unchanged'} {_rel(path)}")
+    return 0
 
 
 def cmd_build(args) -> int:
@@ -132,19 +166,7 @@ def cmd_build(args) -> int:
     if getattr(args, "screen", False):
         planned = [(path, sizesweep_mod.screen_request(data) if path.name.endswith(".request.json") else data)
                    for path, data in planned]
-    try:
-        created = set(build_mod.commit_inputs(planned))
-    except build_mod.BuildError as exc:
-        print(f"build: {exc}", file=sys.stderr)
-        return 1
-    for path, _ in planned:
-        verb = "wrote" if path in created else "unchanged"
-        try:
-            shown = path.relative_to(build_mod.REPO_ROOT)
-        except ValueError:  # a campaigns dir outside the repo (tests)
-            shown = path
-        print(f"{verb} {shown}")
-    return 0
+    return commit_build("build", planned)
 
 
 def cmd_smoke(args) -> int:
@@ -714,15 +736,7 @@ def cmd_loadwidth_build(args) -> int:
     requests), all carrying the candidate's XM5/XM6 geometry."""
     out_dir = _campaign_dir(args.campaign)
     planned = loadwidth_mod.plan_all_scr_inputs(out_dir)
-    if not _commit_planned(planned, args, "loadwidth-build"):
-        return 1
-    for path, _data in planned:
-        try:
-            shown = path.relative_to(build_mod.REPO_ROOT)
-        except ValueError:
-            shown = path
-        print(f"wrote {shown}")
-    return 0
+    return commit_build("loadwidth-build", planned, force=getattr(args, "force", False))
 
 
 def cmd_loadwidth_report(args) -> int:

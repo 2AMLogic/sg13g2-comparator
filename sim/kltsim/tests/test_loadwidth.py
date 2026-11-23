@@ -11,6 +11,7 @@ reads the committed archived grading record the study compares against.
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import hashlib
 import io
@@ -369,6 +370,64 @@ class GateTests(unittest.TestCase):
         density = {"points": {"tt": {"density_nv_rthz": 33.76}}}
         self.assertEqual(loadwidth._tt_density(density), 33.76)
         self.assertEqual(loadwidth._tt_density({}), float("inf"))
+
+
+class BuildCommandTests(unittest.TestCase):
+    """Issue #538: ``loadwidth-build`` reports ``wrote`` only for the files it
+    created, ``unchanged`` for ones an identical rebuild leaves alone, and a
+    conflict as exit 1 with nothing written."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        p = mock.patch.object(cli, "CAMPAIGNS_DIR", self.root)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def build(self, force=False):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = cli.cmd_loadwidth_build(argparse.Namespace(campaign="study", force=force))
+        return rc, out.getvalue(), err.getvalue()
+
+    def files(self):
+        return sorted(p for p in (self.root / "study").rglob("*") if p.is_file())
+
+    def test_fresh_build_reports_wrote_for_every_file(self):
+        rc, out, err = self.build()
+        self.assertEqual((rc, err), (0, ""))
+        self.assertEqual(sorted(out.splitlines()), [f"wrote {p}" for p in self.files()])
+
+    def test_identical_rebuild_reports_unchanged(self):
+        self.build()
+        rc, out, err = self.build()
+        self.assertEqual((rc, err), (0, ""))
+        self.assertEqual(sorted(out.splitlines()), [f"unchanged {p}" for p in self.files()])
+
+    def test_conflict_exits_1_and_writes_nothing(self):
+        self.build()
+        files = self.files()
+        victim, absent = files[0], files[-1]
+        victim.write_bytes(b"tampered")
+        absent.unlink()
+        rc, out, err = self.build()
+        self.assertEqual(rc, 1)
+        self.assertEqual(out, "")
+        self.assertIn(str(victim), err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(victim.read_bytes(), b"tampered")
+        self.assertFalse(absent.exists())  # nothing written on a refusal
+
+    def test_force_rewrites_every_file_and_reports_wrote(self):
+        self.build()
+        victim = self.files()[0]
+        original = victim.read_bytes()
+        victim.write_bytes(b"tampered")
+        rc, out, err = self.build(force=True)
+        self.assertEqual((rc, err), (0, ""))
+        self.assertEqual(victim.read_bytes(), original)
+        self.assertEqual(sorted(out.splitlines()), [f"wrote {p}" for p in self.files()])
 
 
 if __name__ == "__main__":
