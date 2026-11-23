@@ -1,7 +1,7 @@
 # Work plan
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-22T08:11:04Z (snapshot; compare against live labels)_
+_Generated: 2026-11-23T04:39:56Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
@@ -24,8 +24,7 @@ _None._
 
 Human-approved issues (`loom:issue`) ready for implementation — excluding held (`loom:blocked`/`loom:operator`/`loom:frozen`), `loom:building`, and issues closed by an open `loom:pr` PR (listed under Approved).
 
-- **#489**: Replace raw xschem call in design/netlist.py with klt netlist — changes requested on PR #500
-- **#495**: Remove the empty-measurement fallback from the memory determinism repeat — changes requested on PR #499
+- **#543**: Remove test-only write_*_inputs wrappers in kltsim; finish commit_build move for kickback driver
 
 ## In Progress
 
@@ -57,7 +56,6 @@ Issues carrying `loom:curated`.
 - **#470**: Merge queue: add the merge_group trigger and adapt the PR-metadata gates *(curated)* *(held)*
 - **#476**: Draft the decision record on adopting the 8 µm input pair for Row 4a kickback *(curated)*
 - **#487**: test_item5_spec_rows: pinned-klt skip guard uses a substring match, so a 0.9.2.dev build passes as the pin *(curated)*
-- **#489**: Replace raw xschem call in design/netlist.py with klt netlist *(curated)*
 - **#497**: Measure the integration-node capacitance tradeoff between Row 2 noise and Row 3c delay *(curated)*
 
 ## Proposed (Architect / Hermit)
@@ -75,11 +73,11 @@ _None._
 | Operator merge-risk holds | 1 |
 | Very important | 0 |
 | Important | 1 |
-| Ready (`loom:issue`) | 2 |
+| Ready (`loom:issue`) | 1 |
 | In Progress (`loom:building`) | 3 |
 | PRs awaiting review | 0 |
 | Approved PRs awaiting merge | 2 |
-| Curated | 7 |
+| Curated | 6 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->
