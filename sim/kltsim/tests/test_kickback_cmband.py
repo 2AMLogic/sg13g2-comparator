@@ -439,7 +439,10 @@ class SupplementRunner(unittest.TestCase):
 
     @staticmethod
     def build_args(series, arm=None):
-        return mock.Mock(series=series, condition=None, arm=arm)
+        # report_dir/check are explicit (never Mock-synthesized) so the
+        # in-place frozen-series guard sees a real in-place probe-compare.
+        return mock.Mock(series=series, condition=None, arm=arm,
+                         report_dir=None, check=False)
 
     def test_default_arms_by_series(self):
         self.assertEqual(rkb._arms_for("20261108-405-probe", None), kb.PROBE_ARMS)
