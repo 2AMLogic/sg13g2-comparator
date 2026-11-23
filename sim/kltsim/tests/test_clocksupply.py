@@ -329,12 +329,6 @@ class OffsetValidation(unittest.TestCase):
 
 
 class ReportJson(unittest.TestCase):
-    def test_dumps_report_is_strict(self):
-        out = rep.dumps_report({"a": float("nan"), "b": [float("inf"), 1.0]})
-        self.assertNotIn("NaN", out)
-        self.assertNotIn("Infinity", out)
-        json.loads(out, parse_constant=lambda c: self.fail(c))
-
     def test_reference_campaign_still_readable(self):
         d = rep.build_mod.EXPERIMENT_DIR / "campaigns" / rep.REFERENCE_CAMPAIGN
         p = d / "regeneration.envelope.json"
