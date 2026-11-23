@@ -80,8 +80,9 @@ Two measured studies exist on top of that baseline, and neither was adopted:
    and the stored MC evidence
    [`20261115-issue92-bias-mc.md`](../../sim/klt-corner-verification/campaigns/20261115-issue92-bias-mc.md)):
    three finalists on the 8 µm base at lower bias / larger latch devices.
-   All three keep Row 4a inside its Target; none closes Row 2; each has one
-   aborted mismatch draw leaving Row 1 incomplete.
+   All three keep Row 4a inside its Target; none closes Row 2; each has at
+   least one aborted mismatch draw leaving Row 1 incomplete (1, 2 and 1
+   affected points respectively; see the finalist paragraph below).
 
 The operator's 2026-10-15 ruling on #92 chose the further-study option and
 left adoption open. `ROADMAP.md` still lists "Adopt a resized input pair"
@@ -96,9 +97,12 @@ not copied from the issue text.
 kickback alone, while Row 2 (input-referred noise) remains open — or keep
 the 12 µm pair until the Row 2 direction (#477 → #479 → #480) lands?**
 
-Nothing in the DR-0001 topology closes Row 2 (the bias study says so
-explicitly), so adopting now is deliberately adopting a design that still
-fails one ratified Target row. That trade is the operator's to make; this
+None of the candidates tested so far closes Row 2: the 8 µm pair and the
+three bias/latch finalists all miss it. That does not rule out every
+option within the DR-0001 topology, for example the integration-node
+capacitance option that #479 still plans to investigate. Adopting now is
+therefore deliberately adopting a design that still fails one ratified
+Target row. That trade is the operator's to make; this
 record only frames it with the measured evidence and both costs.
 
 ## The measured evidence
@@ -115,7 +119,7 @@ DR-0002 bounds.
 |---|---|---|
 | 4a Q_kick, Target ≤ 25 fC/side | **FAIL** — 23.58 … 31.46 fC, binding `ff_125c_1.32v` (31.46); **39/45 corners over** (envelope 6 pass / 39 fail / 0 error) | **PASS** — 15.65 … 21.2 fC, same binding corner (21.2); **45/45 under** (envelope 45 pass / 0 fail / 0 error). Margin 3.8 fC at the binding corner. Stretch ≤ 8 fC still FAIL both. |
 | 1 offset 3σ, Target ≤ 15 mV (MC N = 60/point, shipped mismatch models) | PASS — 6.913 … 12.09 mV, binding `ff_125c_1.08v` | **PASS but thinner** — 8.955 … 13.93 mV, binding moves to `tt_125c_1.08v`; **45/45 points valid**, 1.07 mV under the Target. Stretch ≤ 8 mV FAIL both. |
-| 2 noise, Target ≤ 1 mV rms grid mean (probit, N = 80/rung) | FAIL — grid mean 1.289 mV rms | **FAIL, slightly worse** — grid mean 1.338 mV rms (worst point `ff_125c_1.08v`, 1.764). The grade's shared-draw caveat (1669/3600 samples repeat a raw draw at another grid point) applies as documented. |
+| 2 noise, Target ≤ 1 mV rms grid mean (probit, N = 80/rung) | FAIL — grid mean 1.289 mV rms (same injected 36.27 nV/√Hz density, `vn_na=5.735e-3`, `vn_ts=2e-11`) | **FAIL, slightly worse** — grid mean 1.338 mV rms at the same injected 36.27 nV/√Hz density (`vn_na=5.735e-3`, `vn_ts=2e-11` in both committed bodies; worst point `ff_125c_1.08v`, 1.764). The grade's shared-draw caveat (1669/3600 samples repeat a raw draw at another grid point) applies as documented. |
 | 3a / 3b / 3c decision time, τ, 0.1 mV overdrive | PASS | PASS — 0.8664 ns / 168.7 ps / 1.705 ns worst (`ss_125c_1.32v`, `ss_-40c_1.08v`, `ss_-40c_1.08v`); all 45/45 valid |
 | 4b residue, Target ≤ 100 µV | PASS | PASS — worst 10.29 µV (`ss_-40c_1.20v`), 45/45 valid |
 | 4c input excursion (reporting only, unbounded) | 87.66 … 143.3 mV | 62.74 … 96.03 mV (improved) |
@@ -128,13 +132,17 @@ finalists, `w8_l034` is the only one that keeps Row 1 passing:
 points over the Target, 45/45 valid) and `w8_l020` fails it worse (worst
 17.98 mV at `sf_27c_1.32v`, 19 points over, 44/45 valid). The bias/latch
 finalists — `ib10_sw20`, `ib10_sw20lat6`, `ib12p5_sw20` — cannot be
-proposed now because each has one aborted mismatch draw
+proposed now because each has aborted mismatch draws
 (`timestep_too_small` → `analysis_aborted` at a fixed committed seed), so
-Row 1 is **INCOMPLETE** on all three (44/45, 43/45 and 44/45 valid points;
+Row 1 is **INCOMPLETE** on all three (44/45, 43/45 and 44/45 valid points,
+i.e. 1, 2 and 1 points with 59 usable draws and one error each, per
+`.rows[0].target.points_missing_or_invalid` in each candidate's
+`grading.json`: `ib10_sw20` at `sf_125c_1.08v`; `ib10_sw20lat6` at
+`ff_-40c_1.20v` and `sf_27c_1.32v`; `ib12p5_sw20` at `sf_27c_1.32v`;
 worst valid 13.69 / 13.37 / 13.78 mV), and none closes Row 2 either
 (1.192 / 1.096 / 1.255 mV rms, all FAIL). Proposing one of them would first
-require re-running its errored unit with the recorded seeds and showing the
-incomplete rows complete.
+require re-running every errored unit (two for `ib10_sw20lat6`) with the
+recorded seeds and showing the incomplete rows complete.
 
 The 18-point screen numbers (e.g. `w8_l020` at 15.1 fC, `w6_l034` at
 15.97 fC at the binding corner) are screening only, mismatch off, and carry
@@ -150,7 +158,10 @@ no Row 1/2 verdict; no number above rests on them.
   does not unblock T1 by itself.
 - Row 1 margin thins from 2.91 mV to **1.07 mV** under the 15 mV Target, and
   Row 2's grid mean worsens 1.289 → 1.338 mV rms against the unchanged
-  1.0 mV Target. Both bounds stay as ratified.
+  1.0 mV Target. Both are grid means measured with the same injected
+  36.27 nV/√Hz density, so the change does not reflect the resized pair's
+  own front-end noise density, which #477 investigates. Both bounds stay as
+  ratified.
 - The GDS hash changes. #61's extracted evidence is tied to the current
   layout hash: its remaining extracted PVT and Monte-Carlo grids are
   superseded and must re-run on the adopted layout (earlier records stay
