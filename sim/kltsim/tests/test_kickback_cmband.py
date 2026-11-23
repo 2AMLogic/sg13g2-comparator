@@ -228,6 +228,34 @@ class Reproduction(unittest.TestCase):
             env["corners"].pop()
         self.assertFalse(self.check(env=env_for(NOM, m))["ok"])
 
+    def _null(self, env, name, corner_idx=0):
+        meas(env["corners"][corner_idx], name)["value"] = None
+
+    def test_null_null_pair_is_problem_not_compared(self):
+        # issue #532: a null/null pair is a missing measurement, not compared
+        nom = env_for(NOM)
+        ref = copy.deepcopy(REF_ENV)
+        self._null(nom, "kick_sigdep_uv")
+        self._null(ref, "kick_sigdep_uv")
+        r = kb.reproduction_check(nom, kb.compose_request(NOM), kb.compose_body(NOM),
+                                  ref, REF_REQ, REF_BODY)
+        self.assertFalse(r["ok"], r)
+        self.assertEqual(r["values_compared"], r["expected_values"] - 1)
+        self.assertEqual(r["mismatches"], [])
+        self.assertEqual(len(r["problems"]), 1)
+        self.assertIn("unmeasured", r["problems"][0])
+        self.assertIn("both sides", r["problems"][0])
+
+    def test_null_on_one_side_is_problem_not_compared(self):
+        nom = env_for(NOM)
+        self._null(nom, "kick_sigdep_uv")
+        r = self.check(env=nom)
+        self.assertFalse(r["ok"], r)
+        self.assertEqual(r["values_compared"], r["expected_values"] - 1)
+        self.assertEqual(r["mismatches"], [])
+        self.assertEqual(len(r["problems"]), 1)
+        self.assertIn("one side", r["problems"][0])
+
 
 class Probe405(unittest.TestCase):
     """Issue #405 supplementary probe requests."""

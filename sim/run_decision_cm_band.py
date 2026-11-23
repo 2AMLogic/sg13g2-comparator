@@ -89,8 +89,11 @@ def cmd_compare(args) -> int:
               + ", ".join(f"{q} {g['min']:.4g}..{g['max']:.4g}" for q, g in c["grid"].items()))
     rep = result.get("reproduction")
     if rep:
+        unmeasured = len(rep.get("unmeasured") or [])
         print(f"vcm-nom reproduction: bit_identical={rep['bit_identical']} "
-              f"({len(rep['mismatches'])} mismatches)")
+              f"({len(rep['mismatches'])} mismatches"
+              + (f", {unmeasured} unmeasured value pair(s) excluded" if unmeasured else "")
+              + ")")
     return 0
 
 

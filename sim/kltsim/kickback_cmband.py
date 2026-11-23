@@ -412,6 +412,11 @@ def reproduction_check(nominal_env: dict, nominal_request: dict, nominal_body: s
             if x is None or y is None:
                 problems.append(f"{key_str(key)}: {name} missing")
                 continue
+            if x.get("value") is None or y.get("value") is None:
+                side = "both sides" if (x.get("value") is None and y.get("value") is None) \
+                    else "one side"
+                problems.append(f"{key_str(key)}: {name} unmeasured (no value on {side})")
+                continue
             compared += 1
             if x.get("value") != y.get("value") or x.get("status") != y.get("status"):
                 mismatches.append({"key": key_str(key), "measurement": name,
