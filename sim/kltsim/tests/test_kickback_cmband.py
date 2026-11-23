@@ -471,21 +471,24 @@ class ProbeCompareNulls(unittest.TestCase):
         return [a for r in res["points"] for a in r["arms"].values()
                 if a.get("present")]
 
-    def test_null_on_one_side_only_is_unmeasured_not_a_diff(self):
-        # the committed #165 reference stays untouched: only the arm is null
-        with tempfile.TemporaryDirectory() as d:
-            series = Path(d) / "series"
-            self.write_series(
-                series, lambda cond: self.null(self.ref_env(cond), "kick_sigdep_uv"))
-            res = kb.probe_compare(series, arms=kb.PROBE_ARMS)
-            self.assertEqual(res["problems"], [])
-            for a in self.rows(res):
-                self.assertEqual(a["unmeasured_on_original_cards"],
-                                 ["kick_sigdep_uv"])
-                self.assertFalse(a["equals_165_on_original_cards"], a)
-                self.assertNotIn("kick_sigdep_uv", a["differs_from_165"])
-            self.assertIn("unmeasured: kick_sigdep_uv",
-                          kb.probe_render_markdown(res))
+    def test_null_on_only_one_side_is_a_diff(self):
+        def with_null(cond):
+            return self.null(self.ref_env(cond), "kick_sigdep_uv")
+
+        for side in ("arm", "reference"):
+            with self.subTest(null_side=side), tempfile.TemporaryDirectory() as d:
+                base = Path(d)
+                series = base / "series"
+                self.write_reference(base, with_null if side == "reference" else self.ref_env)
+                self.write_series(series, with_null if side == "arm" else self.ref_env)
+                with mock.patch.object(kb, "SERIES_DIR", base):
+                    res = kb.probe_compare(series, arms=kb.PROBE_ARMS)
+                self.assertEqual(res["problems"], [])
+                for a in self.rows(res):
+                    self.assertEqual(a["differs_from_165"], ["kick_sigdep_uv"])
+                    self.assertNotIn("unmeasured_on_original_cards", a)
+                    self.assertFalse(a["equals_165_on_original_cards"], a)
+                self.assertIn("| False | kick_sigdep_uv |", kb.probe_render_markdown(res))
 
     def test_null_null_original_card_is_unmeasured_not_equal(self):
         # None == None is not evidence of equality: with the card null on both
@@ -505,7 +508,7 @@ class ProbeCompareNulls(unittest.TestCase):
                                  ["kick_sigdep_uv"])
                 self.assertFalse(a["equals_165_on_original_cards"], a)
                 self.assertEqual(a["differs_from_165"], [])
-            self.assertIn("unmeasured: kick_sigdep_uv",
+            self.assertIn("| False | unmeasured: kick_sigdep_uv |",
                           kb.probe_render_markdown(res))
 
     def test_all_measured_baseline_emits_no_unmeasured_field(self):
@@ -633,6 +636,15 @@ class SupplementRunner(unittest.TestCase):
         self.assertEqual(kb.probe_render_markdown(res),
                          (kb.SERIES_DIR / "20261108-405-probe" / "comparison.md")
                          .read_text(encoding="utf-8"))
+
+    def test_frozen_415_comparison_reproduces_byte_for_byte(self):
+        series = kb.SERIES_DIR / "20261114-415-forceddc"
+        res = kb.probe_compare(series, arms=kb.PROBE_ARMS_415, issue=kb.SUPPLEMENT_ISSUE)
+        self.assertEqual(res["problems"], [])
+        self.assertEqual((json.dumps(res, indent=2) + "\n").encode("utf-8"),
+                         (series / "comparison.json").read_bytes())
+        self.assertEqual(kb.probe_render_markdown(res).encode("utf-8"),
+                         (series / "comparison.md").read_bytes())
 
 
 class Evidence(unittest.TestCase):
