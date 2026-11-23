@@ -70,19 +70,15 @@ def cmd_build(args) -> int:
     # Plan every selected condition first, then commit the whole build as one
     # batch: a conflict on any condition writes nothing (no partial build).
     series = _series(args)
-    planned: list[tuple[Path, bytes]] = []
-    try:
+
+    def plan() -> list[tuple[Path, bytes]]:
+        planned: list[tuple[Path, bytes]] = []
         for name in args.condition or [c.name for c in cmband.CONDITIONS]:
             cond = cmband.condition(name)
             planned += cmband.plan_condition_inputs(cond, series / cond.name)
-        created = set(build_mod.commit_inputs(planned))
-    except build_mod.BuildError as exc:
-        print(f"build: {exc}", file=sys.stderr)
-        return 1
-    for path, _ in planned:
-        verb = "wrote" if path in created else "unchanged"
-        print(f"{verb} {kcli._rel(path)}")
-    return 0
+        return planned
+
+    return kcli.commit_build("build", plan)
 
 
 def cmd_run(args) -> int:
@@ -225,19 +221,15 @@ def cmd_supplement_build(args) -> int:
     # Plan every selected condition first, then commit the whole build as one
     # batch: a conflict on any condition writes nothing (no partial build).
     series = _series(args)
-    planned: list[tuple[Path, bytes]] = []
-    try:
+
+    def plan() -> list[tuple[Path, bytes]]:
+        planned: list[tuple[Path, bytes]] = []
         for name in args.condition or [c.name for c in cmband.CONDITIONS]:
             cond = cmband.condition(name)
             planned += cmband.plan_supplement_inputs(cond, series / cond.name)
-        created = set(build_mod.commit_inputs(planned))
-    except build_mod.BuildError as exc:
-        print(f"supplement-build: {exc}", file=sys.stderr)
-        return 1
-    for path, _ in planned:
-        verb = "wrote" if path in created else "unchanged"
-        print(f"{verb} {kcli._rel(path)}")
-    return 0
+        return planned
+
+    return kcli.commit_build("supplement-build", plan)
 
 
 def cmd_supplement_run(args) -> int:

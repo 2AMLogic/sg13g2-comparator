@@ -25,7 +25,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from kltsim import artifacts as artifacts_mod  # noqa: E402
-from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import cmdecision as cd  # noqa: E402
 
@@ -38,18 +37,14 @@ def cmd_build(args) -> int:
     # Plan every selected condition first, then commit the whole build as one
     # batch: a conflict on any condition writes nothing (no partial build).
     series = _series(args)
-    planned: list[tuple[Path, bytes]] = []
-    try:
+
+    def plan() -> list[tuple[Path, bytes]]:
+        planned: list[tuple[Path, bytes]] = []
         for name in args.condition or [c.name for c in cd.CONDITIONS]:
             planned += cd.plan_condition_inputs(cd.condition(name), series / name)
-        created = set(build_mod.commit_inputs(planned))
-    except build_mod.BuildError as exc:
-        print(f"build: {exc}", file=sys.stderr)
-        return 1
-    for path, _ in planned:
-        verb = "wrote" if path in created else "unchanged"
-        print(f"{verb} {kcli._rel(path)}")
-    return 0
+        return planned
+
+    return kcli.commit_build("build", plan)
 
 
 def cmd_run(args) -> int:
