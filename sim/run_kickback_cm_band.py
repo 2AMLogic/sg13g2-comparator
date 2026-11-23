@@ -48,7 +48,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from kltsim import artifacts as artifacts_mod  # noqa: E402
-from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import grade as grade_mod  # noqa: E402
 from kltsim import kickback_cmband as kb  # noqa: E402
@@ -83,21 +82,16 @@ def cmd_build(args) -> int:
     # batch: a conflict on any condition writes nothing (no partial build).
     series = _series(args)
     planned: list[tuple[Path, bytes]] = []
-    paths: list[Path] = []
     try:
         for name in args.condition or [c.name for c in kb.CONDITIONS]:
             cond = kb.condition(name)
             out_dir = series / cond.name
             files = kb.input_bytes(cond)
             planned.extend((out_dir / n, data) for n, data in files.items())
-            paths.extend(out_dir / n for n in files)
-        kb.commit_inputs(planned, evidence="campaign evidence")
     except kb.KickbackCmBandError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    for p in paths:
-        print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
-    return 0
+    return kcli.commit_build("build", planned, evidence="campaign evidence")
 
 
 def _retire_unrun_submit(out_dir: Path, tag: str) -> None:
@@ -203,9 +197,7 @@ def cmd_probe_build(args) -> int:
     # as one batch: a conflict on any arm writes nothing (no partial build).
     issue = _issue_for(args.series)
     series = _series(args)
-    planned: list[tuple[Path, bytes]] = []
-    seen: set[Path] = set()
-    paths: list[Path] = []
+    planned: dict[Path, bytes] = {}  # the shared body prints once per condition
     try:
         for name in args.condition or [c.name for c in kb.CONDITIONS]:
             cond = kb.condition(name)
@@ -213,19 +205,11 @@ def cmd_probe_build(args) -> int:
             for arm in _arms_for(args.series, args.arm):
                 files = kb.probe_input_bytes(cond, arm, issue=issue)
                 kb.check_probe_reference_body(cond, arm, files)
-                for fname, data in files.items():
-                    path = out_dir / fname
-                    planned.append((path, data))
-                    if path not in seen:  # the shared body prints once per condition
-                        seen.add(path)
-                        paths.append(path)
-        kb.commit_inputs(planned)
+                planned.update((out_dir / n, data) for n, data in files.items())
     except kb.KickbackCmBandError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    for p in paths:
-        print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
-    return 0
+    return kcli.commit_build("probe-build", list(planned.items()), evidence="probe evidence")
 
 
 def cmd_probe_run(args) -> int:

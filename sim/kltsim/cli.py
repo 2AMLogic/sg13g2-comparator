@@ -81,14 +81,17 @@ def _json_bytes(obj) -> bytes:
     return (json.dumps(obj, indent=2) + "\n").encode("utf-8")
 
 
-def _commit_planned_paths(planned, force: bool, label: str) -> set[Path] | None:
+def _commit_planned_paths(planned, force: bool, label: str,
+                          evidence: str | None = None) -> set[Path] | None:
     """Write a precomputed input set append-only (issue #105).
 
     Every destination that exists must already hold exactly the proposed
     bytes, else nothing is written (an identical regeneration leaves bytes and
     timestamps alone). ``force`` keeps the explicit scratch contract and
-    overwrites. Returns the paths written, or None (after printing why) on a
-    refusal.
+    overwrites. ``evidence`` names the append-only input class of a
+    ``--series`` driver (issue #543): the refusal is then the shared
+    artifacts contract's, instead of the bench-campaign builder's wording.
+    Returns the paths written, or None (after printing why) on a refusal.
     """
     if force:
         for path, data in planned:
@@ -96,8 +99,16 @@ def _commit_planned_paths(planned, force: bool, label: str) -> set[Path] | None:
             path.write_bytes(data)
         return {path for path, _ in planned}
     try:
-        return set(build_mod.commit_inputs(planned))
+        if evidence is None:
+            return set(build_mod.commit_inputs(planned))
+        return set(artifacts_mod.commit(
+            planned,
+            differs=f"exists and differs -- {evidence} is append-only; use a new --series",
+            dup="two different contents proposed for one input file"))
     except build_mod.BuildError as exc:
+        print(f"{label}: {exc}", file=sys.stderr)
+        return None
+    except artifacts_mod.ArtifactConflict as exc:
         print(f"{label}: {exc}", file=sys.stderr)
         return None
 
@@ -111,7 +122,7 @@ def _commit_planned(planned, args, label: str) -> bool:
 
 def commit_build(label: str,
                  planned: list[tuple[Path, bytes]] | Callable[[], list[tuple[Path, bytes]]],
-                 *, force: bool = False) -> int:
+                 *, force: bool = False, evidence: str | None = None) -> int:
     """Commit a ``build`` command's inputs and report every planned path.
 
     ``planned`` is the (destination, bytes) list, or a zero-argument callable
@@ -120,6 +131,10 @@ def commit_build(label: str,
     ``<label>: <reason>`` to stderr and returns 1 with nothing written;
     otherwise each path is reported as ``wrote`` (newly created) or
     ``unchanged`` (already held exactly these bytes) and 0 is returned.
+    ``evidence`` names the append-only input class of a ``--series`` driver
+    (e.g. ``"campaign evidence"``): the commit then goes through the shared
+    artifacts contract with that wording instead of the bench-campaign
+    builder's (issue #543).
     """
     if callable(planned):
         try:
@@ -127,7 +142,7 @@ def commit_build(label: str,
         except build_mod.BuildError as exc:
             print(f"{label}: {exc}", file=sys.stderr)
             return 1
-    created = _commit_planned_paths(planned, force, label)
+    created = _commit_planned_paths(planned, force, label, evidence=evidence)
     if created is None:
         return 1
     for path, _ in planned:

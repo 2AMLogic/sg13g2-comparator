@@ -261,18 +261,6 @@ def plan_condition_inputs(cond: Condition, out_dir: Path, *,
     return planned
 
 
-def write_condition_inputs(cond: Condition, out_dir: Path, *,
-                           osdi_dir: str = build_mod.BATCH_OSDI_DIR,
-                           backend: str = "batch") -> tuple[Path, list[Path]]:
-    """Write the condition's campaign inputs append-only: a conflicting
-    rebuild is refused before anything is touched (``commit_inputs``)."""
-    planned = plan_condition_inputs(cond, out_dir, osdi_dir=osdi_dir, backend=backend)
-    build_mod.commit_inputs(planned)
-    return (out_dir / BODY_NAME,
-            [out_dir / f"{BENCH_NAME}.{section}.request.json"
-             for section in OFFSET_MC.process_sections])
-
-
 def part_tags() -> list[str]:
     return [f"{BENCH_NAME}.{section}" for section in OFFSET_MC.process_sections]
 
@@ -411,16 +399,6 @@ def plan_supplement_inputs(cond: Condition, out_dir: Path, *,
         planned.append((out_dir / f"{BENCH_NAME}.{section}.request.json",
                         (json.dumps(req, indent=2) + "\n").encode("utf-8")))
     return planned
-
-
-def write_supplement_inputs(cond: Condition, out_dir: Path, *,
-                            osdi_dir: str = build_mod.BATCH_OSDI_DIR,
-                            backend: str = "batch") -> tuple[list[Path], set[Path]]:
-    """Write the condition's supplementary inputs append-only: a conflicting
-    rebuild is refused before anything is touched (``commit_inputs``)."""
-    planned = plan_supplement_inputs(cond, out_dir, osdi_dir=osdi_dir, backend=backend)
-    created = build_mod.commit_inputs(planned)
-    return [path for path, _ in planned], created
 
 
 # --------------------------------------------------------------------------- #

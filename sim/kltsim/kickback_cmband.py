@@ -52,7 +52,6 @@ import json
 import re
 from pathlib import Path
 
-from . import artifacts as artifacts_mod
 from . import build as build_mod
 from . import cmband
 from . import grade as grade_mod
@@ -192,33 +191,6 @@ def input_bytes(cond: Condition, osdi_dir: str = build_mod.BATCH_OSDI_DIR,
         f"{TAG}.request.json": (json.dumps(compose_request(cond, BODY_NAME, backend), indent=2)
                                 + "\n").encode("utf-8"),
     }
-
-
-def commit_inputs(files: list[tuple[Path, bytes]], *, evidence: str = "evidence") -> list[Path]:
-    """Append-only batch write of a complete, precomputed input set through
-    the shared ``artifacts.commit`` contract: a symlink or non-regular
-    destination, or any content difference, rejects the WHOLE set before
-    anything is written; identical files are reused without a write; absent
-    files are created with exclusive creation (no check-then-write window).
-    A destination directory that is not a real directory, or that sits under a
-    non-directory ancestor, rejects the whole set the same way (issue #515)
-    instead of escaping as a bare ``FileExistsError`` / ``NotADirectoryError``
-    from ``mkdir``. Returns the paths newly created."""
-    try:
-        return artifacts_mod.commit(
-            files,
-            differs=f"exists and differs -- {evidence} is append-only; use a new --series",
-            dup="two different contents proposed for one input file")
-    except artifacts_mod.ArtifactConflict as exc:
-        raise KickbackCmBandError("; ".join(exc.conflicts)) from None
-
-
-def write_condition_inputs(cond: Condition, out_dir: Path, **kw) -> list[Path]:
-    """Write body + request; refuse to change anything already there."""
-    files = input_bytes(cond, **kw)
-    commit_inputs([(out_dir / name, data) for name, data in files.items()],
-                  evidence="campaign evidence")
-    return [out_dir / name for name in files]
 
 
 # --------------------------------------------------------------------------- #
@@ -775,17 +747,6 @@ def check_probe_reference_body(cond: Condition, arm: str, files: dict[str, bytes
     if probe_body_name(arm) == BODY_NAME and files[BODY_NAME] != ref_body.read_bytes():
         raise KickbackCmBandError(
             f"probe body for {cond.name} differs from the #165 body {ref_body}; refusing")
-
-
-def write_probe_inputs(cond: Condition, arm: str, out_dir: Path,
-                       *, issue: int = PROBE_ISSUE) -> list[Path]:
-    """Write body + arm request; refuse to change anything already there. An
-    arm without a supplement block must reference the shared body and that
-    body must be byte-identical to the #165 body."""
-    files = probe_input_bytes(cond, arm, issue=issue)
-    check_probe_reference_body(cond, arm, files)
-    commit_inputs([(out_dir / name, data) for name, data in files.items()])
-    return [out_dir / name for name in files]
 
 
 def _meas_map(corner: dict) -> dict:
