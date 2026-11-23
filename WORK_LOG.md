@@ -6,8 +6,23 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 - [2026-09](work_log/WORK_LOG_2026-09.md)
 
+### 2026-11-23
+
+- **PR #541**: test: pin run_decision_cm_band build: fresh, idempotent, conflict
+- **PR #539**: fix: share one commit_build helper across six build commands
+- **PR #536**: fix: keep null-valued original cards from certifying probe equality in kickback_cmband
+- **PR #534**: fix: exclude null-valued pairs from values_compared in cmdecision and kickback reproduction checks
+- **PR #520**: refactor: route kickback CM-band comparisons through artifacts.publish
+- **Issue #540** (closed): Add a cmd_build test class for sim/run_decision_cm_band.py (the one build call site with no automated test)
+- **Issue #538** (closed): Consolidate six campaign/series build commit-and-print epilogues onto cli.commit_build
+- **Issue #535** (closed): probe_compare: equals_165_on_original_cards counts null/null pairs as equal (latent sibling of #532)
+- **Issue #532** (closed): Sibling values_compared paths still count null-vs-null pairs as compared values (kickback, cmdecision)
+- **Issue #519** (closed): Route kickback CM-band comparison writers through artifacts.publish
+
 ### 2026-11-22
 
+- **PR #530**: fix: count only measured pairs as compared values in the memory determinism repeat
+- **Issue #525** (closed): Determinism repeat counts null-vs-null measurement pairs as compared values
 - **PR #531**: fix: drop kickback_cmband's duplicate non-directory preflight
 - **PR #528**: fix: publish supplement-report pair append-only
 - **PR #526**: fix: preflight non-directory destination dirs in artifacts commit/check
