@@ -130,20 +130,25 @@ class RequestMetadata(unittest.TestCase):
         self.assertEqual(req["measurements"][:-1],
                          [m.request_entry() for m in OFFSET_MC.measurements])
 
-    def test_write_condition_inputs(self):
+    def test_commit_condition_inputs(self):
         with tempfile.TemporaryDirectory() as tmp:
-            body, requests = cmband.write_condition_inputs(cmband.condition("vcm-p050"), Path(tmp))
-            self.assertEqual(len(requests), 5)
-            self.assertTrue(body.read_text().startswith("* offset_cm"))
+            out = Path(tmp)
+            planned = cmband.plan_condition_inputs(cmband.condition("vcm-p050"), out)
+            build.commit_inputs(planned)
+            self.assertEqual(len(planned), 6)  # body + one request per process section
+            self.assertTrue(planned[0][0].read_text(encoding="utf-8").startswith("* offset_cm"))
 
 
 class AppendOnlyConditionInputs(unittest.TestCase):
-    """Issue #516: ``write_condition_inputs`` commits append-only through
-    ``build.commit_inputs``: a conflict refuses before anything is written,
-    an identical rebuild touches nothing."""
+    """Issue #516: ``plan_condition_inputs`` + ``build.commit_inputs`` commit
+    append-only: a conflict refuses before anything is written, an identical
+    rebuild touches nothing."""
 
     def write(self, tmp, name="vcm-p050"):
-        return cmband.write_condition_inputs(cmband.condition(name), Path(tmp))
+        out = Path(tmp)
+        planned = cmband.plan_condition_inputs(cmband.condition(name), out)
+        build.commit_inputs(planned)
+        return out / cmband.BODY_NAME, [path for path, _ in planned[1:]]
 
     def test_conflicting_input_refused_nothing_written(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -83,12 +83,15 @@ class BodyTests(unittest.TestCase):
 
 
 class AppendOnlyConditionInputs(unittest.TestCase):
-    """Issue #516: ``write_condition_inputs`` commits append-only through
-    ``build.commit_inputs``: a conflict refuses before anything is written,
-    an identical rebuild touches nothing."""
+    """Issue #516: ``plan_condition_inputs`` + ``build.commit_inputs`` commit
+    append-only: a conflict refuses before anything is written, an identical
+    rebuild touches nothing."""
 
     def write(self, tmp, name="vcm-m050"):
-        return cd.write_condition_inputs(cd.condition(name), Path(tmp))
+        out = Path(tmp)
+        planned = cd.plan_condition_inputs(cd.condition(name), out)
+        build.commit_inputs(planned)
+        return out / cd.BODY_NAME, out / cd.REQUEST_NAME
 
     def test_conflicting_input_refused_nothing_written(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -142,15 +142,6 @@ def plan_condition_inputs(cond: Condition, out_dir: Path, *, backend: str = "bat
     ]
 
 
-def write_condition_inputs(cond: Condition, out_dir: Path, *, backend: str = "batch"
-                           ) -> tuple[Path, Path]:
-    """Write the condition's campaign inputs append-only: a conflicting
-    rebuild is refused before anything is touched (``commit_inputs``)."""
-    planned = plan_condition_inputs(cond, out_dir, backend=backend)
-    build_mod.commit_inputs(planned)
-    return out_dir / BODY_NAME, out_dir / REQUEST_NAME
-
-
 # --------------------------------------------------------------------------- #
 # analysis
 # --------------------------------------------------------------------------- #
