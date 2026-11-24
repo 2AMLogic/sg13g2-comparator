@@ -833,6 +833,41 @@ class CapScreenPlanningTests(unittest.TestCase):
                 self.assertEqual(cli.cmd_run(args), 0)
             self.assertEqual(sorted(seen), sorted(sizesweep.screen_part_tags(TRANSIENT_NOISE)))
 
+    def test_incomplete_full_grid_and_explicit_parts(self):
+        from kltsim import cli
+        from kltsim.benches import OFFSET_MC, NOISE_FULL_BENCHES
+        for bench in (TRANSIENT_NOISE, OFFSET_MC, NOISE_FULL_BENCHES["tn_full_zero"]):
+            with self.subTest(bench=bench.name), tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp)
+                build.commit_inputs(build.plan_bench_inputs(bench, out, target="batch")[2])
+                tags = build.part_tags(bench)
+                fs = next(t for t in tags if ".mos_fs" in t)
+                sf = next(t for t in tags if ".mos_sf" in t)
+                (out / f"{fs}.request.json").unlink()
+                argv = ["run", "--campaign", tmp, "--bench", bench.name]
+                with mock.patch.object(cli, "_submit_with_retry", return_value=0) as submit:
+                    self.assertNotEqual(cli.main(argv), 0)
+                    self.assertNotEqual(cli.main(argv + ["--part", sf, "--part", fs]), 0)
+                    submit.assert_not_called()
+                    self.assertEqual(cli.main(argv + ["--part", sf]), 0)
+                    self.assertEqual([c.args[2] for c in submit.call_args_list], [sf])
+
+    def test_unavailable_screen_part_and_mixed_grids(self):
+        from kltsim import cli
+        bench = TRANSIENT_NOISE
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            build.commit_inputs(sizesweep.plan_screen_inputs(bench, out)[2])
+            argv = ["run", "--campaign", tmp, "--bench", bench.name]
+            with mock.patch.object(cli, "_submit_with_retry", return_value=0) as submit:
+                self.assertNotEqual(cli.main(argv + ["--part", "transient_noise.mos_fs"]), 0)
+                tag = "transient_noise.mos_tt"
+                full = dict(build.plan_bench_inputs(bench, out, target="batch")[2])
+                path = out / f"{tag}.request.json"
+                path.write_bytes(full[path])
+                self.assertNotEqual(cli.main(argv), 0)
+                submit.assert_not_called()
+
     def test_unsplit_screen_bytes_unchanged(self):
         # kickback/regeneration screens keep today's exact request bytes
         # (plan + screen_request), so a rebuild of an archived screen is a
@@ -998,6 +1033,8 @@ class CapScreenReductionTests(unittest.TestCase):
         noise = row["metrics"]["noise_mean"]
         self.assertFalse(noise["available"])
         self.assertEqual(noise["valid"], 17)
+        self.assertEqual(noise["present"], 18)
+        self.assertEqual(row["benches"]["transient_noise"]["missing_points"], [])
         self.assertTrue(any("independence probe" in r for r in noise["rejections"]),
                         noise["rejections"])
 
@@ -1006,6 +1043,10 @@ class CapScreenReductionTests(unittest.TestCase):
         noise = row["metrics"]["noise_mean"]
         self.assertFalse(noise["available"])
         self.assertEqual(noise["valid"], 17)
+        self.assertEqual((noise["present"], noise["expected"]), (17, 18))
+        bench = row["benches"]["transient_noise"]
+        self.assertEqual((bench["present"], bench["missing_points"]), (17, ["ff_125c_1.32v"]))
+        self.assertEqual(noise["missing_points"], bench["missing_points"])
         self.assertTrue(any("no Monte-Carlo population" in r for r in noise["rejections"]))
 
     def test_incomplete_screen_is_not_an_elimination(self):
@@ -1021,6 +1062,14 @@ class CapScreenReductionTests(unittest.TestCase):
         md = sizesweep.render_capacitance_markdown(result)
         self.assertIn("Screen INCOMPLETE", md)
         self.assertNotIn("No setting advanced", md)
+
+        from kltsim import cli
+        from contextlib import redirect_stdout
+        import io
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(cli.main(["capacitance", "--campaign", str(self.root)]), 1)
+        saved = json.loads((self.root / "capacitance.json").read_bytes())
+        self.assertEqual(saved["screen"][0]["decision"]["decision"], "incomplete")
 
     def test_unregistered_candidate_does_not_advance(self):
         row = self.reduce(name="unlisted-setting", cap="2f")
@@ -1117,7 +1166,7 @@ class CapFullTests(unittest.TestCase):
         sub.mkdir()
         return sub
 
-    def run_cap_full(self, graded_rows, name="cadd2f"):
+    def write_full_bodies(self, name="cadd2f"):
         from kltsim.benches import BENCHES as all_benches
         sub = self._full_dir(name)
         for bname, bench in all_benches.items():
@@ -1126,6 +1175,10 @@ class CapFullTests(unittest.TestCase):
                                    param_overrides={"dut_ib": "1e-05"},
                                    geometry_overrides=CAP_GEOMETRY,
                                    candidate=(name, self.cand)), encoding="utf-8")
+        return sub
+
+    def run_cap_full(self, graded_rows, name="cadd2f"):
+        self.write_full_bodies(name)
         calls = []
         orig = grade.grade_campaign
 
@@ -1192,6 +1245,32 @@ class CapFullTests(unittest.TestCase):
         s = sizesweep._full_row_summary(entry)
         self.assertEqual(s["value"], 1.0962763220245755)
         self.assertEqual((s["points_valid"], s["points_expected"]), (45, 45))
+
+    def test_finalist_without_envelopes_retains_real_grader_diagnostics(self):
+        sub = self.write_full_bodies()
+        entries = {r["id"]: r for r in grade.grade_campaign(sub, candidate="cadd2f")["rows"]}
+        result = {"campaign": "c", "full": sizesweep.cap_full(self.root)}
+        rows = result["full"][0]["rows"]
+        self.assertEqual(rows["4c"]["state"], "incomplete")
+        self.assertEqual(rows["4c"]["report_verdict"], entries["4c"]["report_verdict"])
+        self.assertEqual(rows["5a"]["benches_fully_covered"], [])
+        self.assertEqual(len(rows["5a"]["coverage_problems"]), 4)
+        self.assertEqual(rows["5a"]["coverage_problems"], entries["5a"]["coverage_problems"])
+        md = sizesweep.render_capacitance_markdown(result)
+        self.assertIn("reporting requirement: INCOMPLETE", md)
+        for reason in entries["5a"]["coverage_problems"]:
+            self.assertIn(reason, md)
+
+    def test_completed_reporting_and_coverage_rows_from_archived_grade(self):
+        baseline = (build.EXPERIMENT_DIR / "campaigns" / sizesweep.BASELINE_CAMPAIGN
+                    / sizesweep.BASELINE_FULL / "grading.json")
+        entries = json.loads(baseline.read_bytes())["rows"]
+        finalist, _, md = self.run_cap_full(entries)
+        self.assertEqual(finalist["rows"]["4c"]["report_verdict"], grade.REPORTED)
+        self.assertIn("reporting requirement: REPORTED", md)
+        covered = next(r for r in entries if r["id"] == "5a")["benches_fully_covered"]
+        self.assertEqual(finalist["rows"]["5a"]["benches_fully_covered"], covered)
+        self.assertIn("covered: " + ", ".join(covered), md)
 
     def test_table_includes_reporting_and_coverage_rows(self):
         ids = [i for i, _l, _u in sizesweep._table_rows()]

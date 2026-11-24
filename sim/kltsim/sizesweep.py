@@ -744,7 +744,9 @@ def _noise_screen_cell(bench_ev, reasons: list[str]) -> dict:
     ev = next(r for r in rows_spec["rows"] if r["id"] == "2")["evidence"]
     details, notes = grade_mod.mc_probit_noise(bench_ev, ev, CAP_SCREEN_GRID)
     valid = [d for d in details if d["sigma"] is not None]
-    keys = list(grade_mod.grid_keys(CAP_SCREEN_GRID))
+    keys = grade_mod.grid_keys(CAP_SCREEN_GRID)
+    observed = grade_mod._mc_samples(bench_ev).keys()
+    absent = [grade_mod.key_label(k) for k in keys if k not in observed]
     expected = len(keys)
     mean = sum(d["sigma"] for d in valid) / len(valid) if valid else None
     available = not reasons and len(valid) == expected
@@ -753,7 +755,6 @@ def _noise_screen_cell(bench_ev, reasons: list[str]) -> dict:
     for d in details:
         if d["sigma"] is None:
             missing[str(d["point"])] = d["problem"] or "no valid sigma"
-    observed = {str(d["point"]) for d in details}
     return {
         "available": available,
         # a partial mean is not a screen statistic: it is published only
@@ -761,12 +762,12 @@ def _noise_screen_cell(bench_ev, reasons: list[str]) -> dict:
         "value": mean if available else None,
         "partial_mean": None if available else mean,
         "point": None,
-        "expected": expected, "present": len(observed),
+        "expected": expected, "present": expected - len(absent),
         "valid": 0 if reasons else len(valid),
         "required_gates": [],
         "rejections": [] if reasons else
         [f"{pt}: {why}" for pt, why in missing.items()],
-        "missing_points": sorted(missing),
+        "missing_points": absent,
         "notes": list(notes),
         "noise_statistic": NOISE_SCREEN_STATISTIC,
     }
@@ -896,7 +897,7 @@ def cap_screen(campaign_dir: Path) -> list[dict]:
                 }
             else:
                 bench_cell = {"expected": noise["expected"], "present": noise["present"],
-                              "missing_points": []}
+                              "missing_points": noise["missing_points"]}
             row["benches"][bname] = {
                 **bench_cell,
                 "evidence_rejections": d["reasons"], "notes": d["notes"]}
@@ -1003,9 +1004,11 @@ def cap_full(campaign_dir: Path) -> list[dict]:
         for row_id in _all_row_ids():
             entry = by_id.get(row_id)
             cell = ibsweep_mod._cell(entry)
-            if entry is None:
-                cell = {"state": "not swept"}
-            elif entry["target_verdict"] == grade_mod.INCOMPLETE:
+            if entry is not None:
+                for field in ("report_verdict", "benches_fully_covered", "coverage_problems"):
+                    if field in entry:
+                        cell[field] = entry[field]
+            if grade_mod.INCOMPLETE in (cell.get("report_verdict"), cell.get("target_verdict")):
                 # the grader could not grade it: keep its numbers, but it is
                 # neither a measured pass nor a measured failure
                 cell["state"] = "incomplete"
@@ -1127,10 +1130,12 @@ def render_capacitance_markdown(result: dict) -> str:
                   "Rows 1-5 remain unmeasured. The elimination reasons above are the "
                   "recorded rationale, and apply only to the settings measured."]
         L += ["", "### Screening evidence validation", "",
-              "| setting | bench | expected | present | evidence rejections |", "|---|---|---|---|---|"]
+              "| setting | bench | expected | present | missing points | evidence rejections |",
+              "|---|---|---|---|---|---|"]
         for r in result["screen"]:
             for bname, b in (r.get("benches") or {}).items():
                 L.append(f"| {r['name']} | {bname} | {b.get('expected')} | {b.get('present')} | "
+                         f"{', '.join(b.get('missing_points') or []) or '-'} | "
                          f"{'; '.join(b.get('evidence_rejections') or [])[:400] or '-'} |")
         for r in result["screen"]:
             problems = (r.get("candidate_problems") or []) + (r.get("identity_problems") or [])
@@ -1143,7 +1148,7 @@ def render_capacitance_markdown(result: dict) -> str:
               f"`{BASELINE_CAMPAIGN}/{BASELINE_FULL}`; a Target row it PASSes must "
               "still PASS for the finalist to advance.", "",
               "| finalist | C per side [fF] | " + " | ".join(f"{i} {l} [{u}]" for i, l, u in _table_rows()) + " |",
-              "|---|---|---|" + "---|" * len(_table_rows())]
+              "|---|---|" + "---|" * len(_table_rows())]
         for r in result["full"]:
             cells = []
             for row_id, _l, _u in _table_rows():
@@ -1170,6 +1175,12 @@ def render_capacitance_markdown(result: dict) -> str:
                     cells.append(f"{_f(c['value'])} @ {c['at']} (T {tv}; "
                                  f"{c['points_valid']}/{c['points_expected']} valid; "
                                  f"{c['points_failing_target']} pts fail T){mark}")
+                if "report_verdict" in c:
+                    cells[-1] += f" (reporting requirement: {c['report_verdict']})"
+                if "benches_fully_covered" in c:
+                    cells[-1] += " (covered: " + (", ".join(c["benches_fully_covered"]) or "none") + ")"
+                if c.get("coverage_problems"):
+                    cells[-1] += " — " + "; ".join(c["coverage_problems"])
             L.append(f"| {r['name']} | {_f(r.get('cap_fF'), 3) if r.get('cap_fF') is not None else '-'} | "
                      + " | ".join(cells) + " |")
         for r in result["full"]:

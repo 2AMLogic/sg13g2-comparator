@@ -101,26 +101,49 @@ point whose samples repeat a raw noise draw. Generic `klt` capability gaps
 found by this study are filed under the
 [friction protocol](../../CLAUDE.md) and linked from the report.
 
-## Reproduce
+## Reproduce the archived screen table
+
+From the repository root with `KLT_ARTIFACT_BROKER` configured, restore the
+nine noise envelopes into the campaign. Each `klt artifact get` checks the
+download against the manifest digest. The deterministic envelopes are in git.
+
+```bash
+set -e
+campaign=sim/klt-corner-verification/campaigns/20261121-issue497
+manifest=manifests/artifacts/klt-corner-verification-20261121-issue497-mc.manifest.json
+for setting in cadd1f cadd2f cadd4f; do
+  for proc in tt ff ss; do
+    part="scr_${setting}/transient_noise.mos_${proc}.envelope.json"
+    klt artifact get "$manifest#${campaign}-mc/$part" -o "$campaign/$part"
+  done
+done
+python3 sim/run_klt_corner_verification.py capacitance \
+  --campaign 20261121-issue497 --report-name capacitance-r2
+```
+
+The command checks the recomputed bytes against the committed
+[Markdown table](../klt-corner-verification/campaigns/20261121-issue497/capacitance-r2.md)
+and [JSON report](../klt-corner-verification/campaigns/20261121-issue497/capacitance-r2.json).
+It exits successfully when both match.
+
+## Build and run a screen
 
 ```bash
 # build one setting's screen inputs (campaign dir under
 # sim/klt-corner-verification/campaigns/):
 python3 sim/run_klt_corner_verification.py build \
-  --campaign 20261121-issue497/scr_cadd2f --screen \
+  --campaign my-capacitance-study/scr_cadd2f --screen \
   --bench regeneration --bench transient_noise \
   --dut-param dut_ib=1e-05 \
   --geometry XM1.w=8u --geometry XM2.w=8u --geometry XM3.w=6u \
   --geometry XM4.w=6u --geometry XM5.w=6u --geometry XM6.w=6u \
   --geometry XMSW.w=20u --candidate cadd2f
 python3 sim/run_klt_corner_verification.py run \
-  --campaign 20261121-issue497/scr_cadd2f --bench regeneration \
+  --campaign my-capacitance-study/scr_cadd2f --bench regeneration \
   --capacity-wait-s 600
 for P in mos_tt mos_ff mos_ss; do
   python3 sim/run_klt_corner_verification.py run \
-    --campaign 20261121-issue497/scr_cadd2f --bench transient_noise \
+    --campaign my-capacitance-study/scr_cadd2f --bench transient_noise \
     --part transient_noise.$P --capacity-wait-s 600
 done
-# the study report (control + screens + finalists):
-python3 sim/run_klt_corner_verification.py capacitance --campaign 20261121-issue497
 ```

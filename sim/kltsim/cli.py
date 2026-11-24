@@ -557,24 +557,55 @@ def _submit(request_path: Path, out_dir: Path, tag: str, args,
     return 0
 
 
+def _run_parts(bench, out_dir: Path, requested: list[str] | None) -> list[str]:
+    """Preflight the selected requests before the first batch submission."""
+    tags = build_mod.part_tags(bench)
+    if bench.split_by_process:
+        screen_tags = sizesweep_mod.screen_part_tags(bench)
+        modes = set()
+        for tag in tags:
+            path = out_dir / f"{tag}.request.json"
+            if not path.is_file():
+                continue
+            try:
+                request = json.loads(path.read_bytes())
+            except ValueError as exc:
+                raise ValueError(f"{path}: invalid request JSON") from exc
+            corners = request.get("corners") if isinstance(request, dict) else None
+            if tag in screen_tags and corners == sizesweep_mod.screen_corners_for(bench, tag):
+                modes.add("screen")
+            elif corners == grade_mod._expected_request(bench, tag)["corners"]:
+                modes.add("full")
+            else:
+                raise ValueError(f"{path}: unexpected grid for {tag}")
+        if len(modes) > 1:
+            raise ValueError(f"{bench.name}: mixed screen and full-grid requests")
+        if modes == {"screen"}:
+            tags = screen_tags
+
+    if requested:
+        unavailable = set(requested).difference(tags)
+        if unavailable:
+            raise ValueError("unavailable request part(s): " + ", ".join(sorted(unavailable)))
+        tags = [tag for tag in tags if tag in requested]
+    for tag in tags:
+        path = out_dir / f"{tag}.request.json"
+        if not path.is_file():
+            raise ValueError(f"no request at {path}; run `build` first")
+    return tags
+
+
 def cmd_run(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     bench = ALL_BENCHES[args.bench]
-    tags = build_mod.part_tags(bench)
-    # a screening campaign (build --screen) holds only the tt/ff/ss parts of a
-    # process-split bench; read the tags the screen builder wrote (issue #497)
-    screen_tags = sizesweep_mod.screen_part_tags(bench)
-    if (not all((out_dir / f"{t}.request.json").is_file() for t in tags)
-            and all((out_dir / f"{t}.request.json").is_file() for t in screen_tags)):
-        tags = screen_tags
-    if args.part:
-        tags = [tag for tag in tags if tag in args.part]
+    try:
+        tags = _run_parts(bench, out_dir, args.part)
+    except (ValueError, OSError) as exc:
+        print(f"run: {exc}", file=sys.stderr)
+        return 1
     rc = 0
     for tag in tags:
         request_path = out_dir / f"{tag}.request.json"
-        if not request_path.is_file():
-            print(f"no request at {request_path}; run `build` first", file=sys.stderr)
-            return 1
         if (out_dir / f"{tag}.envelope.json").exists() and args.skip_existing:
             print(f"{tag}: envelope present, skipped", file=sys.stderr)
             continue
@@ -815,6 +846,8 @@ def cmd_capacitance(args) -> int:
         print(f"capacitance: {exc}", file=sys.stderr)
         return 1
     print((CAMPAIGNS_DIR / args.campaign / f"{args.report_name}.md").read_text(encoding="utf-8"))
+    if any(row["decision"]["decision"] == "incomplete" for row in result["screen"]):
+        return 1
     return 0 if result["screen"] or result["full"] else 1
 
 
