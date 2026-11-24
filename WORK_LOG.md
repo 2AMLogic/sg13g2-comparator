@@ -8,6 +8,8 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-11-23
 
+- **PR #545**: refactor: drop test-only write_*_inputs wrappers, move kickback build onto commit_build
+- **Issue #543** (closed): Remove test-only write_*_inputs wrappers in kltsim; finish commit_build move for kickback driver
 - **PR #541**: test: pin run_decision_cm_band build: fresh, idempotent, conflict
 - **PR #539**: fix: share one commit_build helper across six build commands
 - **PR #536**: fix: keep null-valued original cards from certifying probe equality in kickback_cmband
