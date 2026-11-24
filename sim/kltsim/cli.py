@@ -32,6 +32,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from . import build as build_mod
@@ -80,25 +81,73 @@ def _json_bytes(obj) -> bytes:
     return (json.dumps(obj, indent=2) + "\n").encode("utf-8")
 
 
-def _commit_planned(planned, args, label: str) -> bool:
-    """Write a helper command's precomputed inputs append-only (issue #105).
+def _commit_planned_paths(planned, force: bool, label: str,
+                          evidence: str | None = None) -> set[Path] | None:
+    """Write a precomputed input set append-only (issue #105).
 
     Every destination that exists must already hold exactly the proposed
     bytes, else nothing is written (an identical regeneration leaves bytes and
-    timestamps alone). ``--force`` keeps its explicit scratch contract and
-    overwrites. Returns False (after printing why) on a refusal.
+    timestamps alone). ``force`` keeps the explicit scratch contract and
+    overwrites. ``evidence`` names the append-only input class of a
+    ``--series`` driver (issue #543): the refusal is then the shared
+    artifacts contract's, instead of the bench-campaign builder's wording.
+    Returns the paths written, or None (after printing why) on a refusal.
     """
-    if getattr(args, "force", False):
+    if force:
         for path, data in planned:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
-        return True
+        return {path for path, _ in planned}
     try:
-        build_mod.commit_inputs(planned)
+        if evidence is None:
+            return set(build_mod.commit_inputs(planned))
+        return set(artifacts_mod.commit(
+            planned,
+            differs=f"exists and differs -- {evidence} is append-only; use a new --series",
+            dup="two different contents proposed for one input file"))
     except build_mod.BuildError as exc:
         print(f"{label}: {exc}", file=sys.stderr)
-        return False
-    return True
+        return None
+    except artifacts_mod.ArtifactConflict as exc:
+        print(f"{label}: {exc}", file=sys.stderr)
+        return None
+
+
+def _commit_planned(planned, args, label: str) -> bool:
+    """Write a helper command's precomputed inputs append-only (issue #105);
+    ``--force`` keeps its explicit scratch contract and overwrites. Returns
+    False (after printing why) on a refusal."""
+    return _commit_planned_paths(planned, getattr(args, "force", False), label) is not None
+
+
+def commit_build(label: str,
+                 planned: list[tuple[Path, bytes]] | Callable[[], list[tuple[Path, bytes]]],
+                 *, force: bool = False, evidence: str | None = None) -> int:
+    """Commit a ``build`` command's inputs and report every planned path.
+
+    ``planned`` is the (destination, bytes) list, or a zero-argument callable
+    returning it when the planning itself can refuse with ``BuildError`` (it
+    is then evaluated under the same guard). A refusal prints
+    ``<label>: <reason>`` to stderr and returns 1 with nothing written;
+    otherwise each path is reported as ``wrote`` (newly created) or
+    ``unchanged`` (already held exactly these bytes) and 0 is returned.
+    ``evidence`` names the append-only input class of a ``--series`` driver
+    (e.g. ``"campaign evidence"``): the commit then goes through the shared
+    artifacts contract with that wording instead of the bench-campaign
+    builder's (issue #543).
+    """
+    if callable(planned):
+        try:
+            planned = planned()
+        except build_mod.BuildError as exc:
+            print(f"{label}: {exc}", file=sys.stderr)
+            return 1
+    created = _commit_planned_paths(planned, force, label, evidence=evidence)
+    if created is None:
+        return 1
+    for path, _ in planned:
+        print(f"{'wrote' if path in created else 'unchanged'} {_rel(path)}")
+    return 0
 
 
 def cmd_build(args) -> int:
@@ -151,19 +200,7 @@ def cmd_build(args) -> int:
                       if path.name.endswith(".request.json") else data)
                      for path, data in files]
         planned += files
-    try:
-        created = set(build_mod.commit_inputs(planned))
-    except build_mod.BuildError as exc:
-        print(f"build: {exc}", file=sys.stderr)
-        return 1
-    for path, _ in planned:
-        verb = "wrote" if path in created else "unchanged"
-        try:
-            shown = path.relative_to(build_mod.REPO_ROOT)
-        except ValueError:  # a campaigns dir outside the repo (tests)
-            shown = path
-        print(f"{verb} {shown}")
-    return 0
+    return commit_build("build", planned)
 
 
 def cmd_smoke(args) -> int:
@@ -643,6 +680,42 @@ def resolve_report_dir(args, source: Path, md: str, result: dict, kind: str,
     return report_dir, md
 
 
+def publish_report_pair(label: str, args, source: Path, stem: str, result: dict,
+                        md: str, kind: str, *, cite: bool = True,
+                        json_kw: dict | None = None) -> int:
+    """Publish the append-only ``stem.{json,md}`` derived-report pair through
+    the shared artifacts contract (issue #546): in place by default, into a
+    NEW citing namespace via ``--report-dir``, or read-only via ``--check``
+    (read defensively, so a minimal ``argparse.Namespace`` works). The JSON
+    member is strict (issue #250): a non-finite float is null, never a
+    NaN/Infinity token; ``json_kw`` overrides the ``indent=2`` default
+    (``noise-full`` passes its compact ``separators``)."""
+    report_dir, md = resolve_report_dir(args, source, md, result, kind, cite=cite)
+    hint = SERIES_NAMESPACE_HINT if kind == "series" else _NAMESPACE_HINT
+    return artifacts_mod.publish(
+        label,
+        [(report_dir / f"{stem}.json",
+          (grade_mod.dumps_strict(result, **(json_kw or {"indent": 2})) + "\n").encode("utf-8")),
+         (report_dir / f"{stem}.md", md.encode("utf-8"))],
+        check_only=getattr(args, "check", False), namespace_hint=hint,
+        require_dir=report_dir)
+
+
+def add_report_pair_args(parser, stem: str, kind: str, cite: bool = True) -> None:
+    """The shared ``--report-dir`` / ``--check`` flags of a derived-report
+    subcommand (issue #546): ``stem`` names the ``stem.{json,md}`` pair and
+    ``kind`` the cited source directory (``campaign`` or ``series``); ``cite``
+    is False for a writer that publishes without a provenance line (``noise-full``,
+    issue #423), so its help does not claim a citation."""
+    parser.add_argument(
+        "--report-dir",
+        help=f"write {stem}.{{json,md}} here instead of the {kind} directory (new "
+             f"directory; {f'cites the {kind}; ' if cite else ''}different existing files "
+             "are never overwritten)")
+    parser.add_argument("--check", action="store_true",
+                        help="read-only: exit 1 if the reports are missing, stale or unsafe")
+
+
 def cmd_grade(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     offset_n = getattr(args, "offset_n", None)
@@ -669,14 +742,8 @@ def cmd_grade(args) -> int:
         result = grade_mod.grade_campaign(out_dir, candidate=candidate)
     else:
         result = declared_n_mod.grade_campaign(out_dir, offset_n)
-    md = grade_mod.render_markdown(result)
-    report_dir, md = resolve_report_dir(args, out_dir, md, result, "campaign")
-    rc = artifacts_mod.publish(
-        "grade",
-        [(report_dir / "grading.json", (grade_mod.dumps_strict(result, indent=2) + "\n").encode("utf-8")),
-         (report_dir / "grading.md", md.encode("utf-8"))],
-        check_only=getattr(args, "check", False), namespace_hint=_NAMESPACE_HINT,
-        require_dir=report_dir)
+    rc = publish_report_pair("grade", args, out_dir, "grading", result,
+                             grade_mod.render_markdown(result), "campaign")
     if rc == 0 and not getattr(args, "check", False):
         print(grade_mod.render_summary(result))
     return rc
@@ -703,18 +770,13 @@ def cmd_noise_full(args) -> int:
     result["campaign"] = out_dir.name
     text = noise_full_mod.render_markdown(result)
     # Issue #423: noise_full deliberately publishes without the citation branch
-    # (`cite=False`) — the committed redirected noise_full report carries no
-    # provenance line, so adding one now would change a regeneration result.
-    # That is an evidence question for the sim/README.md decision-record route,
-    # not a refactor; keep the output byte-identical.
-    report_dir, _ = resolve_report_dir(args, out_dir, text, result, "campaign",
-                                       cite=False)
-    targets = {report_dir / "noise_full.json": json.dumps(result, separators=(",", ":")) + "\n",
-               report_dir / "noise_full.md": text}
-    rc = artifacts_mod.publish(
-        "noise-full", [(p, d.encode("utf-8")) for p, d in targets.items()],
-        check_only=getattr(args, "check", False), namespace_hint=_NAMESPACE_HINT,
-        require_dir=report_dir)
+    # (`cite=False`) and with its compact separators — the committed redirected
+    # noise_full report carries no provenance line, so adding one now would
+    # change a regeneration result. That is an evidence question for the
+    # sim/README.md decision-record route, not a refactor; keep the output
+    # byte-identical.
+    rc = publish_report_pair("noise-full", args, out_dir, "noise_full", result, text,
+                             "campaign", cite=False, json_kw={"separators": (",", ":")})
     if rc == 0 and not getattr(args, "check", False):
         print(text)
     return rc
@@ -727,13 +789,8 @@ def cmd_ibsweep(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     result = ibsweep_mod.sweep(out_dir)
     md = ibsweep_mod.render_markdown(result)
-    report_dir, md = resolve_report_dir(args, out_dir, md, result, "campaign")
-    rc = artifacts_mod.publish(
-        "ibsweep",
-        [(report_dir / "ibsweep.json", (grade_mod.dumps_strict(result, indent=2) + "\n").encode("utf-8")),
-         (report_dir / "ibsweep.md", md.encode("utf-8"))],
-        check_only=args.check, namespace_hint=_NAMESPACE_HINT, require_dir=report_dir)
-    if rc == 0 and not args.check:
+    rc = publish_report_pair("ibsweep", args, out_dir, "ibsweep", result, md, "campaign")
+    if rc == 0 and not getattr(args, "check", False):
         print(md)
     return rc if rc else (0 if result["points"] else 1)
 
@@ -768,15 +825,7 @@ def cmd_loadwidth_build(args) -> int:
     requests), all carrying the candidate's XM5/XM6 geometry."""
     out_dir = _campaign_dir(args.campaign)
     planned = loadwidth_mod.plan_all_scr_inputs(out_dir)
-    if not _commit_planned(planned, args, "loadwidth-build"):
-        return 1
-    for path, _data in planned:
-        try:
-            shown = path.relative_to(build_mod.REPO_ROOT)
-        except ValueError:
-            shown = path
-        print(f"wrote {shown}")
-    return 0
+    return commit_build("loadwidth-build", planned, force=getattr(args, "force", False))
 
 
 def cmd_loadwidth_report(args) -> int:
@@ -881,11 +930,7 @@ def main(argv: list[str] | None = None) -> int:
 
     ib = sub.add_parser("ibsweep", help="tabulate a dut_ib sweep campaign (issue #80)")
     ib.add_argument("--campaign", required=True)
-    ib.add_argument("--report-dir", help="write ibsweep.{json,md} here instead of the campaign "
-                    "directory (new directory; cites the campaign; different existing files are "
-                    "never overwritten)")
-    ib.add_argument("--check", action="store_true",
-                    help="read-only: exit 1 if the reports are missing, stale or unsafe")
+    add_report_pair_args(ib, "ibsweep", "campaign")
     ib.set_defaults(func=cmd_ibsweep)
 
     sz = sub.add_parser("sizesweep", help="tabulate an input-pair sizing study (issue #92)")
@@ -926,11 +971,7 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--candidate", metavar="NAME",
                    help="the named issue #497 candidate setting this campaign holds; every "
                         "bench body must declare exactly it (structural DUT binding)")
-    g.add_argument("--report-dir", help="write grading.{json,md} here instead of the campaign "
-                   "directory (new directory; cites the campaign; existing different files "
-                   "are never overwritten)")
-    g.add_argument("--check", action="store_true",
-                   help="read-only: exit 1 if the reports are missing, stale or unsafe")
+    add_report_pair_args(g, "grading", "campaign")
     g.set_defaults(func=cmd_grade)
 
     e = sub.add_parser("estimate", help="issue #167: estimate a larger offset campaign's committed "
@@ -942,10 +983,7 @@ def main(argv: list[str] | None = None) -> int:
 
     nf = sub.add_parser("noise-full", help="issue #81: analyse the tn_full_* configurations of a campaign")
     nf.add_argument("--campaign", required=True)
-    nf.add_argument("--report-dir", help="write noise_full.{json,md} here (new directory; "
-                    "existing different files are never overwritten); default: the campaign directory")
-    nf.add_argument("--check", action="store_true",
-                    help="read-only: exit 1 if the reports are missing, stale or unsafe")
+    add_report_pair_args(nf, "noise_full", "campaign", cite=False)
     nf.set_defaults(func=cmd_noise_full)
 
     args = ap.parse_args(argv)

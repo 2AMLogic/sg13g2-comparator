@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -129,11 +130,53 @@ class RequestMetadata(unittest.TestCase):
         self.assertEqual(req["measurements"][:-1],
                          [m.request_entry() for m in OFFSET_MC.measurements])
 
-    def test_write_condition_inputs(self):
+    def test_commit_condition_inputs(self):
         with tempfile.TemporaryDirectory() as tmp:
-            body, requests = cmband.write_condition_inputs(cmband.condition("vcm-p050"), Path(tmp))
-            self.assertEqual(len(requests), 5)
-            self.assertTrue(body.read_text().startswith("* offset_cm"))
+            out = Path(tmp)
+            planned = cmband.plan_condition_inputs(cmband.condition("vcm-p050"), out)
+            build.commit_inputs(planned)
+            self.assertEqual(len(planned), 6)  # body + one request per process section
+            self.assertTrue(planned[0][0].read_text(encoding="utf-8").startswith("* offset_cm"))
+
+
+class AppendOnlyConditionInputs(unittest.TestCase):
+    """Issue #516: ``plan_condition_inputs`` + ``build.commit_inputs`` commit
+    append-only: a conflict refuses before anything is written, an identical
+    rebuild touches nothing."""
+
+    def write(self, tmp, name="vcm-p050"):
+        out = Path(tmp)
+        planned = cmband.plan_condition_inputs(cmband.condition(name), out)
+        build.commit_inputs(planned)
+        return out / cmband.BODY_NAME, [path for path, _ in planned[1:]]
+
+    def test_conflicting_input_refused_nothing_written(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            victim = Path(tmp) / cmband.BODY_NAME
+            victim.write_text("tampered\n", encoding="utf-8")
+            with self.assertRaises(build.BuildError):
+                self.write(tmp)
+            self.assertEqual(list(Path(tmp).iterdir()), [victim])
+            self.assertEqual(victim.read_text(), "tampered\n")
+
+    def test_identical_rerun_preserves_timestamps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            body, requests = self.write(tmp)
+            files = [body, *requests]
+            for p in files:  # push mtimes into the past so a rewrite is visible
+                os.utime(p, (1_000_000_000, 1_000_000_000))
+            self.assertEqual(self.write(tmp), (body, requests))
+            self.assertEqual({p.stat().st_mtime for p in files}, {1_000_000_000})
+
+    def test_dangling_symlink_destination_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            target = out / "elsewhere" / cmband.BODY_NAME
+            (out / cmband.BODY_NAME).symlink_to(target)
+            with self.assertRaises(build.BuildError):
+                self.write(tmp, "vcm-nom")
+            self.assertFalse(target.exists())  # the symlink was not followed
+            self.assertEqual([p.name for p in out.iterdir()], [cmband.BODY_NAME])
 
 
 class Statistics(unittest.TestCase):

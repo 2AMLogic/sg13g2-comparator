@@ -516,8 +516,8 @@ pinned build moves, the manifest, the freeze, and the pin move in one change.
 [`klt-pin.json`](klt-pin.json) is the single source of truth for the pin
 (`klt_commit`, `klt_version`, `klayout_version`). CI runs
 `python3 scripts/check_klt_pin.py` (stdlib only) in the signoff job, which
-fails if any machine-read copy disagrees with it: both `ci.yml` install
-lines (`klayout-tools==<klt_version>`; the git form `@<sha>` is still
+fails if any machine-read copy disagrees with it: every `ci.yml` install
+line (`klayout-tools==<klt_version>`; the git form `@<sha>` is still
 accepted for a dev-build pin) and its `klayout==` pin, `layout/run_flow.sh` `KLT_PIN`/`KLAYOUT_PIN`,
 this report's `build.git_commit`/`build.version`, and the `provenance`
 block of the DRC, LVS and ERC reports under `layout/comparator/`.

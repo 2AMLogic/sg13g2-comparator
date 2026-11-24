@@ -246,19 +246,19 @@ def compose_cm_request(cond: Condition, body_name: str, section: str,
     return request
 
 
-def write_condition_inputs(cond: Condition, out_dir: Path, *,
-                           osdi_dir: str = build_mod.BATCH_OSDI_DIR,
-                           backend: str = "batch") -> tuple[Path, list[Path]]:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    body = out_dir / BODY_NAME
-    body.write_text(compose_cm_body(cond, osdi_dir), encoding="utf-8")
-    requests = []
+def plan_condition_inputs(cond: Condition, out_dir: Path, *,
+                          osdi_dir: str = build_mod.BATCH_OSDI_DIR,
+                          backend: str = "batch") -> list[tuple[Path, bytes]]:
+    """Every (destination, bytes) pair of the condition's campaign inputs,
+    body first -- for ``commit_inputs``' append-only write."""
+    planned: list[tuple[Path, bytes]] = [(
+        out_dir / BODY_NAME,
+        compose_cm_body(cond, osdi_dir).encode("utf-8"))]
     for section in OFFSET_MC.process_sections:
-        path = out_dir / f"{BENCH_NAME}.{section}.request.json"
         req = compose_cm_request(cond, BODY_NAME, section, backend)
-        path.write_text(json.dumps(req, indent=2) + "\n", encoding="utf-8")
-        requests.append(path)
-    return body, requests
+        planned.append((out_dir / f"{BENCH_NAME}.{section}.request.json",
+                        (json.dumps(req, indent=2) + "\n").encode("utf-8")))
+    return planned
 
 
 def part_tags() -> list[str]:
@@ -399,17 +399,6 @@ def plan_supplement_inputs(cond: Condition, out_dir: Path, *,
         planned.append((out_dir / f"{BENCH_NAME}.{section}.request.json",
                         (json.dumps(req, indent=2) + "\n").encode("utf-8")))
     return planned
-
-
-def write_supplement_inputs(cond: Condition, out_dir: Path, *,
-                            osdi_dir: str = build_mod.BATCH_OSDI_DIR,
-                            backend: str = "batch") -> tuple[list[Path], set[Path]]:
-    """Write the condition's supplementary inputs append-only: a conflicting
-    rebuild is refused before anything is touched (``commit_inputs``)."""
-    out_dir.mkdir(parents=True, exist_ok=True)
-    planned = plan_supplement_inputs(cond, out_dir, osdi_dir=osdi_dir, backend=backend)
-    created = build_mod.commit_inputs(planned)
-    return [path for path, _ in planned], created
 
 
 # --------------------------------------------------------------------------- #
@@ -1082,18 +1071,21 @@ def _envelope_bytes(path: Path) -> bytes:
         return gzip.decompress(gz.read_bytes())
 
 
-def _supplement_envelope(path: Path) -> tuple[dict | None, str | None]:
-    """Load one supplementary envelope; (None, reason) when missing/malformed."""
+def _supplement_envelope(path: Path) -> tuple[dict | None, bytes | None, str | None]:
+    """Load one supplementary envelope; ``(envelope, exact bytes parsed, None)``,
+    or ``(None, None, reason)`` when missing/malformed. The bytes are the
+    buffer ``json.loads`` read, so a digest over them describes the reported
+    measurements without re-reading the file."""
     try:
         raw = _envelope_bytes(path)
     except FileNotFoundError:
-        return None, "envelope not found (part not run)"
+        return None, None, "envelope not found (part not run)"
     except (OSError, EOFError) as exc:
-        return None, f"unreadable: {exc}"
+        return None, None, f"unreadable: {exc}"
     try:
-        return json.loads(raw), None
+        return json.loads(raw), raw, None
     except json.JSONDecodeError as exc:
-        return None, f"malformed JSON: {exc}"
+        return None, None, f"malformed JSON: {exc}"
 
 
 def _pair_check(sup: list[dict] | None, par: list[dict] | None) -> dict:
@@ -1158,9 +1150,9 @@ def compare_supplement(series_dir: Path, *,
         for section in supplement_sections():
             tag = f"{BENCH_NAME}.{section}"
             sup_path = series_dir / cond.name / f"{tag}.envelope.json"
-            env, problem = _supplement_envelope(sup_path)
+            env, raw, problem = _supplement_envelope(sup_path)
             if env is not None:
-                sha = hashlib.sha256(_envelope_bytes(sup_path)).hexdigest()
+                sha = hashlib.sha256(raw).hexdigest()
                 sources[f"{cond.name}/{tag}"] = {
                     "status": env.get("status"),
                     "job_id": ((env.get("environment") or {}).get("remote") or {}).get("job_id"),
@@ -1171,7 +1163,7 @@ def compare_supplement(series_dir: Path, *,
             else:
                 missing.append(f"{cond.name}/{tag}: {problem}")
             par_path = parent_dir / cond.name / f"{tag}.envelope.json"
-            par_env, par_problem = _supplement_envelope(par_path)
+            par_env, _, par_problem = _supplement_envelope(par_path)
             if par_env is not None:
                 parent_loaded.update(load_points([par_env], vcm_v=cond.vcm_v()))
             else:

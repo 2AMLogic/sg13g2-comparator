@@ -115,6 +115,50 @@ class CommitInputsTests(unittest.TestCase):
             REGENERATION, self.out, target="batch", param_overrides={"dut_ib": 5e-6})
         self.assertIn("dut_ib=5e-06", (self.out / "regeneration.body.spice").read_text())
 
+    def test_non_directory_campaign_dir_rejected_without_writes(self):
+        self.out.write_text("not a directory", encoding="utf-8")
+        with self.assertRaises(build.BuildError) as ctx:
+            build.commit_inputs(_plan([REGENERATION], self.out))
+        self.assertIn(f"{self.out}: exists and is not a directory", str(ctx.exception))
+        self.assertIn("not a directory", str(ctx.exception))
+        self.assertEqual(self.out.read_text(), "not a directory")
+        self.assertEqual([p.name for p in self.out.parent.iterdir()], ["campaign"])
+
+    def test_non_directory_ancestor_rejected_without_writes(self):
+        for as_symlink in (False, True):
+            with self.subTest(symlink=as_symlink):
+                root = self.out.parent / f"case{int(as_symlink)}"
+                root.mkdir()
+                blocker = root / "blocker"
+                if as_symlink:
+                    blocker.symlink_to(root / "gone")
+                else:
+                    blocker.write_text("x", encoding="utf-8")
+                with self.assertRaises(build.BuildError) as ctx:
+                    build.commit_inputs(_plan([REGENERATION], blocker / "camp"))
+                self.assertIn(f"{blocker}: exists and is not a directory",
+                              str(ctx.exception))
+                self.assertFalse((root / "gone").exists())
+                self.assertEqual([p.name for p in root.iterdir()], ["blocker"])
+
+    def test_multi_dir_batch_rejected_atomically(self):
+        bad = self.out.parent / "bad"
+        bad.write_text("x", encoding="utf-8")
+        good = self.out.parent / "good"
+        with self.assertRaises(build.BuildError) as ctx:
+            build.commit_inputs([(bad / "a.spice", b"1"), (good / "b.spice", b"2")])
+        self.assertIn(f"{bad}: exists and is not a directory", str(ctx.exception))
+        self.assertFalse(good.exists())
+
+    def test_symlinked_ancestor_is_followed(self):
+        real = self.out.parent / "real"
+        real.mkdir()
+        link = self.out.parent / "link"
+        link.symlink_to(real, target_is_directory=True)
+        created = build.commit_inputs(_plan([REGENERATION], link / "camp"))
+        self.assertEqual(set(created), {p for p, _ in _plan([REGENERATION], link / "camp")})
+        self.assertTrue((real / "camp" / "regeneration.body.spice").is_file())
+
 
 class CmdBuildTests(unittest.TestCase):
     def run_build(self, root: Path, benches, dut_param=None):
@@ -138,6 +182,29 @@ class CmdBuildTests(unittest.TestCase):
             self.assertIn("NEW campaign ID", err)
             self.assertEqual(_snapshot(root / "c1"), before)
             self.assertTrue(set(BENCHES) >= {"regeneration", "kickback"})
+
+    def test_cmd_build_reports_non_directory_campaign_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "c1").write_text("not a directory", encoding="utf-8")
+            code, err = self.run_build(root, ["regeneration"])
+            self.assertEqual(code, 1)
+            self.assertIn(f"{root / 'c1'}: exists and is not a directory", err)
+            self.assertNotIn("Traceback", err)
+            self.assertEqual((root / "c1").read_text(), "not a directory")
+            self.assertEqual([p.name for p in root.iterdir()], ["c1"])
+
+    def test_commit_planned_reports_non_directory_dir_without_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "camp"
+            dest.write_text("x", encoding="utf-8")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertFalse(cli._commit_planned(
+                    [(dest / "a.spice", b"1")], argparse.Namespace(), "helper"))
+            self.assertIn(f"{dest}: exists and is not a directory", err.getvalue())
+            self.assertNotIn("Traceback", err.getvalue())
+            self.assertEqual(dest.read_text(), "x")
 
 
 if __name__ == "__main__":

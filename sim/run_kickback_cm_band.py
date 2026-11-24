@@ -26,7 +26,11 @@ a series with any other id defaults to the issue #415 forced-DC supplement's
 arms repro/obs/optdc/icdc, whose optdc/icdc bodies append a declared block
 to the #165 body (sim/kltsim/kickback_cmband.py: probe_body_supplement).
 probe-compare only ever writes into the series it is pointed at; it refuses
-to rewrite the frozen #405 series with a non-#405 arm set.
+to rewrite the frozen #405 series in place with a non-#405 arm set
+(`--report-dir NEW-DIR` publishes such an analysis in a new namespace).
+`compare` and `probe-compare` write their `comparison.{json,md}` pair
+append-only through `kltsim.artifacts.publish` (`--check` is the read-only
+twin; `--report-dir` redirects into a new, citing namespace).
 
 See sim/kltsim/kickback_cmband.py and sim/comparator-kickback-cm-band/README.md.
 Run from the repository root.
@@ -43,7 +47,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import kickback_cmband as kb  # noqa: E402
 
@@ -73,16 +76,20 @@ def _extra(cond: kb.Condition) -> dict:
 
 
 def cmd_build(args) -> int:
-    for name in args.condition or [c.name for c in kb.CONDITIONS]:
-        cond = kb.condition(name)
-        try:
-            paths = kb.write_condition_inputs(cond, _series(args) / cond.name)
-        except kb.KickbackCmBandError as exc:
-            print(str(exc), file=sys.stderr)
-            return 1
-        for p in paths:
-            print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
-    return 0
+    # Plan every selected condition first, then commit the whole build as one
+    # batch: a conflict on any condition writes nothing (no partial build).
+    series = _series(args)
+    planned: list[tuple[Path, bytes]] = []
+    try:
+        for name in args.condition or [c.name for c in kb.CONDITIONS]:
+            cond = kb.condition(name)
+            out_dir = series / cond.name
+            files = kb.input_bytes(cond)
+            planned.extend((out_dir / n, data) for n, data in files.items())
+    except kb.KickbackCmBandError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return kcli.commit_build("build", planned, evidence="campaign evidence")
 
 
 def _retire_unrun_submit(out_dir: Path, tag: str) -> None:
@@ -152,8 +159,10 @@ def cmd_smoke(args) -> int:
 def cmd_compare(args) -> int:
     series = _series(args)
     result = kb.compare_series(series, kb.REFERENCE_DIR)
-    (series / "comparison.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    (series / "comparison.md").write_text(kb.render_markdown(result), encoding="utf-8")
+    rc = kcli.publish_report_pair("compare", args, series, "comparison", result,
+                                  kb.render_markdown(result), "series")
+    if rc or getattr(args, "check", False):
+        return rc
     r = result["reproduction"]
     print(f"reproduction: {'PASS' if r['ok'] else 'FAIL'} "
           f"({r['values_compared']}/{r['expected_values']} values, "
@@ -167,18 +176,24 @@ def cmd_compare(args) -> int:
 
 
 def cmd_probe_build(args) -> int:
+    # Plan every arm of every selected condition first (running the #165
+    # reference-body check per shared-body arm), then commit the whole build
+    # as one batch: a conflict on any arm writes nothing (no partial build).
     issue = _issue_for(args.series)
-    for name in args.condition or [c.name for c in kb.CONDITIONS]:
-        cond = kb.condition(name)
-        for arm in _arms_for(args.series, args.arm):
-            try:
-                paths = kb.write_probe_inputs(cond, arm, _series(args) / cond.name, issue=issue)
-            except kb.KickbackCmBandError as exc:
-                print(str(exc), file=sys.stderr)
-                return 1
-            for p in paths:
-                print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
-    return 0
+    series = _series(args)
+    planned: dict[Path, bytes] = {}  # the shared body prints once per condition
+    try:
+        for name in args.condition or [c.name for c in kb.CONDITIONS]:
+            cond = kb.condition(name)
+            out_dir = series / cond.name
+            for arm in _arms_for(args.series, args.arm):
+                files = kb.probe_input_bytes(cond, arm, issue=issue)
+                kb.check_probe_reference_body(cond, arm, files)
+                planned.update((out_dir / n, data) for n, data in files.items())
+    except kb.KickbackCmBandError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return kcli.commit_build("probe-build", list(planned.items()), evidence="probe evidence")
 
 
 def cmd_probe_run(args) -> int:
@@ -209,14 +224,18 @@ def cmd_probe_run(args) -> int:
 def cmd_probe_compare(args) -> int:
     series = _series(args)
     arms = _arms_for(args.series, args.arm)
-    if args.series == FROZEN_PROBE_SERIES and set(arms) != set(kb.PROBE_ARMS):
-        print(f"{args.series} is the frozen #405 probe series; refusing to rewrite it "
-              "with a non-#405 arm set (its committed files must stay byte-unchanged)",
-              file=sys.stderr)
+    report_dir = getattr(args, "report_dir", None)
+    if args.series == FROZEN_PROBE_SERIES and set(arms) != set(kb.PROBE_ARMS) and (
+            not report_dir or Path(report_dir) == series):
+        print(f"{args.series} is the frozen #405 probe series; refusing to rewrite it in "
+              "place with a non-#405 arm set (its committed files must stay byte-unchanged; "
+              "publish under a NEW --report-dir instead)", file=sys.stderr)
         return 1
     res = kb.probe_compare(series, arms=arms, issue=_issue_for(args.series))
-    (series / "comparison.json").write_text(json.dumps(res, indent=2) + "\n", encoding="utf-8")
-    (series / "comparison.md").write_text(kb.probe_render_markdown(res), encoding="utf-8")
+    rc = kcli.publish_report_pair("probe-compare", args, series, "comparison", res,
+                                  kb.probe_render_markdown(res), "series")
+    if rc or getattr(args, "check", False):
+        return rc
     for p in res["problems"]:
         print("problem:", p, file=sys.stderr)
     for r in res["points"]:
@@ -262,6 +281,7 @@ def main(argv: list[str] | None = None) -> int:
 
     g = sub.add_parser("compare")
     g.add_argument("--series", required=True)
+    kcli.add_report_pair_args(g, "comparison", "series")
     g.set_defaults(func=cmd_compare)
 
     pb = sub.add_parser("probe-build")
@@ -284,6 +304,7 @@ def main(argv: list[str] | None = None) -> int:
     pc.add_argument("--series", required=True)
     pc.add_argument("--arm", action="append", choices=list(kb.ALL_PROBE_ARMS),
                     help="arm set to compare (default: by series, see --help)")
+    kcli.add_report_pair_args(pc, "comparison", "series")
     pc.set_defaults(func=cmd_probe_compare)
 
     args = ap.parse_args(argv)

@@ -370,13 +370,22 @@ def regeneration_with_bias_probes(bench: Bench | None = None) -> Bench:
 
 #: DR-0002 Row 2 basis (sim/comparator-transient-noise, record
 #: 20260921-154729-41cbc7f): N = 80 trials per rung per PVT point, probe
-#: overdrive od_x = 1 mV, injected density 36.27 nV/sqrt(Hz). The seed is
+#: overdrive od_x = 1 mV, injected density
+#: TRANSIENT_NOISE_INJECTED_DENSITY_NV_RTHZ nV/sqrt(Hz). The seed is
 #: RECORDED ONLY: klt writes a per-sample `.options seed=` from it, which
 #: ngspice-46's TRNOISE generator ignores (see the circuit's header, item 4).
 TRANSIENT_NOISE_N = 80
 TRANSIENT_NOISE_SEED = 20260916
 #: Probe overdrive (V), copied from sim/comparator-transient-noise/testbench/tb.json.
 TRANSIENT_NOISE_OD_X_V = 1e-3
+#: Input-referred density the bench circuit injects (nV/sqrt(Hz)):
+#: vn_na * sqrt(2 * vn_ts) over the committed `.param` lines of
+#: sim/klt-corner-verification/benches/transient_noise.circuit.spice.
+#: The one definition every projection and report figure assuming the
+#: DR-0002 Row 2 injection is scaled by (loadwidth._projection and prose);
+#: tests/test_benches_noise_density.py fails loudly if the circuit is
+#: recalibrated away from it.
+TRANSIENT_NOISE_INJECTED_DENSITY_NV_RTHZ = 36.27
 
 TRANSIENT_NOISE = Bench(
     name="transient_noise",

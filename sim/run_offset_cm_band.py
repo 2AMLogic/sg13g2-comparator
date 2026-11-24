@@ -10,6 +10,7 @@
     python3 sim/run_offset_cm_band.py supplement-build --series ID [--condition C ...]
     python3 sim/run_offset_cm_band.py supplement-run  --series ID [--condition C] [--klt KLT]
     python3 sim/run_offset_cm_band.py supplement-report --series ID [--parent ID]
+        [--report-dir DIR] [--check]
 
 Conditions: vcm-m050 (dut_vcm - 50 mV), vcm-nom (dut_vcm), vcm-p050
 (dut_vcm + 50 mV). Each condition is one campaign under
@@ -49,11 +50,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from kltsim import artifacts as artifacts_mod  # noqa: E402
 from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import cmband  # noqa: E402
-from kltsim import grade as grade_mod  # noqa: E402
 from kltsim.benches import OFFSET_MC, SUPPLIES_V, TEMPERATURES_C  # noqa: E402
 
 
@@ -66,13 +65,18 @@ def _extra(cond: cmband.Condition, kind: str) -> dict:
 
 
 def cmd_build(args) -> int:
-    for name in args.condition or [c.name for c in cmband.CONDITIONS]:
-        cond = cmband.condition(name)
-        body, requests = cmband.write_condition_inputs(cond, _series(args) / cond.name)
-        print(f"wrote {body.relative_to(build_mod.REPO_ROOT)}")
-        for r in requests:
-            print(f"wrote {r.relative_to(build_mod.REPO_ROOT)}")
-    return 0
+    # Plan every selected condition first, then commit the whole build as one
+    # batch: a conflict on any condition writes nothing (no partial build).
+    series = _series(args)
+
+    def plan() -> list[tuple[Path, bytes]]:
+        planned: list[tuple[Path, bytes]] = []
+        for name in args.condition or [c.name for c in cmband.CONDITIONS]:
+            cond = cmband.condition(name)
+            planned += cmband.plan_condition_inputs(cond, series / cond.name)
+        return planned
+
+    return kcli.commit_build("build", plan)
 
 
 def cmd_run(args) -> int:
@@ -115,11 +119,12 @@ def cmd_run(args) -> int:
 
 
 def _reduced_request(cond: cmband.Condition, out_dir: Path, tag: str, *, section: str,
-                     supply: float, temperature: float, n: int, note: str) -> Path:
-    out_dir.mkdir(parents=True, exist_ok=True)
+                     supply: float, temperature: float, n: int,
+                     note: str) -> tuple[Path, list[tuple[Path, bytes]]]:
+    """The control/repeat inputs as ``(request path, planned files)``: the
+    shared condition body plus the reduced request, composed without touching
+    disk (the caller commits them append-only)."""
     body_name = f"{cmband.BENCH_NAME}.{cond.name}.body.spice"
-    (out_dir / body_name).write_text(
-        cmband.compose_cm_body(cond, build_mod.BATCH_OSDI_DIR), encoding="utf-8")
     req = cmband.compose_cm_request(cond, body_name, section)
     req["corners"]["process"] = [section]
     req["corners"]["supply_v"] = {k: [supply] for k in OFFSET_MC.supply_keys}
@@ -127,8 +132,12 @@ def _reduced_request(cond: cmband.Condition, out_dir: Path, tag: str, *, section
     req["monte_carlo"]["n"] = n
     req["_comment"].append(note)
     path = out_dir / f"{tag}.request.json"
-    path.write_text(json.dumps(req, indent=2) + "\n", encoding="utf-8")
-    return path
+    planned = [
+        (out_dir / body_name,
+         cmband.compose_cm_body(cond, build_mod.BATCH_OSDI_DIR).encode("utf-8")),
+        (path, (json.dumps(req, indent=2) + "\n").encode("utf-8")),
+    ]
+    return path, planned
 
 
 def cmd_control(args) -> int:
@@ -138,11 +147,14 @@ def cmd_control(args) -> int:
     if (out_dir / f"{tag}.envelope.json").exists():
         print(f"{tag}: envelope present (append-only)", file=sys.stderr)
         return 1
-    request = _reduced_request(
+    request, planned = _reduced_request(
         cond, out_dir, tag, section=args.process, supply=args.supply,
         temperature=args.temperature, n=args.n,
         note=(f"MISMATCH-OFF NEGATIVE CONTROL: plain `{args.process}` section, so every "
               "sample must report the same offset (sigma = 0). Not spec evidence."))
+    # force=False on purpose: --force never clobbers the shared controls/ inputs.
+    if not kcli._commit_planned(planned, argparse.Namespace(force=False), tag):
+        return 1
     return kcli._submit_with_retry(request, out_dir, tag, args, _extra(cond, "negative-control"))
 
 
@@ -156,12 +168,15 @@ def cmd_repeat(args) -> int:
     # The FIRST grid point of the per-process request (lowest supply, lowest
     # temperature) is corner_index 0 there and here, so klt derives the same
     # per-sample seeds: a same-seed repeat of the campaign's draws.
-    request = _reduced_request(
+    request, planned = _reduced_request(
         cond, out_dir, tag, section=args.process, supply=SUPPLIES_V[0],
         temperature=TEMPERATURES_C[0], n=OFFSET_MC.monte_carlo["n"],
         note=("SAME-SEED REPEAT: the campaign's first grid point of this process (corner "
               "index 0 in both requests), full N, resubmitted as a separate batch job; every "
               "draw must reproduce the campaign's. Not additional spec evidence."))
+    # force=False on purpose: --force never clobbers the shared controls/ inputs.
+    if not kcli._commit_planned(planned, argparse.Namespace(force=False), tag):
+        return 1
     return kcli._submit_with_retry(request, out_dir, tag, args, _extra(cond, "same-seed-repeat"))
 
 
@@ -181,17 +196,9 @@ def cmd_compare(args) -> int:
     series = _series(args)
     result = cmband.compare_series(series, reference_campaign=args.reference_campaign,
                                    harness_record=cmband.HARNESS_RECORD)
-    md = cmband.render_markdown(result)
-    report_dir, md = kcli.resolve_report_dir(args, series, md, result, "series")
-    # Strict JSON (issue #250): a non-finite float is null, never a NaN token.
-    rc = artifacts_mod.publish(
-        "compare",
-        [(report_dir / "comparison.json", (grade_mod.dumps_strict(result, indent=2) + "\n").encode("utf-8")),
-         (report_dir / "comparison.md", md.encode("utf-8"))],
-        check_only=args.check,
-        namespace_hint=kcli.SERIES_NAMESPACE_HINT,
-        require_dir=report_dir)
-    if rc or args.check:
+    rc = kcli.publish_report_pair("compare", args, series, "comparison", result,
+                                  cmband.render_markdown(result), "series")
+    if rc or getattr(args, "check", False):
         return rc
     for name, c in result["conditions"].items():
         t = c["three_sigma_mv"]
@@ -201,21 +208,18 @@ def cmd_compare(args) -> int:
 
 
 def cmd_supplement_build(args) -> int:
-    try:
+    # Plan every selected condition first, then commit the whole build as one
+    # batch: a conflict on any condition writes nothing (no partial build).
+    series = _series(args)
+
+    def plan() -> list[tuple[Path, bytes]]:
+        planned: list[tuple[Path, bytes]] = []
         for name in args.condition or [c.name for c in cmband.CONDITIONS]:
             cond = cmband.condition(name)
-            paths, created = cmband.write_supplement_inputs(cond, _series(args) / cond.name)
-            for p in paths:
-                verb = "wrote" if p in created else "unchanged"
-                try:
-                    shown = p.relative_to(build_mod.REPO_ROOT)
-                except ValueError:  # a series dir outside the repo (tests)
-                    shown = p
-                print(f"{verb} {shown}")
-    except build_mod.BuildError as exc:
-        print(f"supplement-build: {exc}", file=sys.stderr)
-        return 1
-    return 0
+            planned += cmband.plan_supplement_inputs(cond, series / cond.name)
+        return planned
+
+    return kcli.commit_build("supplement-build", plan)
 
 
 def cmd_supplement_run(args) -> int:
@@ -242,10 +246,11 @@ def cmd_supplement_run(args) -> int:
 def cmd_supplement_report(args) -> int:
     series = _series(args)
     result = cmband.compare_supplement(series, parent_campaign=args.parent)
-    (series / "supplement-report.json").write_text(
-        json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    (series / "supplement-report.md").write_text(
-        cmband.render_supplement_markdown(result), encoding="utf-8")
+    rc = kcli.publish_report_pair("supplement-report", args, series, "supplement-report",
+                                  result, cmband.render_supplement_markdown(result),
+                                  "series")
+    if rc or getattr(args, "check", False):
+        return rc
     c = result["conclusion"]
     print(f"targets complete: {sum(1 for t in c['targets_complete'] if t['valid'])}"
           f"/{c['targets_expected']}; pairs identical {c['pairs_identical']}"
@@ -323,11 +328,7 @@ def main(argv: list[str] | None = None) -> int:
     g = sub.add_parser("compare")
     g.add_argument("--series", required=True)
     g.add_argument("--reference-campaign", default=cmband.REFERENCE_CAMPAIGN)
-    g.add_argument("--report-dir", help="write comparison.{json,md} here instead of the series "
-                   "directory (new directory; cites the series; different existing files are "
-                   "never overwritten)")
-    g.add_argument("--check", action="store_true",
-                   help="read-only: exit 1 if the reports are missing, stale or unsafe")
+    kcli.add_report_pair_args(g, "comparison", "series")
     g.set_defaults(func=cmd_compare)
 
     sb = sub.add_parser("supplement-build")
@@ -344,6 +345,7 @@ def main(argv: list[str] | None = None) -> int:
     sg = sub.add_parser("supplement-report")
     sg.add_argument("--series", required=True)
     sg.add_argument("--parent", default=cmband.SUPPLEMENT_PARENT)
+    kcli.add_report_pair_args(sg, "supplement-report", "series")
     sg.set_defaults(func=cmd_supplement_report)
 
     args = ap.parse_args(argv)

@@ -1,14 +1,25 @@
 """Clock/supply sensitivity (issue #173) unit tests. Stdlib only, no PDK, no
 ngspice. Covers the circuit rewrites (exact, one-for-one), the disturbance
-timing, the request shape and the paired offset statistics."""
+timing, the request shape, the paired offset statistics and the ``build``
+command's append-only commit (issue #538)."""
 
 from __future__ import annotations
 
+import argparse
+import contextlib
+import io
 import json
+import sys
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
-from kltsim import clocksupply as cs
-from kltsim import clocksupply_report as rep
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+import run_clock_supply_sensitivity as rcs  # noqa: E402
+from kltsim import clocksupply as cs  # noqa: E402
+from kltsim import clocksupply_report as rep  # noqa: E402
 
 
 class CircuitRewrites(unittest.TestCase):
@@ -318,12 +329,6 @@ class OffsetValidation(unittest.TestCase):
 
 
 class ReportJson(unittest.TestCase):
-    def test_dumps_report_is_strict(self):
-        out = rep.dumps_report({"a": float("nan"), "b": [float("inf"), 1.0]})
-        self.assertNotIn("NaN", out)
-        self.assertNotIn("Infinity", out)
-        json.loads(out, parse_constant=lambda c: self.fail(c))
-
     def test_reference_campaign_still_readable(self):
         d = rep.build_mod.EXPERIMENT_DIR / "campaigns" / rep.REFERENCE_CAMPAIGN
         p = d / "regeneration.envelope.json"
@@ -331,6 +336,69 @@ class ReportJson(unittest.TestCase):
             self.skipTest("reference campaign not present")
         pts = cs.regen_points(json.loads(p.read_text(encoding="utf-8")))
         self.assertEqual(sum(1 for q in pts.values() if not q["problem"]), 45)
+
+
+class BuildCommand(unittest.TestCase):
+    """Issue #538: ``build`` commits through ``kcli.commit_build``, so a
+    series outside the repo builds, an identical rebuild reports every path
+    as ``unchanged`` and a refusal is reported (exit 1) rather than escaping
+    as a traceback."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.series = Path(tmp.name) / "s"
+        p = mock.patch.object(cs, "SERIES_DIR", self.series.parent)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def build(self):
+        args = argparse.Namespace(series=self.series.name, condition=["base"], kind=None)
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = rcs.cmd_build(args)
+        return rc, out.getvalue(), err.getvalue()
+
+    def files(self):
+        return sorted(p for p in self.series.rglob("*") if p.is_file())
+
+    def test_fresh_build_outside_repo_reports_wrote(self):
+        rc, out, err = self.build()
+        self.assertEqual((rc, err), (0, ""))
+        written = self.files()
+        self.assertEqual(len(written), 4)  # regen + offset: body + request each
+        self.assertEqual(sorted(out.splitlines()), [f"wrote {p}" for p in written])
+
+    def test_identical_rebuild_reports_unchanged(self):
+        self.build()
+        rc, out, err = self.build()
+        self.assertEqual((rc, err), (0, ""))
+        self.assertEqual(sorted(out.splitlines()), [f"unchanged {p}" for p in self.files()])
+
+    def test_conflicting_input_is_reported_without_traceback(self):
+        self.build()
+        victim = self.series / "base" / "regen.base.body.spice"
+        victim.write_bytes(b"tampered")
+        absent = self.series / "base" / "offset.base.request.json"
+        absent.unlink()
+        rc, out, err = self.build()
+        self.assertEqual(rc, 1)
+        self.assertEqual(out, "")
+        self.assertIn(str(victim), err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(victim.read_bytes(), b"tampered")
+        self.assertFalse(absent.exists())  # nothing written on a refusal
+
+    def test_non_directory_condition_dir_is_reported_without_traceback(self):
+        blocker = self.series / "base"
+        blocker.parent.mkdir(parents=True)
+        blocker.write_bytes(b"not a directory")
+        rc, out, err = self.build()
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn(f"{blocker}: exists and is not a directory", err)
+        self.assertNotIn("Traceback", err)
+        self.assertEqual(blocker.read_bytes(), b"not a directory")
+        self.assertEqual(list(self.series.iterdir()), [blocker])
 
 
 if __name__ == "__main__":

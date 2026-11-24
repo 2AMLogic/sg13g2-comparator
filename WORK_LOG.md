@@ -6,8 +6,54 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 - [2026-09](work_log/WORK_LOG_2026-09.md)
 
+### 2026-11-23
+
+- **PR #545**: refactor: drop test-only write_*_inputs wrappers, move kickback build onto commit_build
+- **Issue #543** (closed): Remove test-only write_*_inputs wrappers in kltsim; finish commit_build move for kickback driver
+- **PR #541**: test: pin run_decision_cm_band build: fresh, idempotent, conflict
+- **PR #539**: fix: share one commit_build helper across six build commands
+- **PR #536**: fix: keep null-valued original cards from certifying probe equality in kickback_cmband
+- **PR #534**: fix: exclude null-valued pairs from values_compared in cmdecision and kickback reproduction checks
+- **PR #520**: refactor: route kickback CM-band comparisons through artifacts.publish
+- **Issue #540** (closed): Add a cmd_build test class for sim/run_decision_cm_band.py (the one build call site with no automated test)
+- **Issue #538** (closed): Consolidate six campaign/series build commit-and-print epilogues onto cli.commit_build
+- **Issue #535** (closed): probe_compare: equals_165_on_original_cards counts null/null pairs as equal (latent sibling of #532)
+- **Issue #532** (closed): Sibling values_compared paths still count null-vs-null pairs as compared values (kickback, cmdecision)
+- **Issue #519** (closed): Route kickback CM-band comparison writers through artifacts.publish
+
+### 2026-11-22
+
+- **PR #530**: fix: count only measured pairs as compared values in the memory determinism repeat
+- **Issue #525** (closed): Determinism repeat counts null-vs-null measurement pairs as compared values
+- **PR #531**: fix: drop kickback_cmband's duplicate non-directory preflight
+- **PR #528**: fix: publish supplement-report pair append-only
+- **PR #526**: fix: preflight non-directory destination dirs in artifacts commit/check
+- **PR #524**: fix: kickback commit_inputs refuses non-directory destination dirs
+- **PR #522**: chore: ignore daemon-owned .loom/account-ranking.* dispatch state
+- **PR #517**: refactor: route CM-band campaign input writers through build.commit_inputs append-only
+- **PR #514**: refactor: route kickback CM-band input writers through artifacts.commit
+- **PR #500**: refactor: drive netlist regeneration through pinned klt netlist, not raw xschem
+- **PR #499**: fix: report insufficient evidence for empty determinism-repeat rounds
+- **Issue #527** (closed): kickback_cmband._non_directory_ancestors is now redundant with the artifacts preflight
+- **Issue #523** (closed): build.commit_inputs: campaign dir existing as a regular file raises a bare FileExistsError, not BuildError
+- **Issue #521** (closed): gitignore: daemon-owned .loom/account-ranking.* trips check-main-clean for every builder
+- **Issue #518** (closed): Route cmd_supplement_report's derived report pair through artifacts.publish
+- **Issue #516** (closed): Route remaining CM-band input writers in cmband and cmdecision through build.commit_inputs
+- **Issue #515** (closed): kickback_cmband.commit_inputs: out_dir existing as a regular file raises a bare FileExistsError, not KickbackCmBandError
+- **Issue #513** (closed): Replace duplicated append-only input writers in kickback_cmband with artifacts.commit
+- **Issue #495** (closed): Remove the empty-measurement fallback from the memory determinism repeat
+- **Issue #489** (closed): Replace raw xschem call in design/netlist.py with klt netlist
+- **PR #509**: refactor: source the transient-noise injected density from one constant
+- **Issue #506** (closed): Source the 36.27 nV/√Hz bench injection from one place instead of per-module literals
+- **PR #510**: fix: hash supplement envelopes from the bytes used to parse them
+- **Issue #508** (closed): Hash offset supplement envelopes from the bytes used to parse them
+
 ### 2026-11-21
 
+- **PR #501**: sim: measure matched PMOS load widths for Row 2 density and bench noise
+- **Issue #498** (closed): Measure how matched PMOS load widths change input-referred density and Row 2 noise
+- **PR #505**: fix: repair dangling issue-92-bias MC manifest link in corner-verification README
+- **Issue #502** (closed): Broken relative link to the issue-92-bias MC manifest in sim/klt-corner-verification/README.md
 - **PR #494**: docs: measure per-corner front-end density and complete the Row 2 factor split
 - **PR #491**: sim: replace the unusable manual dpkg-deb recipe in build-osdi.sh with install-and-rerun
 - **Issue #477** (closed): Row 2 noise: split the front-end term (density vs decision bandwidth), then a bounded three-candidate design study and a drafting-only decision record

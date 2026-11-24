@@ -138,7 +138,10 @@ a bench artifact, or a convergence weakness, so the question above stays open.
 The 43/45 result of the parent campaign is unchanged. Re-submission needs a
 fleet runner image compatible with the client; `supplement-report` regenerates
 the report from whichever envelopes exist in a series directory (fetch stored
-objects with `klt artifact get <manifest>#<name>`).
+objects with `klt artifact get <manifest>#<name>`). The report pair is
+append-only: re-publishing identical bytes is a no-op, different bytes are
+refused, a changed analysis goes under a new directory with `--report-dir`,
+and `--check` is the read-only twin.
 
 ### Supplementary max-step re-run r2 (#89), partial: 4 of 6 populations
 
