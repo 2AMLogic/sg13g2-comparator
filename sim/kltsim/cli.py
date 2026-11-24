@@ -846,7 +846,8 @@ def cmd_capacitance(args) -> int:
         print(f"capacitance: {exc}", file=sys.stderr)
         return 1
     print((CAMPAIGNS_DIR / args.campaign / f"{args.report_name}.md").read_text(encoding="utf-8"))
-    if any(row["decision"]["decision"] == "incomplete" for row in result["screen"]):
+    if (any(row["decision"]["decision"] == "incomplete" for row in result["screen"])
+            or any(row["candidate_status"] == "rejected" for row in result["full"])):
         return 1
     return 0 if result["screen"] or result["full"] else 1
 

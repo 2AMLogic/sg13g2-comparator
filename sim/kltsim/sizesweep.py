@@ -688,18 +688,20 @@ def _control_identity() -> dict:
             "params": build_mod.extract_param_overrides(text)}
 
 
-def _candidate_report(sub: Path, bench_names, expect_name: str | None = None
-                      ) -> tuple[dict, list[str]]:
-    """(candidate declaration, problems): every bench body must declare the
-    SAME structural candidate, and (when ``expect_name`` is given, derived
-    from the ``scr_/full_`` directory name) exactly that named setting."""
-    found: dict[str, dict] = {}
-    problems: list[str] = []
+def _candidate_report(sub: Path, bench_names, expect_name: str, control: dict
+                      ) -> tuple[dict, list[str], dict[str, str]]:
+    """Check the shared candidate declaration and each executable batch body."""
+    bodies = {}
+    body_problems = {}
     for name in bench_names:
-        body = sub / f"{name}.body.spice"
-        if not body.is_file():
-            continue
-        found[name] = build_mod.extract_candidate(body.read_text(encoding="utf-8"))
+        path = sub / f"{name}.body.spice"
+        if path.is_file():
+            bodies[name] = path.read_text(encoding="utf-8")
+        else:
+            body_problems[name] = f"{path.name} is missing"
+
+    found = {n: build_mod.extract_candidate(body) for n, body in bodies.items()}
+    problems = []
     missing = sorted(n for n, c in found.items() if not c)
     if missing:
         problems.append(f"bench body/bodies declare no candidate: {', '.join(missing)}")
@@ -707,13 +709,33 @@ def _candidate_report(sub: Path, bench_names, expect_name: str | None = None
     if len(declared) > 1:
         problems.append("inconsistent candidate declaration across benches: " + "; ".join(
             f"{n} {json.dumps(c, sort_keys=True)}" for n, c in sorted(found.items())))
-        return {}, problems
-    cand = next(iter(declared)) if declared else {}
-    cand = json.loads(cand) if cand else {}
-    if expect_name and cand and cand.get("name") != expect_name:
-        problems.append(f"directory names candidate {expect_name!r} but the benches "
-                        f"declare {cand.get('name')!r}")
-    return cand, problems
+        return {}, problems, body_problems
+    if not declared:
+        return {}, problems, body_problems
+
+    cand = json.loads(declared.pop())
+    ref_problems, _ = grade_mod._candidate_reference(cand, expect_name)
+    problems.extend(ref_problems)
+    if not ref_problems:
+        # Header and envelope hashes alone do not bind the bias sources or the
+        # TRNOISE waveform. Rebuild from the archived controls, registered DUT
+        # and fixed bench circuit, including all executable SPICE statements.
+        reference = (expect_name, build_mod.REPO_ROOT / cand["path"])
+        bias = control["params"]["dut_ib"]
+        for name, body in bodies.items():
+            bench = grade_mod._bench_spec(name)
+            # compose_body accepts both a numeric override (CLI) and its quoted
+            # SPICE literal. Accept either representation of the control bias.
+            for value in (float(bias), bias):
+                expected = build_mod.compose_body(
+                    bench, build_mod.BATCH_OSDI_DIR, param_overrides={"dut_ib": value},
+                    geometry_overrides=control["geometry"], candidate=reference)
+                if body == expected:
+                    break
+            else:
+                body_problems[name] = (f"{name}.body.spice differs from the batch bench "
+                                       f"at the archived control bias and geometry for {expect_name}")
+    return cand, problems, body_problems
 
 
 def _candidate_cap_fF(cand: dict, problems: list[str]) -> float | None:
@@ -760,7 +782,7 @@ def _noise_screen_cell(bench_ev, reasons: list[str]) -> dict:
         # a partial mean is not a screen statistic: it is published only
         # under its own key, never as the setting's noise value
         "value": mean if available else None,
-        "partial_mean": None if available else mean,
+        "partial_mean": mean if not available and not reasons else None,
         "point": None,
         "expected": expected, "present": expected - len(absent),
         "valid": 0 if reasons else len(valid),
@@ -835,8 +857,8 @@ def _select_finalist(rows: list[dict]) -> None:
             r["decision"].update(
                 advance=False, decision="not-selected",
                 reasons=r["decision"]["reasons"] + [
-                    f"qualified, but `{qualified[0]['name']}` has the lower noise mean and "
-                    "is the single finalist"])
+                    f"qualified; selected `{qualified[0]['name']}` by lowest noise mean, "
+                    "then smaller capacitance, then name"])
 
 
 def cap_screen(campaign_dir: Path) -> list[dict]:
@@ -859,13 +881,15 @@ def cap_screen(campaign_dir: Path) -> list[dict]:
                       if p.is_dir() and p.name.startswith("scr_")):
         name = sub.name[len("scr_"):]
         geometry, geom_problems = _geometry_report(sub, CAP_STUDY_BENCHES)
-        cand, cand_problems = _candidate_report(sub, CAP_STUDY_BENCHES, expect_name=name)
+        cand, cand_problems, body_problems = _candidate_report(
+            sub, CAP_STUDY_BENCHES, name, control)
         identity_problems = []
         if geometry != control_identity:
             identity_problems.append(
                 "every setting must hold the archived control identity ("
                 + _geom(control_identity) + "); the body declares " + _geom(geometry))
         cap_fF = _candidate_cap_fF(cand, cand_problems)
+        shared_problems = cand_problems + geom_problems + identity_problems
         loaded = {}
         for bname in CAP_STUDY_BENCHES:
             bench = grade_mod._bench_spec(bname)
@@ -873,9 +897,11 @@ def cap_screen(campaign_dir: Path) -> list[dict]:
             ev = grade_mod.load_campaign(sub, corners=corners, bench_names=(bname,))[bname]
             points, notes = (_bench_points(ev, expected_set) if bname == "regeneration"
                              else ({}, []))
-            reasons = (_bench_reasons(ev, dut, candidate=name) + geom_problems
-                       + identity_problems)
-            cand_problems += [r for r in reasons if "candidate" in r]
+            reasons = _bench_reasons(ev, dut, candidate=name)
+            reasons.extend(p for p in shared_problems if p not in reasons)
+            if bname in body_problems:
+                reasons.append(body_problems[bname])
+            cand_problems.extend(r for r in reasons if "candidate" in r and r not in cand_problems)
             loaded[bname] = {
                 "points": points, "notes": notes, "reasons": reasons, "ev": ev,
                 "ppb": {k: _point_problem(c, bname)
@@ -967,43 +993,49 @@ def cap_control() -> dict:
     }
 
 
-def cap_full(campaign_dir: Path) -> list[dict]:
+def cap_full(campaign_dir: Path, screen: list[dict] | None = None) -> list[dict]:
     """The finalist table: full 45-point Rows 1-5 graded by ``kltsim.grade``
     with the candidate expectation, plus the archived 8 um baseline's Target
     verdicts carried alongside for the preservation question.
 
-    A finalist is graded only after its archived identity is checked: the
-    named structural candidate, one consistent geometry/bias declaration
-    across the benches, and that declaration equal to the archived control's.
+    Only the setting advanced by the screen can be graded. Its batch bodies
+    must reproduce the registered candidate at the archived control settings.
     """
     baseline = json.loads((build_mod.EXPERIMENT_DIR / "campaigns" / BASELINE_CAMPAIGN
                            / BASELINE_FULL / "grading.json").read_text(encoding="utf-8"))
     base_by_id = {r["id"]: r for r in baseline["rows"]}
     control = _control_identity()
     control_identity = {**control["geometry"], **control["params"]}
+    if screen is None:
+        screen = cap_screen(campaign_dir)
+    finalist = next((row["name"] for row in screen if row["decision"]["advance"]), None)
+    benches = grade_mod._bench_names()
     out = []
     for sub in sorted(p for p in campaign_dir.iterdir()
                       if p.is_dir() and p.name.startswith("full_")):
         name = sub.name[len("full_"):]
-        cand, cand_problems = _candidate_report(sub, tuple(grade_mod._bench_names()),
-                                                expect_name=name)
-        if cand:
-            # the reference file itself is verified before any grading spend
-            ref_problems, _bytes = grade_mod._candidate_reference(cand, name)
-            cand_problems += ref_problems
-        geometry, geom_problems = _geometry_report(sub, tuple(grade_mod._bench_names()))
-        identity_problems = []
-        if not geom_problems and geometry != control_identity:
-            identity_problems.append(
-                "a finalist must hold the archived control identity ("
-                + _geom(control_identity) + "); the bodies declare " + _geom(geometry))
-        problems = list(cand_problems) + list(geom_problems) + identity_problems
+        if name == finalist:
+            cand, cand_problems, body_problems = _candidate_report(sub, benches, name, control)
+            geometry, geom_problems = _geometry_report(sub, benches)
+            identity_problems = list(body_problems.values())
+            if not geom_problems and geometry != control_identity:
+                identity_problems.append(
+                    "a finalist must hold the archived control identity ("
+                    + _geom(control_identity) + "); the bodies declare " + _geom(geometry))
+        else:
+            cand, cand_problems, geometry, geom_problems = {}, [], {}, []
+            selection = f"selected {finalist}" if finalist else "selected no finalist"
+            identity_problems = [f"Unexpected {sub.name} because the screen {selection}."]
+        problems = cand_problems + geom_problems + identity_problems
         graded = None if problems else grade_mod.grade_campaign(sub, candidate=name)
         by_id = {r["id"]: r for r in (graded or {}).get("rows", [])}
+        row2 = _full_row_summary(by_id.get("2"))
         cells = {}
         for row_id in _all_row_ids():
             entry = by_id.get(row_id)
             cell = ibsweep_mod._cell(entry)
+            if row_id == "2" and row2:
+                cell.update(row2, at=None)
             if entry is not None:
                 for field in ("report_verdict", "benches_fully_covered", "coverage_problems"):
                     if field in entry:
@@ -1042,7 +1074,7 @@ def cap_full(campaign_dir: Path) -> list[dict]:
             "grading_verdicts": {
                 "target_rows_pass": (graded or {}).get("t1_item5", {}).get(
                     "all_target_rows_pass"),
-                "row2": _full_row_summary(by_id.get("2")),
+                "row2": row2,
             } if graded else None,
         })
     return out
@@ -1056,7 +1088,8 @@ def _full_row_summary(entry: dict | None) -> dict | None:
     target = entry.get("target") if isinstance(entry.get("target"), dict) else {}
     mean = target.get("grid_mean")
     return {"target_verdict": entry.get("target_verdict"),
-            "value": mean if mean is not None else (target.get("binding") or {}).get("value"),
+            "value": mean,
+            "partial_mean_ungraded": target.get("partial_mean_ungraded"),
             "grid_mean": mean,
             "points_valid": target.get("points_valid"),
             "points_expected": target.get("points_expected")}
@@ -1157,7 +1190,7 @@ def render_capacitance_markdown(result: dict) -> str:
                     cells.append("REJECTED")
                 elif c.get("state") not in ("measured", "incomplete"):
                     cells.append("not run")
-                elif c.get("points_expected") is None:
+                elif c.get("points_expected") is None and row_id != "2":
                     # coverage / reporting rows carry no point population
                     cells.append(f"{c['target_verdict']}"
                                  + (" **baseline-unverified**"
@@ -1172,9 +1205,17 @@ def render_capacitance_markdown(result: dict) -> str:
                         mark = " **baseline-unverified** (row not gradeable)"
                     elif base == grade_mod.PASS:
                         mark = " (baseline PASS held)" if c.get("preservation") == "held" else ""
-                    cells.append(f"{_f(c['value'])} @ {c['at']} (T {tv}; "
-                                 f"{c['points_valid']}/{c['points_expected']} valid; "
-                                 f"{c['points_failing_target']} pts fail T){mark}")
+                    if row_id == "2":
+                        # Older reports also store the authoritative grid mean in the summary.
+                        summary = (r.get("grading_verdicts") or {}).get("row2") or {}
+                        mean = c.get("grid_mean", summary.get("grid_mean"))
+                        value = _f(mean) if mean is not None else "unavailable"
+                        cells.append(f"{value} (T {tv}, "
+                                     f"{c['points_valid']}/{c['points_expected']} valid){mark}")
+                    else:
+                        cells.append(f"{_f(c['value'])} @ {c['at']} (T {tv}; "
+                                     f"{c['points_valid']}/{c['points_expected']} valid; "
+                                     f"{c['points_failing_target']} pts fail T){mark}")
                 if "report_verdict" in c:
                     cells[-1] += f" (reporting requirement: {c['report_verdict']})"
                 if "benches_fully_covered" in c:
@@ -1184,17 +1225,25 @@ def render_capacitance_markdown(result: dict) -> str:
             L.append(f"| {r['name']} | {_f(r.get('cap_fF'), 3) if r.get('cap_fF') is not None else '-'} | "
                      + " | ".join(cells) + " |")
         for r in result["full"]:
+            if r.get("rejection_reasons"):
+                L.append("")
+                L.extend(f"- `{r['name']}` — {reason}" for reason in r["rejection_reasons"])
             gv = r.get("grading_verdicts") or {}
             row2 = gv.get("row2") or {}
             if row2:
+                mean = (f"{_f(row2['grid_mean'])} mV rms" if row2.get("grid_mean") is not None
+                        else "unavailable")
                 L += ["", f"### `{r['name']}` Row 2 (Target <= 1.0 mV rms)", "",
-                      f"- 45-point unchanged-bench grid mean: **{_f(row2.get('value'))} mV rms**, "
+                      f"- 45-point unchanged-bench grid mean: **{mean}**, "
                       f"Target verdict **{row2.get('target_verdict')}** "
                       f"({row2.get('points_valid')}/{row2.get('points_expected')} valid points).",
                       "- This is the DR-designated statistic (grid-wide mean of the "
                       "per-point two-rung probit-slope sigma, N = 80 per rung, injected "
                       "36.27 nV/rtHz); the screen's 18-point figure above is a "
                       "projection-scale comparison only."]
+                if row2.get("partial_mean_ungraded") is not None:
+                    L.append(f"- {row2['points_valid']}/{row2['points_expected']} valid points, "
+                             f"partial mean (ungraded): {_f(row2['partial_mean_ungraded'])} mV rms.")
         L.append("")
     return "\n".join(L)
 
@@ -1203,8 +1252,9 @@ def cap_run(campaign: str, campaigns_dir: Path, report_name: str = "capacitance"
     """The issue #497 capacitance-study report: control + screen (+ full
     finalists), written append-only beside the campaign like ``run``."""
     cdir = campaigns_dir / campaign
+    screen_rows = cap_screen(cdir)
     result = {"campaign": campaign, "control": cap_control(),
-              "screen": cap_screen(cdir), "full": cap_full(cdir)}
+              "screen": screen_rows, "full": cap_full(cdir, screen_rows)}
     js = json.dumps(grade_mod.json_safe(result), indent=2, allow_nan=False) + "\n"
     md = render_capacitance_markdown(result)
     jpath, mpath = cdir / f"{report_name}.json", cdir / f"{report_name}.md"

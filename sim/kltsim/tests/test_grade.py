@@ -641,7 +641,7 @@ class CandidateDutTests(unittest.TestCase):
         body = self._cand_body(self.cand2f, self.GEOMETRY)
         declared = build.extract_candidate(body)
         self.assertEqual(declared["name"], "cadd2f")
-        self.assertEqual(declared["path"], str(self.cand2f))
+        self.assertEqual(build.REPO_ROOT / declared["path"], self.cand2f.resolve())
         self.assertEqual(declared["sha256"],
                          hashlib.sha256(self.cand2f.read_bytes()).hexdigest())
 

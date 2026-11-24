@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from kltsim import build, grade, sizesweep
+from kltsim import build, cli, grade, sizesweep
 from kltsim.benches import KICKBACK, REGENERATION
 
 
@@ -1000,6 +1000,20 @@ def _write_chain(sub: Path, tag: str, body: str, req_bytes: bytes, env: dict):
         "envelope_sha256": hashlib.sha256(env_bytes).hexdigest()}), encoding="utf-8")
 
 
+def replace_cap_body(sub, bench, old, new):
+    """Change the executable body and rebind every envelope and invocation to it."""
+    path = sub / f"{bench}.body.spice"
+    body = path.read_text()
+    assert old in body
+    body = body.replace(old, new)
+    path.write_text(body)
+    for envelope in sub.glob(f"{bench}.*envelope.json"):
+        tag = envelope.name.removesuffix(".envelope.json")
+        env = json.loads(envelope.read_bytes())
+        env["provenance"]["input"]["content_hash"] = "sha256:" + build.sha256_file(path)
+        _write_chain(sub, tag, body, (sub / f"{tag}.request.json").read_bytes(), env)
+
+
 class CapScreenReductionTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -1119,6 +1133,30 @@ class CapScreenReductionTests(unittest.TestCase):
                         row["identity_problems"])
         self.assertFalse(row["metrics"]["noise_mean"]["available"])
 
+    def test_changed_executable_settings_reject_rehashed_screen(self):
+        for bench, metric, old, new in (
+                ("regeneration", "td01_worst", ".param dut_ib='1e-05'", ".param dut_ib=2e-05"),
+                ("transient_noise", "noise_mean", ".param vn_na=5.735e-3", ".param vn_na=1.147e-2")):
+            with self.subTest(bench=bench):
+                sub = write_cap_screen(self.root / bench)
+                replace_cap_body(sub, bench, old, new)
+                row, = sizesweep.cap_screen(sub.parent)
+                self.assertEqual(row["decision"]["decision"], "incomplete")
+                self.assertIsNone(row["metrics"][metric]["value"])
+                self.assertTrue(row["benches"][bench]["evidence_rejections"])
+                if bench == "transient_noise":
+                    self.assertIsNone(row["metrics"][metric]["partial_mean"])
+
+    def test_inconsistent_candidate_references_cannot_advance(self):
+        sub = write_cap_screen(self.root)
+        reference = self.root / "cadd2f.spice"
+        copy = self.root / "other-reference.spice"
+        copy.write_bytes(reference.read_bytes())
+        replace_cap_body(sub, "regeneration", reference.name, copy.name)
+        row, = sizesweep.cap_screen(self.root)
+        self.assertEqual(row["decision"]["decision"], "incomplete")
+        self.assertIn("inconsistent candidate declaration", " ".join(row["candidate_problems"]))
+
     def test_markdown_renders_screen_and_control(self):
         write_cap_screen(self.root, "cadd2f", "2f")
         result = {"campaign": "c", "control": sizesweep.cap_control(),
@@ -1159,7 +1197,7 @@ class CapFullTests(unittest.TestCase):
         self.root = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
         self.cand = self.root / "cadd2f.spice"
-        self.cand.write_text(build.compose_candidate_netlist("2f"), encoding="utf-8")
+        write_cap_screen(self.root)
 
     def _full_dir(self, name="cadd2f"):
         sub = self.root / f"full_{name}"
@@ -1174,7 +1212,7 @@ class CapFullTests(unittest.TestCase):
                 build.compose_body(bench, build.BATCH_OSDI_DIR,
                                    param_overrides={"dut_ib": "1e-05"},
                                    geometry_overrides=CAP_GEOMETRY,
-                                   candidate=(name, self.cand)), encoding="utf-8")
+                                   candidate=(name, self.root / f"{name}.spice")), encoding="utf-8")
         return sub
 
     def run_cap_full(self, graded_rows, name="cadd2f"):
@@ -1246,6 +1284,65 @@ class CapFullTests(unittest.TestCase):
         self.assertEqual(s["value"], 1.0962763220245755)
         self.assertEqual((s["points_valid"], s["points_expected"]), (45, 45))
 
+    def test_partial_row2_uses_only_the_ungraded_mean(self):
+        grading = (build.EXPERIMENT_DIR / "campaigns" / sizesweep.CONTROL_CAMPAIGN
+                   / sizesweep.CONTROL_FULL / "grading.json")
+        entry = next(r for r in json.loads(grading.read_bytes())["rows"] if r["id"] == "2")
+        details = entry["monte_carlo_per_point"]
+        details[0].update(sigma=None, problem="missing sigma")
+        column = grade.grade_grid_mean(details, {"max": 1.0})
+        entry.update(target=column, target_verdict=column["verdict"])
+        r, _, md = self.run_cap_full([entry])
+        for cell in (r["rows"]["2"], r["grading_verdicts"]["row2"]):
+            self.assertIsNone(cell["value"])
+            self.assertEqual(cell["partial_mean_ungraded"], column["partial_mean_ungraded"])
+        self.assertIsNone(r["rows"]["2"]["at"])
+        self.assertIn("44/45", md)
+        self.assertIn("partial mean (ungraded)", md)
+        self.assertNotIn(f"{column['range']['max']['value']:.4g}", md)
+
+    def test_only_the_screen_winner_can_be_graded(self):
+        write_cap_screen(self.root, "cadd1f", "1f")
+        self.write_full_bodies("cadd1f")
+        self.write_full_bodies("cadd2f")
+        with mock.patch.object(cli, "CAMPAIGNS_DIR", self.root.parent), \
+                mock.patch("builtins.print"), \
+                mock.patch.object(grade, "grade_campaign", wraps=grade.grade_campaign) as grader:
+            rc = cli.main(["capacitance", "--campaign", self.root.name])
+        self.assertEqual(rc, 1)
+        grader.assert_called_once_with(self.root / "full_cadd1f", candidate="cadd1f")
+        report = json.loads((self.root / "capacitance.json").read_bytes())
+        winner, other = report["full"]
+        self.assertEqual(winner["candidate_status"], "available")
+        self.assertEqual(other["candidate_status"], "rejected")
+        self.assertIn("full_cadd2f", other["rejection_reasons"][0])
+        self.assertIn(other["rejection_reasons"][0], (self.root / "capacitance.md").read_text())
+
+    def test_full_without_a_screen_is_rejected(self):
+        full = self.write_full_bodies()
+        orphan_campaign = self.root / "orphan"
+        orphan_campaign.mkdir()
+        full.rename(orphan_campaign / full.name)
+        with mock.patch.object(grade, "grade_campaign") as grader:
+            row, = sizesweep.cap_full(orphan_campaign)
+        grader.assert_not_called()
+        self.assertEqual(row["candidate_status"], "rejected")
+        self.assertIn("no finalist", " ".join(row["rejection_reasons"]))
+
+    def test_changed_executable_finalist_settings_are_rejected_before_grading(self):
+        sub = self.write_full_bodies()
+        for bench, old, new in (
+                ("regeneration", ".param dut_ib='1e-05'", ".param dut_ib=2e-05"),
+                ("transient_noise", ".param vn_na=5.735e-3", ".param vn_na=1.147e-2")):
+            with self.subTest(bench=bench):
+                replace_cap_body(sub, bench, old, new)
+                with mock.patch.object(grade, "grade_campaign") as grader:
+                    row, = sizesweep.cap_full(self.root)
+                grader.assert_not_called()
+                self.assertEqual(row["candidate_status"], "rejected")
+                self.assertIn(bench, " ".join(row["rejection_reasons"]))
+                replace_cap_body(sub, bench, new, old)
+
     def test_finalist_without_envelopes_retains_real_grader_diagnostics(self):
         sub = self.write_full_bodies()
         entries = {r["id"]: r for r in grade.grade_campaign(sub, candidate="cadd2f")["rows"]}
@@ -1302,20 +1399,13 @@ class CapFullTests(unittest.TestCase):
         self.assertTrue(any("archived control identity" in x for x in r["rejection_reasons"]))
 
     def test_wrong_candidate_name_rejected_before_grading(self):
-        sub = self._full_dir("cadd4f")  # dir says cadd4f, bodies declare cadd2f? no:
-        # bodies are composed with name cadd4f but reference cadd2f's file ->
-        # the declaration names cadd4f with cadd2f's bytes: reference mismatch
-        from kltsim.benches import BENCHES as all_benches
-        for bname, bench in all_benches.items():
-            body = build.compose_body(bench, build.BATCH_OSDI_DIR,
-                                      param_overrides={"dut_ib": "1e-05"},
-                                      geometry_overrides=CAP_GEOMETRY,
-                                      candidate=("cadd2f", self.cand))
-            (sub / f"{bname}.body.spice").write_text(
-                body.replace("name=cadd2f ", "name=cadd4f "), encoding="utf-8")
-        r = sizesweep.cap_full(self.root)[0]
+        sub = self.write_full_bodies()
+        replace_cap_body(sub, "regeneration", "name=cadd2f ", "name=cadd4f ")
+        with mock.patch.object(grade, "grade_campaign") as grader:
+            r, = sizesweep.cap_full(self.root)
+        grader.assert_not_called()
         self.assertEqual(r["candidate_status"], "rejected")
-        self.assertTrue(r["rejection_reasons"])
+        self.assertIn("inconsistent candidate declaration", " ".join(r["rejection_reasons"]))
         self.assertEqual(r["rows"]["3c"]["state"], "rejected")
 
 

@@ -40,14 +40,15 @@ convention is unchanged.
 | `ff_125c_1.08v` | 44.62 nV/√Hz / 0.9780 / **45.61 nV/√Hz** | identical |
 | `fs_-40c_1.20v` | 35.13 nV/√Hz / 1.1514 / **30.52 nV/√Hz** | identical |
 
-**Adding 1–4 fF at the integration nodes changes neither the white density
-at 1 MHz nor the DC gain**: the 1 MHz calibration index sits deep in the
-flat band below the node pole (~2 GHz for the ~15 fF node), so the
-capacitance is invisible there and at 1 Hz by construction. The
-candidate-own-density projection for every setting is therefore the
-control's own density — the screen's small noise reduction (see the
-[study report](../20261121-issue497.md)) is a pure decision-bandwidth effect
-at effectively fixed injected AND own density.
+At these four PVT points, the control and all three tested capacitances
+give the same 1 MHz density and 1 Hz gain to the reported precision.
+Both frequencies fall well below the estimated node pole (~2 GHz for a
+~15 fF node). The candidate density projections therefore match the
+control at these points. A narrower decision bandwidth could lower the
+noise at fixed injection. Sampling variation could also explain the
+observed differences, whose magnitudes are within one paired standard
+error. All three measured means exceed the 1.0 mV screening threshold.
+[Study report](../20261121-issue497.md)
 
 ## Mechanism control (parameter application)
 
