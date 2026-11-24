@@ -2,6 +2,14 @@
 
 Sections moved byte-for-byte from [WORK_LOG.md](../WORK_LOG.md) by `loom-daemon work-docs archive`.
 
+### 2026-09-23
+
+- **PR #47**: chore: remove unwired npm placeholder scripts from package.json
+- **PR #46**: docs: embed fleet burndown chart in README
+- **Issue #45** (closed): Remove dead npm placeholder scripts from package.json: test/lint/check:ci/check:all are unwired no-ops
+- **Issue #44** (closed): README: embed the fleet burndown chart (one line)
+- **Issue #35** (closed): README.md's Offset sigma row states 10/45 PVT points over 15 mV, but the cited corrected-seed record shows 13/45
+
 ### 2026-09-21
 
 - **PR #42**: test: run harness unit tests as step 0 of sim/selftest.sh
