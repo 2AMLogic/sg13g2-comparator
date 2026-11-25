@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the per-row schematic-vs-extracted delta table from a klt pex envelope.
 
-usage: make_delta_table.py <pex_report.json> <out_stem>
+usage: make_delta_table.py [--bench NAME] <pex_report.json> <out_stem>
 Writes <out_stem>.json and <out_stem>.md (new files only; refuses to overwrite).
 
 Two separate readings per row (issue #181). Availability: klt's raw status and
@@ -12,7 +12,11 @@ here implies a sigma or offset/noise compliance. Malformed input exits 2.
 
 Evidence validation (issue #211). Corners are canonicalised to a physical
 (process, voltage, temperature) identity (Decimal voltage, int temperature), so
-`tt/1.2V/27C` and `tt/1.200V/27C` are one point. For every mapped key (LOGIC or
+`tt/1.2V/27C`, `tt/1.200V/27C` and klt's `corners.params` supply spelling
+`tt/novdd/27C/params:vdd_val=1.2` (issue #424) are one point. `/mc<n>`,
+`/@variant`, `/options:...` and multi-param labels stay raw, so a Monte-Carlo
+sample never shares an identity with the unsampled corner it was drawn from.
+For every mapped key (LOGIC or
 DELAY) a physical point may appear in at most one row, whatever the spelling or
 nominal/pvt variant; a repeat is ambiguous evidence and is rejected, never
 merged. Full-grid compliance compares the set of canonical identities that are
@@ -34,6 +38,27 @@ or missing (absent row or null value) required state leaves that point's delay
 "decision state not valid": the numeric verdict (within/EXCEEDS) and raw values
 stay visible, but the point does not count toward "met at every PVT grid point".
 EXCEEDS still reports NOT MET whatever the validity. No bound is invented.
+
+Bench labelling (issue #417). LOGIC/DELAY/TIMING_STATES are keyed (bench,
+measurement), so every row must carry its bench. `klt pex` prefixes delta[]
+`spec_row` with the request's filename stem only when it was given MORE THAN
+ONE testbench (`single_testbench` in klt's pex.py); a one-request run emits the
+bare measurement name, and klt has no flag to ask for the prefix. `--bench
+NAME` supplies that missing label and only that: it refuses an envelope klt
+already prefixed, is recorded in the output as `spec_row_prefix` so a reader
+knows the label is caller-applied, and changes no value, status or delta.
+
+Input shapes (issue #445). `klt pex` writes `delta[]` for single-request and batch
+runs alike; `rows[]` is the repo's own derived-extract convention (the shape
+`make_mc_rollup.py` reads), used when the full envelope JSON is too large to commit.
+render() accepts both: the derived extract's provenance (`client`, `klt_git_commit`,
+passed/failed/errored counts) is mapped into the table rather than dropped, and its
+`envelope_status` restates klt's own status convention from those counts (error when
+any row failed or errored, pass otherwise; left null when the extract records no
+counts). A rendered table -- which also carries `rows[]`, plus
+`source_envelope`/`spec_row_prefix` -- is refused, exactly as `--bench` refuses an
+already-prefixed envelope, so the renderer cannot ingest its own output; an envelope
+carrying both `delta[]` and `rows[]` is refused as ambiguous evidence.
 """
 import itertools
 import json
@@ -57,14 +82,27 @@ TIMING_STATES = {("regeneration", "td_a"): (("regeneration", "da_first"), ("rege
 GRID = ({"tt", "ff", "ss", "fs", "sf"}, {Decimal("1.08"), Decimal("1.2"), Decimal("1.32")}, {-40, 27, 125})
 GRID_POINTS = frozenset(itertools.product(*GRID))
 CORNER = re.compile(r"(\w+)/([0-9.]+)V/(-?\d+)C")
+# The same point on a `corners.params` supply axis (issue #424): with no supply_v
+# source klt emits the literal `novdd` supply label plus the vdd_val param. The
+# `fullmatch` keeps /@<variant>, /options:... and /mc<n> suffixes on the raw
+# fallback -- an mc sample must not share an identity with the unsampled corner
+# it was drawn from -- and the novdd-only, sole-param match keeps a multi-param
+# sweep (two distinct corners, one identity) and a conflicting real supply raw.
+CORNER_PARAMS = re.compile(r"(\w+)/novdd/(-?\d+)C/params:vdd_val=([0-9.]+)")
+# `--bench` label: dotted segments, like klt's own `<request-stem>.` prefix, so
+# k = (first, last) still resolves to (bench, measurement). No empty segments.
+BENCH = re.compile(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*")
 FIELDS = ("spec_row", "corner_id", "schematic_value", "extracted_value", "delta_pct", "status")
 
 
 def canonical(corner):
     """Physical identity (process, volts, deg C); unparseable labels keep their raw text."""
-    m = CORNER.fullmatch(corner)
     try:
-        return (m[1], Decimal(m[2]), int(m[3])) if m else ("raw", corner)
+        m = CORNER.fullmatch(corner)
+        if m:
+            return (m[1], Decimal(m[2]), int(m[3]))
+        p = CORNER_PARAMS.fullmatch(corner)
+        return (p[1], Decimal(p[3]), int(p[2])) if p else ("raw", corner)
     except InvalidOperation:
         return ("raw", corner)
 
@@ -137,9 +175,64 @@ def phys_rows(phys, k, cid):
     return [phys[k, cid]] if (k, cid) in phys else []
 
 
-def render(env, source):
-    if not isinstance(env, dict) or not isinstance(env.get("delta"), list) or not env["delta"]:
+def prefixed(env, bench):
+    """Label every bare `spec_row` with `bench` (issue #417); see the module docstring.
+
+    Refuses an envelope whose rows klt already prefixed -- re-labelling those would
+    invent a bench klt did not report. A row with a missing or non-string `spec_row`
+    is passed through untouched, for render()'s own validation to reject.
+    """
+    labelled = [r["spec_row"] for r in env["delta"]
+                if isinstance(r, dict) and isinstance(r.get("spec_row"), str)
+                and "." in r["spec_row"]]
+    if labelled:
+        raise ValueError(f"--bench {bench}: delta[] is already prefixed by klt "
+                         f"(e.g. {labelled[0]!r}); re-labelling it would be ambiguous")
+    return {**env, "delta": [
+        {**r, "spec_row": f"{bench}.{r['spec_row']}"}
+        if isinstance(r, dict) and isinstance(r.get("spec_row"), str) and r["spec_row"] else r
+        for r in env["delta"]]}
+
+
+def derived_input(env):
+    """Normalise the repo's derived extract (rows[]) into klt's delta[] shape (issue #445).
+
+    `rows[]` is the repo's derived-extract convention, not a klt schema: klt pex writes
+    delta[] for single-request and batch runs alike (see the module docstring). The
+    extract records provenance as `client` / `klt_git_commit` and passed/failed/errored
+    counts where a klt envelope carries `provenance.klt_version` / `status`; those are
+    mapped, not dropped, so the rendered table states what produced it. `status` is
+    restated from the counts by klt's own convention (error when any row failed or
+    errored, pass otherwise) and left absent when the extract records no counts. A
+    rendered table also carries rows[] -- with `source_envelope` / `spec_row_prefix` --
+    and is refused here, exactly as prefixed() refuses an already-prefixed envelope:
+    re-rendering it would present the renderer's own output as fresh evidence. Returns
+    None for a klt delta[] envelope, untouched.
+    """
+    if not isinstance(env, dict) or "delta" in env or not isinstance(env.get("rows"), list):
+        return None
+    if "source_envelope" in env or "spec_row_prefix" in env:
+        raise ValueError("envelope is a rendered delta table (source_envelope/spec_row_prefix "
+                         "present), not an input envelope; refusing to re-render it")
+    norm = {**env, "delta": env["rows"],
+            "provenance": {**(env.get("provenance") or {}), "klt_version": env.get("client")}}
+    if any(k in env for k in ("passed", "failed", "errored")):
+        norm["status"] = "error" if env.get("failed") or env.get("errored") else "pass"
+    return norm
+
+
+def render(env, source, bench=None):
+    if not isinstance(env, dict):
         raise ValueError("envelope has no delta[] rows")
+    if "delta" in env and "rows" in env:
+        raise ValueError("envelope carries both delta[] and rows[]; ambiguous evidence, refusing to choose")
+    derived = derived_input(env)
+    if derived is not None:
+        env = derived
+    if not isinstance(env.get("delta"), list) or not env["delta"]:
+        raise ValueError("envelope has no delta[] rows")
+    if bench is not None:
+        env = prefixed(env, bench)
     rows, seen, phys, got, summary = [], set(), {}, {}, {}
     for i, r in enumerate(env["delta"]):
         if not isinstance(r, dict) or any(k not in r for k in FIELDS):
@@ -193,6 +286,11 @@ def render(env, source):
         "source_envelope": str(source),
         "klt_version": (env.get("provenance") or {}).get("klt_version"),
         "envelope_status": env.get("status"),
+        "spec_row_prefix": bench,
+        "spec_row_prefix_meaning": None if bench is None else
+            "caller-supplied bench label (--bench): klt emitted bare measurement names "
+            "because the run passed a single testbench. Values, statuses and deltas are "
+            "klt's, unchanged",
         "passed": env.get("passed"), "failed": env.get("failed"), "errored": env.get("errored"),
         "klt_status_meaning": "measurement availability (both legs produced a value; no limits "
                               "are set in the requests), not circuit compliance",
@@ -206,6 +304,8 @@ def render(env, source):
                                     for k, v in validity.items()},
         "rows": rows,
     }
+    if derived is not None:  # the derived extract's klt identity, kept with its version (issue #445)
+        out["klt_git_commit"] = env.get("klt_git_commit")
     return out, markdown(out)
 
 
@@ -231,15 +331,30 @@ def markdown(out):
 
 
 def main(argv):
+    bench = None
+    if "--bench" in argv:
+        i = argv.index("--bench")
+        if i + 1 >= len(argv):
+            sys.exit(__doc__)
+        bench = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
+        if not BENCH.fullmatch(bench):
+            print(f"error: --bench {bench!r}: expected dotted [A-Za-z0-9_] segments",
+                  file=sys.stderr)
+            return 2
     if len(argv) != 2:
         sys.exit(__doc__)
     src, stem = Path(argv[0]), Path(argv[1])
     try:
-        out, md = render(load(src), src)
+        out, md = render(load(src), src, bench)
     except (OSError, ValueError) as e:
         print(f"error: {src}: {e}", file=sys.stderr)
         return 2
-    paths = [stem.with_suffix(".json"), stem.with_suffix(".md")]
+    # Append, never Path.with_suffix: a dotted stem like `grid.regeneration.20261114`
+    # has `.20261114` as its suffix, so with_suffix would REPLACE the date and write
+    # `grid.regeneration.json` -- not the `<out_stem>.json` this tool documents, and
+    # a silently wrong evidence filename (issue #417).
+    paths = [stem.with_name(stem.name + e) for e in (".json", ".md")]
     for p in paths:
         if p.exists():
             print(f"refusing to overwrite {p}", file=sys.stderr)

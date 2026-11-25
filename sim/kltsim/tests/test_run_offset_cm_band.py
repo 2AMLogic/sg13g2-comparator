@@ -44,7 +44,7 @@ class Base(unittest.TestCase):
         self.addCleanup(p.stop)
         self.args = _args(self.series, series=self.series.name)
         self.calls, self.codes, self.refused = [], [], []
-        self.out_dirs, self.sleeps = [], []
+        self.out_dirs, self.sleeps, self.backends = [], [], []
         for obj, name, fn in (
                 (kcli, "_submit", self._submit),
                 (kcli, "_last_attempt_refused_at_cap", self._refused),
@@ -54,9 +54,10 @@ class Base(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def _submit(self, request, out_dir, tag, args, extra=None):
+    def _submit(self, request, out_dir, tag, args, backend=None, extra=None):
         self.calls.append((tag, extra["kind"]))
         self.out_dirs.append(out_dir)
+        self.backends.append(backend)
         return self.codes.pop(0) if self.codes else 0
 
     def _refused(self, out_dir):
@@ -117,6 +118,29 @@ class RetryTests(Base):
         self.assertEqual(self.go(3), 5)
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(self.sleeps, [])
+
+    def test_positional_extra_caller_submits_with_no_backend(self):
+        # `extra` stays the 5th positional parameter: every existing caller
+        # passes it positionally and must keep reaching _submit unchanged.
+        self.assertEqual(self.go(3), 0)
+        self.assertEqual(self.calls, [("t", "k")])
+        self.assertEqual(self.backends, [None])
+
+    def test_backend_is_forwarded_to_submit(self):
+        self.args.retry_refused = 0
+        code = kcli._submit_with_retry(Path("r"), Path("o"), "t", self.args,
+                                       {"kind": "k"}, backend="batch")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.backends, ["batch"])
+
+    def test_backend_is_forwarded_on_every_retry(self):
+        self.codes, self.refused = [2, 2, 0], [True, True]
+        self.args.retry_refused = 2
+        code = kcli._submit_with_retry(Path("r"), Path("o"), "t", self.args,
+                                       {"kind": "k"}, backend="batch")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.backends, ["batch"] * 3)
+        self.assertEqual(self.sleeps, [7, 7])
 
 
 class LocalSmokeTests(unittest.TestCase):
@@ -302,6 +326,79 @@ class ControlRepeatGuardTests(Base):
 
     def test_repeat_refuses_when_envelope_exists(self):
         self.guard(rcb.cmd_repeat, f"repeat.{COND}.mos_tt")
+
+
+class BuildTests(Base):
+    """Issue #516: ``build`` commits every selected condition as ONE
+    append-only batch; a conflict on any condition writes nothing."""
+
+    def args_all(self):
+        return argparse.Namespace(series=self.series.name, condition=None)
+
+    def test_build_writes_body_and_requests_per_condition(self):
+        self.assertEqual(rcb.cmd_build(self.args_all()), 0)
+        expected = sorted([cmband.BODY_NAME] + [f"{t}.request.json" for t in TAGS])
+        for cond in cmband.CONDITIONS:
+            self.assertEqual(sorted(p.name for p in (self.series / cond.name).iterdir()),
+                             expected)
+
+    def test_build_is_idempotent(self):
+        self.assertEqual(rcb.cmd_build(self.args_all()), 0)
+        before = {p: p.read_bytes() for p in self.series.rglob("*") if p.is_file()}
+        self.assertEqual(rcb.cmd_build(self.args_all()), 0)
+        after = {p: p.read_bytes() for p in self.series.rglob("*") if p.is_file()}
+        self.assertEqual(before, after)
+
+    def test_conflict_on_later_condition_writes_nothing(self):
+        nom = self.series / "vcm-nom"
+        nom.mkdir(parents=True)
+        conflicting = nom / cmband.BODY_NAME
+        conflicting.write_bytes(b"tampered")
+        self.assertEqual(rcb.cmd_build(self.args_all()), 1)
+        self.assertEqual([p for p in self.series.rglob("*") if p.is_file()], [conflicting])
+        self.assertFalse((self.series / "vcm-m050").exists())  # earlier condition absent
+        self.assertEqual(conflicting.read_bytes(), b"tampered")
+
+
+class ControlRepeatCommitTests(Base):
+    """Issue #516: control/repeat inputs commit append-only through
+    ``kcli._commit_planned``; a modified shared body in ``controls/`` refuses
+    the submit, and ``--force`` cannot clobber it."""
+
+    def shared_body(self):
+        ctl = self.series / "controls"
+        ctl.mkdir(parents=True)
+        shared = ctl / f"{cmband.BENCH_NAME}.{COND}.body.spice"
+        shared.write_text("tampered\n", encoding="utf-8")
+        return ctl, shared
+
+    def test_repeat_commits_inputs_then_submits(self):
+        self.assertEqual(rcb.cmd_repeat(self.args), 0)
+        self.assertEqual([c[0] for c in self.calls], [f"repeat.{COND}.mos_tt"])
+        ctl = self.series / "controls"
+        self.assertEqual(sorted(p.name for p in ctl.iterdir()),
+                         sorted([f"{cmband.BENCH_NAME}.{COND}.body.spice",
+                                 f"repeat.{COND}.mos_tt.request.json"]))
+
+    def test_repeat_refuses_modified_shared_body_without_submitting(self):
+        ctl, shared = self.shared_body()
+        self.args.force = True  # even --force must not clobber controls/ inputs
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(rcb.cmd_repeat(self.args), 1)
+        self.assertEqual(self.calls, [])
+        self.assertEqual([p.name for p in ctl.iterdir()], [shared.name])
+        self.assertEqual(shared.read_text(), "tampered\n")
+
+    def test_control_refuses_modified_shared_body_without_submitting(self):
+        ctl, shared = self.shared_body()
+        self.args.supply, self.args.temperature, self.args.n = 1.2, 27, 4
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(rcb.cmd_control(self.args), 1)
+        self.assertEqual(self.calls, [])
+        self.assertEqual([p.name for p in ctl.iterdir()], [shared.name])
+        self.assertEqual(shared.read_text(), "tampered\n")
 
 
 if __name__ == "__main__":
@@ -626,25 +723,95 @@ class SupplementReportTests(Base):
         md = cmband.render_supplement_markdown(result)
         self.assertIn("Failures, reported as-is", md)
 
+    def report_args(self, **kw):
+        d = dict(series=self.supp.name, parent=cmband.SUPPLEMENT_PARENT,
+                 check=False, report_dir=None)
+        d.update(kw)
+        return argparse.Namespace(**d)
+
+    def full_series(self, **kw):
+        for section in cmband.supplement_sections():
+            for cond in cmband.CONDITIONS:
+                self.full_pair(section, cond, **kw)
+
     def test_missing_envelope_fails_the_command(self):
         self.full_pair("mos_tt_mismatch", cmband.condition("vcm-m050"))
-        args = argparse.Namespace(series=self.supp.name, parent=cmband.SUPPLEMENT_PARENT)
-        self.assertEqual(rcb.cmd_supplement_report(args), 1)
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 1)
         result = json.loads((self.supp / "supplement-report.json").read_text())
         self.assertEqual(len(result["missing_envelopes"]), 5)
         md = (self.supp / "supplement-report.md").read_text()
         self.assertIn("Missing or malformed envelopes", md)
 
     def test_malformed_envelope_fails_the_command(self):
-        for section in cmband.supplement_sections():
-            for cond in cmband.CONDITIONS:
-                self.full_pair(section, cond)
+        self.full_series()
         d = self.supp / "vcm-nom"
         (d / "offset_cm.mos_tt_mismatch.envelope.json").write_text("{not json")
-        args = argparse.Namespace(series=self.supp.name, parent=cmband.SUPPLEMENT_PARENT)
-        self.assertEqual(rcb.cmd_supplement_report(args), 1)
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 1)
         result = json.loads((self.supp / "supplement-report.json").read_text())
         self.assertTrue(any("malformed" in m for m in result["missing_envelopes"]))
+
+    def test_rerun_with_identical_bytes_is_noop(self):
+        self.full_series()
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 0)
+        before = {p.name: p.read_bytes()
+                  for p in self.supp.glob("supplement-report.*")}
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 0)
+        after = {p.name: p.read_bytes()
+                 for p in self.supp.glob("supplement-report.*")}
+        self.assertEqual(before, after)
+
+    def test_rerun_after_envelope_change_is_refused_untouched(self):
+        self.full_series()
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 0)
+        first = {p.name: p.read_bytes()
+                 for p in self.supp.glob("supplement-report.*")}
+        self.full_pair("mos_tt_mismatch", cmband.condition("vcm-m050"), shift=1.25)
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 1)
+        after = {p.name: p.read_bytes()
+                 for p in self.supp.glob("supplement-report.*")}
+        self.assertEqual(after, first)
+
+    def test_check_ok_when_reports_match_fresh_regeneration(self):
+        self.full_series()
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 0)
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args(check=True)), 0)
+
+    def test_check_stale_report_returns_1_without_writing(self):
+        self.full_series()
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 0)
+        victim = self.supp / "supplement-report.md"
+        victim.write_text("stale\n")
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args(check=True)), 1)
+        self.assertEqual(victim.read_text(), "stale\n")
+
+    def test_check_missing_report_returns_1_and_creates_nothing(self):
+        self.full_series()
+        self.assertFalse((self.supp / "supplement-report.json").exists())
+        self.assertEqual(rcb.cmd_supplement_report(self.report_args(check=True)), 1)
+        self.assertFalse((self.supp / "supplement-report.json").exists())
+        self.assertFalse((self.supp / "supplement-report.md").exists())
+
+    def test_check_missing_report_creates_no_report_dir(self):
+        self.full_series()
+        with tempfile.TemporaryDirectory() as td:
+            elsewhere = Path(td) / "redirected-missing"
+            self.assertEqual(rcb.cmd_supplement_report(
+                self.report_args(check=True, report_dir=str(elsewhere))), 1)
+            self.assertFalse(elsewhere.exists())
+
+    def test_report_dir_redirect_writes_pair_with_citation(self):
+        self.full_series()
+        with tempfile.TemporaryDirectory() as td:
+            elsewhere = Path(td) / "redirected"
+            self.assertEqual(rcb.cmd_supplement_report(
+                self.report_args(report_dir=str(elsewhere))), 0)
+            self.assertTrue((elsewhere / "supplement-report.json").is_file())
+            self.assertTrue((elsewhere / "supplement-report.md").is_file())
+            self.assertFalse((self.supp / "supplement-report.json").exists())
+            result = json.loads((elsewhere / "supplement-report.json").read_text())
+            self.assertEqual(result["source_series_dir"], str(self.supp.resolve()))
+            self.assertIn("Source series",
+                          (elsewhere / "supplement-report.md").read_text())
 
     def test_no_data_run_reads_zero_valid_and_gzip_envelopes(self):
         """A batch run that produced no draws: N valid is 0/60 (not the
@@ -664,7 +831,19 @@ class SupplementReportTests(Base):
         raw = gz_path.read_bytes()
         gz_path.with_name(gz_path.name + ".gz").write_bytes(gzip.compress(raw))
         gz_path.unlink()
-        result = cmband.compare_supplement(self.supp)
+        # one load per envelope path: the digest must come from the same
+        # bytes the parser saw, not a second, independently-timed read
+        loads = []
+        real_bytes = cmband._envelope_bytes
+        with mock.patch.object(cmband, "_envelope_bytes",
+                               side_effect=lambda p: (loads.append(str(p)),
+                                                      real_bytes(p))[1]):
+            result = cmband.compare_supplement(self.supp)
+        expected = sorted(
+            str(root / c.name / f"offset_cm.{s}.envelope.json")
+            for root in (self.supp, self.parent)
+            for s in cmband.supplement_sections() for c in cmband.CONDITIONS)
+        self.assertEqual(sorted(loads), expected)
         self.assertEqual(result["missing_envelopes"], [])
         self.assertEqual(result["sources"]["vcm-nom/offset_cm.mos_tt_mismatch"]
                          ["envelope_sha256"], hashlib.sha256(raw).hexdigest())

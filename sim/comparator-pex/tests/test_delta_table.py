@@ -4,6 +4,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -196,6 +197,167 @@ class Synthetic(unittest.TestCase):
                 mdt.render(env, "fixture")
 
 
+class DerivedExtract(unittest.TestCase):
+    """Issue #445: `rows[]` is the repo's derived-extract input shape; render() output is not.
+
+    `klt pex` writes delta[] for single-request and batch runs alike, so `rows[]` is the
+    repo's own derived-extract convention (the shape make_mc_rollup.py reads, committed
+    when the envelope JSON is too large) and render() must read it with its provenance
+    mapped, not dropped. render()'s own output also carries rows[] and is refused, as is
+    an envelope carrying both container keys.
+    """
+
+    CLIENT, COMMIT = "0.8.1.dev887+g2e9ee1aa66cf", "2e9ee1aa66cfc273ca174c3ae0b33d7ca46fb336"
+    GRID = REPO / "sim/comparator-pex/reports/batch-extracted-grid.regeneration.20261031.json"
+
+    def render(self, rows, **extra):
+        return mdt.render({"rows": rows, "client": self.CLIENT, "klt_git_commit": self.COMMIT, **extra}, "fixture")
+
+    def test_rows_twin_renders_as_delta_twin(self):
+        rows = [row("regeneration.pvt.td_a", TT, 7e-10, 1e-9),
+                row("regeneration.pvt.dc_first", TT, 0.0, 1.0)]
+        a, _ = mdt.render({"status": "error", "provenance": {"klt_version": self.CLIENT},
+                           "delta": [dict(r) for r in rows], "passed": 1, "failed": 0, "errored": 1}, "fixture")
+        b, _ = self.render([dict(r) for r in rows], passed=1, failed=0, errored=1)
+        self.assertEqual(b["klt_version"], self.CLIENT)
+        self.assertEqual(b["envelope_status"], "error")
+        self.assertEqual(b["klt_git_commit"], self.COMMIT)
+        for out in (a, b):
+            for k in ("klt_version", "envelope_status", "klt_git_commit"):
+                out.pop(k, None)  # klt_git_commit is derived-path only by design
+        self.assertEqual(a, b)
+
+    def test_provenance_mapped_from_counts(self):
+        for counts, want in (((1, 0, 0), "pass"), ((1, 0, 1), "error"), ((1, 2, 0), "error")):
+            with self.subTest(counts=counts):
+                out, _ = self.render([row("regeneration.pvt.offset_sigma", TT, 1e-3, 2e-3)],
+                                     passed=counts[0], failed=counts[1], errored=counts[2])
+                self.assertEqual(out["envelope_status"], want)
+                self.assertEqual((out["passed"], out["failed"], out["errored"]), counts)
+        out, _ = mdt.render({"rows": [row("regeneration.pvt.offset_sigma", TT, 1e-3, 2e-3)]}, "fixture")
+        # nothing recorded by the extract, nothing invented by the table
+        self.assertEqual((out["klt_version"], out["envelope_status"], out["klt_git_commit"]), (None, None, None))
+
+    def test_rendered_table_refused(self):
+        good = row("regeneration.pvt.td_a", TT, 7e-10, 1e-9)
+        for extra in ({"source_envelope": "env.json", "spec_row_prefix": None},
+                      {"source_envelope": "env.json"},
+                      {"spec_row_prefix": "regeneration"}):
+            with self.subTest(extra=extra), self.assertRaisesRegex(ValueError, "rendered delta table"):
+                self.render([good], **extra)
+
+    def test_both_container_keys_refused(self):
+        good = row("regeneration.pvt.td_a", TT, 7e-10, 1e-9)
+        with self.assertRaisesRegex(ValueError, "both delta\\[\\] and rows\\[\\]"):
+            mdt.render({"delta": [good], "rows": [good]}, "fixture")
+
+    def test_empty_or_non_list_rows_same_error_path_as_delta(self):
+        for env in ({"rows": []}, {"rows": "x"}, {}):
+            with self.subTest(env=env), self.assertRaisesRegex(ValueError, "no delta\\[\\] rows"):
+                mdt.render(env, "fixture")
+
+    def test_dotted_rows_with_bench_still_refused_by_prefixed(self):
+        with self.assertRaisesRegex(ValueError, "already prefixed by klt"):
+            mdt.render({"rows": [row("regeneration.pvt.td_a", TT, 7e-10, 1e-9)],
+                        "client": self.CLIENT}, "fixture", bench="regeneration")
+
+    def test_committed_grid_renders(self):
+        env = mdt.load(self.GRID)
+        out, md = mdt.render(env, str(self.GRID), bench="regeneration")
+        self.assertEqual(len(out["rows"]), len(env["rows"]))
+        self.assertEqual(len(out["corners"]), env["corner_count"])
+        self.assertEqual(out["pvt_grid_points"], 45)
+        self.assertEqual(out["klt_version"], env["client"])
+        self.assertIsNotNone(out["klt_version"])
+        self.assertEqual(out["envelope_status"], "error")
+        self.assertEqual(out["klt_git_commit"], env["klt_git_commit"])
+        self.assertEqual((out["passed"], out["failed"], out["errored"]),
+                         (env["passed"], env["failed"], env["errored"]))
+        self.assertEqual(out["spec_row_prefix"], "regeneration")
+        self.assertTrue(out["delay_compliance_extracted"]["regeneration.td_a"].startswith("NOT MET"))
+        self.assertTrue(out["delay_compliance_extracted"]["regeneration.td_c"].startswith("not established: 0/45"))
+        td_c = [r for r in out["rows"] if r["spec_row"] == "regeneration.td_c"]
+        self.assertEqual(len(td_c), 45)
+        self.assertTrue(all(r["extracted_value"] is None and r["interpretation"]["verdict"] == "missing: no verdict"
+                            for r in td_c))
+        self.assertNotIn("sigma", md.replace("no sigma", "").replace("offset_sigma", ""))
+
+    def test_cli_grid_with_bench(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            res = subprocess.run([sys.executable, "-B", str(PEX / "make_delta_table.py"), "--bench", "regeneration",
+                                  str(self.GRID), str(d / "grid.regeneration")],
+                                 capture_output=True, text=True, timeout=120)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            out = json.loads((d / "grid.regeneration.json").read_text())
+            self.assertEqual((len(out["rows"]), out["pvt_grid_points"]), (540, 45))
+            self.assertIsNotNone(out["klt_version"])
+            self.assertEqual(sorted(p.name for p in d.iterdir()),
+                             ["grid.regeneration.json", "grid.regeneration.md"])
+
+
+class ParamsSupply(unittest.TestCase):
+    """Issue #424: the `corners.params` supply spelling is the same physical point.
+
+    A request that puts the supply on the corners.params axis (no supply_v source)
+    makes klt emit `ss/novdd/125C/params:vdd_val=1.08`; `canonical()` must map it
+    to the identity the `<V>V` spellings already have, while mc samples, variants,
+    options, extra params and a conflicting real supply stay raw and ungraded.
+    """
+
+    def render(self, rows):
+        return mdt.render({"status": "error", "delta": rows}, "fixture")
+
+    def pc(self, p, v, t):
+        return f"{p}/novdd/{t}C/params:vdd_val={v}"
+
+    def test_same_identity_as_v_spelling(self):
+        self.assertEqual(mdt.canonical("ss/novdd/125C/params:vdd_val=1.08"),
+                         ("ss", Decimal("1.08"), 125))
+        self.assertTrue(mdt.in_grid("ss/novdd/125C/params:vdd_val=1.08"))
+        self.assertTrue(mdt.in_grid("ff/1.080V/-40C"))  # klt's old %.3f spelling, unchanged
+
+    def test_params_spelled_grid_grades(self):
+        pts = grid_pts()
+        rows = [row("regeneration.pvt.td_a", self.pc(p, v, t), 7e-10, 1e-9) for p, v, t in pts]
+        rows += [r for p, v, t in pts
+                 for r in (row("regeneration.pvt.da_first", self.pc(p, v, t), 0.0, 0.0),
+                           row("regeneration.pvt.da_end", self.pc(p, v, t), 1.0, 1.0))]
+        out, _ = self.render(rows)
+        self.assertTrue(out["delay_compliance_extracted"]["regeneration.td_a"].startswith("met at every"))
+        self.assertEqual(out["pvt_grid_points"], 45)
+        rows[0]["extracted_value"] = None
+        out, _ = self.render(rows)
+        self.assertTrue(out["delay_compliance_extracted"]["regeneration.td_a"]
+                        .startswith("not established: 44/45"))
+
+    def test_mixed_spelling_duplicate_rejected(self):
+        with self.assertRaisesRegex(ValueError, "repeats the physical point"):
+            self.render([row("regeneration.pvt.td_a", "tt/1.200V/27C", 7e-10, 1e-9),
+                         row("regeneration.pvt.td_a", "tt/novdd/27C/params:vdd_val=1.2", 7e-10, 1e-9)])
+        # the same point on two different measurements, one per spelling: not ambiguous
+        self.render([row("regeneration.pvt.td_a", "tt/1.200V/27C", 7e-10, 1e-9),
+                     row("regeneration.pvt.offset_sigma", "tt/novdd/27C/params:vdd_val=1.2", 1e-3, 2e-3)])
+
+    def test_suffixes_and_extra_params_stay_raw(self):
+        for c in ("tt/1.200V/27C/mc3",
+                  "tt/novdd/27C/@sliced/params:vdd_val=1.2",
+                  "tt/novdd/27C/params:vdd_val=1.2/options:x=1",
+                  "tt/novdd/27C/params:vdd_val=1.2/mc3",
+                  "tt/novdd/27C/params:other=5,vdd_val=1.2",
+                  "tt/novdd/27C/params:vdd_val=1.2,other=5",
+                  "tt/1.080V/27C/params:vdd_val=1.2"):  # a real supply AND a vdd_val param
+            with self.subTest(corner=c):
+                self.assertEqual(mdt.canonical(c), ("raw", c))
+                self.assertFalse(mdt.in_grid(c))
+
+    def test_out_of_grid_params_voltage_ungraded(self):
+        c = "tt/novdd/27C/params:vdd_val=1.5"
+        out, _ = self.render([row("regeneration.pvt.td_a", c, 7e-10, 9e-9)])
+        self.assertIn("outside", by(out)["regeneration.pvt.td_a", c]["interpretation"]["verdict"])
+        self.assertEqual(out["pvt_grid_points"], 0)
+
+
 class DecisionValidity(unittest.TestCase):
     """Issue #240: in-bound delays only establish compliance with matching valid decision states."""
 
@@ -322,6 +484,105 @@ class Cli(unittest.TestCase):
             self.assertEqual((d / "old.md").read_text(), "evidence\n")
             self.assertEqual(self.run_cli(ENVELOPE, d / "new").returncode, 0)
             self.assertTrue((d / "new.json").exists() and (d / "new.md").exists())
+
+
+class OutStem(unittest.TestCase):
+    """Issue #417: the two outputs are `<out_stem>.json` / `.md`, dots and all.
+
+    Path.with_suffix() would read the trailing `.20261114` of a dotted evidence stem
+    as a suffix and REPLACE it, writing an undated filename while still reporting
+    success -- and the overwrite refusal would then guard the wrong path.
+    """
+
+    def test_dotted_stem_keeps_every_segment(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "env.json").write_text(json.dumps({"delta": td_rows()}))
+            stem = "batch-extracted-ss125.regeneration.20261114"
+            res = subprocess.run([sys.executable, "-B", str(PEX / "make_delta_table.py"),
+                                  str(d / "env.json"), str(d / stem)],
+                                 capture_output=True, text=True, timeout=60)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertEqual(sorted(p.name for p in d.iterdir()),
+                             sorted(["env.json", f"{stem}.json", f"{stem}.md"]))
+
+    def test_dotted_stem_overwrite_still_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "env.json").write_text(json.dumps({"delta": td_rows()}))
+            stem = "grid.regeneration.20261114"
+            (d / f"{stem}.md").write_text("evidence\n")
+            res = subprocess.run([sys.executable, "-B", str(PEX / "make_delta_table.py"),
+                                  str(d / "env.json"), str(d / stem)],
+                                 capture_output=True, text=True, timeout=60)
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("refusing to overwrite", res.stderr)
+            self.assertEqual((d / f"{stem}.md").read_text(), "evidence\n")
+            self.assertFalse((d / f"{stem}.json").exists())
+
+
+class BenchLabel(unittest.TestCase):
+    """Issue #417: --bench supplies the bench a single-testbench `klt pex` run omits.
+
+    klt prefixes delta[] `spec_row` with the request stem only for a MULTI-testbench
+    run, so a one-request envelope carries bare measurement names that no LOGIC/DELAY
+    key -- all (bench, measurement) -- can map. --bench adds that label and nothing else.
+    """
+
+    def bare(self, key="td_a", ex=1e-9, pts=None):
+        """td_rows(), but with the bare spec_row a single-testbench run emits."""
+        return [row(key, f"{p}/{v}V/{t}C", 7e-10, ex) for p, v, t in (pts or grid_pts())]
+
+    def test_bare_rows_ungradeable_without_bench(self):
+        with self.assertRaises(ValueError):
+            mdt.render({"delta": self.bare()}, "fixture")
+
+    def test_bench_labels_and_grades_bare_rows(self):
+        env = {"delta": self.bare(ex=1e-9)}
+        out, _ = mdt.render(env, "fixture", "regeneration.ss125")
+        self.assertEqual(out["spec_row_prefix"], "regeneration.ss125")
+        self.assertIn("single testbench", out["spec_row_prefix_meaning"])
+        labelled = by(out)["regeneration.ss125.td_a", "tt/1.2V/27C"]
+        self.assertEqual(labelled["interpretation"]["verdict"], "within")
+        self.assertIn("regeneration.td_a", out["delay_compliance_extracted"])
+
+    def test_prefix_changes_no_measurement(self):
+        rows = self.bare(ex=1e-9)
+        out, _ = mdt.render({"delta": [dict(r) for r in rows]}, "fixture", "regeneration.ss125")
+        for src, got in zip(rows, out["rows"]):
+            self.assertEqual(got["spec_row"], f"regeneration.ss125.{src['spec_row']}")
+            for f in ("corner_id", "schematic_value", "extracted_value", "delta_pct", "status"):
+                self.assertEqual(got[f], src[f])
+
+    def test_already_prefixed_envelope_refused(self):
+        env = {"delta": td_rows()}  # klt-prefixed rows
+        with self.assertRaises(ValueError) as cm:
+            mdt.render(env, "fixture", "regeneration.ss125")
+        self.assertIn("already prefixed", str(cm.exception))
+
+    def test_no_bench_leaves_output_unlabelled(self):
+        out, _ = mdt.render({"delta": td_rows()}, "fixture")
+        self.assertIsNone(out["spec_row_prefix"])
+        self.assertIsNone(out["spec_row_prefix_meaning"])
+
+    def test_cli_bench_roundtrip_and_bad_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "env.json").write_text(json.dumps({"delta": self.bare(ex=1e-9)}))
+            cli = [sys.executable, "-B", str(PEX / "make_delta_table.py")]
+            res = subprocess.run(cli + ["--bench", "regeneration.ss125", str(d / "env.json"),
+                                        str(d / "out")], capture_output=True, text=True, timeout=60)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            got = json.loads((d / "out.json").read_text())
+            self.assertEqual(got["spec_row_prefix"], "regeneration.ss125")
+            self.assertTrue(all(r["spec_row"].startswith("regeneration.ss125.") for r in got["rows"]))
+            for bad in ("", "a..b", "bad name", "a.", ".a"):
+                res = subprocess.run(cli + ["--bench", bad, str(d / "env.json"), str(d / "bad")],
+                                     capture_output=True, text=True, timeout=60)
+                with self.subTest(bench=bad):
+                    self.assertEqual(res.returncode, 2, res.stderr)
+                    self.assertNotIn("Traceback", res.stderr)
+                    self.assertFalse((d / "bad.json").exists())
 
 
 if __name__ == "__main__":

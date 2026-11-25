@@ -23,9 +23,10 @@
 #
 # The one PDK-dependent leg that IS run here (issue #224) is the real
 # schematic-to-netlist freshness check (`design/netlist.py --check`, job
-# `netlist-regeneration`): it provisions a pinned xschem and the PDK release
-# pinned in `sim/pdk.json` (no OSDI/ngspice needed; netlisting reads only
-# schematics, symbols and the PDK's xschem libraries). See design/README.md.
+# `netlist-regeneration`): it provisions a pinned xschem, the pinned klt the
+# generator drives (issue #489) and the PDK release pinned in `sim/pdk.json`
+# (no OSDI/ngspice needed; netlisting reads only schematics, symbols and the
+# PDK's xschem libraries). See design/README.md.
 #
 # Pinning policy: third-party actions and `klt` are pinned by full commit SHA
 # (action tags are kept as trailing comments) so verdicts are reproducible.
@@ -35,6 +36,7 @@ name: CI
 
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
   workflow_dispatch:
@@ -78,22 +80,22 @@ jobs:
             /sim/comparator-transient-noise/*.py
             /sim/comparator-transient-noise-full/*.py
             /sim/device-mismatch-confirm/*.py
-            /scripts/
             /sim/comparator-regeneration/testbench/
             /sim/comparator-kickback/testbench/
             /sim/comparator-offset-transient-mc/testbench/
             /sim/comparator-transient-noise/testbench/
             /sim/dut/
             /sim/characterize.sh
-            /sim/run_characterization.py
             /sim/characterization/
             /sim/klt-yield/
             /sim/dut.json
             /sim/klt-corner-verification/benches/
             /sim/klt-corner-verification/rows.json
+            /scripts/tests/test_item5_spec_rows.py
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.json
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.jsonl
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.spice
+            /sim/klt-corner-verification/campaigns/20261009-issue92/full_w8_l034/kickback.envelope.json
             /sim/comparator-transient-noise/records/20260921-154729-41cbc7f.md
             /sim/klt-corner-verification/campaigns/20261009-issue81/noise_full.json
             /sim/comparator-offset-transient-mc/records/20260917-060858-ea40b57.json
@@ -121,7 +123,7 @@ jobs:
       - name: Install klt (pinned, see manifests/README.md)
         run: |
           python3 -m pip install --disable-pip-version-check \
-            "klayout-tools==0.8.0"
+            "klayout-tools==0.9.2"
           klt --version
 
       # Issue #64: the T1 item 8 characterization report. Stdlib only, no
@@ -132,6 +134,15 @@ jobs:
 
       - name: Fresh-render parity check vs committed report
         run: python3 scripts/check_signoff_report.py
+
+      # Issue #478: verdict regression for the item 5 per-row citations and
+      # declared spec_rows. Exercises the real pinned grader: the committed
+      # manifest (kickback fails, Rows 1/2/5a declared gaps, Row 2 never
+      # covered), a passing-kickback fixture (partial_coverage held by the
+      # gaps alone) and Row 2 as the sole gap. Scratch manifests cite only
+      # committed envelopes; no simulation runs.
+      - name: Item 5 spec_rows verdict regression (issue #478)
+        run: python3 -m unittest scripts.tests.test_item5_spec_rows
 
       # Issue #174: README target-spec-table figures vs the committed report
       # (stdlib only). Unmapped claims are listed as UNCHECKED, never passed.
@@ -180,7 +191,7 @@ jobs:
       - name: Install klt (pinned) + KLayout
         run: |
           python3 -m pip install --disable-pip-version-check \
-            "klayout-tools==0.8.0" \
+            "klayout-tools==0.9.2" \
             "klayout==0.30.12"
           klt --version
 
@@ -204,12 +215,14 @@ jobs:
   # the hashed T1 item 1 anchor (manifests/README.md) and is DERIVED from the
   # xschem schematics, which nothing else hashes. This job runs the real
   # generator in check mode with a real, pinned xschem (built from source by
-  # scripts/provision_netlist_env.sh, which holds the xschem pin) and the
+  # scripts/provision_netlist_env.sh, which holds the xschem pin), the pinned
+  # klt (the generator invokes `klt netlist`, issue #489) and the
   # PDK release/sha256 declared in sim/pdk.json, resolved through the same
   # discovery contract the harness uses (PDK_ROOT, sim/harness/pdk.py).
-  # Nothing here skips: a missing xschem, symbol, PDK input or a stale
-  # netlist fails the job. The mocked tests in design/tests/ still run in
-  # harness-unit-tests; they check generator logic, not this schematic.
+  # Nothing here skips: a missing klt, xschem, symbol, PDK input or a stale
+  # netlist fails the job. The mocked tests in design/tests/ also run here
+  # (issue #489) and in harness-unit-tests; they check generator logic, not
+  # this schematic.
   netlist-regeneration:
     name: netlist regeneration (schematics regenerate the committed netlist, real xschem + pinned PDK)
     runs-on: ubuntu-latest
@@ -231,6 +244,18 @@ jobs:
         with:
           python-version: '3.13'
 
+      # Issue #489: the generator shells out to `klt netlist` (never a raw
+      # xschem), so this job's fresh runner needs the pinned klt too -- the
+      # signoff job's install does not carry over. Same release pin as every
+      # other job; the drift guard in signoff-manifest-parity checks this
+      # literal line against manifests/klt-pin.json (that job's cone holds
+      # the manifest, this one's does not).
+      - name: Install klt (pinned, see manifests/README.md)
+        run: |
+          python3 -m pip install --disable-pip-version-check \
+            "klayout-tools==0.9.2"
+          klt --version
+
       # Tool provisioning (not a repo input; skipped by the sparse-cone test).
       - name: Provision xschem build dependencies
         run: |
@@ -244,6 +269,13 @@ jobs:
 
       - name: Provision pinned SG13G2 PDK (sim/pdk.json)
         run: scripts/provision_netlist_env.sh pdk "$RUNNER_TEMP/pdk"
+
+      # Issue #489: the generator's own unit tests (mocked klt boundary) run
+      # in the same clean, klt-provisioned job as the real regeneration, so
+      # a klt-invocation regression is caught here even without xschem. They
+      # also run in harness-unit-tests (design/ is in that cone too).
+      - name: Generator unit tests (design/tests/, mocked klt boundary)
+        run: python3 -m unittest discover -s design/tests -p 'test_netlist.py'
 
       - name: Regenerate netlist from schematics and compare (design/netlist.py --check)
         env:
@@ -286,7 +318,6 @@ jobs:
             /sim/comparator-offset-transient-mc/testbench/
             /sim/comparator-transient-noise/testbench/
             /sim/comparator-memory/testbench/
-            /sim/run_memory.py
             /sim/comparator-transient-noise/*.py
             /sim/comparator-transient-noise-full/*.py
             /sim/device-mismatch-confirm/*.py
@@ -294,6 +325,7 @@ jobs:
             /sim/dut/
             /sim/klt-corner-verification/benches/
             /sim/klt-corner-verification/rows.json
+            /sim/klt-corner-verification/campaigns/20261115-issue92-bias/full_ib10_sw20lat6/grading.json
             /sim/klt-corner-verification/campaigns/20261009-issue78/fixture/
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.json
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.jsonl
@@ -301,6 +333,20 @@ jobs:
             /sim/klt-corner-verification/campaigns/20261010-n200/*.json
             /sim/klt-corner-verification/campaigns/20261010-n200/*.jsonl
             /sim/klt-corner-verification/campaigns/20261010-n200/*.spice
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_2.5uA/*.json
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_2.5uA/*.spice
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_5uA/*.json
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_5uA/*.spice
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_7.5uA/*.json
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_7.5uA/*.spice
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_10uA/*.json
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_10uA/*.spice
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_15uA/*.json
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_15uA/*.spice
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_20uA/*.json
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_20uA/*.spice
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_40uA/*.json
+            /sim/klt-corner-verification/campaigns/20261009-issue80/ib_40uA/*.spice
             /sim/klt-corner-verification/campaigns/20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json
             /sim/comparator-offset-cm-band/campaigns/20261009-5185f52/vcm-m050/*.spice
             /sim/comparator-offset-cm-band/campaigns/20261009-5185f52/vcm-m050/*.request.json
@@ -308,6 +354,29 @@ jobs:
             /sim/comparator-offset-cm-band/campaigns/20261009-5185f52/vcm-nom/*.request.json
             /sim/comparator-offset-cm-band/campaigns/20261009-5185f52/vcm-p050/*.spice
             /sim/comparator-offset-cm-band/campaigns/20261009-5185f52/vcm-p050/*.request.json
+            /sim/comparator-kickback-cm-band/campaigns/20261011-165/vcm-m050/kickback.body.spice
+            /sim/comparator-kickback-cm-band/campaigns/20261011-165/vcm-m050/kickback.envelope.json
+            /sim/comparator-kickback-cm-band/campaigns/20261011-165/vcm-nom/kickback.body.spice
+            /sim/comparator-kickback-cm-band/campaigns/20261011-165/vcm-nom/kickback.envelope.json
+            /sim/comparator-kickback-cm-band/campaigns/20261011-165/vcm-p050/kickback.body.spice
+            /sim/comparator-kickback-cm-band/campaigns/20261011-165/vcm-p050/kickback.envelope.json
+            /sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/comparison.json
+            /sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/comparison.md
+            /sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/vcm-m050/kickback.body.spice
+            /sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/vcm-m050/kickback-*.envelope.json
+            /sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/vcm-m050/kickback-*.request.json
+            /sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/vcm-nom/kickback-*.envelope.json
+            /sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/vcm-nom/kickback-*.request.json
+            /sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/vcm-p050/kickback-*.envelope.json
+            /sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/vcm-p050/kickback-*.request.json
+            /sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/comparison.json
+            /sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/comparison.md
+            /sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/vcm-m050/kickback-*.envelope.json
+            /sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/vcm-m050/kickback-*.request.json
+            /sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/vcm-nom/kickback-*.envelope.json
+            /sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/vcm-nom/kickback-*.request.json
+            /sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/vcm-p050/kickback-*.envelope.json
+            /sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/vcm-p050/kickback-*.request.json
             /sim/klt-corner-verification/campaigns/20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json
             /sim/klt-yield/
             /sim/characterization/
@@ -439,7 +508,6 @@ jobs:
           /sim/comparator-kickback/records/20260916-022249-36773c7.json
           /sim/evidence-exceptions.json
           /sim/evidence-size-budget.json
-          /sim/evidence-size-exceptions/
           /spec/decision-records/
           EOF
           echo "tracked files in working tree: $(git ls-files -t | grep -c '^H ' || true)"
@@ -456,6 +524,8 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           PUSH_AFTER: ${{ github.event.after }}
           GITHUB_SHA_CUR: ${{ github.sha }}
+          MG_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          MG_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
         run: |
           set -eu
           empty_tree=4b825dc642cb6eb9a060e54bf8d69288fbee4904
@@ -485,6 +555,18 @@ jobs:
               base=$GITHUB_SHA_CUR^
               head=$GITHUB_SHA_CUR
               echo "mode: workflow_dispatch LAST-COMMIT AUDIT, $base -> $head"
+              ;;
+            merge_group)
+              # Merge queue trial merge (issue #470): base_sha is the
+              # target-branch tip the group was built on, head_sha the
+              # trial-merge commit, so the comparison is base -> head
+              # directly (no merge-base). An empty or unavailable SHA fails
+              # closed below; nothing silently passes.
+              git cat-file -e "$MG_BASE_SHA^{commit}" || { echo "::error::merge-group base $MG_BASE_SHA unavailable"; exit 2; }
+              git cat-file -e "$MG_HEAD_SHA^{commit}" || { echo "::error::merge-group head $MG_HEAD_SHA unavailable"; exit 2; }
+              base=$MG_BASE_SHA
+              head=$MG_HEAD_SHA
+              echo "mode: merge_group, $base -> $head"
               ;;
             *)
               echo "::error::unsupported event $EVENT_NAME"; exit 2 ;;

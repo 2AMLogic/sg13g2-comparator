@@ -209,34 +209,39 @@ def cmd_auto(args) -> int:
 # repeat (determinism)
 # --------------------------------------------------------------------------- #
 
-REPEAT_POINT = ("mos_tt", 1.2, 27.0)
+#: The determinism-repeat PVT point, as recorded in the committed campaign
+#: sim/comparator-memory/campaigns/20261010-08e31bed1.md ("Determinism
+#: repeat"). Temperature is int so the generated request bytes match that
+#: record; see issue #426.
+REPEAT_POINT = ("mos_tt", 1.2, 27)
 
 
 def cmd_repeat(args) -> int:
     """Re-submit the nominal tt / 1.20 V / 27 C point for each round, using the
     SAME body (so the same probe plan) as the nominal campaign, narrowed to
     that one corner. Decisions must reproduce exactly."""
+    proc, vsup, temp = REPEAT_POINT
     git = git_state()
     jobs = []
     for k in range(1, mem.MAX_ROUNDS + 1):
         src = round_dir(args.series, "nominal", k)
-        body_src = src / f"{tag_for('mos_tt')}.body.spice"
+        body_src = src / f"{tag_for(proc)}.body.spice"
         if not body_src.is_file():
             continue
         rdir = round_dir(args.series, "repeat", k)
         body_bytes = body_src.read_bytes()
-        req = mem.load_json(src / f"{tag_for('mos_tt')}.request.json")
-        req["corners"]["supply_v"] = {"vsup": [1.2]}
-        req["corners"]["temperature_c"] = [27]
+        req = mem.load_json(src / f"{tag_for(proc)}.request.json")
+        req["corners"]["supply_v"] = {"vsup": [vsup]}
+        req["corners"]["temperature_c"] = [temp]
         req["_comment"] = req["_comment"] + [
             "DETERMINISM REPEAT: the nominal campaign's round body, narrowed to tt / 1.20 V / 27 C."]
         req["_round"] = dict(req.get("_round") or {}, arm="repeat")
         files = [(rdir / body_src.name, body_bytes),
-                 (rdir / f"{tag_for('mos_tt')}.request.json",
+                 (rdir / f"{tag_for(proc)}.request.json",
                   (json.dumps(req, indent=2) + "\n").encode("utf-8"))]
         if not kcli._commit_planned(files, argparse.Namespace(force=False), f"repeat r{k}"):
             return 1
-        tag = tag_for("mos_tt")
+        tag = tag_for(proc)
         if (rdir / f"{tag}.envelope.json").exists():
             continue
         jobs.append((rdir / f"{tag}.request.json", rdir, tag,
@@ -400,15 +405,23 @@ def build_record(series: str) -> dict:
     # determinism repeat
     rep = []
     for k in range(1, mem.MAX_ROUNDS + 1):
-        a = series_dir(series) / "nominal" / f"round{k}" / f"{tag_for('mos_tt')}.envelope.json"
-        b = series_dir(series) / "repeat" / f"round{k}" / f"{tag_for('mos_tt')}.envelope.json"
+        a = series_dir(series) / "nominal" / f"round{k}" / f"{tag_for(REPEAT_POINT[0])}.envelope.json"
+        b = series_dir(series) / "repeat" / f"round{k}" / f"{tag_for(REPEAT_POINT[0])}.envelope.json"
         if not (a.is_file() and b.is_file()):
             continue
         va = _repeat_values(mem.load_json(a))
         vb = _repeat_values(mem.load_json(b))
-        diffs = {n: [va.get(n), vb.get(n)] for n in sorted(set(va) | set(vb))
-                 if va.get(n) != vb.get(n)}
-        rep.append({"round": k, "values_compared": len(vb), "identical": not diffs,
+        missing = [side for side, v in (("nominal", va), ("repeat", vb)) if not v]
+        if missing:
+            rep.append({"round": k, "values_compared": 0, "identical": None,
+                        "missing_measurements": missing,
+                        "max_abs_difference": None, "differences": {}})
+            continue
+        names = sorted(set(va) | set(vb))
+        unmeasured = [n for n in names if va.get(n) is None or vb.get(n) is None]
+        diffs = {n: [va.get(n), vb.get(n)] for n in names if va.get(n) != vb.get(n)}
+        rep.append({"round": k, "values_compared": len(names) - len(unmeasured),
+                    "identical": not diffs, "unmeasured": unmeasured,
                     "max_abs_difference": max((abs(x[0] - x[1]) for x in diffs.values()
                                                if x[0] is not None and x[1] is not None), default=0.0),
                     "differences": diffs})
@@ -417,12 +430,25 @@ def build_record(series: str) -> dict:
     return record
 
 
-def _repeat_values(env: dict) -> dict:
+def _repeat_values(env: dict) -> dict | None:
+    """Measurement map at the repeat point, or None when no corner matches it:
+    an absent corner (or an empty measurement set) is missing evidence, not an
+    empty-and-therefore-identical comparison. An input whose measurements all lack
+    a value (failed simulations) counts as missing too.
+
+    Evidence is keyed on the value alone, never on ``status``: a non-null value
+    counts whatever its status, so a ``status: "error"`` entry that nonetheless
+    carries a number is evidence. That is how klt reports a failed measurement
+    (``status: "error"`` with a null value) and how the search itself reads the
+    same envelope (:func:`kltsim.memory.corner_values`)."""
     for c in env.get("corners") or []:
-        if c.get("process") == "mos_tt" and abs(c["supply_v"]["vsup"] - 1.2) < 1e-6 \
-                and abs(c["temperature_c"] - 27) < 1e-6:
-            return {m["name"]: m.get("value") for m in c["measurements"]}
-    return {}
+        if c.get("process") == REPEAT_POINT[0] and abs(c["supply_v"]["vsup"] - REPEAT_POINT[1]) < 1e-6 \
+                and abs(c["temperature_c"] - REPEAT_POINT[2]) < 1e-6:
+            vals = {m["name"]: m.get("value") for m in (c.get("measurements") or [])}
+            # No measured value at all (absent/null list, or every measurement failed
+            # with a null value) is missing evidence; numeric zero is evidence.
+            return vals if any(v is not None for v in vals.values()) else None
+    return None
 
 
 def render_markdown(rec: dict) -> str:
@@ -471,11 +497,38 @@ def render_markdown(rec: dict) -> str:
                  f"{r['classification_total']['unresolved']} | {r['classification_total']['wrong_polarity']} |")
     d = rec["determinism_repeat"]
     L += ["", "## Determinism repeat (tt / 1.20 V / 27 C)", ""]
-    if d["rounds"]:
-        L.append(f"All rounds bit-identical: **{d['all_identical']}** "
-                 f"(rounds: {', '.join(str(r['round']) for r in d['rounds'])}).")
-    else:
+    if not d["rounds"]:
         L.append("Not run.")
+    else:
+        incomplete = [r for r in d["rounds"] if r["identical"] is None]
+        complete = [r for r in d["rounds"] if r["identical"] is not None]
+        partial = [r for r in complete if r["unmeasured"]]
+        partial_note = (f"; round(s) {', '.join(str(r['round']) for r in partial)} partially measured"
+                        if partial else "")
+        for r in incomplete:
+            L.append(f"- round {r['round']}: INSUFFICIENT EVIDENCE, no measured values at the repeat "
+                     f"point in the {' and '.join(r['missing_measurements'])} envelope; "
+                     "no identity verdict for this round.")
+        for r in partial:
+            L.append(f"- round {r['round']}: PARTIALLY MEASURED, {r['values_compared']} of "
+                     f"{r['values_compared'] + len(r['unmeasured'])} values compared; no value on "
+                     f"at least one side for: {', '.join(r['unmeasured'])}.")
+        if not complete:
+            L.append("No round has measurements on both sides; the repeat is undecided on this "
+                     "evidence.")
+        elif incomplete:
+            L.append(f"Compared rounds bit-identical: **{all(r['identical'] for r in complete)}** "
+                     f"(rounds {', '.join(str(r['round']) for r in complete)} of {len(d['rounds'])}; "
+                     f"round(s) {', '.join(str(r['round']) for r in incomplete)} lack measurements"
+                     f"{partial_note}).")
+        elif partial:
+            L.append(f"Compared values bit-identical: **{d['all_identical']}** "
+                     f"(rounds: {', '.join(str(r['round']) for r in d['rounds'])}); "
+                     f"round(s) {', '.join(str(r['round']) for r in partial)} partially measured, "
+                     "so this is no verdict on their unmeasured values.")
+        else:
+            L.append(f"All rounds bit-identical: **{d['all_identical']}** "
+                     f"(rounds: {', '.join(str(r['round']) for r in d['rounds'])}).")
     L += ["", "## Batch provenance", ""]
     for j in rec["provenance"]["requests"]:
         L.append(f"- `{j['request']}`: {j['backend']} job `{j['job_id']}` "
@@ -496,6 +549,9 @@ def cmd_record(args) -> int:
         print(f"control {name}: shift {x['shift_uV']} uV -> {x['verdict']['verdict']}")
     print("sensitivity control:", rec["controls"]["bench_sensitivity_control"])
     print("determinism repeat identical:", rec["determinism_repeat"]["all_identical"])
+    lacking = [r["round"] for r in rec["determinism_repeat"]["rounds"] if r["identical"] is None]
+    if lacking:
+        print("determinism repeat insufficient-evidence rounds:", lacking)
     return 0
 
 

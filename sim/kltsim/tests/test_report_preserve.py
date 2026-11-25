@@ -4,8 +4,10 @@ Only analysis/rendering is mocked; every test drives the public CLI entry
 points against a temporary directory. No simulator, no network.
 """
 
+import argparse
 import contextlib
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -14,6 +16,7 @@ from unittest import mock
 
 import run_clock_supply_sensitivity as clock
 import run_decision_cm_band as decision
+import run_kickback_cm_band as kickback
 import run_offset_cm_band as offset
 from kltsim import artifacts
 from kltsim import cli
@@ -24,21 +27,32 @@ from kltsim import clocksupply_report as rep
 from kltsim import declared_n
 from kltsim import grade as grade_mod
 from kltsim import ibsweep
+from kltsim import kickback_cmband as kb
 from kltsim import noise_full
 
 SIDE = {"grade": ("grading.json", "grading.md"),
         "noise": ("noise_full.json", "noise_full.md"),
         "clock": ("comparison.json", "comparison.md"),
         "offset": ("comparison.json", "comparison.md"),
+        "offset-supplement": ("supplement-report.json", "supplement-report.md"),
         "decision": ("comparison.json", "comparison.md"),
+        "kickback": ("comparison.json", "comparison.md"),
+        "kickback-probe": ("comparison.json", "comparison.md"),
         "ibsweep": ("ibsweep.json", "ibsweep.md")}
-SERIES_RUNNERS = {"clock": clock, "offset": offset, "decision": decision}
+SERIES_RUNNERS = {"clock": (clock, "compare"), "offset": (offset, "compare"),
+                  "offset-supplement": (offset, "supplement-report"),
+                  "decision": (decision, "compare"),
+                  "kickback": (kickback, "compare"),
+                  "kickback-probe": (kickback, "probe-compare")}
 
 
 class Harness(unittest.TestCase):
     """Runs one public command with mocked analysis whose output is mutable."""
 
     kind = ""
+    # Issue #423: whether a redirected publish cites its source in the JSON and
+    # markdown. `noise` is the one deliberate exception — it must NOT cite.
+    cites_source = True
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -66,6 +80,27 @@ class Harness(unittest.TestCase):
                 mod, "compare_series", lambda d, **kw: {**self.result, "conditions": {}}))
             stack.enter_context(mock.patch.object(mod, "render_markdown", lambda r: self.md))
         stack.enter_context(mock.patch.object(
+            cmband, "compare_supplement",
+            lambda d, **kw: {**self.result, "conditions": {},
+                             "conclusion": {"targets_complete": [], "targets_expected": 0,
+                                            "pairs_identical": 0, "pairs_compared": 0,
+                                            "max_abs_delta_mv": None},
+                             "populations": [], "missing_envelopes": []}))
+        stack.enter_context(mock.patch.object(
+            cmband, "render_supplement_markdown", lambda r: self.md))
+        stack.enter_context(mock.patch.object(kb, "SERIES_DIR", self.campaigns))
+        stack.enter_context(mock.patch.object(
+            kb, "compare_series",
+            lambda d, ref=None: {**self.result, "conditions": {},
+                                 "reproduction": {"ok": True, "values_compared": 0,
+                                                  "expected_values": 0, "mismatches": [],
+                                                  "problems": []}}))
+        stack.enter_context(mock.patch.object(kb, "render_markdown", lambda r: self.md))
+        stack.enter_context(mock.patch.object(
+            kb, "probe_compare",
+            lambda d, **kw: {**self.result, "problems": [], "points": []}))
+        stack.enter_context(mock.patch.object(kb, "probe_render_markdown", lambda r: self.md))
+        stack.enter_context(mock.patch.object(
             ibsweep, "sweep", lambda d: {**self.result, "points": [1]}))
         stack.enter_context(mock.patch.object(ibsweep, "render_markdown", lambda r: self.md))
 
@@ -77,7 +112,8 @@ class Harness(unittest.TestCase):
         err, out = io.StringIO(), io.StringIO()
         with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
             if self.kind in SERIES_RUNNERS:
-                rc = SERIES_RUNNERS[self.kind].main(["compare", "--series", "C1", *extra])
+                mod, sub = SERIES_RUNNERS[self.kind]
+                rc = mod.main([sub, "--series", "C1", *extra])
             else:
                 rc = cli.main(self.argv(*extra))
         return rc, out.getvalue(), err.getvalue()
@@ -178,6 +214,20 @@ class _Cases:
         self.assertEqual(rc, 1)
         self.assertIn("not a regular file", err)
 
+    def test_nonfinite_floats_are_null_never_tokens(self):
+        # Issue #250/#546: every derived-report writer serializes through
+        # grade_mod.dumps_strict, so NaN/Infinity become null in the
+        # published JSON, never literal tokens.
+        self.result = {**self.result, "nan": float("nan"), "inf": float("inf")}
+        rc, _, _ = self.run_cmd()
+        self.assertEqual(rc, 0)
+        text = (self.src / self.names[0]).read_text(encoding="utf-8")
+        self.assertNotIn("NaN", text)
+        self.assertNotIn("Infinity", text)
+        parsed = json.loads(text, parse_constant=lambda c: self.fail(c))
+        self.assertIsNone(parsed["nan"])
+        self.assertIsNone(parsed["inf"])
+
     def test_report_dir_publishes_changed_analysis_and_keeps_original(self):
         self.run_cmd()
         before = self.snapshot(self.src)
@@ -188,9 +238,14 @@ class _Cases:
         self.assertEqual(self.snapshot(self.src), before)
         self.assertEqual({p.name for p in new.iterdir()}, set(self.names))
         self.assertIn("C1", (new / self.names[0]).read_text())
-        if self.kind != "noise":
-            self.assertIn("source_", (new / self.names[0]).read_text())
-            self.assertIn("original evidence", (new / self.names[1]).read_text())
+        json_text = (new / self.names[0]).read_text()
+        md_text = (new / self.names[1]).read_text()
+        if self.cites_source:
+            self.assertIn("source_", json_text)
+            self.assertIn("original evidence", md_text)
+        else:
+            self.assertNotIn("source_", json_text)
+            self.assertNotIn("original evidence", md_text)
 
     def test_report_dir_is_a_file_refused(self):
         f = self.root / "afile"
@@ -206,6 +261,9 @@ class GradeTest(_Cases, Harness):
 
 class NoiseFullTest(_Cases, Harness):
     kind = "noise"
+    # Issue #423: noise_full deliberately publishes without citing its source
+    # campaign; changing that is a sim/README.md decision-record question.
+    cites_source = False
 
     def test_compact_json_serialization_kept(self):
         self.run_cmd()
@@ -225,8 +283,55 @@ class DecisionCmBandTest(_Cases, Harness):
     kind = "decision"
 
 
+class OffsetSupplementTest(_Cases, Harness):
+    kind = "offset-supplement"
+
+
+class KickbackTest(_Cases, Harness):
+    kind = "kickback"
+
+
+class KickbackProbeTest(_Cases, Harness):
+    kind = "kickback-probe"
+
+    def test_report_dir_allows_frozen_series_with_other_arms(self):
+        # the frozen-#405 guard refuses only in-place rewrites: a redirected
+        # publish cites the series and leaves its committed pair untouched.
+        self.src = self.campaigns / "20261108-405-probe"
+        self.src.mkdir()
+        rc, _, _ = self.run_cmd("--series", "20261108-405-probe", "--arm", "icdc",
+                                "--report-dir", str(self.root / "new-ns"))
+        self.assertEqual(rc, 0)
+        self.assertEqual(list(self.src.iterdir()), [])
+        self.assertEqual({p.name for p in (self.root / "new-ns").iterdir()}, set(self.names))
+
+    def test_in_place_frozen_series_with_other_arms_refused(self):
+        self.src = self.campaigns / "20261108-405-probe"
+        self.src.mkdir()
+        rc, _, err = self.run_cmd("--series", "20261108-405-probe", "--arm", "icdc")
+        self.assertEqual(rc, 1)
+        self.assertIn("frozen #405 probe series", err)
+        self.assertEqual(list(self.src.iterdir()), [])
+
+
 class IbsweepTest(_Cases, Harness):
     kind = "ibsweep"
+
+
+class MinimalNamespaceTest(unittest.TestCase):
+    """Issue #546: the shared publish helper reads ``check`` and ``report_dir``
+    defensively, so a programmatic minimal ``argparse.Namespace`` works."""
+
+    def test_publish_report_pair_without_check_attribute(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = Path(d) / "src"
+            src.mkdir()
+            rc = cli.publish_report_pair(
+                "compare", argparse.Namespace(report_dir=None), src, "comparison",
+                {"series": "S", "v": 1}, "# md\n", "series")
+            self.assertEqual(rc, 0)
+            self.assertEqual({p.name for p in src.iterdir()},
+                             {"comparison.json", "comparison.md"})
 
 
 class WriterTest(unittest.TestCase):
@@ -268,6 +373,99 @@ class WriterTest(unittest.TestCase):
         p = self.d / "sub" / "x"
         self.assertEqual(len(artifacts.check([(p, b"1")])), 1)
         self.assertFalse(p.parent.exists())
+
+    def test_commit_refuses_non_directory_destination_dir(self):
+        dest = self.d / "camp"
+        dest.write_text("not a directory", encoding="utf-8")
+        with self.assertRaises(artifacts.ArtifactConflict) as caught:
+            artifacts.commit([(dest / "a.spice", b"body")])
+        self.assertIn(f"{dest}: exists and is not a directory", str(caught.exception))
+        self.assertEqual(dest.read_text(), "not a directory")
+        self.assertEqual([p.name for p in self.d.iterdir()], ["camp"])
+
+    def test_commit_refuses_symlinked_destination_dir(self):
+        real = self.d / "real"
+        real.mkdir()
+        dest = self.d / "camp"
+        dest.symlink_to(real, target_is_directory=True)
+        with self.assertRaises(artifacts.ArtifactConflict) as caught:
+            artifacts.commit([(dest / "a.spice", b"body")])
+        self.assertIn(f"{dest}: exists and is not a directory", str(caught.exception))
+        self.assertEqual(list(real.iterdir()), [])
+
+    def test_commit_refuses_non_directory_ancestor(self):
+        for kind in ("file", "dangling-symlink", "symlink-to-file"):
+            with self.subTest(kind=kind):
+                root = self.d / kind.replace("-", "_")
+                root.mkdir()
+                ancestor = root / "camp"
+                if kind == "file":
+                    ancestor.write_text("x", encoding="utf-8")
+                elif kind == "dangling-symlink":
+                    ancestor.symlink_to(root / "gone")
+                else:
+                    (root / "afile").write_text("x", encoding="utf-8")
+                    ancestor.symlink_to(root / "afile")
+                with self.assertRaises(artifacts.ArtifactConflict) as caught:
+                    artifacts.commit([(ancestor / "bench" / "a.spice", b"body")])
+                self.assertIn(f"{ancestor}: exists and is not a directory",
+                              str(caught.exception))
+                self.assertFalse((root / "gone").exists())
+                leftovers = {"file": ["camp"], "dangling-symlink": ["camp"],
+                             "symlink-to-file": ["afile", "camp"]}[kind]
+                self.assertEqual(sorted(p.name for p in root.iterdir()), leftovers)
+
+    def test_commit_follows_symlinked_ancestor_to_directory(self):
+        real = self.d / "real"
+        real.mkdir()
+        link = self.d / "link"
+        link.symlink_to(real, target_is_directory=True)
+        created = artifacts.commit([(link / "camp" / "a.spice", b"body")])
+        self.assertEqual(created, [link / "camp" / "a.spice"])
+        self.assertEqual((real / "camp" / "a.spice").read_bytes(), b"body")
+
+    def test_commit_multi_dir_batch_rejects_whole_set(self):
+        bad = self.d / "bad"
+        bad.write_text("x", encoding="utf-8")
+        good = self.d / "good"
+        with self.assertRaises(artifacts.ArtifactConflict) as caught:
+            artifacts.commit([(bad / "a", b"1"), (good / "b", b"2")])
+        self.assertIn(f"{bad}: exists and is not a directory", str(caught.exception))
+        self.assertFalse(good.exists())
+
+    def test_commit_reports_shared_bad_ancestor_once(self):
+        ancestor = self.d / "camp"
+        ancestor.write_text("x", encoding="utf-8")
+        with self.assertRaises(artifacts.ArtifactConflict) as caught:
+            artifacts.commit([(ancestor / "one" / "a", b"1"), (ancestor / "two" / "b", b"2")])
+        self.assertEqual(
+            str(caught.exception).count(f"{ancestor}: exists and is not a directory"), 1)
+
+    def test_check_reports_directory_conflict_without_spurious_missing(self):
+        bad = self.d / "bad"
+        bad.write_text("x", encoding="utf-8")
+        good = self.d / "good"
+        good.mkdir()
+        problems = artifacts.check([(bad / "a", b"1"), (good / "b", b"2")])
+        self.assertEqual(problems,
+                         [f"{bad}: exists and is not a directory", f"{good / 'b'}: missing"])
+        self.assertFalse((good / "b").exists())
+
+    def test_require_dir_short_circuit_preserved(self):
+        f = self.d / "afile"
+        f.write_text("x", encoding="utf-8")
+        self.assertEqual(artifacts.check([], require_dir=f),
+                         [f"{f}: exists and is not a directory"])
+        real = self.d / "real"
+        real.mkdir()
+        link = self.d / "link"
+        link.symlink_to(real, target_is_directory=True)
+        self.assertEqual(artifacts.check([], require_dir=link),
+                         [f"{link}: exists and is not a directory"])
+        with self.assertRaises(artifacts.ArtifactConflict) as caught:
+            artifacts.commit([(self.d / "other" / "a", b"1")], require_dir=f)
+        self.assertEqual(str(caught.exception), f"{f}: exists and is not a directory")
+        self.assertFalse((self.d / "other").exists())
 
 
 if __name__ == "__main__":

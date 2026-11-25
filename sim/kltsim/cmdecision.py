@@ -67,8 +67,6 @@ ROW3 = {
 }
 GATES = ["dout_od50_first", "dout_od1_first", "dout_od01_first",
          "dout_od50_end", "dout_od1_end", "dout_od01_end"]
-REPORTED = ("td_od50_ns", "td_od1_ns", "td_od01_ns", "tau_ps", "resolve_decades", "p_avg_uw")
-EXPECTED_POINTS = 45
 
 
 class DecisionCmError(RuntimeError):
@@ -131,14 +129,15 @@ def compose_request(cond: Condition, backend: str = "batch") -> dict:
     return request
 
 
-def write_condition_inputs(cond: Condition, out_dir: Path, *, backend: str = "batch"
-                           ) -> tuple[Path, Path]:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    body = out_dir / BODY_NAME
-    body.write_text(compose_body(cond), encoding="utf-8")
-    req = out_dir / REQUEST_NAME
-    req.write_text(json.dumps(compose_request(cond, backend), indent=2) + "\n", encoding="utf-8")
-    return body, req
+def plan_condition_inputs(cond: Condition, out_dir: Path, *, backend: str = "batch"
+                          ) -> list[tuple[Path, bytes]]:
+    """Every (destination, bytes) pair of the condition's campaign inputs,
+    body first -- for ``commit_inputs``' append-only write."""
+    return [
+        (out_dir / BODY_NAME, compose_body(cond).encode("utf-8")),
+        (out_dir / REQUEST_NAME,
+         (json.dumps(compose_request(cond, backend), indent=2) + "\n").encode("utf-8")),
+    ]
 
 
 # --------------------------------------------------------------------------- #
@@ -314,7 +313,12 @@ def reproduction(nominal_env: dict, reference_env: dict) -> dict:
     """Exact comparison of every reference measurement at every expected point.
 
     A reference measurement absent from the nominal envelope is a mismatch;
-    only an extra nominal measurement (e.g. the ``vcm_meas`` probe) is allowed."""
+    only an extra nominal measurement (e.g. the ``vcm_meas`` probe) is allowed.
+    A name whose value is ``None`` is not evidence of identity (issue #532):
+    ``None`` on both sides is excluded from ``values_compared`` and listed in
+    ``unmeasured``; ``None`` on one side only is a mismatch. A point whose
+    every measurement is unmeasured on both sides therefore yields
+    ``compared == 0`` and cannot certify ``bit_identical``."""
     def table(env):
         out = {}
         for c in env.get("corners") or []:
@@ -325,6 +329,7 @@ def reproduction(nominal_env: dict, reference_env: dict) -> dict:
         return out
     a, b = table(nominal_env), table(reference_env)
     mismatches, compared = [], 0
+    unmeasured = []
     for k in expected_keys():
         if k not in a or k not in b:
             mismatches.append({"point": key_label(k), "reason": "missing in one envelope"})
@@ -334,13 +339,21 @@ def reproduction(nominal_env: dict, reference_env: dict) -> dict:
                 mismatches.append({"point": key_label(k), "measurement": n,
                                    "reason": "reference measurement missing from nominal"})
                 continue
+            if a[k][n] is None or b[k][n] is None:
+                if a[k][n] is None and b[k][n] is None:
+                    unmeasured.append({"point": key_label(k), "measurement": n})
+                else:
+                    mismatches.append({"point": key_label(k), "measurement": n,
+                                       "nominal": a[k][n], "reference": b[k][n],
+                                       "reason": "no value on one side (null)"})
+                continue
             compared += 1
             if a[k][n] != b[k][n]:
                 mismatches.append({"point": key_label(k), "measurement": n,
                                    "nominal": a[k][n], "reference": b[k][n]})
     shared = sorted(set(next(iter(a.values()), {})) & set(next(iter(b.values()), {})))
     return {"bit_identical": not mismatches and compared > 0, "values_compared": compared,
-            "shared_measurements": shared, "mismatches": mismatches}
+            "shared_measurements": shared, "mismatches": mismatches, "unmeasured": unmeasured}
 
 
 def _load_json(path: Path):
@@ -399,11 +412,18 @@ def render_markdown(result: dict) -> str:
          "their reason; nothing is substituted.", ""]
     rep = result.get("reproduction")
     if rep:
+        unmeasured = rep.get("unmeasured") or []
+        verdict = ("BIT-IDENTICAL" if rep["bit_identical"] and not unmeasured
+                   else "IDENTICAL OVER MEASURED VALUES" if rep["bit_identical"]
+                   else "NOT IDENTICAL")
         L += [f"**vcm-nom reproduction vs `{result['reference_campaign']}`:** "
-              f"{'BIT-IDENTICAL' if rep['bit_identical'] else 'NOT IDENTICAL'} "
+              f"{verdict} "
               f"({rep['values_compared']} values compared across "
               f"{len(rep['shared_measurements'])} shared measurements, "
-              f"{len(rep['mismatches'])} mismatches).", ""]
+              f"{len(rep['mismatches'])} mismatches"
+              + (f", {len(unmeasured)} unmeasured value pair(s) excluded"
+                 f" (no value on either side)" if unmeasured else "")
+              + ").", ""]
     L += ["| condition | vcm (V) | valid | td_od50 ns (min..max) | tau ps (min..max) | "
           "td_od01 ns (min..max) | Target fails (50mV/tau/0.1mV) | Stretch fails (50mV) | "
           "min decades | batch job |", "|---|---|---|---|---|---|---|---|---|---|"]

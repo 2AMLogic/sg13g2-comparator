@@ -51,25 +51,60 @@ How the verdicts are kept apart (`sim/kltsim/grade.py`):
 
 ## The citation `klt signoff` sees
 
-`klt signoff` accepts a single `sim` envelope for item 5, and it marks the
-item passed only when that one envelope's own `status` is `pass`. The
-envelopes here encode **only DR-0002 Target bounds and validity gates** as
-`limits`. Stretch bounds are deliberately not encoded, so an envelope's own
-status is the Target verdict of the rows it carries. Two consequences follow:
+Since #478 the pinned `klt signoff` (0.9.2) grades item 5 on a **list of
+citations, each naming the spec rows it covers**, against the full row set
+declared in the manifest under `spec_rows["5"]`
+(`docs/cli/signoff.md`, "Item 5 with several citations and declared spec
+rows"). The envelopes here encode **only DR-0002 Target bounds and validity
+gates** as `limits`. Stretch bounds are deliberately not encoded, so an
+envelope's own status is the Target verdict of the rows it carries. Three
+consequences follow:
 
 - `manifests/sg13g2-comparator.json` cites
-  [`campaigns/20261009-d73a9ac/kickback.envelope.json`](campaigns/20261009-d73a9ac/kickback.envelope.json).
-  Its own status is `fail` (39/45 corners over the 25 fC Q_kick Target), and
-  the grader renders item 5 `unmet` / `check_failed`. Citing the passing
-  regeneration envelope instead would have rendered item 5 **met** on one
-  row's evidence, which is a false claim.
-- The Row 1 and Row 2 statistics are caller-side reductions of klt's
-  per-corner Monte-Carlo moments. Their envelopes' `status` reflects only
-  per-sample gates and limits, never the row verdict. They therefore must
-  never be cited as item 5 passes. See
-  [klayout-tools#2960](https://github.com/2AMLogic/klayout-tools/issues/2960):
-  only a pooled mean ± kσ window is gradeable, so a per-corner population
-  statistic or a statistic over two measurements cannot be expressed.
+  [`campaigns/20261009-d73a9ac/regeneration.envelope.json`](campaigns/20261009-d73a9ac/regeneration.envelope.json)
+  for Rows **3a, 3b, 3c** and
+  [`campaigns/20261009-d73a9ac/kickback.envelope.json`](campaigns/20261009-d73a9ac/kickback.envelope.json)
+  for Rows **4a, 4b**, each pinned by `content_hash` (the netlist body's
+  `provenance.input.content_hash`, re-hashed by the grader). The kickback
+  envelope's own status is `fail` (39/45 corners over the 25 fC Q_kick
+  Target), so the grader renders item 5 `unmet` / `check_failed` with that
+  envelope as the sole failed citation. The committed requests carry no
+  `spec_row` tags, so the grader trusts the manifest's row assignments
+  (`row_sources` reports them `asserted`) and lists **both 4a and 4b** in
+  `detail.failed_rows` — one `status` covers the whole envelope, even though
+  Row 4b meets its Target at 45/45 points per `grading.md`. The envelope is
+  not split or re-minted for this; that is the tool's honest reading of an
+  untagged envelope.
+- **Rows 1, 2 and 5a are declared `gap`s in `spec_rows["5"]`** — a gap is
+  never covered and keeps item 5 `unmet`:
+  - Rows 1 and 2 are caller-side reductions of klt's per-corner
+    Monte-Carlo moments (worst-point quantization-corrected 3σ; grid-wide
+    mean of per-point probit-slope σ). Their envelopes' `status` reflects
+    only per-sample gates and limits, never the row verdict, so they must
+    never be cited with `rows` for 1 or 2 — an asserted entry counts the
+    row covered (a scratch assertion on a `transient_noise` envelope
+    rendered Row 2 covered and item 5 `met` against the failing 1.289 mV
+    grid mean). Upstream capability gaps:
+    [#6967](https://github.com/2AMLogic/klayout-tools/issues/6967),
+    [#6968](https://github.com/2AMLogic/klayout-tools/issues/6968)
+    (following the closed
+    [#2960](https://github.com/2AMLogic/klayout-tools/issues/2960) and
+    [#2976](https://github.com/2AMLogic/klayout-tools/issues/2976)).
+  - Row 5a's PASS is this campaign's own joint verdict — `grade.py` checks
+    all four benches over the complete grid with supply and temperature
+    verified as applied. No single envelope carries that joint property,
+    and per-bench citations would assert coverage without the joint check,
+    so 5a is a declared gap in the signoff manifest even though the
+    campaign verdict is PASS. Upstream:
+    [#6969](https://github.com/2AMLogic/klayout-tools/issues/6969).
+- Rows 4c and 5b carry no ratified Target (`rows.json`: `target: null`) and
+  are **not declared** in `spec_rows["5"]` — the manifest does not invent
+  bounds for them; they stay reported quantities in `grading.md`.
+
+`scripts/tests/test_item5_spec_rows.py` (in the `signoff-manifest-parity`
+CI job) holds the verdict regression: with a passing kickback citation and
+the same declared gaps, item 5 stays `unmet` / `partial_coverage`, and Row 2
+as the sole gap keeps it `unmet` with no coverage source.
 
 ## Layout
 
@@ -120,6 +155,10 @@ the only bench and `2 <= N <= 1000`), checked against the budget first with
 `estimate --offset-n N`, and graded with `grade --campaign <id> --offset-n N`; the
 saved requests must carry exactly that N. The committed instance is
 `20261010-n200` (N = 200); the historical `20261009-d73a9ac` is unchanged.
+Re-checking the committed pair needs the same declaration (issue #440):
+`grade --campaign 20261010-n200 --offset-n 200 --check` exits 0, while omitting
+`--offset-n` correctly exits 1 (the historical N = 60 contract rejects an
+undeclared N = 200 campaign).
 
 Re-grading the committed campaign needs no simulator:
 `python3 sim/run_klt_corner_verification.py grade --campaign 20261009-d73a9ac`.
@@ -474,6 +513,9 @@ changes no spec row, no ratified Target, not `design/comparator.spice` and not
 `sim/dut.json`. Adopting any candidate is a follow-up issue plus a decision record.
 Evidence: [`campaigns/20261009-issue92/`](campaigns/20261009-issue92/); generated table
 [`sizesweep.md`](campaigns/20261009-issue92/sizesweep.md) (machine form `sizesweep.json`).
+Note (issue #447): that committed roll-up predates the roll-up fix and omits
+Row 5a entirely; Row 5a's per-candidate verdict is in each finalist's own
+`grading.md` (`full_w8_l034`: PASS).
 Client: the CI-pinned klt `0.5.0+ge8ca621a6961`, batch backend (job ids in each
 envelope's `environment.remote`).
 
@@ -668,3 +710,131 @@ independent-point estimate. Derivation and script:
 `sim/klt-vs-record-offset-significance/`. The remaining ~13 % method
 uncertainty note is therefore sampling-limited, not evidence of a systematic
 method difference.
+
+## Bias/latch-device study, operator-authorized option `study` (issue #92, 2026-11-15)
+
+Append-only continuation of the issue #92 sections above; nothing there is
+edited. After PR #121 closed Row 4a with `w8_l034` but left Row 2 at
+1.338 mV, the operator ruled (2026-10-15, recorded on the issue) for a
+bounded bias/latch-device study inside the DR-0001 topology and the 1.0 mV
+noise Target; the batch-fleet regression that parked it twice
+(2026-10-29/30) was cleared by the 2026-11-13 probe ruling after the fleet
+image was rebaked (v13, ngspice 47).
+
+Evidence: [`campaigns/20261115-issue92-bias/`](campaigns/20261115-issue92-bias/)
+(screening table `sizesweep.md`, finalist report
+[`sizesweep-final.md`](campaigns/20261115-issue92-bias/sizesweep-final.md),
+machine forms `.json`; finalist MC envelopes + artifacts are **stored**, not
+committed: manifest
+[`../../manifests/artifacts/klt-corner-verification-20261115-issue92-bias-mc.manifest.json`](../../manifests/artifacts/klt-corner-verification-20261115-issue92-bias-mc.manifest.json),
+summary [`campaigns/20261115-issue92-bias-mc.md`](campaigns/20261115-issue92-bias-mc.md)).
+Note (issue #447): the committed roll-ups here predate the roll-up fix and
+omit Row 5a entirely; Row 5a's per-candidate verdict is in each finalist's
+own `grading.md` (INCOMPLETE on all three finalists).
+
+**Fleet probe.** The unchanged `w8_l034` baseline regeneration screening
+request (byte-identical to the parked 20261029 campaign's) completed 18/18
+corners at 5.6-6.3 s/corner (job `klt-sim-5d313de2e8b6`, klt
+`0.9.2.dev1029`, ngspice 47) — the 2026-10-29/30 timeout regression is gone.
+
+**Screening** (13 candidates = `dut_ib` {10, 12.5, 15} uA x {plain, latch
+XM3-XM6 w 10u->6u, tail XMSW w 10u->20u, both}, plus the 20 uA baseline;
+18-point grid; kickback evidence for the identical requests carried verbatim
+from the 20261029 campaign): every candidate keeps Row 4a at the binding
+corner (19.7-21.5 fC <= 25). `dut_ib=10 uA` plain misses the Row 3c screen
+(t_d @ 0.1 mV worst 2.159 ns > 2.0) as the #80 ibsweep found; widening
+`XMSW` to 20 uA restores it (1.823 ns plain+sw20, 1.862 with the latch
+widening too).
+
+**Finalists** (45-point grid, MC offset N=60 / noise N=80, bench-default
+seeds committed in each request): `ib10_sw20`, `ib10_sw20lat6`,
+`ib12p5_sw20`. All three keep Rows 3a/3b/3c/4a/4b at 45/45. Row 2 stays
+FAIL for every candidate: grid mean 1.192 / 1.096 / 1.255 mV rms — the best
+the topology reaches under this study is **1.096 mV** (`ib10_sw20lat6`,
+`dut_ib=10 uA`, latch pairs 6 u, `XMSW` 20 u) against the <= 1.0 mV Target.
+Row 1 is INCOMPLETE on all three (one mismatch draw per finalist aborts in
+ngspice, `timestep_too_small` -> `analysis_aborted`, at its committed seed;
+43-44/45 points valid, worst valid point 13.4-13.8 mV, reasons in the
+grading files) — reported incomplete, not dropped.
+
+**No candidate in this study closes Row 2.** Per the operator's ruling this
+report recommends neither relaxing the Target nor re-opening DR-0001; it is
+the evidence for that next decision. Nothing is adopted:
+`design/comparator.spice`, `sim/dut.json` defaults, `spec/` and the ratified
+table are unchanged, and any adoption remains a follow-up issue plus a
+decision record (with the layout regeneration and DRC/LVS re-run that a
+sized candidate implies).
+
+## Matched PMOS load-width study (issue #498, 2026-11-21)
+
+Append-only continuation; nothing above is edited. Issue
+[#498](https://github.com/2AMLogic/sg13g2-comparator/issues/498) (part of
+#479) asked whether resizing **only** the matched PMOS loads XM5/XM6 --
+with XM3/XM4, the input pair, the switch and the 10 uA bias held at the
+archived `ib10_sw20lat6` geometry -- moves Row 2 and the input-referred
+density. Phase 1 of #477 attributed 85.4-92.4 % of differential output
+noise power to the diode-connected counterparts XM5A/XM6A, which motivated
+the experiment.
+
+Evidence: [`campaigns/20261121-issue498/`](campaigns/20261121-issue498/)
+(corrected [screen report](campaigns/20261121-issue498/loadwidth-final.md) and
+[finalist comparison](campaigns/20261121-issue498/sizesweep-final-comparison.md);
+candidate screen and finalist MC envelopes + artifacts are **stored**, not
+committed: manifest
+[`../../manifests/artifacts/klt-corner-verification-20261121-issue498-mc.manifest.json`](../../manifests/artifacts/klt-corner-verification-20261121-issue498-mc.manifest.json),
+summary [`campaigns/20261121-issue498-mc.md`](campaigns/20261121-issue498-mc.md)).
+Candidate densities (reduced model, Phase 1 method):
+[`../comparator-preamp-noise/reports/20261121-issue498/`](../comparator-preamp-noise/reports/20261121-issue498/)
+and its stored four-point batch
+[`../comparator-preamp-noise/reports/20261121-issue498-pvt.md`](../comparator-preamp-noise/reports/20261121-issue498-pvt.md).
+
+**Declared set.** XM5/XM6 widths 4, 8, 10, 12 u (3 u and 6 u were already
+measured; every width in the set is new as a PMOS load width). Screening =
+the issue #92 18-point grid: the standard kickback/regeneration requests
+plus a Row 2 transient-noise screen (N = 80 per rung) as THREE per-process
+requests per candidate -- derived from the process-specific full requests
+because the builder's `--screen` rewrite replaces the process list after
+the split (the byte-identical-file pitfall recorded in the issue). The
+screen's union check (18 points exactly once) is enforced by
+`sim/kltsim/loadwidth.py` at build time.
+
+**Characterization result.** Wider loads lower the input-referred density
+monotonically and cost front-end gain: S(TT) 39.41 / 36.78 / 35.04 / 33.76
+/ 32.74 nV/rtHz at 4 / 6 / 8 / 10 / 12 u (control row reproduces Phase 1
+at all four PVT points). The 10.1 % TT-density reduction the control's
+Row 2 projection needs is crossed between 10 u and 12 u.
+
+**Screen result** (18-point Row 2 mean, unchanged 36.27 nV/rtHz injection;
+control's 1.053 mV recomputed from the archived grades): w4 1.076 and w8
+1.065 mV do not improve on the control (eliminated); w12 improves (1.032)
+but its Row 3c screen breaches the Target (t_d @ 0.1 mV 2.044 ns > 2.0 at
+`ss_-40c_1.08v`, eliminated); **w10 advances** (1.008 mV, all Target-bound
+gates pass; 3c margin thin at 1.977 ns).
+
+**Full-grid comparison.** w10 preserves every passing Target of the 8 µm
+input-pair baseline. Both grades cover 45/45 points in every bench, with
+complete offset and noise draw counts and no INCOMPLETE rows. Row 2 uses
+the 45-point mean at the 36.27 nV/√Hz bench injection. Row 4c is a reporting
+requirement. A dash denotes an unspecified bound.
+[8 µm baseline grade](campaigns/20261009-issue92/full_w8_l034/grading.md) · [w10 grade](campaigns/20261121-issue498/full_w10/grading.md)
+
+| Row | Measurement | 8 µm baseline | w10 | Target / Stretch (both designs) |
+|---|---|---:|---:|---|
+| 1 | Offset, worst 3σ (mV) | 13.93 | 13.37 | PASS / FAIL |
+| 2 | Decision noise, grid mean (mV rms) | 1.33778 | 1.04143 | FAIL / FAIL |
+| 3a | Decision time at 50 mV, max (ns) | 0.8664 | 1.188 | PASS / FAIL |
+| 3b | Regeneration time constant, max (ps) | 168.7 | 135.6 | PASS / — |
+| 3c | Decision time at 0.1 mV, max (ns) | 1.705 | 1.977 | PASS / — |
+| 4a | Injected charge per side, max (fC) | 21.2 | 19.76 | PASS / FAIL |
+| 4b | Signal-dependent residue, max (µV) | 10.29 | 10.42 | PASS / PASS |
+| 4c | Single-ended excursion, max (mV) | 96.03 | 97.95 | REPORTED / — |
+| 5a | PVT coverage, all four benches | 45/45 per bench | 45/45 per bench | PASS / — |
+| 5b | Average power at 33.3 MHz, max (µW) | 37.61 | 25.67 | — / FAIL |
+
+At its measured 45-point bandwidth, w10's TT-density projection is
+**0.96930 mV rms** (1.04143154 × 33.758 / 36.27). Holding the 6 µm
+control bandwidth fixed gives **1.02035 mV rms** (1.09627632 × 33.758 /
+36.27). The measured w10 mean at 36.27 nV/√Hz is **1.04143 mV rms**, so
+Row 2 fails the 1.0 mV Target despite a 5.0% improvement over the control.
+The 12 µm screen breached Row 3c at
+2.044 ns. Widths between 10 and 12 µm have no timing grade.

@@ -17,8 +17,8 @@ import json
 import math
 import unittest
 
-from kltsim import build, grade
-from kltsim.benches import BENCHES, PROCESSES, SUPPLIES_V, TEMPERATURES_C
+from kltsim import bias_probes, build, declared_n, grade
+from kltsim.benches import BENCHES, BIAS_PROBES, OFFSET_MC_N, PROCESSES, SUPPLIES_V, TEMPERATURES_C
 
 ROWS = json.loads((build.EXPERIMENT_DIR / "rows.json").read_text(encoding="utf-8"))
 GRID = ROWS["grid"]
@@ -918,10 +918,27 @@ class DuplicateEvidenceTests(unittest.TestCase):
         self.assertEqual(out[0], out[1])
 
 class CampaignChainTests(unittest.TestCase):
-    """Saved request/invocation provenance at the loading boundary (issue #107)."""
+    """Saved request/invocation provenance at the loading boundary (issue #107).
+
+    Every tamper case below runs against all three campaign loaders (issue
+    #452): ``grade.load_campaign`` (this class) and the declared-contract
+    wrappers ``DeclaredNChainTests`` / ``BiasProbesChainTests``, which override
+    ``LOADER``. Each loader must detect the same tamper kinds, so a future
+    hardening of one loader's chain checks cannot silently miss the others: a
+    loader whose detection surface drifts fails here instead of returning
+    ``chain_problems == []`` like correct behaviour does.
+    """
 
     SRC = build.EXPERIMENT_DIR / "campaigns" / "20261009-d73a9ac"
     SPLIT = "offset_mc.mos_tt_mismatch"
+
+    #: The loader under test: ``(campaign_dir, bench_names=...) ->
+    #: {name: BenchEvidence}``.
+    LOADER = staticmethod(grade.load_campaign)
+    #: Chain problems an intact load is expected to carry, by bench name: a
+    #: declared-contract loader rejects what the fixture campaign does not
+    #: declare. Empty for ``grade``, whose contract the fixture was built to.
+    BASELINE_PROBLEMS: dict[str, tuple[str, ...]] = {}
 
     def setUp(self):
         import shutil
@@ -937,7 +954,7 @@ class CampaignChainTests(unittest.TestCase):
                 shutil.copy(f, self.dir / f.name)
 
     def _load(self, bench="offset_mc"):
-        return grade.load_campaign(self.dir)[bench]
+        return self.LOADER(self.dir)[bench]
 
     def _edit_invocation(self, tag, **changes):
         path = self.dir / f"{tag}.invocation.json"
@@ -959,7 +976,13 @@ class CampaignChainTests(unittest.TestCase):
     def test_intact_chain_reports_checked_hashes(self):
         for bench in BENCHES:
             ev = self._load(bench)
-            self.assertEqual(ev.chain_problems, [], bench)
+            expected = self.BASELINE_PROBLEMS.get(bench, ())
+            if expected:
+                self.assertTrue(ev.chain_problems, bench)
+                for p in ev.chain_problems:
+                    self.assertTrue(any(needle in p for needle in expected), (bench, p))
+            else:
+                self.assertEqual(ev.chain_problems, [], bench)
             for tag, _ in ev.envelopes:
                 checked = ev.chain_checked[tag]
                 self.assertEqual(checked["request_sha256"], checked["invocation_request_sha256"])
@@ -1023,7 +1046,7 @@ class CampaignChainTests(unittest.TestCase):
 
     def test_rejected_chain_blocks_met_rows_and_is_reported(self):
         (self.dir / "regeneration.request.json").write_bytes(b"{}")
-        benches = grade.load_campaign(self.dir)
+        benches = self.LOADER(self.dir)
         result = grade.grade(_spec([_row("3a")]), benches, grade.load_dut_reference())
         row = result["rows"][0]
         self.assertEqual(row["target_verdict"], grade.REJECTED_EVIDENCE)
@@ -1038,6 +1061,119 @@ class CampaignChainTests(unittest.TestCase):
         row = grade.grade(_spec([_row("3a")]), {"regeneration": ev},
                           grade.load_dut_reference())["rows"][0]
         self.assertNotEqual(row["target_verdict"], grade.REJECTED_EVIDENCE)
+
+    def test_bench_names_filter_is_honoured_by_every_loader(self):
+        loaders = (grade.load_campaign,
+                   lambda campaign_dir, **kw: declared_n.load_campaign(
+                       campaign_dir, offset_n=OFFSET_MC_N, **kw),
+                   bias_probes.load_campaign)
+        for loader in loaders:
+            benches = loader(self.dir, bench_names=("offset_mc",))
+            self.assertEqual(set(benches), {"offset_mc"})
+            self.assertEqual(benches["offset_mc"].chain_problems, [])
+
+
+class DeclaredNChainTests(CampaignChainTests):
+    """The same chain-tamper surface through the declared-N loader (issue #452):
+    ``declared_n.load_campaign`` must detect everything ``grade`` detects.
+
+    Declared at the fixture campaign's own draw count (the historical
+    ``OFFSET_MC_N``), so its intact chain is clean exactly as ``grade``'s is;
+    a declared N that differs from the saved requests is rejected in
+    ``test_offset_n.py``, which also covers the ``offset_n=None`` delegation
+    straight to ``grade.load_campaign``.
+    """
+
+    LOADER = staticmethod(
+        lambda campaign_dir, **kw: declared_n.load_campaign(
+            campaign_dir, offset_n=OFFSET_MC_N, **kw))
+
+
+class BiasProbesChainTests(CampaignChainTests):
+    """The same chain-tamper surface through the declared bias-probe loader
+    (issue #452). The fixture campaign was built without the probes, so its
+    ``regeneration`` requests are baseline-rejected by the declared contract;
+    every other bench's intact chain is clean exactly as ``grade``'s is, and
+    the tamper needles below are independent of that baseline."""
+
+    LOADER = staticmethod(bias_probes.load_campaign)
+    BASELINE_PROBLEMS = {"regeneration": ("request measurements",)}
+
+
+class BiasProbeDeclarationTests(unittest.TestCase):
+    """The issue #80 bias-probe superset at the loading boundary (issue #440):
+    an explicit declaration (``bias_probes.load_campaign`` swaps the
+    ``regeneration`` contract for the superset bench), and the declared
+    superset is compared exactly by ``grade``'s unchanged rules."""
+
+    def _superset_bench(self):
+        from kltsim.benches import regeneration_with_bias_probes
+        return regeneration_with_bias_probes(BENCHES["regeneration"])
+
+    def _superset_request(self) -> dict:
+        return grade._expected_request(self._superset_bench(), "regeneration")
+
+    def _problems(self, bench, request):
+        return grade.check_request_semantics(bench, "regeneration", request)
+
+    def test_declared_superset_is_accepted(self):
+        problems = self._problems(self._superset_bench(), self._superset_request())
+        self.assertEqual(problems, [])
+
+    def test_undeclared_superset_is_still_rejected(self):
+        problems = self._problems(BENCHES["regeneration"], self._superset_request())
+        self.assertTrue(any("request measurements" in p for p in problems), problems)
+
+    def test_a_different_extra_measurement_is_rejected_even_when_declared(self):
+        request = self._superset_request()
+        request["measurements"] = list(request["measurements"]) + [
+            {"name": "something_else", "spice": ".meas tran something_else find v(x) at=1n"}]
+        problems = self._problems(self._superset_bench(), request)
+        self.assertTrue(any("request measurements" in p for p in problems), problems)
+
+    def test_a_missing_probe_is_rejected_even_when_declared(self):
+        request = self._superset_request()
+        request["measurements"] = [m for m in request["measurements"] if m["name"] != "vref_v"]
+        problems = self._problems(self._superset_bench(), request)
+        self.assertTrue(any("request measurements" in p for p in problems), problems)
+
+    def test_superset_bench_changes_only_the_regeneration_measurements(self):
+        superset = self._superset_bench()
+        self.assertEqual(superset.name, BENCHES["regeneration"].name)
+        self.assertEqual(superset.measurements,
+                         BENCHES["regeneration"].measurements + BIAS_PROBES)
+        for field_name in ("analysis", "process_sections", "supply_keys", "probes",
+                           "monte_carlo", "circuit"):
+            self.assertEqual(getattr(superset, field_name),
+                             getattr(BENCHES["regeneration"], field_name))
+        self.assertEqual(BENCHES["regeneration"].measurements,
+                         tuple(m for m in superset.measurements
+                               if m.name not in {"vref_v", "tmid_eval_v"}))
+
+    def test_load_path_threads_the_declaration(self):
+        import tempfile
+        from pathlib import Path
+
+        from kltsim import bias_probes
+        with tempfile.TemporaryDirectory() as d:
+            directory = Path(d)
+            _, _, files = build.plan_bench_inputs(
+                self._superset_bench(), directory, target="batch")
+            for path, data in files:
+                path.write_bytes(data)
+            env = b"{}\n"
+            (directory / "regeneration.envelope.json").write_bytes(env)
+            (directory / "regeneration.invocation.json").write_text(json.dumps({
+                "tag": "regeneration",
+                "request_sha256": hashlib.sha256(
+                    (directory / "regeneration.request.json").read_bytes()).hexdigest(),
+                "envelope_sha256": hashlib.sha256(env).hexdigest(),
+            }))
+            declared = bias_probes.load_campaign(directory)
+            self.assertEqual(declared["regeneration"].chain_problems, [])
+            undeclared = grade.load_campaign(directory)
+            self.assertTrue(any("request measurements" in p
+                                for p in undeclared["regeneration"].chain_problems))
 
 
 class ProbeUnitTests(unittest.TestCase):

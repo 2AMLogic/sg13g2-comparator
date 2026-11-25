@@ -251,10 +251,6 @@ CIRCUITS = {"regen": regeneration_circuit, "offset": offset_circuit}
 BASE_BENCH = {"regen": REGENERATION, "offset": OFFSET_MC}
 
 
-def tag(kind: str) -> str:
-    return f"{kind}"
-
-
 # --------------------------------------------------------------------------- #
 # body + request
 # --------------------------------------------------------------------------- #
@@ -313,8 +309,10 @@ def compose_request(kind: str, c: Condition, body_name: str, backend: str = "bat
     return request
 
 
-def write_inputs(kind: str, c: Condition, out_dir: Path, *, osdi_dir: str = build_mod.BATCH_OSDI_DIR,
-                 backend: str = "batch") -> list[tuple[Path, bytes]]:
+def plan_inputs(kind: str, c: Condition, out_dir: Path, *, osdi_dir: str = build_mod.BATCH_OSDI_DIR,
+                backend: str = "batch") -> list[tuple[Path, bytes]]:
+    """Every (destination, bytes) pair of the condition's ``kind`` inputs, body
+    first -- for ``commit_inputs``' append-only write; touches no disk."""
     body_name = f"{kind}.{c.name}.body.spice"
     files = [(out_dir / body_name, compose_body(kind, c, osdi_dir).encode("utf-8"))]
     req = compose_request(kind, c, body_name, backend)

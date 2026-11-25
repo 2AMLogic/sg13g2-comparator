@@ -1,0 +1,134 @@
+{
+  "engine": "ngspice",
+  "netlist": "front-end.spice",
+  "models": {
+    "pdk": "ihp-sg13g2",
+    "lib": "libs.tech/ngspice/models/cornerMOSlv.lib"
+  },
+  "corners": {
+    "process": [
+      "mos_tt"
+    ],
+    "supply_v": {
+      "vsup": [
+        1.2
+      ]
+    },
+    "temperature_c": [
+      27
+    ],
+    "params": {
+      "pair_w": [
+        1.2e-05,
+        8e-06,
+        8e-06,
+        6e-06,
+        8e-06,
+        8e-06,
+        8e-06
+      ],
+      "pair_l": [
+        3.4e-07,
+        3.4e-07,
+        3.4e-07,
+        3.4e-07,
+        2e-07,
+        3.4e-07,
+        3.4e-07
+      ],
+      "switch_w": [
+        4e-05,
+        4e-05,
+        2e-05,
+        4e-05,
+        4e-05,
+        2e-05,
+        2e-05
+      ],
+      "latch_w": [
+        3e-06,
+        3e-06,
+        6e-06,
+        3e-06,
+        3e-06,
+        3e-06,
+        3e-06
+      ],
+      "dut_ib": [
+        2e-05,
+        2e-05,
+        1e-05,
+        2e-05,
+        2e-05,
+        1e-05,
+        1.25e-05
+      ]
+    }
+  },
+  "analysis": {
+    "kind": "noise",
+    "args": "v(aop,aon) vd dec 20 1 1e9 1"
+  },
+  "measurements": [
+    {
+      "name": "white_out",
+      "noise": {
+        "quantity": "onoise",
+        "at_hz": 1000000.0
+      },
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "gain_dc",
+      "expr": "noise1.onoise_spectrum[0]/noise1.inoise_spectrum[0]",
+      "unit": "V/V"
+    },
+    {
+      "name": "xm1a",
+      "expr": "noise1.onoise_n.xa.xm1a.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xm2a",
+      "expr": "noise1.onoise_n.xa.xm2a.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xmta",
+      "expr": "noise1.onoise_n.xa.xmta.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xmswa",
+      "expr": "noise1.onoise_n.xa.xmswa.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xmba",
+      "expr": "noise1.onoise_n.xa.xmba.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xm5a",
+      "expr": "noise1.onoise_n.xa.xm5a.nsg13_lv_pmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xm6a",
+      "expr": "noise1.onoise_n.xa.xm6a.nsg13_lv_pmos[120]",
+      "unit": "V/rtHz"
+    }
+  ],
+  "options": {
+    "osdi_preload": [
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/psp103.osdi",
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/psp103_nqs.osdi"
+    ],
+    "timeout_s": 30,
+    "keep_artifacts": true
+  },
+  "_comment": [
+    "One PVT point. Each zipped parameter row is one existing design. Order: committed, w8_l034, ib10_sw20lat6, w6_l034, w8_l020, ib10_sw20, ib12p5_sw20.",
+    "The output spectrum and per-device totals are measured at 1 MHz. gain_dc is the magnitude of the differential transfer at 1 Hz."
+  ]
+}

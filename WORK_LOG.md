@@ -2,6 +2,146 @@
 
 Merged pull requests and closed issues from the preceding 30 days, recorded by Guide. These entries describe repository activity, not engineering verification.
 
+## Archives
+
+- [2026-09](work_log/WORK_LOG_2026-09.md)
+
+### 2026-11-23
+
+- **Issue #549** (closed): Remove six token-shadowed zero-reference definitions in sim/kltsim and sim/comparator-pex
+- **PR #550**: refactor: remove six zero-reference definitions from sim modules
+- **Issue #546** (closed): Consolidate nine derived-report publish epilogues onto cli.publish_report_pair
+- **PR #548**: refactor(sim): consolidate derived-report publish epilogues onto cli.publish_report_pair
+- **Issue #487** (closed): test_item5_spec_rows: pinned-klt skip guard uses a substring match, so a 0.9.2.dev build passes as the pin
+- **PR #492**: fix: require exact klt version match to run item 5 spec-row tests
+- **PR #545**: refactor: drop test-only write_*_inputs wrappers, move kickback build onto commit_build
+- **Issue #543** (closed): Remove test-only write_*_inputs wrappers in kltsim; finish commit_build move for kickback driver
+- **PR #541**: test: pin run_decision_cm_band build: fresh, idempotent, conflict
+- **PR #539**: fix: share one commit_build helper across six build commands
+- **PR #536**: fix: keep null-valued original cards from certifying probe equality in kickback_cmband
+- **PR #534**: fix: exclude null-valued pairs from values_compared in cmdecision and kickback reproduction checks
+- **PR #520**: refactor: route kickback CM-band comparisons through artifacts.publish
+- **Issue #540** (closed): Add a cmd_build test class for sim/run_decision_cm_band.py (the one build call site with no automated test)
+- **Issue #538** (closed): Consolidate six campaign/series build commit-and-print epilogues onto cli.commit_build
+- **Issue #535** (closed): probe_compare: equals_165_on_original_cards counts null/null pairs as equal (latent sibling of #532)
+- **Issue #532** (closed): Sibling values_compared paths still count null-vs-null pairs as compared values (kickback, cmdecision)
+- **Issue #519** (closed): Route kickback CM-band comparison writers through artifacts.publish
+
+### 2026-11-22
+
+- **PR #530**: fix: count only measured pairs as compared values in the memory determinism repeat
+- **Issue #525** (closed): Determinism repeat counts null-vs-null measurement pairs as compared values
+- **PR #531**: fix: drop kickback_cmband's duplicate non-directory preflight
+- **PR #528**: fix: publish supplement-report pair append-only
+- **PR #526**: fix: preflight non-directory destination dirs in artifacts commit/check
+- **PR #524**: fix: kickback commit_inputs refuses non-directory destination dirs
+- **PR #522**: chore: ignore daemon-owned .loom/account-ranking.* dispatch state
+- **PR #517**: refactor: route CM-band campaign input writers through build.commit_inputs append-only
+- **PR #514**: refactor: route kickback CM-band input writers through artifacts.commit
+- **PR #500**: refactor: drive netlist regeneration through pinned klt netlist, not raw xschem
+- **PR #499**: fix: report insufficient evidence for empty determinism-repeat rounds
+- **Issue #527** (closed): kickback_cmband._non_directory_ancestors is now redundant with the artifacts preflight
+- **Issue #523** (closed): build.commit_inputs: campaign dir existing as a regular file raises a bare FileExistsError, not BuildError
+- **Issue #521** (closed): gitignore: daemon-owned .loom/account-ranking.* trips check-main-clean for every builder
+- **Issue #518** (closed): Route cmd_supplement_report's derived report pair through artifacts.publish
+- **Issue #516** (closed): Route remaining CM-band input writers in cmband and cmdecision through build.commit_inputs
+- **Issue #515** (closed): kickback_cmband.commit_inputs: out_dir existing as a regular file raises a bare FileExistsError, not KickbackCmBandError
+- **Issue #513** (closed): Replace duplicated append-only input writers in kickback_cmband with artifacts.commit
+- **Issue #495** (closed): Remove the empty-measurement fallback from the memory determinism repeat
+- **Issue #489** (closed): Replace raw xschem call in design/netlist.py with klt netlist
+- **PR #509**: refactor: source the transient-noise injected density from one constant
+- **Issue #506** (closed): Source the 36.27 nV/√Hz bench injection from one place instead of per-module literals
+- **PR #510**: fix: hash supplement envelopes from the bytes used to parse them
+- **Issue #508** (closed): Hash offset supplement envelopes from the bytes used to parse them
+
+### 2026-11-21
+
+- **PR #501**: sim: measure matched PMOS load widths for Row 2 density and bench noise
+- **Issue #498** (closed): Measure how matched PMOS load widths change input-referred density and Row 2 noise
+- **PR #505**: fix: repair dangling issue-92-bias MC manifest link in corner-verification README
+- **Issue #502** (closed): Broken relative link to the issue-92-bias MC manifest in sim/klt-corner-verification/README.md
+- **PR #494**: docs: measure per-corner front-end density and complete the Row 2 factor split
+- **PR #491**: sim: replace the unusable manual dpkg-deb recipe in build-osdi.sh with install-and-rerun
+- **Issue #477** (closed): Row 2 noise: split the front-end term (density vs decision bandwidth), then a bounded three-candidate design study and a drafting-only decision record
+- **Issue #488** (closed): Remove the unusable manual dpkg-deb fallback from the OSDI build diagnostic
+- **PR #485**: signoff: declare item 5 spec_rows and cite per-row envelopes with gaps for ungradeable rows
+- **Issue #478** (closed): Item 5: declare the DR-0002 row set under spec_rows and cite each row's envelope, replacing the single-envelope citation
+
+### 2026-11-20
+
+- **PR #486**: docs: characterize Row 2 decision bandwidth and prepare candidate noise measurements
+- **PR #484**: fix: write sizesweep JSON and Markdown as one preflighted append-only pair
+- **Issue #483** (closed): Remove the per-file sizesweep writer and preflight the report pair
+
+### 2026-11-18
+
+- **PR #473**: ci: report the append-only sim evidence gate on merge_group commits (merge queue readiness)
+
+### 2026-11-17
+
+- **PR #464**: chore(loom): resync installed Loom to v0.19.1306
+
+### 2026-11-16
+
+- **PR #459**: chore(loom): resync installed Loom to v0.19.1302
+
+### 2026-11-15
+
+- **PR #455**: fix: report Row 5a in the sizesweep finalist roll-up
+- **PR #456**: refactor: share one chain-loading loop between the declared-contract loaders
+- **PR #454**: fix(sim): make_delta_table reads the derived extract shape (rows[]) beside klt's delta[]
+- **PR #450**: chore: remove dead repo-root package.json stub
+- **PR #448**: ibsweep: grade swept-bias campaigns against the declared BIAS_PROBES superset
+- **Issue #447** (closed): sizesweep finalist roll-up cannot report Row 5a, hiding a PASS->INCOMPLETE regression
+- **Issue #452** (closed): No guard keeps the three copies of grade.load_campaign's chain-loading loop in sync (grade / declared_n / bias_probes)
+- **Issue #445** (closed): make_delta_table.py cannot read the batch envelope shape (rows[] vs delta[]), the last gap before a 45-corner grid table renders
+- **Issue #428** (closed): Remove the repo-root package.json stub: its last script invokes a Loom script deleted in v0.19.1244
+- **Issue #440** (closed): --check regeneration drift: six committed report pairs no longer reproduce byte-identically on main
+- **PR #449**: pin: move klayout-tools 0.9.1 -> 0.9.2, re-freeze layout evidence
+- **Issue #438** (closed): Decide whether to chase the klayout-tools 0.9.2 pin (0.9.1 landed in #430 as the measured candidate)
+- **PR #433**: refactor: route the kickback driver's smoke and probe submits through kcli
+- **PR #443**: sim: probe the Row 4b band-edge kickback rejects with a forced DC operating point
+- **PR #446**: sim: close the #92 bias/latch study -- Rows 3c/4a recoverable, Row 2 unclosed at 1.096 mV
+- **PR #441**: refactor: factor the --report-dir citation preamble into one resolve_report_dir helper
+- **PR #442**: refactor(sim): share the memory bench's round probe-index rule in round_mult
+- **PR #444**: fix: canonicalise klt's params-supply corner ids in make_delta_table
+- **PR #437**: refactor: wire REPEAT_POINT into its seven re-spelled readers, byte-identical
+- **PR #434**: refactor(layout/tests): single-source the klayout stand-in module loader
+- **PR #430**: build: move the klt pin from 0.8.0 to PyPI release 0.9.1
+- **PR #436**: ci: drop four dead sparse-checkout patterns, add cone minimality guard
+- **PR #439**: docs: state item 7 post-layout evidence as of 2026-11-14
+- **Issue #431** (closed): Adopt the shared klt-sim smoke runner and retry wrapper in run_kickback_cm_band.py: two copies the Oct-17 sharing refactor missed
+- **Issue #415** (closed): Probe the two Row 4b band-edge kickback rejects with a forced DC operating point
+- **Issue #92** (closed): Joint input-pair sizing study to close the failing Target rows (Row 4 Q_kick, Row 2 noise)
+- **Issue #423** (closed): Factor the --report-dir citation preamble into one helper beside _cite_note
+- **Issue #422** (closed): Share the round probe-index rule in sim/kltsim/memory.py: one expression written six times
+- **Issue #424** (closed): make_delta_table.py cannot canonicalise the corner ids klt emits for a corners.params supply axis, so every delay row reads ungraded
+- **Issue #426** (closed): Decide `REPEAT_POINT` in sim/run_memory.py: wire into cmd_repeat, or drop
+- **Issue #432** (closed): Dedupe the klayout stand-in module loader duplicated across layout/tests/test_erc_tool.py and test_pdk_drc.py
+- **Issue #416** (closed): Bump the klayout-tools pin from 0.8.0 to the release the batch runner accepts
+- **Issue #429** (closed): Remove five redundant CI sparse-checkout patterns, and guard cone minimality
+- **Issue #418** (closed): Update the item 7 narrative in manifests/README.md to the current post-layout evidence
+
+### 2026-11-14
+
+- **PR #425**: feat(pex): measure the three ss / 125 C extracted regeneration corners
+- **PR #427**: refactor: call build.py's sha256 helpers instead of module-local copies
+- **PR #421**: refactor: delete eight unreferenced module-level definitions
+- **PR #414**: docs: roadmap as of 2026-11-13
+- **Issue #417** (closed): Measure the three unmeasured extracted regeneration corners (ss / 125 C)
+- **Issue #420** (closed): Remove seven unreferenced module-level constants (none is a hashed report input)
+- **Issue #419** (closed): Consolidate the triplicated sha256 helpers in sim/kltsim onto build.py
+
+### 2026-11-10
+
+- **PR #411**: chore: remove one-off scripts/diagnostics reproduction package
+- **Issue #336** (closed): Remove scripts/diagnostics: completed #188 upstream-handoff package (~506 LOC)
+
+### 2026-11-08
+
+- **PR #407**: sim: probe the two Row 4b band-edge kickback rejects as a labelled supplement
+- **Issue #405** (closed): Probe the two Row 4b band-edge kickback rejects (DR-0004 gate)
+
 ### 2026-11-05
 
 - **PR #403**: sim: complete max-step supplement with vcm-p050 populations 60/60
@@ -374,65 +514,3 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 - **Issue #51** (closed): sim/selftest.sh hardcodes its three test modules instead of discovering them — reopens #41's no-gate coverage gap
 - **Issue #49** (closed): sim/comparator-offset-transient-mc/README.md still asserts PR #18 is open / DR-0002 is not yet ratified
 - **Issue #48** (closed): Post-DR-0002 sweep missed six files: stale "DRAFT/unratified" claims, an open-PR-#18 banner, and a broken README anchor
-
-### 2026-09-23
-
-- **PR #47**: chore: remove unwired npm placeholder scripts from package.json
-- **PR #46**: docs: embed fleet burndown chart in README
-- **Issue #45** (closed): Remove dead npm placeholder scripts from package.json: test/lint/check:ci/check:all are unwired no-ops
-- **Issue #44** (closed): README: embed the fleet burndown chart (one line)
-- **Issue #35** (closed): README.md's Offset sigma row states 10/45 PVT points over 15 mV, but the cited corrected-seed record shows 13/45
-
-### 2026-09-21
-
-- **PR #42**: test: run harness unit tests as step 0 of sim/selftest.sh
-- **PR #40**: sim: whole-latch transient-noise bench (comparator-transient-noise)
-- **PR #39**: feat: machine-grade the block's T1 state via a klt signoff block manifest
-- **PR #18**: Ratify the target-spec table via DR-0002 on the schematic-DUT evidence
-- **Issue #41** (closed): sim/harness/tests/: unit tests executed by no gate — wire into sim/selftest.sh (or remove)
-- **Issue #37** (closed): Commit a klt signoff block manifest so this block's T1 state is graded, not hand-read
-- **Issue #36** (closed): Reconcile DR-0002's Row 1 (Offset sigma) with PR #33's whole-latch offset evidence before merging PR #18
-- **Issue #34** (closed): DR-0002's ratified Offset σ evidence cites the pre-#32 broken-seed comparator-offset-mc record
-- **Issue #24** (closed): Transient-noise bench for the input-referred noise floor (DR-0001 Consequence 1, split from #22)
-- **Issue #12** (closed): Ratify target-spec table via decision record (two-key mechanism) — porting-plan next step 3
-
-### 2026-09-17
-
-- **PR #33**: sim: whole-latch transient Monte-Carlo offset bench (comparator-offset-transient-mc)
-- **Issue #23** (closed): Transient Monte-Carlo offset bench for the whole latch (DR-0001 Consequence 1, split from #22)
-
-### 2026-09-16
-
-- **PR #32**: fix: use setseed (not set rndseed=) for comparator-offset-mc's Monte-Carlo seed
-- **PR #31**: Remove dead ToolchainDrift exception class
-- **PR #29**: fix: recalibrate two placeholder-derived corner-sensitivity floors against DR-0001
-- **PR #27**: refactor: remove dead Pdk.res_corner_lib property
-- **PR #25**: fix: correct placeholder-era testbench notes to describe the bound schematic DUT
-- **PR #17**: Implement DR-0001 comparator schematic and swap out the placeholder DUT
-- **Issue #30** (closed): Remove dead ToolchainDrift exception class in sim/harness/toolchain.py
-- **Issue #28** (closed): comparator-offset-mc's `set rndseed=` does not actually seed ngspice-46's mismatch draws (use `setseed`)
-- **Issue #26** (closed): Remove dead Pdk.res_corner_lib property (zero callers)
-- **Issue #20** (closed): Stale placeholder-era note blocks in three tb.json files are reproduced into schematic-DUT records
-- **Issue #16** (closed): Recalibrate two placeholder-derived corner-sensitivity check floors against the real DR-0001 DUT
-- **Issue #11** (closed): Implement comparator schematic (design/comparator.sch) and swap out the placeholder DUT — porting-plan next step 2
-
-### 2026-09-15
-
-- **PR #15**: chore: remove dead git_dirty()/pdk_available() wrapper functions
-- **PR #13**: docs: add DR-0001 comparator topology decision (single-tail StrongARM, no preamp)
-- **Issue #14** (closed): Remove dead git_dirty()/pdk_available() wrapper functions
-- **Issue #10** (closed): Decision record: select comparator topology (StrongARM latch, preamp/no-preamp) — porting-plan next step 1
-
-### 2026-09-10
-
-- **PR #9**: sim: stand up the PVT harness + four comparator experiment directories
-- **Issue #8** (closed): sim: stand up the PVT harness + four comparator experiment directories (offset-MC, preamp-noise, regeneration, kickback) with a loudly-labelled placeholder DUT — porting-plan next steps 3–4, ported from gf180-comparator#5
-
-### 2026-09-09
-
-- **PR #7**: feat: confirm SG13G2 LV MOS models carry per-instance local mismatch
-- **Issue #6** (closed): Confirm & record: do SG13G2 LV MOS models carry per-instance local mismatch, or only global corners? (porting-plan next step 2)
-
-### 2026-09-07
-
-- **Issue #5** (closed): perm-test-delete-me

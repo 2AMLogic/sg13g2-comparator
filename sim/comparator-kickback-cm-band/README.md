@@ -84,3 +84,26 @@ valid kickback number; the unvalidated residue is shown in `comparison.md`):
 `vcm-m050` ss/1.200 V/-40 C (`dout_float_big_end` = 6.8e-9 V/V, needs >= 0.9);
 `vcm-p050` ss/1.080 V/-40 C (`dout_float_small_end` = 6.2e-9 V/V).
 These are findings about the design at the band edge, not tool errors.
+
+## Supplementary probe of the two rejects (issue #405)
+
+`campaigns/20261108-405-probe/` is a separately labelled supplement, never merged
+into the `20261011-165` populations: the two rejected points plus the nominal-CM
+control, four arms (`repro`, `obs`, `xing`, `step20p`), batch fleet. The rejects
+reproduce bit-for-bit; the evidence favours a bench artifact (DC operating point /
+initial state) over latch marginality, which is not excluded. See that series'
+`README.md` for the conclusion and the #89 comparison.
+
+## Forced-DC probe of the two rejects (issue #415)
+
+`campaigns/20261114-415-forceddc/` is the discriminating follow-up #405 named:
+the same two points plus the control, arms `repro`/`obs`/`optdc`/`icdc`, the
+last two appending a declared `.options` / `.nodeset`+`.ic` block to the #165
+body (shown in full in that series' README). Outcome: the recorded rejects are
+DC-solver artifacts (the gate value is set by which bistable state the failing
+DC solve parks the latch in, not by the latch; the controls decide correctly
+from a forced wrong state at the same PVT supplies), while the bench still
+fails its DC op and delivers only ~1/46 of the programmed differential at the
+reject common modes. Do not count these two cells as design rejections; the
+residual gap (a bench whose DC op converges at 0.55/0.65 V) is named there and
+fixing the bench stays out of scope.

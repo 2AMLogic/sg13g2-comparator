@@ -271,6 +271,14 @@ A grader change re-mints the report directory (the sha256 of every grader source
 `sim/kltsim/characterization.py` `REPORT_DIR_NAMES` names the current
 one (`-r2` after issue #245) and the superseded directory stays as history.
 
+The declared-contract loaders (`sim/kltsim/declared_n.py`,
+`sim/kltsim/bias_probes.py`) are deliberately not indexed grader sources:
+they share one chain-loading loop (`sim/kltsim/declared_contract.py`,
+issue #452) that mirrors the frozen `grade.load_campaign` without editing it,
+and `sim/kltsim/tests/test_grade.py`'s `CampaignChainTests` per-loader
+subclasses keep every loader's chain-check detection surface in step with
+`grade`'s.
+
 **Sample-population integrity (issue #245).** Before the offset and
 transient-noise reducers use a klt per-corner summary, `sim/kltsim/populations.py`
 (shared with `yield_reports.collect_populations`) requires each PVT point's
@@ -308,9 +316,10 @@ inconsistent inputs are refused and write nothing. The manifest pins the hash of
 ## Derived report pairs (grading, noise-full, comparison, ibsweep)
 
 `grade` (`grading.{json,md}`), `noise-full` (`noise_full.{json,md}`),
-`ibsweep` (`ibsweep.{json,md}`) and the `compare` subcommands of
-`run_clock_supply_sensitivity.py`, `run_offset_cm_band.py` and
-`run_decision_cm_band.py` (`comparison.{json,md}`) write append-only evidence through the one planned-byte writer
+`ibsweep` (`ibsweep.{json,md}`) and the `compare` / `probe-compare`
+subcommands of `run_clock_supply_sensitivity.py`, `run_offset_cm_band.py`,
+`run_decision_cm_band.py` and `run_kickback_cm_band.py`
+(`comparison.{json,md}`) write append-only evidence through the one planned-byte writer
 `sim/kltsim/artifacts.py` (also used by `build` and `characterize.sh report`).
 Both members are composed in memory first, then:
 
@@ -336,6 +345,26 @@ always read from `--campaign`/`--series`; the new `grading`/`comparison` JSON
 and Markdown cite the original directory (`source_campaign_dir` /
 `source_series_dir`), and `noise_full.json` carries `campaign`. There is no
 force switch.
+
+Committed pairs vs later renderer changes (issue #440, classified 2026-11-15 on
+`f24d7281c`): five committed pairs predate a later, purely additive renderer or
+grader change, so their `--check` exits 1 while their committed bytes stay
+authoritative -- the ratified "publish in a NEW namespace" case above, not a
+defect. In every one of them zero leaves were removed and zero committed values
+changed; they are deliberately NOT re-published.
+
+| pair | `--check` | why the fresh render differs |
+|---|---|---|
+| `grade --campaign 20261009-d73a9ac` | 1 | predates the #107 provenance bookkeeping (`chain_problems`, `chain_checked.*`) |
+| `grade --campaign 20261010-n200 --offset-n 200` | 0 | reproduces when graded with its declared N (without `--offset-n` the historical N = 60 contract correctly rejects it, exit 1) |
+| `ibsweep --campaign 20261009-issue80` | 1 | predates the #267 mirror-probe coverage keys (`mirror.{complete,points_valid,points_expected}`, +21 JSON leaves); since issue #440 its swept points grade clean again -- the false `REJECTED_EVIDENCE` regression is fixed and `ibsweep.md` is byte-identical again |
+| `noise-full --campaign 20261009-issue81` | 1 | predates the transient-noise uncertainty basis (`grid_mean_se_fully_correlated_bound`, `shared_draw_*`, `grader_notes`, `provenance_status`) |
+| `run_offset_cm_band.py compare --series 20261009-5185f52` | 1 | predates the repeat-control accounting (`controls.repeat[].{expected_draws,missing_draws,rejected_draws,verdict}`) |
+| `run_clock_supply_sensitivity.py compare --series 20261011-ce8cb93` | 1 | predates per-condition coverage (`offset.*.coverage.*`) |
+| `run_decision_cm_band.py compare --series 20261011-94b6bc5b4` | 0 | reproduces |
+| `run_kickback_cm_band.py compare --series 20261011-165` | 0 | reproduces |
+| `run_kickback_cm_band.py probe-compare --series 20261108-405-probe` | 0 | reproduces |
+| `run_kickback_cm_band.py probe-compare --series 20261114-415-forceddc` | 0 | reproduces |
 
 ## Reproducing one record
 
@@ -576,8 +605,11 @@ harness/adapter code, READMEs, the signoff manifests under `manifests/`, and
 **Comparison modes (CI):** pull request -- `git merge-base base head` to the
 actual PR head SHA; push to main -- event `before` to `after` (empty tree if
 `before` is all zeros); workflow_dispatch -- `HEAD^` to `HEAD`, a last-commit
-audit only. Missing revisions fail the job (exit 2), never skip. Exit 1 means
-a violation or an invalid exception registry. Locally:
+audit only; merge queue (`merge_group`, issue #470) -- the event's `base_sha`
+(the target-branch tip the group was built on) to `head_sha` (the trial-merge
+commit) directly, so the queued merge result is audited against the base it
+will actually land on. Missing revisions fail the job (exit 2), never skip.
+Exit 1 means a violation or an invalid exception registry. Locally:
 
 ```bash
 python3 scripts/check_append_only_evidence.py --base "$(git merge-base origin/main HEAD)" --head HEAD
@@ -687,11 +719,11 @@ transitive inputs):
 
 | Job | Inputs beyond its own scripts |
 |---|---|
-| signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report}.py`, `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`, `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
+| signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report,readme_claims}.py`, `scripts/tests/test_item5_spec_rows.py` (issue #478 verdict regression, run by its own step), `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.{json,jsonl,spice}` (both item 5 envelopes' pinned bodies), `sim/klt-corner-verification/campaigns/20261009-issue92/full_w8_l034/kickback.envelope.json` (the passing-kickback fixture that regression cites), `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
-| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh,tools/regen_reverse_control.py}`, `sim/comparator-{regeneration,kickback,memory,offset-transient-mc,transient-noise}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `sim/comparator-offset-cm-band/campaigns/20261009-5185f52/{vcm-m050,vcm-nom,vcm-p050}/{*.spice,*.request.json}`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
+| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh,tools/regen_reverse_control.py}`, `sim/comparator-{regeneration,kickback,memory,offset-transient-mc,transient-noise}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `sim/klt-corner-verification/campaigns/20261115-issue92-bias/full_ib10_sw20lat6/grading.json` (the issue #498 control whose Row 2 grades the load-width screen baseline is recomputed from), `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-issue80/ib_{2.5,5,7.5,10,15,20,40}uA/*.{json,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `sim/comparator-offset-cm-band/campaigns/20261009-5185f52/{vcm-m050,vcm-nom,vcm-p050}/{*.spice,*.request.json}`; `sim/comparator-kickback-cm-band/campaigns/20261011-165/{vcm-m050,vcm-nom,vcm-p050}/{kickback.body.spice,kickback.envelope.json}`, `sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/{comparison.json,comparison.md,vcm-m050/kickback.body.spice}`, `sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/{vcm-m050,vcm-nom,vcm-p050}/kickback-*.{envelope.json,request.json}`, `sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/{comparison.json,comparison.md,{vcm-m050,vcm-nom,vcm-p050}/kickback-*.{envelope.json,request.json}}`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
 | netlist-regeneration | `design/`, `sim/harness/`, `sim/pdk.json` |
-| append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `sim/evidence-size-exceptions/`, `spec/decision-records/` (the size and manifest checks read blobs from the target commit, not the working tree) |
+| append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` (the size and manifest checks read blobs from the target commit, not the working tree) |
 
 A new input a job starts reading must be added to its patterns in the same
 change. `scripts/tests/test_sparse_checkout.py` proves the cones: it builds a

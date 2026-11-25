@@ -24,9 +24,9 @@ THE SEARCH. The contract asks for a deterministic bisection to <= 10 uV
 (14 iterations, 15 permitted). ``klt sim`` cannot run an adaptive search in
 one request, and every bisection round is a full sequential batch
 round-trip, so this module uses the deterministic equivalent that needs
-fewer round trips: a 10-ary search. Round 1 evaluates 11 probes
-(-50 mV ... +50 mV in 10 mV steps, endpoints included); each later round
-evaluates the 9 interior points of the current bracket. The bracket shrinks
+fewer round trips: a 10-ary search. Round 1 evaluates the full bracket,
+endpoints included (-50 mV ... +50 mV); each later round evaluates the
+interior points of the current bracket (see :func:`round_mult`). The bracket shrinks
 by exactly 10x per round: 100 mV -> 10 mV -> 1 mV -> 100 uV -> 10 uV, i.e.
 FOUR sequential batch requests, ending at exactly the 10 uV limit. All
 arithmetic is in integer microvolts so the width is exact, not rounded.
@@ -93,13 +93,8 @@ SHORT_RESET_MIN_ABS_UV = 40.0
 SHORT_OVER_LONG_MIN_UV = 20.0
 
 HISTORIES = ("P", "N")
-CONDITION_SIGN = {"P": +1, "N": -1}
 
 BENCH_NAME = "memory"
-CONTROL_NAMES = ("long", "short")
-CONTROL_PERIOD_NS = {"nominal": NOMINAL_PERIOD_NS, "long": LONG_RESET_PERIOD_NS,
-                     "short": SHORT_RESET_PERIOD_NS}
-CONTROL_POINT = ("tt", 1.2, 27)
 
 #: solver options. Threshold work at 10 uV needs a tighter relative
 #: tolerance than the 1e-4 the timing benches use.
@@ -132,23 +127,24 @@ def classify(decision: float | None, probe_uv: int | float) -> dict:
 
 
 def round_probes(lo_uv: int, hi_uv: int, first: bool) -> list[int]:
-    """Probe inputs (integer uV) of one round: 11 including the endpoints in
-    round 1, the 9 interior points afterwards."""
+    """Probe inputs (integer uV) of one round, on the indices from
+    :func:`round_mult`."""
     width = hi_uv - lo_uv
     if width % FANOUT:
         raise MemoryError_(f"bracket width {width} uV is not divisible by {FANOUT}")
     step = width // FANOUT
-    idx = range(0, FANOUT + 1) if first else range(1, FANOUT)
-    return [lo_uv + i * step for i in idx]
-
-
-def n_probes(first: bool) -> int:
-    return FANOUT + 1 if first else FANOUT - 1
+    return [lo_uv + i * step for i in round_mult(first)]
 
 
 def round_step_uv(round_no: int) -> int:
     """Probe spacing of round ``round_no`` (1-based) from the fixed schedule."""
     return (INIT_HI_UV - INIT_LO_UV) // FANOUT ** round_no
+
+
+def round_mult(first: bool) -> list[int]:
+    """Probe-instance indices of one round: all ``FANOUT + 1`` bracket points
+    (endpoints included) in round 1, the interior ``FANOUT - 1`` afterwards."""
+    return list(range(0, FANOUT + 1)) if first else list(range(1, FANOUT))
 
 
 @dataclass
@@ -323,9 +319,6 @@ def short_reset_verdict(shift_uv, long_shift_uv) -> dict:
 # netlist
 # --------------------------------------------------------------------------- #
 
-def _corner_key(process: str, supply: float, temp: float) -> tuple:
-    return (process, round(float(supply), 3), float(temp))
-
 
 def clock_times_ns(period_ns: float) -> dict:
     rise = [FIRST_RISE_NS + k * period_ns for k in range(N_CONDITIONING + 1)]
@@ -366,10 +359,10 @@ def compose_circuit(period_ns: float, first: bool, step_uv: int,
 
     ``lo_tables[h]`` maps (supply, temperature) -> the low end (uV) of
     history ``h``'s bracket at that PVT point; the probe of instance ``m`` is
-    ``lo + m * step`` where ``m`` runs 0..10 (round 1) or 1..9.
+    ``lo + m * step`` over the round's indices (see :func:`round_mult`).
     """
     ck = clock_times_ns(period_ns)
-    mult = list(range(0, FANOUT + 1)) if first else list(range(1, FANOUT))
+    mult = round_mult(first)
     L = [
         "* ---- bench: memory / hysteresis (issue #159) ---------------------------",
         "* Two histories in ONE netlist: P (3 strobes at +50 mV, then the probe) and",
@@ -441,7 +434,7 @@ def measurements(period_ns: float, first: bool) -> list[dict]:
     for h in HISTORIES:
         meas.append({"name": meas_name("lo", h), "spice":
                      f".meas tran {meas_name('lo', h)} find v(lo{h}) at=1n", "unit": "uV"})
-    mult = list(range(0, FANOUT + 1)) if first else list(range(1, FANOUT))
+    mult = round_mult(first)
     for h in HISTORIES:
         for m in mult:
             meas.append({"name": meas_name("d", h, m), "spice":
@@ -572,7 +565,7 @@ def extract_round(env: dict, period_ns: float, first: bool, plan: dict[tuple, di
     supply/temperature/lookup/probe application does not match the plan, or
     that has any missing value, carries a ``problem`` and no decisions.
     """
-    mult = list(range(0, FANOUT + 1)) if first else list(range(1, FANOUT))
+    mult = round_mult(first)
     out: dict = {}
     for corner in env.get("corners") or []:
         key = parse_corner_id(corner)
@@ -637,9 +630,6 @@ class PointSearch:
     def active(self) -> bool:
         return self.problem is None and (self.P.active or self.N.active)
 
-    def plan(self) -> dict:
-        return {h: getattr(self, h).next_probes() for h in HISTORIES}
-
 
 def new_searches(keys) -> dict[tuple, PointSearch]:
     return {k: PointSearch(k) for k in keys}
@@ -652,7 +642,7 @@ def build_plan(searches: dict[tuple, PointSearch], round_no: int) -> dict[tuple,
     bracket lo = -50 mV; its results are ignored by :func:`apply_round`."""
     first = round_no == 1
     step = round_step_uv(round_no)
-    mult = range(0, FANOUT + 1) if first else range(1, FANOUT)
+    mult = round_mult(first)
     plan = {}
     for key, ps in searches.items():
         plan[key] = {}

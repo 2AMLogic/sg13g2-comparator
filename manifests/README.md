@@ -132,22 +132,47 @@ row:
   `.meas` waits for (its output is already high before the flip, i.e. it
   decided the other way at -0.1 mV), so the measurement has no value. That
   is a recorded post-layout finding, not a tooling failure, and the request
-  was not edited to hide it. The run is **one corner only** (tt, 1.20 V,
-  27 C, deterministic transient, no Monte Carlo, no sigma): the 45-point PVT
-  grids and the offset-sigma / noise Monte Carlo rows were not run, and host
-  rules forbid a local grid. The batch fleet first refused the submit
-  (`batch_no_capacity`, 30 pools). When capacity was granted (2026-10-10,
-  job `klt-sim-f07e181de148`, record
-  `sim/comparator-pex/reports/batch-probe.pvt.20261010-c.md`), every corner
-  failed with `batch_runner_version_mismatch` (fleet runner klt 0.5.0,
-  client 0.7.0). The open blocker is the runner image. Extraction half:
-  `body_bias.status: "biased"` (0 unbiased devices); `extraction.model` is
+  was not edited to hide it. The cited run is **one corner only** (tt,
+  1.20 V, 27 C, deterministic transient, no Monte Carlo, no sigma); host
+  rules forbid a local grid, and the wider post-layout coverage lives in
+  separate, uncited batch records. As of 2026-11-14 those records are: the
+  extracted 45-corner kickback grid
+  (`sim/comparator-pex/reports/batch-extracted-grid.kickback.20261031.md`:
+  envelope `status: pass`, all 45 corners measured on both sides, 810 rows
+  passed / 0 failed / 0 errored); the extracted regeneration grid
+  (`sim/comparator-pex/reports/batch-extracted-grid.regeneration.20261031.md`:
+  envelope `status: error`, 42 of 45 corners compared on both sides, 462
+  rows passed / 0 failed / 78 errored); the follow-up that measured the
+  three corners that grid missed
+  (`sim/comparator-pex/reports/batch-extracted-ss125.regeneration.20261114.md`,
+  #417: all three `ss` / 125 C corners on both sides, 36 rows, 33 passed /
+  0 failed / 3 errored, the errored rows all `td_c`); and the latest
+  per-point Monte Carlo roll-up
+  (`sim/comparator-pex/reports/mc-rollup.20261103-g.md`: "20 offset and 11
+  noise points have data, out of 45 grid points" — 25 offset and 34 noise
+  points missing). The three batch records state development `klt` clients
+  (`0.8.1.dev897+ga42d9de8d98d` kickback, `0.8.1.dev887+g2e9ee1aa66cf`
+  regeneration, `0.9.2.dev1024+g8da9718f0cb6` ss/125 C; all out of pin,
+  tracked in #416) and that nothing ran locally. What remains before a
+  full-grid `klt pex` report can be cited: the missing Monte Carlo points
+  (tracked in #61), a single 45-corner grid record — "three corners are
+  not a grid result", so the split evidence above does not provide one —
+  and the updated item-7 citation, `content_hash` and regenerated signoff
+  report. Dated history, 2026-10-10, since superseded: the batch fleet
+  first refused the submit (`batch_no_capacity`, 30 pools); when capacity
+  was granted (job `klt-sim-f07e181de148`, record
+  `sim/comparator-pex/reports/batch-probe.pvt.20261010-c.md`), every
+  corner failed with `batch_runner_version_mismatch` (fleet runner klt
+  0.5.0, client 0.7.0) — then the open blocker; the 2026-11-14 run records
+  `runner_klt_version: 0.9.0`, `runner_compatibility: match`. Extraction
+  half: `body_bias.status: "biased"` (0 unbiased devices); `extraction.model` is
   the quasi-static lumped-RC model (single series R per net, net-to-ground
   C plus vertical-overlap coupling; no lateral coupling without
   `--critical-net`, no fringe shielding, no distributed RC) quoted in full
   in the envelope. Per-row deltas: `sim/comparator-pex/reports/delta-nominal-20261009.{md,json}`;
   discussion and what closes the gap: `sim/comparator-pex/README.md`. The
-  earlier errored attempt (`pex.attempt-20261009.json`) is kept as history.
+  earlier errored attempt
+  (`sim/comparator-pex/reports/pex.attempt-20261009.json`) is kept as history.
 - **Item 8 (Characterization report)** — cited since #64; see "Item 8" below.
 - **Item 11 (Power delivery (structural))** — cited since #38; see "Item 11" below.
 
@@ -159,7 +184,7 @@ both file-backed and pinned by `content_hash`.
 | Part | File | Pinned `content_hash` | Tool-defined value |
 |---|---|---|---|
 | `klt erc` | `layout/comparator/erc_report.json` | `sha256:583e99c6ee32474e0209d3aeaeb406393050e2bce9de4674bf091ee6a9e9d80d` | `provenance.input.content_hash`: the GDS (the same value item 3 pins) |
-| `klt lvs` | `layout/comparator/lvs_report.json` | `sha256:6970e7e51951f876f68536d37d37adf16e5ff121862c9ee60a8be94ff6a3bf0b` | `provenance.input.content_hash`: the extracted netlist (item 4's value; the envelope was **not** re-minted, none of its inputs changed) |
+| `klt lvs` | `layout/comparator/lvs_report.json` | `sha256:5430eecf551b34671c2000c45411268388e3cc89095b3bafd49ab319c33817f1` | `provenance.input.content_hash`: the extracted netlist (item 4's value; re-minted at the klt 0.9.2 pin bump — the extractor now emits the `.subckt` pins in request order, so the netlist hash moved while the GDS stayed byte-identical) |
 
 **Declared supply set, reconciled against the schematic.** The ERC request
 (`layout/comparator/erc_supply_spec.json`, derived from the generator's layer
@@ -182,9 +207,19 @@ supply; it is not counted among the supplies.
 **ERC half.** `klt erc --deck sg13g2 --top comparator --findings-only`
 reads `erc_status: clean`, 0 findings. `erc_coverage.checked` holds
 `erc.net_connectivity` for `vdd`, `vss` and `vbias`, `erc.missing_tie` for the
-`nwell_vdd` tie and `erc.floating_gate` for the 10 gate nets;
-`erc_coverage.skipped` is empty, so the tie is not a
-`degenerate_tap_declaration`. The tie is narrowed to Activ & nSD & Cont (the
+`nwell_vdd` tie, `erc.floating_gate` for the 10 gate nets, and — new at the
+klt 0.9.2 pin — `erc.supply_short` **and** `erc.supply_short.substrate`: the
+run *evaluates* the substrate-isolation path instead of disclosing it
+undecidable. `erc_coverage.skipped` is empty, so the tie is not a
+`degenerate_tap_declaration`, and `erc_coverage.inapplicable` is empty (the
+klt 0.8.0/0.9.1 reports carried an explicit `substrate_continuity_not_modelled`
+entry here — the machine-readable form of the diffusion/well-continuity limit
+stated under "What this does not establish" below; 0.9.2 replaces that
+disclosure with a measurement, `provenance.substrate_bodies` naming the one
+well body and the tie that reaches it). Still reported:
+`erc_coverage.missing_tie_checked: true` and
+`erc_coverage.layers_in_stream_without_declaration: ["63/0"]` (the text layer,
+which carries no supply role). The tie is narrowed to Activ & nSD & Cont (the
 contacts of the n-tap bars; only those carry nSD) inside NWell. The envelope's
 own `status` is `not_checked` (antenna accumulation skipped by
 `--findings-only`; no antenna table exists for this deck). Item 11 does not
@@ -221,9 +256,9 @@ Item 3 cites `layout/comparator/drc_report.json`, the `klt drc --deck sg13g2
 #59), pinned by `content_hash`
 `sha256:583e99c6ee32474e0209d3aeaeb406393050e2bce9de4674bf091ee6a9e9d80d`
 (the GDS's own hash, recorded as `provenance.input.content_hash`). It reads
-`status: clean`, `violation_count: 0`, `rules_checked` 38, against deck
-`sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`
-(klt `0.8.0`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
+`status: clean`, `violation_count: 0`, `rules_checked` 39, against deck
+`sha256:cf6dfeadf75bd95bf89beb0a64e06ed43b65f6ff782df10ae200ea200a73d8e9`
+(klt `0.9.2`, KLayout 0.30.12). `layout/run_flow.sh` stage 6
 regenerates it; `--check` requires it fresh (`klt drc --check`). `klt signoff`
 grades item 3 on `status: clean` alone and does not enforce disclosure, so the
 three `coverage` fields of the envelope are quoted verbatim here. This is
@@ -231,11 +266,23 @@ klt's *curated* deck, **not** the foundry's own DRC deck: "clean" means clean
 inside this scope only.
 
 `coverage.layers_in_stream_without_rules` (drawn in the stream, no rule in the
-deck: Metal3 pin, Metal3 text, and the text layer; the klt 0.8.0 deck adds
-nSD, pSD and NWell rules, so those are no longer listed):
+deck: Metal3 pin and Metal3 text; the deck carries nSD, pSD and NWell rules,
+so those are not listed. It has carried those since klt 0.8.0, and through
+0.9.1 the deck was byte-identical to the 0.8.0 one — same `content_hash`
+`sha256:1c95db40596afc5412e216009bcf0b775d1d74895b32738447eccbc76336dd15`.
+At klt 0.9.2 the deck moved (hash above) and gained `cont.ongrid.1`
+(IHP rule `cont_drw_Offgrid`: Cont (6/0) vertices on the 0.005 um
+manufacturing grid, `scope: x`) — a rule on the contact layer, not the text
+layer. The layout draws square contacts, and the rule **runs and passes**,
+which is why `rules_checked` went 38 → 39 and `deck_scope` gained `x`. The
+text layer's departure from this list is a separate, deck-side effect,
+recorded as the measurement it is: the 0.9.2 deck's declared layer table now
+includes `63/0` (with `7/21` and `32/0`, also newly declared), and no rule in
+either the 0.9.1 or the 0.9.2 deck references any of the three — the layer
+moved out of this list by declaration alone, not by gaining coverage):
 
 ```
-30/2, 30/25, 63/0
+30/2, 30/25
 ```
 
 `coverage.rules_skipped` (24; every one has reason `no_applicable_geometry`
@@ -257,12 +304,14 @@ via4.width.1
 
 ```
 Act, Cnt, Gat, M1, M2, M3, M4, M5, MIM, NW, TM1, TM2, TV1, TV2, V1, V2, V3,
-V4, pSD
+V4, pSD, x
 ```
 
-Consequences stated plainly (the klt 0.8.0 deck now carries NWell, nSD and pSD
-rules, so those layers are no longer listed as uncovered; their coverage was
-not otherwise re-audited here): Gat.c endcap,
+Consequences stated plainly (the deck carries NWell, nSD and pSD rules, so
+those layers are not listed as uncovered; their coverage was not otherwise
+re-audited here; at klt 0.9.2 the deck is no longer the 0.8.0 deck by hash —
+it gained `cont.ongrid.1` (a Cont (6/0) rule, see above) and a wider
+layer/scope table, without changing any rule value): Gat.c endcap,
 Cnt.e/Cnt.f, latch-up tap distance, density and seal ring are **not checked**
 by this evidence (see `layout/README.md`, "What this layout is, and is not").
 Also, `layout/comparator/drc_report.json` records its input as the
@@ -277,7 +326,7 @@ Item 4 cites `layout/comparator/lvs_report.json`, the `klt lvs` envelope
 (issue #60) comparing `layout/comparator/comparator.gds` (extracted with
 `klt extract --deck sg13g2`) against the `.subckt comparator` block of
 `design/comparator.spice`, pinned by `content_hash`
-`sha256:6970e7e51951f876f68536d37d37adf16e5ff121862c9ee60a8be94ff6a3bf0b`.
+`sha256:5430eecf551b34671c2000c45411268388e3cc89095b3bafd49ab319c33817f1`.
 That is the tool-defined value, `provenance.input.content_hash`, and it is
 the hash of the **extracted netlist** (`layout/comparator/lvs_extracted.spice`),
 not of the GDS or the schematic. The tool does not bind it to either, so
@@ -285,7 +334,7 @@ not of the GDS or the schematic. The tool does not bind it to either, so
 changed GDS, schematic subcircuit or request; see `layout/README.md`, stage 4.
 
 The envelope reads `status: match` (engine `klayout` 0.30.12, klt
-`0.8.0`), 24/24 devices, 18/18 nets, 8/8 pins including
+`0.9.2`), 24/24 devices, 18/18 nets, 8/8 pins including
 `vdd`/`vss` and the independent `vbias`, 0 mismatches, 0 warnings.
 `power_connectivity.status` is `unchecked`, which `klt signoff` accepts: with
 `reference.form: subckt-call` the supply pins take part in the ordinary
@@ -323,34 +372,83 @@ Rows 1, 3a, 3b, 3c and 4b meet their Targets at 45/45 points, and the supply
 and temperature grid (5a) is fully exercised. Row 5's power has no Target
 (DR-0002 ratifies none), and its Stretch fails.
 
-**What is cited, and why that envelope.** The pinned `klt signoff` grades
-item 5 on **one** `sim` envelope and calls it passed only when that
-envelope's own `status` is `pass`. The campaign's requests encode only
+**What is cited, and why these envelopes.** Since #478 the pinned
+`klt signoff` (0.9.2's list form, `docs/cli/signoff.md` "Item 5 with several
+citations and declared spec rows") grades item 5 on a **list of citations,
+each naming the spec rows it covers**, against the full row set declared
+under a top-level `spec_rows["5"]`. The campaign's requests encode only
 DR-0002 Target bounds and validity gates as `limits`, so an envelope's own
-status is the Target verdict of the rows it carries. The manifest cites
-`sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`,
-pinned by `content_hash`
-`sha256:5329b96594ca66668a235d8c3418b958b511fc4a17f3cf652a3bd84cc51c8af7`
-(its `provenance.input.content_hash`: the committed netlist body, which
-inlines `design/comparator.spice` byte for byte). That envelope's own status
-is `fail`: 6 pass / 39 fail / 0 error, the Row 4a Target. The grader
-re-hashes the body and renders item 5 **`unmet` / `check_failed`**
-(`critical_metric_blockers: sim__corner__failed_count = 39`). This is the
-truthful one-envelope summary.
+status is the Target verdict of the rows it carries. The manifest declares
+exactly the eight Target-bearing sub-bounds of `rows.json` and cites:
 
-**What must not be cited**, so a later change does not quietly flip the
-verdict:
+- `sim/klt-corner-verification/campaigns/20261009-d73a9ac/regeneration.envelope.json`
+  (status `pass`), pinned by `content_hash`
+  `sha256:2dc087ac0a1f45992387219a9a30fb1871dbdf43af094ddaf6b280c211acf437`,
+  for Rows **3a, 3b, 3c**;
+- `sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json`
+  (status `fail`), pinned by `content_hash`
+  `sha256:5329b96594ca66668a235d8c3418b958b511fc4a17f3cf652a3bd84cc51c8af7`
+  (its `provenance.input.content_hash`: the committed netlist body, which
+  inlines `design/comparator.spice` byte for byte), for Rows **4a, 4b**.
 
-- `regeneration.envelope.json` has status `pass`, but citing it would render
-  item 5 `met` on Rows 3 and 5 alone.
-- The offset and noise envelopes have status `pass`, but their status
-  reflects only per-sample gates. Rows 1 and 2 are caller-side population
-  statistics that klt sim cannot grade
-  ([klayout-tools#2960](https://github.com/2AMLogic/klayout-tools/issues/2960)).
+Rows **4c and 5b are deliberately not declared**: DR-0002 ratifies no Target
+for either (`rows.json` carries `target: null`), and the manifest does not
+invent bounds. They stay reported quantities in `grading.md`, nothing else.
+
+The committed requests carry no `spec_row` tags, so the grader trusts the
+manifest's row assignments and reports them as `asserted` coverage
+(`row_sources`). One consequence is honest rather than pretty: the kickback
+envelope carries Rows 4a **and** 4b under its single `status`, so its failure
+lists both in `detail.failed_rows` even though Row 4b meets its Target at
+45/45 points (2.03 … 15.63 µV against ≤ 100 µV, `grading.md`). That is the
+tool's reading of an untagged envelope; the envelope is not split or
+re-minted here (re-minting evidence is out of scope and `sim/` is
+append-only).
+
+**Rows 1, 2 and 5a are declared `gap`s**, each naming the capability the
+pinned grader lacks (a gap is never covered, and it keeps item 5 `unmet`):
+
+- **Row 1** (worst-point quantization-corrected 3σ offset) and **Row 2**
+  (grid-wide mean of the per-point probit-slope noise σ) are caller-side
+  population statistics over `by_corner[]` / cross-measurement reductions.
+  Their envelopes' `status: pass` reflects only per-sample gates — it is
+  **not** the row verdict, so those envelopes must never be cited with
+  `rows` for 1 or 2: an asserted entry would count the row covered (a
+  scratch assertion on `transient_noise.mos_tt.envelope.json` rendered Row 2
+  covered and item 5 `met` despite the 1.289 mV grid mean against the
+  1.0 mV Target). Upstream:
+  [klayout-tools#6967](https://github.com/2AMLogic/klayout-tools/issues/6967)
+  (Row 1's statistic),
+  [klayout-tools#6968](https://github.com/2AMLogic/klayout-tools/issues/6968)
+  (Row 2's), following the closed
+  [#2960](https://github.com/2AMLogic/klayout-tools/issues/2960) and
+  [#2976](https://github.com/2AMLogic/klayout-tools/issues/2976).
+- **Row 5a** (supply/temperature grid exercised, verified as applied) is a
+  joint property of **all four benches**. Its campaign PASS comes from
+  `sim/kltsim/grade.py` checking every bench over the complete grid with
+  the applied conditions; no single envelope carries that joint verdict, and
+  citing one per bench would assert coverage without the joint check. Gap
+  reason and campaign verdict both stand. Upstream:
+  [klayout-tools#6969](https://github.com/2AMLogic/klayout-tools/issues/6969).
+
+**The rendered verdict** (regenerated in the same change,
+`manifests/t1-signoff-report.json`): item 5 `unmet` / `check_failed`, with
+`detail.failed_citations` naming the kickback envelope,
+`detail.failed_rows = ["4a", "4b"]`, `detail.declared_gaps = [1, 2, 5a]`,
+no uncovered rows, and `critical_metric_blockers:
+sim__corner__failed_count = 39`. When a Row 4a fix is adopted and #476
+repoints the kickback citation to a passing envelope, the item stays
+`unmet` / `partial_coverage` on the declared gaps alone — Row 2 in
+particular is never reported covered while its Target fails.
+`scripts/tests/test_item5_spec_rows.py` (run in the
+`signoff-manifest-parity` CI job) holds that regression: a passing-kickback
+fixture with the declared gaps, and Row 2 as the sole gap, both render
+`unmet` / `partial_coverage` with Row 2 carrying no coverage source.
 
 Item 5 can honestly read `met` only when every bounded Target in `grading.md`
-passes, and the citation is then whichever envelope the tool accepts as
-covering them.
+passes and every declared row is covered — a gap declaration must be
+removed (because the grader grew the capability or the evidence was
+re-minted to carry the verdict) before the rows it names count.
 
 ## Item 8 (Characterization report) — cited, honestly `unmet` / `check_failed`
 
@@ -410,16 +508,16 @@ source campaign are never edited.
 ## Regeneration and freshness
 
 The report is frozen at the pinned `klt` release — `2AMLogic/klayout-tools`
-`v0.8.0` (commit `c572046be644e0407f693f2410f3abb799d68a3a`, PyPI
-`klayout-tools==0.8.0`). A `klt` older than 2026-09-17 does **not** know item
+`v0.9.2` (commit `046ba74652fc096bd97071fc3237f7159dd40183`, PyPI
+`klayout-tools==0.9.2`). A `klt` older than 2026-09-17 does **not** know item
 11 and renders a ten-item report; the pinned build renders all eleven. If the
 pinned build moves, the manifest, the freeze, and the pin move in one change.
 
 [`klt-pin.json`](klt-pin.json) is the single source of truth for the pin
 (`klt_commit`, `klt_version`, `klayout_version`). CI runs
 `python3 scripts/check_klt_pin.py` (stdlib only) in the signoff job, which
-fails if any machine-read copy disagrees with it: both `ci.yml` install
-lines (`klayout-tools==<klt_version>`; the git form `@<sha>` is still
+fails if any machine-read copy disagrees with it: every `ci.yml` install
+line (`klayout-tools==<klt_version>`; the git form `@<sha>` is still
 accepted for a dev-build pin) and its `klayout==` pin, `layout/run_flow.sh` `KLT_PIN`/`KLAYOUT_PIN`,
 this report's `build.git_commit`/`build.version`, and the `provenance`
 block of the DRC, LVS and ERC reports under `layout/comparator/`.
@@ -459,7 +557,7 @@ not committed around.
 | File | What it is |
 |---|---|
 | `sg13g2-comparator.json` | the block manifest — `block`, `kind`, per-item pinned evidence citations (items 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 and 11 cited; the rest deliberately uncited — see above). **The stable path a fleet roll-up points at.** |
-| `../sim/klt-corner-verification/campaigns/20261009-d73a9ac/kickback.envelope.json` | the cited item 5 evidence (`klt sim` envelope, status `fail`); the rest of that campaign, its grading and its reproduction are in `../sim/klt-corner-verification/README.md` |
+| `../sim/klt-corner-verification/campaigns/20261009-d73a9ac/{regeneration,kickback}.envelope.json` | the cited item 5 evidence (two `klt sim` envelopes, cited per row group under `spec_rows`: regeneration for Rows 3a–3c, status `pass`; kickback for Rows 4a–4b, status `fail`); the rest of that campaign, its grading and its reproduction are in `../sim/klt-corner-verification/README.md` |
 | `../layout/comparator/drc_report.json` | the cited item 3 evidence (`klt drc` envelope), regenerated by `layout/run_flow.sh` |
 | `../layout/comparator/lvs_report.json` | the cited item 4 evidence (`klt lvs` envelope), with its derived inputs `lvs_extracted.spice`, `lvs_reference.spice`, `lvs_request.json`, regenerated by `layout/run_flow.sh` |
 | `../layout/comparator/erc_report.json`, `../layout/comparator/erc_supply_spec.json` | the cited item 11 `klt erc` evidence and its derived request, regenerated by `layout/run_flow.sh` (item 11 also cites `lvs_report.json`) |

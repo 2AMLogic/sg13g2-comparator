@@ -42,6 +42,25 @@ class GeometryTests(unittest.TestCase):
             with self.assertRaises(build.BuildError):
                 self.body(geometry_overrides=bad)
 
+    def test_param_override_read_back_from_body_header(self):
+        self.assertEqual(build.extract_param_overrides(self.body()), {})
+        text = self.body(param_overrides={"dut_ib": 1.5e-05})
+        self.assertEqual(build.extract_param_overrides(text), {"dut_ib": "1.5e-05"})
+
+    def test_candidate_identity_includes_dut_ib(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sub = Path(tmp)
+            (sub / "kickback.body.spice").write_text(self.body(
+                geometry_overrides={"XM1.w": "8u"}, param_overrides={"dut_ib": 1e-05}))
+            (sub / "regeneration.body.spice").write_text(self.body(
+                geometry_overrides={"XM1.w": "8u"}, param_overrides={"dut_ib": 1.5e-05}))
+            _g, problems = sizesweep._geometry_report(sub, ("kickback", "regeneration"))
+            self.assertTrue(problems)
+            (sub / "regeneration.body.spice").write_text(self.body(
+                geometry_overrides={"XM1.w": "8u"}, param_overrides={"dut_ib": 1e-05}))
+            g, problems = sizesweep._geometry_report(sub, ("kickback", "regeneration"))
+            self.assertEqual((g, problems), ({"XM1.w": "8u", "dut_ib": "1e-05"}, []))
+
     def test_parse_geometry(self):
         self.assertEqual(build.parse_geometry(["XM1.w=8u"]), {"XM1.w": "8u"})
         with self.assertRaises(build.BuildError):
@@ -113,14 +132,15 @@ def _is_binding(c):
 
 
 def write_candidate(root: Path, name="x", geometry=None, mutate=None, geometry_by_bench=None,
-                    full_grid_request=False):
+                    full_grid_request=False, param_overrides=None):
     """Write scr_<name>/ with a self-consistent request/body/envelope/invocation
     chain per bench. ``mutate(bench_name, corners)`` edits the corner list."""
     sub = root / f"scr_{name}"
     sub.mkdir(parents=True)
     for bname, bench in BENCH_SPECS.items():
         geo = (geometry_by_bench or {}).get(bname, geometry)
-        body = build.compose_body(bench, build.BATCH_OSDI_DIR, geometry_overrides=geo)
+        body = build.compose_body(bench, build.BATCH_OSDI_DIR, geometry_overrides=geo,
+                                  param_overrides=param_overrides)
         (sub / f"{bname}.body.spice").write_text(body, encoding="utf-8")
         req = build.compose_request(bench, f"{bname}.body.spice", "batch")
         req_bytes = (json.dumps(req, indent=2) + "\n").encode()
@@ -455,6 +475,38 @@ class ScreeningReductionTests(unittest.TestCase):
         sizesweep.run("c1", self.root, report_name="sizesweep_validated")
         self.assertTrue((camp / "sizesweep_validated.json").is_file())
 
+    def test_markdown_only_conflict_writes_nothing(self):
+        camp = self.root / "c1"
+        camp.mkdir()
+        write_candidate(camp)
+        (camp / "sizesweep.md").write_text("historical", encoding="utf-8")
+        with self.assertRaises(FileExistsError) as cm:
+            sizesweep.run("c1", self.root)
+        self.assertIn("--report-name", str(cm.exception))
+        self.assertFalse((camp / "sizesweep.json").exists())
+        self.assertEqual((camp / "sizesweep.md").read_text(), "historical")
+
+    def test_identical_rerun_preserves_timestamps(self):
+        camp = self.root / "c1"
+        camp.mkdir()
+        write_candidate(camp)
+        sizesweep.run("c1", self.root)
+        before = {n: (camp / n).stat().st_mtime_ns for n in ("sizesweep.json", "sizesweep.md")}
+        sizesweep.run("c1", self.root)
+        after = {n: (camp / n).stat().st_mtime_ns for n in before}
+        self.assertEqual(before, after)
+
+    def test_matching_partial_pair_is_completed(self):
+        camp = self.root / "c1"
+        camp.mkdir()
+        write_candidate(camp)
+        sizesweep.run("c1", self.root)
+        (camp / "sizesweep.json").unlink()
+        md_before = (camp / "sizesweep.md").stat().st_mtime_ns
+        sizesweep.run("c1", self.root)
+        self.assertTrue((camp / "sizesweep.json").is_file())
+        self.assertEqual((camp / "sizesweep.md").stat().st_mtime_ns, md_before)
+
 
 class FullGridRegressionTests(unittest.TestCase):
     """The reduced-grid allowance must not weaken the default full-grid checks."""
@@ -496,7 +548,7 @@ class FullFinalistGeometryGateTests(unittest.TestCase):
         self.root = Path(self._tmp.name)
         self.addCleanup(self._tmp.cleanup)
 
-    def run_full(self, bodies, skip=(), verdict=None):
+    def run_full(self, bodies, skip=(), verdict=None, extra_rows=()):
         sub = self.root / "full_x"
         sub.mkdir()
         for bname, bench in BENCH_SPECS.items():
@@ -514,6 +566,11 @@ class FullFinalistGeometryGateTests(unittest.TestCase):
                             "worst": {"value": 0.5, "point": "tt_27c_1.2v"}},
                  "stretch": {"points_failing": 0}}
                 for rid, _l, _u in sizesweep.FULL_ROWS if rid not in skip_rows(skip)]
+        # the real campaigns grade a 5a coverage row too; its INCOMPLETE shape
+        # (evidence_kind "coverage", no `target` block) is what the roll-up
+        # exemption must let through (issue #447)
+        rows.append(coverage_row("5a", grade.INCOMPLETE))
+        rows.extend(extra_rows)
         orig = grade.grade_campaign
         grade.grade_campaign = lambda _d: {"rows": rows}
         self.addCleanup(setattr, grade, "grade_campaign", orig)
@@ -576,6 +633,68 @@ class FullFinalistGeometryGateTests(unittest.TestCase):
         self.assertTrue(unrun)
         self.assertNotIn("rejected", {c["state"] for c in r["rows"].values()})
 
+    def test_rollup_classifies_every_ratified_row(self):
+        # issue #447: the classified set is derived from rows.json, so Row 5a
+        # is classified and Row 4c (reporting_requirement) is not
+        r, _md = self.run_full({})
+        self.assertIn("5a", r["rows"])
+        self.assertNotIn("4c", r["rows"])
+
+    def test_coverage_row_incomplete_lands_in_incomplete_not_not_run(self):
+        # the test that fails on a naive one-token fix: without the
+        # evidence_kind exemption the no-target coverage entry is suppressed
+        # to "not swept" and 5a is misfiled under not run
+        r, md = self.run_full({})
+        met, failed, inc, unrun = sizesweep._met(r)
+        self.assertIn("5a", inc)
+        self.assertNotIn("5a", unrun)
+        self.assertNotIn("5a", met)
+        self.assertNotIn("5a", failed)
+        rollup = md.split("### Ratified Target rows per finalist")[1]
+        self.assertIn("| x | ", rollup)
+        row = [l for l in rollup.splitlines() if l.startswith("| x | ")][0]
+        self.assertIn("5a", row.split("|")[4])  # the incomplete column
+
+    def test_coverage_row_pass_lands_in_met(self):
+        r, _md = self.run_full({}, extra_rows=[coverage_row(
+            "5a", grade.PASS, covered=("regeneration", "kickback"), problems=())])
+        met, failed, inc, unrun = sizesweep._met(r)
+        self.assertIn("5a", met)
+        self.assertNotIn("5a", inc)
+        self.assertNotIn("5a", unrun)
+        self.assertNotIn("5a", failed)
+
+    def test_non_coverage_row_without_target_block_still_not_run(self):
+        # the test that fails if the exemption is keyed on the missing
+        # `target` block instead of evidence_kind: rows 1/2 of the bias
+        # campaign grade INCOMPLETE with no target block under #440 drift and
+        # must stay "not run" (issue #447)
+        r, _md = self.run_full({}, extra_rows=[sim_row_no_target("1", grade.INCOMPLETE)])
+        _m, _f, inc, unrun = sizesweep._met(r)
+        self.assertIn("1", unrun)
+        self.assertNotIn("1", inc)
+
+    def test_reporting_requirement_row_never_classified(self):
+        entry = {"id": "4c", "row": "4c", "unit": "mV", "evidence_kind": "klt_sim",
+                 "target_verdict": grade.NOT_SPECIFIED, "stretch_verdict": grade.NOT_SPECIFIED,
+                 "target_bound": None, "stretch_bound": None,
+                 "target": {"points_valid": 45, "points_expected": 45, "points_failing": 0}}
+        r, _md = self.run_full({}, extra_rows=[entry])
+        met, failed, inc, unrun = sizesweep._met(r)
+        for lst in (met, failed, inc, unrun):
+            self.assertNotIn("4c", lst)
+        self.assertNotIn("4c", r["rows"])
+
+    def test_metric_table_columns_unchanged(self):
+        _r, md = self.run_full({})
+        expected = ("| candidate | geometry override | "
+                    + " | ".join(f"{l} [{u}]" for _i, l, u in sizesweep.FULL_ROWS) + " |")
+        header = md.split("| candidate | geometry override |")[0] + "| candidate | geometry override |" \
+            + md.split("| candidate | geometry override |")[1].split("\n")[0]
+        self.assertIn(expected, header)
+        self.assertNotIn("5a", header)
+        self.assertNotIn("4c", header)
+
 
 def skip_rows(skip):
     return {rid for rid, _l, _u in sizesweep.FULL_ROWS
@@ -583,6 +702,29 @@ def skip_rows(skip):
 
 
 KICK_ROWS = ("4a", "4b")
+
+
+def coverage_row(rid, verdict, covered=("regeneration",),
+                 problems=("kickback: no envelope",)):
+    """A graded entry shaped like ``grade.py``'s coverage branch (issue #447):
+    ``evidence_kind == "coverage"`` and **no** ``target``/``stretch`` block."""
+    return {"id": rid, "row": rid, "unit": None, "condition": None,
+            "statistical_basis": None, "sub_bound": None,
+            "target_bound": None, "stretch_bound": None,
+            "evidence_kind": "coverage",
+            "target_verdict": verdict, "stretch_verdict": grade.NOT_SPECIFIED,
+            "benches_fully_covered": list(covered),
+            "coverage_problems": list(problems)}
+
+
+def sim_row_no_target(rid, verdict):
+    """A graded klt_sim entry with no ``target`` block (rows 1/2 of
+    ``20261115-issue92-bias`` under the #440 grader drift)."""
+    return {"id": rid, "row": rid, "unit": "mV", "condition": None,
+            "statistical_basis": None, "sub_bound": None,
+            "target_bound": None, "stretch_bound": None,
+            "evidence_kind": "klt_sim", "bench": "regeneration",
+            "target_verdict": verdict, "stretch_verdict": verdict}
 
 
 if __name__ == "__main__":

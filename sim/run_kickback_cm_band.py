@@ -5,6 +5,9 @@
     python3 sim/run_kickback_cm_band.py run     --series ID --condition C [--klt KLT]
     python3 sim/run_kickback_cm_band.py smoke   --condition C --osdi-dir DIR [--klt KLT]
     python3 sim/run_kickback_cm_band.py compare --series ID
+    python3 sim/run_kickback_cm_band.py probe-build   --series ID        (issue #405)
+    python3 sim/run_kickback_cm_band.py probe-run     --series ID --condition C --arm A
+    python3 sim/run_kickback_cm_band.py probe-compare --series ID
 
 Conditions: vcm-m050 (dut_vcm - 50 mV), vcm-nom (dut_vcm; reproduction gate),
 vcm-p050 (dut_vcm + 50 mV). Each is ONE deterministic 45-point `klt sim`
@@ -17,6 +20,18 @@ runs ONE corner locally (a debug probe) in a scratch dir, writing nothing
 under sim/. `compare` writes ID/comparison.json + comparison.md offline from
 the saved envelopes.
 
+Probe supplements (never merged into the #165 populations): the frozen
+`20261108-405-probe` series (issue #405) runs arms repro/obs/xing/step20p;
+a series with any other id defaults to the issue #415 forced-DC supplement's
+arms repro/obs/optdc/icdc, whose optdc/icdc bodies append a declared block
+to the #165 body (sim/kltsim/kickback_cmband.py: probe_body_supplement).
+probe-compare only ever writes into the series it is pointed at; it refuses
+to rewrite the frozen #405 series in place with a non-#405 arm set
+(`--report-dir NEW-DIR` publishes such an analysis in a new namespace).
+`compare` and `probe-compare` write their `comparison.{json,md}` pair
+append-only through `kltsim.artifacts.publish` (`--check` is the read-only
+twin; `--report-dir` redirects into a new, citing namespace).
+
 See sim/kltsim/kickback_cmband.py and sim/comparator-kickback-cm-band/README.md.
 Run from the repository root.
 """
@@ -26,16 +41,30 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from kltsim import build as build_mod  # noqa: E402
 from kltsim import cli as kcli  # noqa: E402
 from kltsim import kickback_cmband as kb  # noqa: E402
+
+#: The frozen issue #405 probe series: default arm set, and the one series
+#: probe-compare may rewrite with its own comparison files (AC: byte-unchanged).
+FROZEN_PROBE_SERIES = "20261108-405-probe"
+
+
+def _arms_for(series_name: str, chosen: list[str] | None) -> tuple[str, ...]:
+    """Default arm set by series: the frozen #405 probe keeps its four arms;
+    any other series is the issue #415 forced-DC supplement's arm set."""
+    if chosen:
+        return tuple(chosen)
+    return kb.PROBE_ARMS if series_name == FROZEN_PROBE_SERIES else kb.PROBE_ARMS_415
+
+
+def _issue_for(series_name: str) -> int:
+    return kb.PROBE_ISSUE if series_name == FROZEN_PROBE_SERIES else kb.SUPPLEMENT_ISSUE
 
 
 def _series(args) -> Path:
@@ -47,19 +76,43 @@ def _extra(cond: kb.Condition) -> dict:
 
 
 def cmd_build(args) -> int:
-    for name in args.condition or [c.name for c in kb.CONDITIONS]:
-        cond = kb.condition(name)
-        try:
-            paths = kb.write_condition_inputs(cond, _series(args) / cond.name)
-        except kb.KickbackCmBandError as exc:
-            print(str(exc), file=sys.stderr)
-            return 1
-        for p in paths:
-            print(f"wrote {p.relative_to(build_mod.REPO_ROOT)}")
-    return 0
+    # Plan every selected condition first, then commit the whole build as one
+    # batch: a conflict on any condition writes nothing (no partial build).
+    series = _series(args)
+    planned: list[tuple[Path, bytes]] = []
+    try:
+        for name in args.condition or [c.name for c in kb.CONDITIONS]:
+            cond = kb.condition(name)
+            out_dir = series / cond.name
+            files = kb.input_bytes(cond)
+            planned.extend((out_dir / n, data) for n, data in files.items())
+    except kb.KickbackCmBandError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return kcli.commit_build("build", planned, evidence="campaign evidence")
 
 
-def _graded_attempts(out_dir: Path, tag: str) -> int:
+def _retire_unrun_submit(out_dir: Path, tag: str) -> None:
+    """A batch job that FAILED before running anything (e.g. runner/client klt
+    mismatch: no corner measured) leaves an all-error envelope. Keep it, renamed
+    with its fleet job id (never deleted), so the arm can be submitted again."""
+    env_path = out_dir / f"{tag}.envelope.json"
+    if not env_path.is_file():
+        return
+    env = json.loads(env_path.read_text(encoding="utf-8"))
+    codes = (env.get("diagnostic_counts") or {}).get("by_code") or {}
+    if env.get("status") != "error" or "batch_job_failed" not in codes or env.get("passed") \
+            or env.get("failed"):
+        return
+    job = ((env.get("environment") or {}).get("remote") or {}).get("job_id") or "unknown"
+    for suffix in ("envelope", "invocation"):
+        src = out_dir / f"{tag}.{suffix}.json"
+        if src.is_file():
+            src.rename(out_dir / f"{tag}.{suffix}.unrun-{job}.json")
+    print(f"{tag}: retired unrun failed submit {job} (kept as *.unrun-{job}.json)", file=sys.stderr)
+
+
+def _graded_attempts(out_dir: Path, tag: str, unrun_ok: bool = False) -> int:
     log = out_dir / "attempts.jsonl"
     if not log.is_file():
         return 0
@@ -69,7 +122,7 @@ def _graded_attempts(out_dir: Path, tag: str) -> int:
             rec = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if rec.get("tag") == tag and rec.get("exit_code") in (0, 3, 4):
+        if rec.get("tag") == tag and rec.get("exit_code") in ((0, 3) if unrun_ok else (0, 3, 4)):
             n += 1
     return n
 
@@ -100,30 +153,16 @@ def cmd_smoke(args) -> int:
     req["corners"]["process"] = [args.process]
     req["corners"]["supply_v"] = {"vsup": [args.supply]}
     req["corners"]["temperature_c"] = [args.temperature]
-    request = work / "request.json"
-    request.write_text(json.dumps(req, indent=2) + "\n", encoding="utf-8")
-    cmd = [args.klt, "sim", str(request), "--backend", "local", "--format", "json",
-           "-o", str(work / "artifacts")]
-    print("$ " + " ".join(cmd), file=sys.stderr)
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    (work / "envelope.json").write_text(proc.stdout, encoding="utf-8")
-    print(f"klt sim exit {proc.returncode}; work dir {work}", file=sys.stderr)
-    if proc.stderr.strip():
-        print(proc.stderr.strip()[-2000:], file=sys.stderr)
-    try:
-        env = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        return 1
-    for c in env.get("corners", []):
-        print(c["corner_id"], c["status"], {m["name"]: m["value"] for m in c["measurements"]})
-    return 0
+    return kcli.run_local_smoke(req, work, args.klt)
 
 
 def cmd_compare(args) -> int:
     series = _series(args)
     result = kb.compare_series(series, kb.REFERENCE_DIR)
-    (series / "comparison.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    (series / "comparison.md").write_text(kb.render_markdown(result), encoding="utf-8")
+    rc = kcli.publish_report_pair("compare", args, series, "comparison", result,
+                                  kb.render_markdown(result), "series")
+    if rc or getattr(args, "check", False):
+        return rc
     r = result["reproduction"]
     print(f"reproduction: {'PASS' if r['ok'] else 'FAIL'} "
           f"({r['values_compared']}/{r['expected_values']} values, "
@@ -134,6 +173,79 @@ def cmd_compare(args) -> int:
               f"{ru['min']} .. {ru['max']} uV, Target {c['verdict']['target']}, "
               f"Stretch {c['verdict']['stretch']}")
     return 0 if r["ok"] else 2
+
+
+def cmd_probe_build(args) -> int:
+    # Plan every arm of every selected condition first (running the #165
+    # reference-body check per shared-body arm), then commit the whole build
+    # as one batch: a conflict on any arm writes nothing (no partial build).
+    issue = _issue_for(args.series)
+    series = _series(args)
+    planned: dict[Path, bytes] = {}  # the shared body prints once per condition
+    try:
+        for name in args.condition or [c.name for c in kb.CONDITIONS]:
+            cond = kb.condition(name)
+            out_dir = series / cond.name
+            for arm in _arms_for(args.series, args.arm):
+                files = kb.probe_input_bytes(cond, arm, issue=issue)
+                kb.check_probe_reference_body(cond, arm, files)
+                planned.update((out_dir / n, data) for n, data in files.items())
+    except kb.KickbackCmBandError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return kcli.commit_build("probe-build", list(planned.items()), evidence="probe evidence")
+
+
+def cmd_probe_run(args) -> int:
+    """Submit one arm request on the batch fleet (capacity_wait_s is in the
+    request). A failed submit is reported, never run locally."""
+    cond = kb.condition(args.condition)
+    out_dir = _series(args) / cond.name
+    tag = kb.probe_arm_tag(args.arm)
+    request = out_dir / f"{tag}.request.json"
+    if not request.is_file():
+        print(f"no request at {request}; run `probe-build` first", file=sys.stderr)
+        return 1
+    _retire_unrun_submit(out_dir, tag)
+    if (out_dir / f"{tag}.envelope.json").exists():
+        print(f"{tag}: envelope present -- append-only, not resubmitted", file=sys.stderr)
+        return 0 if args.skip_existing else 1
+    if _graded_attempts(out_dir, tag, unrun_ok=True):
+        print(f"{tag}: attempts.jsonl records a graded run but no envelope; refusing to "
+              "resubmit (investigate)", file=sys.stderr)
+        return 1
+    extra = {"condition": kb.condition_metadata(cond), "kind": "probe", "probe_arm": args.arm,
+             "issue": _issue_for(args.series)}
+    # --backend batch explicitly: the body's OSDI path exists only on the fleet,
+    # so even the one-corner edge requests must not stay local.
+    return kcli._submit_with_retry(request, out_dir, tag, args, extra, backend="batch")
+
+
+def cmd_probe_compare(args) -> int:
+    series = _series(args)
+    arms = _arms_for(args.series, args.arm)
+    report_dir = getattr(args, "report_dir", None)
+    if args.series == FROZEN_PROBE_SERIES and set(arms) != set(kb.PROBE_ARMS) and (
+            not report_dir or Path(report_dir) == series):
+        print(f"{args.series} is the frozen #405 probe series; refusing to rewrite it in "
+              "place with a non-#405 arm set (its committed files must stay byte-unchanged; "
+              "publish under a NEW --report-dir instead)", file=sys.stderr)
+        return 1
+    res = kb.probe_compare(series, arms=arms, issue=_issue_for(args.series))
+    rc = kcli.publish_report_pair("probe-compare", args, series, "comparison", res,
+                                  kb.probe_render_markdown(res), "series")
+    if rc or getattr(args, "check", False):
+        return rc
+    for p in res["problems"]:
+        print("problem:", p, file=sys.stderr)
+    for r in res["points"]:
+        for arm, a in r["arms"].items():
+            if a.get("present"):
+                v = a["values"]
+                print(r["condition"], r["key"], arm, a["corner_status"],
+                      "repro165" if a["equals_165_on_original_cards"] else "DIFFERS",
+                      {g: v.get(g) for g in kb.PROBE_GATES})
+    return 1 if res["problems"] else 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -169,7 +281,31 @@ def main(argv: list[str] | None = None) -> int:
 
     g = sub.add_parser("compare")
     g.add_argument("--series", required=True)
+    kcli.add_report_pair_args(g, "comparison", "series")
     g.set_defaults(func=cmd_compare)
+
+    pb = sub.add_parser("probe-build")
+    pb.add_argument("--series", required=True)
+    pb.add_argument("--condition", action="append", choices=names)
+    pb.add_argument("--arm", action="append", choices=list(kb.ALL_PROBE_ARMS))
+    pb.set_defaults(func=cmd_probe_build)
+
+    pr = sub.add_parser("probe-run")
+    pr.add_argument("--series", required=True)
+    pr.add_argument("--condition", required=True, choices=names)
+    pr.add_argument("--arm", required=True, choices=list(kb.ALL_PROBE_ARMS))
+    pr.add_argument("--skip-existing", action="store_true")
+    pr.add_argument("--klt", default=default_klt)
+    pr.add_argument("--retry-refused", type=int, default=0)
+    pr.add_argument("--retry-wait", type=int, default=120)
+    pr.set_defaults(func=cmd_probe_run, force=False)
+
+    pc = sub.add_parser("probe-compare")
+    pc.add_argument("--series", required=True)
+    pc.add_argument("--arm", action="append", choices=list(kb.ALL_PROBE_ARMS),
+                    help="arm set to compare (default: by series, see --help)")
+    kcli.add_report_pair_args(pc, "comparison", "series")
+    pc.set_defaults(func=cmd_probe_compare)
 
     args = ap.parse_args(argv)
     return args.func(args)

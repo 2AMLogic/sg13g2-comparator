@@ -193,24 +193,6 @@ def input_bytes(cond: Condition, osdi_dir: str = build_mod.BATCH_OSDI_DIR,
     }
 
 
-def write_condition_inputs(cond: Condition, out_dir: Path, **kw) -> list[Path]:
-    """Write body + request; refuse to change anything already there."""
-    files = input_bytes(cond, **kw)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for name, data in files.items():
-        path = out_dir / name
-        if path.exists() and path.read_bytes() != data:
-            raise KickbackCmBandError(
-                f"{path} exists and differs -- campaign evidence is append-only; use a new --series")
-    paths = []
-    for name, data in files.items():
-        path = out_dir / name
-        if not path.exists():
-            path.write_bytes(data)
-        paths.append(path)
-    return paths
-
-
 # --------------------------------------------------------------------------- #
 # validity
 # --------------------------------------------------------------------------- #
@@ -402,6 +384,11 @@ def reproduction_check(nominal_env: dict, nominal_request: dict, nominal_body: s
             if x is None or y is None:
                 problems.append(f"{key_str(key)}: {name} missing")
                 continue
+            if x.get("value") is None or y.get("value") is None:
+                side = "both sides" if (x.get("value") is None and y.get("value") is None) \
+                    else "one side"
+                problems.append(f"{key_str(key)}: {name} unmeasured (no value on {side})")
+                continue
             compared += 1
             if x.get("value") != y.get("value") or x.get("status") != y.get("status"):
                 mismatches.append({"key": key_str(key), "measurement": name,
@@ -535,3 +522,372 @@ def render_markdown(result: dict) -> str:
                 cells += [f"REJECTED ({d['reason']}); unvalidated residue {_f(d.get(RESIDUE))}", "-", "-"]
         out.append(f"| {row['key']} | " + " | ".join(cells) + " |")
     return "\n".join(out) + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# issue #405: supplementary probe of the two Row 4b band-edge rejects
+# --------------------------------------------------------------------------- #
+#
+# SUPPLEMENTARY CHARACTERIZATION, NOT A DR-0004 VERDICT. The #165 campaign has
+# two points that fail the decision-correctness gate (vcm-m050 ss/1.200V/-40C
+# dout_float_big_end; vcm-p050 ss/1.080V/-40C dout_float_small_end). This
+# section builds a separately labelled series that re-runs exactly those two
+# points plus the vcm-nom control at the same two PVT points, in four labelled
+# ARMS. The circuit body is byte-identical to the #165 body of the same
+# condition (checked at build time); arms differ only in the request's
+# measurement cards and analysis args. Nothing here edits, or is merged into,
+# the #165 populations.
+
+PROBE_ISSUE = 405
+PROBE_PROCESS = "mos_ss"
+PROBE_TEMPERATURE_C = -40.0
+#: condition -> supplies run (the edge points, and the control at both).
+PROBE_SUPPLIES_V = {"vcm-m050": (1.2,), "vcm-p050": (1.08,), "vcm-nom": (1.08, 1.2)}
+PROBE_CAPACITY_WAIT_S = 600
+PROBE_STROBE_NS = 30
+PROBE_SAMPLE_NS = (30, 31, 32, 34, 36, 40, 45, 50, 55)
+#: branch label -> (dp node, dn node, normalized-decision node, input-diff node)
+PROBE_BRANCHES = {"b": ("doutb", "doutbb", "dbn", "bd"), "c": ("doutc", "doutbc", "dcn", "cd")}
+PROBE_ARMS = ("repro", "obs", "xing", "step20p")
+STEP_ARM_ARGS = {"step20p": "5p 60n 0 20p"}
+PROBE_REFERENCE_SERIES = "20261011-165"
+
+# --------------------------------------------------------------------------- #
+# issue #415: supplement arms that force a converged DC operating point
+# --------------------------------------------------------------------------- #
+# DISCRIMINATING FOLLOW-UP to the #405 probe, which left "no arm forced a
+# converged DC point (.nodeset/.ic, gmin/itl options)" undone. The supplement
+# runs the same two rejected points plus the vcm-nom control in a NEW series;
+# repro/obs keep the #165 body byte-identical (reproduction gate) and the two
+# new arms append ONE declared block to the body (probe_body_supplement):
+#
+#   optdc  DC convergence aids only (.options itl1/gminsteps/srcsteps, gmin
+#          kept at its 1e-12 default); no .nodeset, no .ic. If the DC warning
+#          clears and the programmed differential appears on bd/cd on its own,
+#          the artifact is confirmed with no circularity to argue about.
+#   icdc   .nodeset of the four floating input pins at their analytic DC
+#          values (at DC no current flows through rfloat, so v(bpp) must
+#          equal v(bsp) = v(cm) + dv_small/2, and likewise for the other
+#          three) and .ic of every branch output at the LOW polarity
+#          (dout=0) -- the wrong answer for the programmed differential, and
+#          the state the rejects already hold on their failing branch. No
+#          arm is forced toward the expected answer, so a 55 ns gate pass
+#          needs a genuine post-strobe decision from a stated wrong-polarity
+#          start.
+#
+# Because optdc/icdc bodies differ from the repro/obs body while one condition
+# directory holds all four arms, the supplement arms reference per-arm body
+# files (kickback-<arm>.body.spice); the shared kickback.body.spice stays the
+# #165 body, written by repro/obs. The AC-2 diff against #165 is exactly the
+# declared block.
+#
+# ngspice semantics (verified against the pinned ngspice-47, no uic on the
+# tran): .nodeset and .ic without uic seed the DC solve rather than pinning
+# nodes; in a bistable circuit the seed selects the basin the solve lands
+# in. The realized start state is therefore re-read from the 1 ns
+# observables instead of assumed; the series README interprets against it.
+
+SUPPLEMENT_ISSUE = 415
+#: The arm set the #415 forced-DC supplement series runs. repro/obs are shared
+#: with the #405 probe (identical cards and body; only the issue label differs).
+PROBE_ARMS_415 = ("repro", "obs", "optdc", "icdc")
+#: Every arm the probe-build / probe-run / probe-compare CLI accepts (#405+#415).
+ALL_PROBE_ARMS = PROBE_ARMS + tuple(a for a in PROBE_ARMS_415 if a not in PROBE_ARMS)
+#: Arms whose body is the #165 body plus exactly probe_body_supplement().
+PROBE_BODY_SUPPLEMENT_ARMS = ("optdc", "icdc")
+
+PROBE_ARM_NOTES = {
+    "repro": "arm repro: the #165 measurement cards and analysis, unchanged "
+             "(reproduction gate).",
+    "obs": "arm obs: #165 cards + outputs over time + input differential probes.",
+    "xing": "arm xing: arm obs + decision-threshold crossing times.",
+    "step20p": "arm step20p: arm obs with tran max step 20p (as the #89 supplement).",
+    "optdc": "arm optdc: arm obs + DC convergence aids only (.options itl1/gminsteps/"
+             "srcsteps, gmin kept at its 1e-12 default); no .nodeset, no .ic.",
+    "icdc": "arm icdc: arm obs + .nodeset of the four floating input pins at their "
+            "analytic DC values and .ic of every branch output at the LOW (dout=0) "
+            "state -- the wrong polarity for the programmed differential.",
+}
+
+
+def probe_arm_tag(arm: str) -> str:
+    return f"{TAG}-{arm}"
+
+
+def _find(name: str, expr: str, at_ns: int, unit: str) -> dict:
+    return {"name": name, "spice": f".meas tran {name} find {expr} at={at_ns}n", "unit": unit}
+
+
+def probe_observables(with_crossings: bool) -> list[dict]:
+    """Extra measurement cards: both outputs of branches B and C over time, the
+    input differential at the strobe edge and at 1 ns (initial state), and
+    (optionally) the time each branch first crosses a decision threshold."""
+    cards = []
+    for br, (dp, dn, norm, vd) in PROBE_BRANCHES.items():
+        for t in PROBE_SAMPLE_NS:
+            cards.append(_find(f"{br}_dp_{t}n", f"v({dp})", t, "V"))
+            cards.append(_find(f"{br}_dn_{t}n", f"v({dn})", t, "V"))
+        cards.append(_find(f"{br}_vd_strobe", f"v({vd})", PROBE_STROBE_NS, "V"))
+        cards.append(_find(f"{br}_vd_1n", f"v({vd})", 1, "V"))
+    if with_crossings:
+        for br, (dp, dn, norm, vd) in PROBE_BRANCHES.items():
+            cards.append({"name": f"{br}_t_half", "unit": "s", "spice":
+                          f".meas tran {br}_t_half when v({norm})=0.5 td={PROBE_STROBE_NS}n cross=1"})
+            cards.append({"name": f"{br}_t_pair", "unit": "s", "spice":
+                          f".meas tran {br}_t_pair when v({dp})=v({dn}) td={PROBE_STROBE_NS}n cross=1"})
+    return cards
+
+
+def probe_request(cond: Condition, arm: str, *, issue: int = PROBE_ISSUE) -> dict:
+    """The #165 request of ``cond`` restricted to the probe PVT points, with the
+    arm's cards/analysis. Always batch (the body's OSDI path exists only on the
+    fleet), with capacity_wait_s so a burst waits instead of failing. ``issue``
+    labels the request's provenance: the #405 probe default; the #415
+    forced-DC supplement passes SUPPLEMENT_ISSUE."""
+    if arm not in ALL_PROBE_ARMS:
+        raise KickbackCmBandError(f"unknown probe arm {arm!r}")
+    req = compose_request(cond, probe_body_name(arm))
+    req["corners"]["process"] = [PROBE_PROCESS]
+    req["corners"]["supply_v"] = {"vsup": list(PROBE_SUPPLIES_V[cond.name])}
+    req["corners"]["temperature_c"] = [PROBE_TEMPERATURE_C]
+    if arm != "repro":
+        req["measurements"] = req["measurements"] + probe_observables(with_crossings=(arm == "xing"))
+    if arm in STEP_ARM_ARGS:
+        req["analysis"] = {**req["analysis"], "args": STEP_ARM_ARGS[arm]}
+    req["batch"] = {"capacity_wait_s": PROBE_CAPACITY_WAIT_S}
+    if arm in PROBE_BODY_SUPPLEMENT_ARMS:
+        body_note = (f"Body file `{probe_body_name(arm)}` is the issue #165 body of this "
+                     "condition plus exactly the declared "
+                     f"`{arm}` supplement block (see the series README); restricted to the probe "
+                     "PVT points; separately labelled, never merged into the #165 populations.")
+    else:
+        body_note = ("Same body as the issue #165 campaign of this condition; restricted to the "
+                     "probe PVT points; separately labelled, never merged into the #165 populations.")
+    req["_comment"] = [
+        f"sg13g2-comparator -- SUPPLEMENTARY probe request (issue #{issue}), condition "
+        f"`{cond.name}`, arm `{arm}`.",
+        "GENERATED by `python3 sim/run_kickback_cm_band.py probe-build`; the committed copy is "
+        "byte-for-byte what was submitted.",
+        body_note,
+        PROBE_ARM_NOTES[arm],
+    ]
+    req["_condition"] = {**condition_metadata(cond), "issue": issue,
+                         "probe_arm": arm, "reference_series": PROBE_REFERENCE_SERIES}
+    if arm in PROBE_BODY_SUPPLEMENT_ARMS:
+        req["_condition"]["body_supplement"] = arm
+    return req
+
+
+def probe_body_name(arm: str) -> str:
+    """The body file this arm's request references. Arms with a declared
+    supplement block get a per-arm body file -- several arms with different
+    bodies share one condition directory, and the shared
+    ``kickback.body.spice`` must stay the #165 body (repro/obs write it)."""
+    return (f"{probe_arm_tag(arm)}.body.spice"
+            if arm in PROBE_BODY_SUPPLEMENT_ARMS else BODY_NAME)
+
+
+def probe_body_supplement(cond: Condition, arm: str) -> str:
+    """The exact text appended to the #165 body for ``arm``; '' for arms that
+    keep the #165 body byte-identical. The block is the ONLY permitted body
+    change, so the AC-2 diff against #165 is exactly this text."""
+    if arm == "optdc":
+        return (
+            "\n"
+            "* ---- issue #415 supplement (arm optdc): DC convergence aids only --------\n"
+            "* Appended verbatim after the issue #165 body; nothing else changed. Solver\n"
+            "* effort only, so the graded values stay comparable to #165: reltol/vntol/\n"
+            "* abstol/chgtol untouched, gmin pinned at its 1e-12 default (the 1 GOhm /\n"
+            "* 1 pF floating network is sensitive to shunt conductance), no .nodeset,\n"
+            "* no .ic, no analysis change.\n"
+            ".options itl1=500 gminsteps=500 srcsteps=500 gmin=1e-12\n"
+        )
+    if arm == "icdc":
+        cm = cond.vcm_v()
+        half_small, half_big = 0.5e-3, 50.0e-3  # dv_small/2, dv_big/2 (body .param values)
+        nodeset = (f".nodeset v(bpp)={cm + half_small:.4g} v(bpn)={cm - half_small:.4g}"
+                   f" v(cpp)={cm + half_big:.4g} v(cpn)={cm - half_big:.4g}\n")
+        return (
+            "\n"
+            "* ---- issue #415 supplement (arm icdc): forced DC operating point ----------\n"
+            "* Appended verbatim after the issue #165 body; nothing else changed.\n"
+            "* .nodeset: at DC no current flows through rfloat, so each floating pin sits\n"
+            "* at its ideal source's value v(cm) +/- dv/2; the hint starts the DC solve\n"
+            "* there instead of letting gmin stepping fail. .ic: every branch output is\n"
+            "* seeded LOW (dout=0) -- the WRONG polarity for the programmed differential\n"
+            "* and the state the rejects already hold on their failing branch; the\n"
+            "* complementary nodes are left to the latch. No arm is forced toward the\n"
+            "* expected answer, so a 55 ns gate pass needs a real post-strobe decision.\n"
+            "* No uic on the tran: ngspice seeds (does not pin) the solve, the bistable\n"
+            "* latch lands in the seeded basin, and the realized start state is re-read\n"
+            "* from the 1 ns observables (series README).\n"
+            f"{nodeset}"
+            ".ic v(douta)=0 v(doutb)=0 v(doutc)=0\n"
+        )
+    return ""
+
+
+def probe_expected_body(cond: Condition, arm: str) -> str:
+    """The exact body this arm is allowed to write: the #165 body, plus the
+    arm's declared supplement block if it declares one."""
+    return compose_body(cond) + probe_body_supplement(cond, arm)
+
+
+def probe_input_bytes(cond: Condition, arm: str, *, issue: int = PROBE_ISSUE) -> dict[str, bytes]:
+    body = probe_body_name(arm)
+    return {body: probe_expected_body(cond, arm).encode("utf-8"),
+            f"{probe_arm_tag(arm)}.request.json":
+            (json.dumps(probe_request(cond, arm, issue=issue), indent=2) + "\n").encode("utf-8")}
+
+
+def check_probe_reference_body(cond: Condition, arm: str, files: dict[str, bytes]) -> None:
+    """An arm without a supplement block must reference the shared body and
+    that body must be byte-identical to the #165 body."""
+    ref_body = SERIES_DIR / PROBE_REFERENCE_SERIES / cond.name / BODY_NAME
+    if probe_body_name(arm) == BODY_NAME and files[BODY_NAME] != ref_body.read_bytes():
+        raise KickbackCmBandError(
+            f"probe body for {cond.name} differs from the #165 body {ref_body}; refusing")
+
+
+def _meas_map(corner: dict) -> dict:
+    return {m["name"]: m for m in corner.get("measurements") or []}
+
+
+def probe_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS,
+                  issue: int = PROBE_ISSUE) -> dict:
+    """Offline comparison of every committed probe envelope against the #165
+    envelope of the same condition at the same PVT key. ``arms`` is the arm set
+    to look for: a listed arm without an envelope is a problem, so a series is
+    only ever compared against its own arm set (the #405 probe default; the
+    #415 supplement passes PROBE_ARMS_415).
+
+    A missing value on just one side is a difference, as recorded for #415.
+    When both values are missing, list the card in ``unmeasured_on_original_cards``.
+    Equality requires at least one original card and matching, measured values
+    for every original card."""
+    ref_root = SERIES_DIR / PROBE_REFERENCE_SERIES
+    out: dict = {"issue": issue, "series": series.name,
+                 "reference_series": PROBE_REFERENCE_SERIES, "points": [], "arms": {},
+                 "problems": []}
+    for cond in CONDITIONS:
+        ref_env = _load(ref_root / cond.name / f"{TAG}.envelope.json")
+        ref_corners, _ = load_points(ref_env)
+        arm_corners: dict[str, dict] = {}
+        for arm in arms:
+            env_path = series / cond.name / f"{probe_arm_tag(arm)}.envelope.json"
+            if not env_path.is_file():
+                out["problems"].append(f"missing envelope {cond.name}/{arm}")
+                continue
+            env = _load(env_path)
+            out["arms"][f"{cond.name}/{arm}"] = {
+                **_remote(env), "envelope_status": env.get("status"),
+                "request_sha256": _sha(series / cond.name / f"{probe_arm_tag(arm)}.request.json"),
+                "envelope_sha256": _sha(env_path)}
+            arm_corners[arm], notes = load_points(env)
+            out["problems"] += [f"{cond.name}/{arm}: {n}" for n in notes]
+        for sup in PROBE_SUPPLIES_V[cond.name]:
+            key = (PROBE_PROCESS.removeprefix("mos_"), round(sup, 6), PROBE_TEMPERATURE_C)
+            ref = ref_corners.get(key)
+            ref_m = _meas_map(ref) if ref else {}
+            row = {"condition": cond.name, "key": key_str(key), "arms": {}}
+            for arm, corners in arm_corners.items():
+                c = corners.get(key)
+                if c is None:
+                    row["arms"][arm] = {"present": False}
+                    continue
+                m = _meas_map(c)
+                diffs = []
+                unmeasured = []
+                for name, ref_card in ref_m.items():
+                    value = m.get(name, {}).get("value")
+                    if value != ref_card.get("value"):
+                        diffs.append(name)
+                    elif value is None:
+                        unmeasured.append(name)
+                arm_row = {
+                    "present": True, "corner_status": c.get("status"),
+                    "corner_id": c.get("corner_id"),
+                    "values": {n: x.get("value") for n, x in m.items()},
+                    "statuses": {n: x.get("status") for n, x in m.items()
+                                 if x.get("status") not in (None, "pass")},
+                    "equals_165_on_original_cards": (bool(ref_m) and not diffs and not unmeasured),
+                    "differs_from_165": diffs}
+                if unmeasured:
+                    arm_row["unmeasured_on_original_cards"] = unmeasured
+                row["arms"][arm] = arm_row
+            out["points"].append(row)
+    return out
+
+
+PROBE_GATES = ("dout_1k_end", "dout_float_small_end", "dout_float_big_end")
+
+
+def probe_render_markdown(res: dict) -> str:
+    def f(x):
+        return "-" if x is None else f"{x:.4g}"
+    o = [f"# Row 4b band-edge kickback probe (issue #{res['issue']})", "",
+         "Supplementary characterization of the two #165 decision-gate rejects; reported beside, "
+         f"never merged into, the `{res['reference_series']}` populations. No spec verdict, no "
+         "sigma, no DR-0004 row pass is claimed here.", "",
+         f"Series `{res['series']}`. Generated by `python3 sim/run_kickback_cm_band.py "
+         "probe-compare`; do not edit.", ""]
+    if res["problems"]:
+        o += ["## Problems", ""] + [f"- {p}" for p in res["problems"]] + [""]
+    o += ["## Fleet jobs", "", "| condition/arm | job id | state | PVT | envelope status |",
+          "|---|---|---|---|---|"]
+    for k, a in res["arms"].items():
+        o.append(f"| `{k}` | {a.get('job_id')} | {a.get('state')} | "
+                 f"{PROBE_PROCESS}/{PROBE_TEMPERATURE_C:g}C | {a.get('envelope_status')} |")
+    o += ["", "## Reproduction (arm `repro` must equal #165 on every original value)", "",
+          "| condition | point | arm | equals #165 on original cards | differing cards |",
+          "|---|---|---|---|---|"]
+    for r in res["points"]:
+        for arm, a in r["arms"].items():
+            if not a.get("present"):
+                continue
+            details = []
+            if a["differs_from_165"]:
+                details.append(", ".join(a["differs_from_165"]))
+            if a.get("unmeasured_on_original_cards"):
+                details.append("unmeasured: " + ", ".join(a["unmeasured_on_original_cards"]))
+            o.append(f"| `{r['condition']}` | {r['key']} | {arm} | "
+                     f"{a['equals_165_on_original_cards']} | {'; '.join(details) or '-'} |")
+    o += ["", "## Decision gates and per-branch outputs", "",
+          "| condition | point | arm | " + " | ".join(PROBE_GATES) + " | b dp/dn @55n | c dp/dn @55n |",
+          "|---|---|---|---|---|---|---|---|---|"]
+    for r in res["points"]:
+        for arm, a in r["arms"].items():
+            if not a.get("present"):
+                continue
+            v = a["values"]
+            o.append(f"| `{r['condition']}` | {r['key']} | {arm} | "
+                     + " | ".join(f(v.get(g)) for g in PROBE_GATES)
+                     + f" | {f(v.get('b_dp_55n'))} / {f(v.get('b_dn_55n'))}"
+                     + f" | {f(v.get('c_dp_55n'))} / {f(v.get('c_dn_55n'))} |")
+    o += ["", "## Input differential and decision timing (arms with the extra cards)", "",
+          "| condition | point | arm | b vd @1n | b vd @strobe | c vd @1n | c vd @strobe | "
+          "b t_half | b t_pair | c t_half | c t_pair |", "|" + "---|" * 11]
+    for r in res["points"]:
+        for arm, a in r["arms"].items():
+            if not a.get("present") or "b_vd_strobe" not in a["values"]:
+                continue
+            v = a["values"]
+            o.append(f"| `{r['condition']}` | {r['key']} | {arm} | "
+                     + " | ".join(f(v.get(n)) for n in (
+                         "b_vd_1n", "b_vd_strobe", "c_vd_1n", "c_vd_strobe",
+                         "b_t_half", "b_t_pair", "c_t_half", "c_t_pair")) + " |")
+    o += ["", "## Outputs over time (V), arm `obs`", ""]
+    for r in res["points"]:
+        a = r["arms"].get("obs")
+        if not a or not a.get("present"):
+            continue
+        v = a["values"]
+        o += [f"### `{r['condition']}` {r['key']}", "",
+              "| t (ns) | " + " | ".join(f"{b} dp | {b} dn" for b in PROBE_BRANCHES) + " |",
+              "|---|" + "---|---|" * len(PROBE_BRANCHES)]
+        for t in PROBE_SAMPLE_NS:
+            o.append(f"| {t} | " + " | ".join(
+                f"{f(v.get(f'{b}_dp_{t}n'))} | {f(v.get(f'{b}_dn_{t}n'))}"
+                for b in PROBE_BRANCHES) + " |")
+        o.append("")
+    return "\n".join(o) + "\n"

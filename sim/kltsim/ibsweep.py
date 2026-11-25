@@ -22,6 +22,7 @@ import math
 import re
 from pathlib import Path
 
+from . import bias_probes as bias_probes_mod
 from . import build as build_mod
 from . import grade as grade_mod
 
@@ -221,7 +222,11 @@ def probe_summary(campaign_dir: Path, grid_points: list | None = None) -> dict:
 def sweep(campaign_dir: Path) -> dict:
     out = {"campaign": campaign_dir.name, "points": []}
     for sub in sorted((p for p in campaign_dir.iterdir() if ib_of(p) is not None), key=ib_of):
-        graded = grade_mod.grade_campaign(sub)
+        # The swept sub-campaigns were built/run with --bias-probes, so grading
+        # goes through the declared-superset loader (issue #440); the REUSE_MC
+        # reference below is the issue #62 campaign, deliberately built without
+        # the probes, and stays on grade's undeclared contract.
+        graded = bias_probes_mod.grade_campaign(sub)
         by_id = {r["id"]: r for r in graded["rows"]}
         cells = {}
         for row_id, _label, _unit in ROWS:

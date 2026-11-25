@@ -32,6 +32,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -131,16 +132,29 @@ def sh(args, cwd, env=None, check=True):
     return r
 
 
+def version_gate_passes(pin_version, returncode, output):
+    """True only if `klt --version` succeeded and reported exactly the pin.
+
+    The complete version token must equal the pin: a development build such as
+    ``0.9.2.dev111+g978f7464fae1`` contains the release string ``0.9.2`` but is
+    a different build and may lack flags the pinned release has.
+    """
+    if returncode != 0:
+        return False
+    m = re.fullmatch(r"klt\s+(\S+)", (output or "").strip())
+    return bool(m) and m.group(1) == pin_version
+
+
 def klt_matches_pin():
     import json
     # Read from the commit, not the working tree: this test itself runs in the
     # append-only job's sparse cone, which does not contain manifests/.
     pin = json.loads(sh(["git", "show", "HEAD:manifests/klt-pin.json"], ROOT).stdout)
     try:
-        out = sh(["klt", "--version"], ROOT, check=False).stdout
+        r = sh(["klt", "--version"], ROOT, check=False)
     except OSError:
         return False
-    return pin["klt_version"].split("+g")[-1][:12] in out
+    return version_gate_passes(pin["klt_version"], r.returncode, r.stdout)
 
 
 @unittest.skipIf(os.environ.get(NESTED), "nested run inside a sparse clone")
@@ -166,6 +180,37 @@ class SparseCones(unittest.TestCase):
                 # only a basename wildcard (`dir/*.ext`); never `**`, `?`, `[`, `!`
                 self.assertFalse(set("?[!") & set(p) or "**" in p
                                  or "*" in p.rsplit("/", 1)[0], f"{name}: wildcard {p!r}")
+
+    def test_every_cone_pattern_contributes_a_unique_path(self):
+        """Issue #429: cone minimality -- the over-coverage twin of the
+        #216 sufficiency guard. Every declared pattern must check out at
+        least one tracked path that no other pattern in the same list
+        already checks out, so a pattern subsumed by a sibling glob
+        (`/sim/run_memory.py` under `/sim/run_*.py`), one subsuming its
+        neighbours (`/scripts/` beside the named guard scripts) or matching
+        nothing tracked at all fails with the dead entries named. Derived
+        from git's index (ls-files lists skip-worktree entries too), so it
+        stays clone-free and also holds inside the append-only job's
+        narrowed cone, whose own heredoc patterns this audits."""
+        tracked = sh(["git", "ls-files"], ROOT).stdout.splitlines()
+        for name, job in self.jobs.items():
+            with self.subTest(job=name):
+                patterns = job["patterns"]
+                unique = {}
+                for path in tracked:
+                    hits = [p for p in patterns if self._covered([p], path)]
+                    if len(hits) == 1:
+                        unique.setdefault(hits[0], path)
+                dead = []
+                for p in patterns:
+                    if p in unique:
+                        continue
+                    example = next((t for t in tracked
+                                    if self._covered([p], t)), None)
+                    dead.append(f"{p} (subsumed: {example} also matched by others)"
+                                if example else f"{p} (matches no tracked path)")
+                self.assertEqual(dead, [], f"{name}: patterns contributing no "
+                                 f"path of their own; remove them")
 
     def test_append_only_job_keeps_full_history(self):
         self.assertIn("fetch-depth: 0", self.jobs[SIZE_JOB]["checkout"]["with"])
@@ -211,6 +256,7 @@ class SparseCones(unittest.TestCase):
         return {**ENV, NESTED: "1", "EVENT_NAME": "push", "PUSH_AFTER": self.head,
                 "PUSH_BEFORE": sh(["git", "rev-parse", "HEAD~1"], dst).stdout.strip(),
                 "PR_BASE_SHA": "", "PR_HEAD_SHA": "", "GITHUB_SHA_CUR": self.head,
+                "MG_BASE_SHA": "", "MG_HEAD_SHA": "",
                 "TARGET_SHA": self.head}
 
     def _run_job(self, name):
@@ -267,6 +313,64 @@ class SparseCones(unittest.TestCase):
     def test_append_only_and_size_job_from_sparse_clone(self):
         self._run_job("append-only-evidence")
 
+    # --- issue #470: the merge_group arm of the append-only gate -----------
+
+    def _append_only_step_script(self):
+        script = dict(self.jobs[SIZE_JOB]["runs"]).get(
+            "Check evidence is append-only")
+        self.assertIsNotNone(script,
+                             "append-only step missing from ci.yml")
+        return script
+
+    def _merge_group_env(self, dst, base, head):
+        return {**self._env(dst), "EVENT_NAME": "merge_group",
+                "MG_BASE_SHA": base, "MG_HEAD_SHA": head}
+
+    def test_append_only_step_merge_group_compares_base_to_head(self):
+        """A merge-group run with a valid base/head passes and echoes the
+        merge_group mode; the comparison is the event's base_sha -> head_sha
+        directly (base_sha is the target-branch tip the group built on)."""
+        step = self._append_only_step_script()
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, self.jobs[SIZE_JOB]["checkout"])
+            base = sh(["git", "rev-parse", "HEAD~1"], dst).stdout.strip()
+            env = self._merge_group_env(dst, base, self.head)
+            r = sh(["bash", "-eu", "-c", step], dst, env, check=False)
+            self.assertEqual(r.returncode, 0, r.stdout[-3000:])
+            self.assertIn("mode: merge_group", r.stdout)
+
+    def test_append_only_step_merge_group_fails_closed_on_bad_shas(self):
+        """An empty base, an empty head or an unavailable (nonexistent) SHA
+        each exit 2 naming the problem -- never a silent pass."""
+        step = self._append_only_step_script()
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, self.jobs[SIZE_JOB]["checkout"])
+            base = sh(["git", "rev-parse", "HEAD~1"], dst).stdout.strip()
+            bogus = "0" * 40
+            cases = [
+                ("missing base", "", self.head, "::error::merge-group base"),
+                ("missing head", base, "", "::error::merge-group head"),
+                ("unavailable base", bogus, self.head,
+                 "::error::merge-group base"),
+            ]
+            for name, mg_base, mg_head, needle in cases:
+                with self.subTest(case=name):
+                    env = self._merge_group_env(dst, mg_base, mg_head)
+                    r = sh(["bash", "-eu", "-c", step], dst, env, check=False)
+                    self.assertEqual(r.returncode, 2, r.stdout[-3000:])
+                    self.assertIn(needle, r.stdout)
+
+    def test_target_sha_steps_fall_back_to_github_sha(self):
+        """On merge_group the PR-head expression resolves empty, so both
+        TARGET_SHA consumers (size budget, artifact manifests) must fall
+        through to `github.sha` -- the merge-group head commit. Static guard
+        on the expressions in ci.yml (the event itself cannot be simulated
+        hermetically)."""
+        hits = re.findall(
+            r"TARGET_SHA: \$\{\{ github\.event\.pull_request\.head\.sha"
+            r" \|\| github\.sha \}\}", CI.read_text())
+        self.assertGreaterEqual(len(hits), 2)
+
     def test_harness_job_from_sparse_clone(self):
         self._run_job("harness-unit-tests")
 
@@ -302,15 +406,26 @@ class SparseCones(unittest.TestCase):
     def test_netlist_job_inputs_are_in_its_cone(self):
         """Issue #224: the cone holds the generator, schematics, symbols, the
         committed netlist, imported harness modules, the PDK pin and the
-        provisioner. Runs the job's real check step only when a real xschem
-        and PDK are available (SKIPPED, never passed, otherwise; CI always
-        provisions both). A cone missing an input fails the real command."""
+        provisioner. Runs the job's real check step only when a real xschem,
+        the PDK and the pinned klt (issue #489: the generator drives
+        `klt netlist`) are available (SKIPPED, never passed, otherwise; CI
+        always provisions all three). The generator's own mocked unit tests
+        need none of them and always run. A cone missing an input fails the
+        real command."""
         job = self.jobs[NETLIST_JOB]
+        # issue #489: mocked-klt generator unit tests are a repo input of
+        # this job; they must pass inside its cone with no tools installed.
+        unittests = next(s for n, s in job["runs"] if "design/tests" in s)
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = self._clone(tmp, job["checkout"])
+            r = sh(["bash", "-eu", "-c", unittests], dst, self._env(dst), check=False)
+            self.assertEqual(r.returncode, 0, f"generator unit tests failed in cone:\n{r.stdout[-3000:]}")
         check = next(s for n, s in job["runs"] if "netlist.py --check" in s)
         xs = shutil.which("xschem")
         pdk_root = os.environ.get("PDK_ROOT")
-        if not xs or not pdk_root:
-            self.skipTest("real xschem and PDK_ROOT not available (CI provisions both)")
+        if not xs or not pdk_root or not klt_matches_pin():
+            self.skipTest("real xschem, PDK_ROOT and the pinned klt not all "
+                          "available (CI provisions all three)")
         # same step as ci.yml, with the ambient xschem standing in for the
         # provisioned one (the provisioned-path assertion line is dropped)
         script = "\n".join(l for l in check.splitlines() if "command -v" not in l)
@@ -454,6 +569,39 @@ class SparseCones(unittest.TestCase):
             self.assertNotEqual(r2.returncode, 0, r2.stdout[-3000:])
             self.assertIn("F821", r2.stdout)
             self.assertIn("sim/device-mismatch-confirm/summarize_dvgs.py", r2.stdout)
+
+
+class KltPinGate(unittest.TestCase):
+    def test_exact_release_passes(self):
+        self.assertTrue(version_gate_passes("0.9.2", 0, "klt 0.9.2\n"))
+
+    def test_dev_build_of_same_release_fails(self):
+        self.assertFalse(version_gate_passes("0.9.2", 0, "klt 0.9.2.dev111+g978f7464fae1\n"))
+
+    def test_other_versions_fail(self):
+        for out in ("klt 0.9.3\n", "klt 0.9.20\n", "klt 10.9.2\n"):
+            self.assertFalse(version_gate_passes("0.9.2", 0, out), out)
+
+    def test_garbage_output_fails(self):
+        for out in ("", "command not found", "klt\n", "klt 0.9.2 extra\n"):
+            self.assertFalse(version_gate_passes("0.9.2", 0, out), out)
+
+    def test_commit_form_pin_requires_the_same_build(self):
+        pin = "0.9.2.dev111+g978f7464fae1"
+        self.assertTrue(version_gate_passes(pin, 0, f"klt {pin}\n"))
+        self.assertFalse(version_gate_passes(pin, 0, "klt 0.9.2.dev112+gabcdef012345\n"))
+
+    def test_failed_version_command_fails_even_with_matching_text(self):
+        self.assertFalse(version_gate_passes("0.9.2", 1, "klt 0.9.2\n"))
+
+    def test_missing_executable_fails(self):
+        # sh() runs with the module-level ENV (a copy captured at import), so
+        # patching os.environ would not remove klt from the subprocess PATH.
+        # Keep git resolvable: the pin is read via `git show` before the
+        # OSError branch, and an unresolvable git would error, not fail.
+        git_dir = os.path.dirname(shutil.which("git"))
+        with mock.patch.dict(ENV, {"PATH": git_dir}):
+            self.assertFalse(klt_matches_pin())
 
 
 class ShDiagnostics(unittest.TestCase):

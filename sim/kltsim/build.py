@@ -191,6 +191,23 @@ def extract_geometry(body_text: str) -> dict:
     return {}
 
 
+PARAM_MARKER = "*   OVERRIDE (issue #80 sweep; sim/dut.json untouched):"
+
+
+def extract_param_overrides(body_text: str) -> dict:
+    """The ``sim/dut.json`` param overrides a body declares (``{}`` when none),
+    as ``{"dut_ib": "1.5e-05"}`` (values kept verbatim)."""
+    for line in body_text.split("\n"):
+        if line.startswith(PARAM_MARKER):
+            out = {}
+            for item in line[len(PARAM_MARKER):].split(","):
+                key, sep, value = item.strip().partition("=")
+                if sep:
+                    out[key] = value.strip("'\"")
+            return out
+    return {}
+
+
 def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
                  param_overrides: dict | None = None,
                  geometry_overrides: dict | None = None) -> str:
@@ -393,9 +410,13 @@ def commit_inputs(files: list[tuple[Path, bytes]]) -> list[Path]:
     Preflight first: every destination that already exists must hold exactly
     the proposed bytes, else the whole set is rejected (``BuildError`` naming
     each conflicting input and pointing at a new campaign ID) before ANY file
-    is touched. Identical files are reused without a write; absent files are
-    created with exclusive creation (``x``), so a concurrent writer cannot be
-    clobbered between check and write. Returns the paths newly created.
+    is touched. A destination directory that is not a real directory, or that
+    sits under a non-directory ancestor, is rejected the same way (issue
+    #523) rather than escaping as a bare ``FileExistsError`` /
+    ``NotADirectoryError``. Identical files are reused without a write;
+    absent files are created with exclusive creation (``x``), so a
+    concurrent writer cannot be clobbered between check and write. Returns
+    the paths newly created.
     """
     try:
         return artifacts_mod.commit(
