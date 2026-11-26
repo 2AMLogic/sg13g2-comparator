@@ -577,17 +577,7 @@ def _smoke_chain(smoke_dir: Path, tag: str, envelope_sha: str | None
     if req_raw is not None:
         checked["request_sha256"] = build_mod.sha256_bytes(req_raw)
     if inv is not None:
-        for name, actual in (("request_sha256", checked.get("request_sha256")),
-                             ("envelope_sha256", envelope_sha)):
-            saved = inv.get(name)
-            if not isinstance(saved, str) or not grade_mod._HEX64.fullmatch(saved):
-                problems.append(f"{tag}: invocation {name} is missing or not a 64-char "
-                                f"lowercase hex sha256 ({saved!r})")
-            elif actual is not None and saved != actual:
-                problems.append(f"{tag}: {name} mismatch: invocation records {saved[:12]}..., "
-                                f"file bytes hash to {actual[:12]}...")
-            else:
-                checked[f"invocation_{name}"] = saved
+        grade_mod.check_invocation_digests(tag, inv, checked, envelope_sha, problems)
         if inv.get("tag") != tag:
             problems.append(f"{tag}: invocation names tag {inv.get('tag')!r}")
         if inv.get("exit_code") != 0:
