@@ -261,8 +261,12 @@ def _details(campaign_dir: Path, bench_name: str, ev: dict, grid: dict,
 
 
 def _present(campaign_dir: Path, bench_name: str) -> bool:
-    return any(read_envelope_bytes(campaign_dir / f"{bench_name}.{sec}.envelope.json") is not None
-               for sec in PROCESSES)
+    """Whether the configuration committed any of its expected process
+    envelopes, plain or gzip -- a file-presence check only (issue #560). The
+    bytes are first read by ``validate_config``, so an unreadable envelope is
+    reported as a rejected configuration instead of raising here."""
+    return any((campaign_dir / f"{bench_name}.{sec}.envelope.json{ext}").is_file()
+               for sec in PROCESSES for ext in ("", ".gz"))
 
 
 def grid_mean_se_bounds(ses: list[float]) -> tuple[float, float]:
