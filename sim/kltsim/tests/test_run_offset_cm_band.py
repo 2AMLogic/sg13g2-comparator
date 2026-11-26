@@ -707,6 +707,150 @@ class SupplementReportTests(Base):
             self.assertFalse(p["pairing_vs_parent"]["seeds_paired"])
             self.assertGreater(p["pairing_vs_parent"]["seed_mismatches"], 0)
 
+    # --- issue #555: the supplement's own pairing path --------------------
+
+    def target_point(self, section):
+        return dict((s, (v, t)) for s, v, t in cmband.SUPPLEMENT_POINTS)[section]
+
+    def at_target(self, section, corner):
+        supply, temp = self.target_point(section)
+        return (corner["process"] == section
+                and corner["supply_v"]["vsup"] == supply
+                and corner["temperature_c"] == temp)
+
+    def rewrite_envelope(self, root, section, cond, edit):
+        """Apply ``edit(corners) -> corners`` to one written envelope of the
+        synthetic pair: the issue #555 false-match fixtures (a parent draw
+        that never ran, and a sample index claimed twice)."""
+        path = root / cond.name / f"offset_cm.{section}.envelope.json"
+        env = json.loads(path.read_text())
+        env["corners"] = edit(env["corners"])
+        path.write_text(json.dumps(env))
+
+    def drop_draw(self, root, section, cond, k):
+        """Remove draw ``k`` at the section's target point -- the never-ran
+        parent draw of the issue #555 reproduction."""
+        self.rewrite_envelope(
+            root, section, cond,
+            lambda cs: [c for c in cs if not (self.at_target(section, c)
+                                              and c["monte_carlo"]["sample_index"] == k)])
+
+    def duplicate_index(self, root, section, cond, k, *, reverse=False):
+        """Draw ``k+1`` re-reports draw ``k``'s sample_index at the target
+        point, so two corners claim index ``k`` with different seeds;
+        ``reverse`` writes the pair in the opposite corner order (the index
+        lookup this replaces silently kept whichever record came last)."""
+        def edit(cs):
+            i = next(i for i, c in enumerate(cs)
+                     if self.at_target(section, c)
+                     and c["monte_carlo"]["sample_index"] == k + 1)
+            cs[i]["monte_carlo"]["sample_index"] = k
+            pair = [j for j, c in enumerate(cs)
+                    if self.at_target(section, c)
+                    and c["monte_carlo"]["sample_index"] == k]
+            if reverse:
+                cs[pair[0]], cs[pair[1]] = cs[pair[1]], cs[pair[0]]
+            return cs
+        self.rewrite_envelope(root, section, cond, edit)
+
+    def duplicate_fixture_result(self, root, *, reverse):
+        for section in cmband.supplement_sections():
+            for cond in cmband.CONDITIONS:
+                self.full_pair(section, cond)
+        self.duplicate_index(root, "mos_tt_mismatch", cmband.condition("vcm-nom"),
+                             5, reverse=reverse)
+        return cmband.compare_supplement(self.supp)
+
+    def assert_duplicate_index_rejected(self, result):
+        affected = [p for p in result["populations"]
+                    if p["condition"] == "vcm-nom" and p["section"] == "mos_tt_mismatch"]
+        self.assertEqual(len(affected), 1)
+        pair = affected[0]["pairing_vs_parent"]
+        self.assertFalse(pair["seeds_paired"])
+        self.assertEqual(pair["n_compared"], 58)
+        self.assertIn("sample index 5 reported 2 times", pair["pairing_rejected"])
+        row = next(s for s in result["sensitivity"]
+                   if s["condition"] == "vcm-nom" and s["point"] == affected[0]["point"])
+        self.assertFalse(row["pairing_vs_parent"]["seeds_paired"])
+        self.assertEqual(row["sensitivity"]["n_pairs"], 58)
+        self.assertFalse(result["conclusion"]["pairing_all_matched"])
+
+    def test_missing_parent_draw_breaks_pairing(self):
+        """Issue #555's false match: with parent draw 59 never run, the
+        parent population is short one draw, but the index-keyed lookup
+        skipped the absent index and still reported every seed paired."""
+        for section in cmband.supplement_sections():
+            for cond in cmband.CONDITIONS:
+                self.full_pair(section, cond)
+        self.drop_draw(self.parent, "mos_tt_mismatch", cmband.condition("vcm-nom"), 59)
+        result = cmband.compare_supplement(self.supp)
+        affected = [p for p in result["populations"]
+                    if p["condition"] == "vcm-nom" and p["section"] == "mos_tt_mismatch"]
+        self.assertEqual(len(affected), 1)
+        pair = affected[0]["pairing_vs_parent"]
+        self.assertFalse(pair["seeds_paired"])
+        self.assertEqual(pair["n_compared"], 59)
+        self.assertIn("missing [59]", pair["pairing_rejected"])
+        self.assertIn("N = 59", affected[0]["parent_status"])
+        for p in result["populations"]:  # the complete 60-draw controls
+            if p is not affected[0]:
+                self.assertTrue(p["pairing_vs_parent"]["seeds_paired"])
+        row = next(s for s in result["sensitivity"]
+                   if s["condition"] == "vcm-nom" and s["point"] == affected[0]["point"])
+        self.assertFalse(row["pairing_vs_parent"]["seeds_paired"])
+        self.assertEqual(row["sensitivity"]["n_pairs"], 59)
+        self.assertEqual(row["sensitivity"]["n_both_valid"], 59)
+        c = result["conclusion"]
+        self.assertFalse(c["pairing_all_matched"])
+        # 33 retained populations; the unpaired one leaves the conclusion
+        self.assertEqual(c["pairs_compared"], 32 * 60)
+        self.assertEqual(c["pairs_identical"], c["pairs_compared"])
+        md = cmband.render_supplement_markdown(result)
+        self.assertIn("**NO**", md)
+        self.assertIn("Seed pairing failures", md)
+
+    def test_duplicate_parent_index_breaks_pairing_in_both_orders(self):
+        """Two parent corners claim one sample index: the replaced lookup
+        silently kept whichever record came last, so reordering the records
+        could turn the seed mismatch into a false match. Both orders reject
+        with identical counts (issue #555)."""
+        for reverse in (False, True):
+            with self.subTest(record_order_reversed=reverse):
+                self.assert_duplicate_index_rejected(
+                    self.duplicate_fixture_result(self.parent, reverse=reverse))
+
+    def test_duplicate_supplement_index_breaks_pairing_in_both_orders(self):
+        """The same duplicate on the supplement side, in both record orders:
+        rejected identically, and the draw is never double-counted as a
+        sensitivity pair."""
+        for reverse in (False, True):
+            with self.subTest(record_order_reversed=reverse):
+                self.assert_duplicate_index_rejected(
+                    self.duplicate_fixture_result(self.supp, reverse=reverse))
+
+    def test_aborted_parent_draw_pairs_but_contributes_no_delta(self):
+        """The identity/measurement distinction (issue #555): a parent draw
+        whose measurement aborted still has a known seed, so it establishes
+        identity and pairs -- it just contributes no sensitivity delta."""
+        for section in cmband.supplement_sections():
+            for cond in cmband.CONDITIONS:
+                self.full_pair(section, cond, abort_k=12 if cond.name == "vcm-m050" else None)
+        result = cmband.compare_supplement(self.supp)
+        rows = [s for s in result["sensitivity"]
+                if s["condition"] == "vcm-m050" and s["target"]]
+        self.assertEqual(len(rows), 2)
+        for s in rows:
+            self.assertTrue(s["pairing_vs_parent"]["seeds_paired"])
+            self.assertEqual(s["pairing_vs_parent"]["n_compared"], 60)
+            self.assertEqual(s["sensitivity"]["n_pairs"], 60)
+            self.assertEqual(s["sensitivity"]["n_both_valid"], 59)
+        for p in result["populations"]:
+            self.assertTrue(p["pairing_vs_parent"]["seeds_paired"])
+        c = result["conclusion"]
+        self.assertTrue(c["pairing_all_matched"])
+        self.assertEqual(c["pairs_compared"], 33 * 60 - 2)
+        self.assertEqual(c["pairs_identical"], c["pairs_compared"])
+
     def test_retained_failure_reported_as_is(self):
         for section in cmband.supplement_sections():
             for cond in cmband.CONDITIONS:
