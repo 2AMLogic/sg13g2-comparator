@@ -203,13 +203,18 @@ def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _num(index: dict, name: str):
+def _num(index: dict, name: str, unit: str | None = None):
     m = index.get(name)
     if m is None or m.get("value") is None:
         return None
     try:
-        return grade_mod.finite(m["value"], name)
-    except grade_mod.NonFiniteError:
+        value = grade_mod.finite(m["value"], name)
+        if unit is None:
+            return value
+        if not isinstance(m.get("unit"), str):
+            return None
+        return grade_mod.finite(grade_mod.convert(value, m["unit"], unit), name)
+    except (grade_mod.NonFiniteError, grade_mod.UnitError):
         return None
 
 
@@ -1071,7 +1076,7 @@ INIT_GATE_NS = 55
 
 def coldinit_qualify(values: dict, *, validity_failures: Iterable[str] = ()) -> dict:
     """Apply the issue #552 qualification rules to one cold-edge point's
-    measured values (``name -> value`` straight from the corner).
+    measured values (the supply and 30 ns output samples are in volts).
 
     A point is QUALIFIED only when every one of these holds; the rules are
     stated here, before grading, so each classification is reproducible from
@@ -1206,6 +1211,7 @@ def coldinit_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS_552) ->
     }
     expected_rises = {m["name"]: m["spice"] for m in init_observables()
                       if m["name"].endswith("_t_half")}
+    strobe_units = dict.fromkeys(("vdd_meas", "a_dp_30n", "b_dp_30n", "c_dp_30n"), "V")
     for cond in CONDITIONS:
         cdir = series / cond.name
         env_path = cdir / f"{probe_arm_tag(arm)}.envelope.json"
@@ -1260,7 +1266,7 @@ def coldinit_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS_552) ->
                 entry["corner_id"] = corner.get("corner_id")
                 entry["corner_status"] = corner.get("status")
                 index, _ = grade_mod.measurement_index(corner)
-                values = {name: _num(index, name) for name in (index or {})}
+                values = {name: _num(index, name, strobe_units.get(name)) for name in (index or {})}
                 entry["values"] = values
                 problem = point_problem(corner, cond.vcm_v(), required_measurements())
                 failures = list(acquisition_failures)

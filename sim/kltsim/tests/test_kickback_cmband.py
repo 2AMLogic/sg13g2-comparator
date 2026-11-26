@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import io
+import itertools
 import json
 import math
 import re
@@ -1247,6 +1248,30 @@ class ColdInitCompare(unittest.TestCase):
                 if p is not edge:
                     self.assertTrue(p["qualification"]["qualified"])
                     self.assertEqual(p["qualification"]["residue_verdict"], "MET")
+
+    def test_strobe_polarity_uses_measured_voltages_in_the_same_unit(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(kb, "SERIES_DIR", Path(d)):
+            series = self.write_series(Path(d))
+            path = series / M050.name / "kickback-init.envelope.json"
+            original = path.read_text()
+            supplies = ((1.2, "V"), (1200, "mV"))
+            samples = ((0.8, "V", False), (800, "mV", False), (600, "mV", True))
+            for br, (vdd, supply_unit), (sample, unit, qualified) in itertools.product(
+                    ("a", "b", "c"), supplies, samples):
+                name = f"{br}_dp_30n"
+                with self.subTest(branch=br, supply=supply_unit, sample=(sample, unit)):
+                    env = json.loads(original)
+                    corner = env["corners"][0]
+                    meas(corner, "vdd_meas").update(value=vdd, unit=supply_unit)
+                    meas(corner, name).update(value=sample, unit=unit)
+                    path.write_text(json.dumps(env))
+                    points = kb.coldinit_compare(series)["points"]
+                    q = next(p["qualification"] for p in points if p["condition"] == M050.name)
+                    self.assertEqual(q["qualified"], qualified, q["failed"])
+                    self.assertEqual(q["residue_verdict"], "MET" if qualified else None)
+                    if not qualified:
+                        self.assertEqual(q["failed"], [
+                            f"{name}: output already above half supply at the strobe"])
 
     def test_wrong_common_mode_withholds_only_the_affected_grade(self):
         with tempfile.TemporaryDirectory() as d:
