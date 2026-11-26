@@ -1,0 +1,293 @@
+{
+  "campaign": "20261121-issue497",
+  "control": {
+    "name": "ib10_sw20lat6 (archived)",
+    "archived": "20261115-issue92-bias",
+    "control_dirs": {
+      "screen": "20261115-issue92-bias/scr_ib10_sw20lat6",
+      "full": "20261115-issue92-bias/full_ib10_sw20lat6"
+    },
+    "cap_fF": 0.0,
+    "geometry": {
+      "XM1.w": "8u",
+      "XM2.w": "8u",
+      "XM3.w": "6u",
+      "XM4.w": "6u",
+      "XM5.w": "6u",
+      "XM6.w": "6u",
+      "XMSW.w": "20u"
+    },
+    "params": {
+      "dut_ib": "1e-05"
+    },
+    "metrics": {
+      "td01_worst": {
+        "available": true,
+        "value": 1.86214,
+        "point": "ss_-40c_1.08v",
+        "expected": 18,
+        "present": 18,
+        "valid": 18,
+        "required_gates": [
+          "dout_od01_first",
+          "dout_od01_end"
+        ],
+        "rejections": []
+      },
+      "noise_mean": {
+        "available": true,
+        "value": 1.0525913405635667,
+        "point": null,
+        "expected": 18,
+        "present": 18,
+        "valid": 18,
+        "required_gates": [],
+        "rejections": [],
+        "notes": [
+          "source: committed grading.json of the archived 45-point campaign, filtered to the 18 screening points"
+        ],
+        "noise_statistic": "mean of the per-point two-rung probit-slope sigma over the 18 screening points (tt/ff/ss x 1.08/1.32 V x -40/27/125 C), N = 80 trials per rung, injected density 36.27 nV/rtHz (the unchanged compliance bench) (re-derived from the archived 45-point grading, not re-run)"
+      }
+    },
+    "benches": {
+      "regeneration": {
+        "expected": 18,
+        "present": 18,
+        "missing_points": [],
+        "evidence_rejections": [],
+        "notes": []
+      }
+    }
+  },
+  "screen": [
+    {
+      "name": "cadd1f",
+      "dir": "scr_cadd1f",
+      "candidate": {
+        "name": "cadd1f",
+        "path": "sim/comparator-integration-capacitance/candidates/cadd1f.spice",
+        "sha256": "e7362662210fb4695785bb36294c23de03f4e8d347cae620b9cb2bdb25aa6281"
+      },
+      "candidate_problems": [],
+      "cap_fF": 1.0,
+      "geometry": {
+        "XM1.w": "8u",
+        "XM2.w": "8u",
+        "XM3.w": "6u",
+        "XM4.w": "6u",
+        "XM5.w": "6u",
+        "XM6.w": "6u",
+        "XMSW.w": "20u",
+        "dut_ib": "1e-05"
+      },
+      "geometry_problems": [],
+      "identity_problems": [],
+      "metrics": {
+        "td01_worst": {
+          "available": true,
+          "value": 1.88037,
+          "point": "ss_-40c_1.08v",
+          "expected": 18,
+          "present": 18,
+          "valid": 18,
+          "required_gates": [
+            "dout_od01_first",
+            "dout_od01_end"
+          ],
+          "rejections": []
+        },
+        "noise_mean": {
+          "available": true,
+          "value": 1.041142739441631,
+          "point": null,
+          "expected": 18,
+          "present": 18,
+          "valid": 18,
+          "required_gates": [],
+          "rejections": [],
+          "notes": [
+            "1368/1440 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated)."
+          ],
+          "noise_statistic": "mean of the per-point two-rung probit-slope sigma over the 18 screening points (tt/ff/ss x 1.08/1.32 V x -40/27/125 C), N = 80 trials per rung, injected density 36.27 nV/rtHz (the unchanged compliance bench)"
+        }
+      },
+      "benches": {
+        "regeneration": {
+          "expected": 18,
+          "present": 18,
+          "missing_points": [],
+          "evidence_rejections": [],
+          "notes": []
+        },
+        "transient_noise": {
+          "expected": 18,
+          "present": 18,
+          "missing_points": [],
+          "evidence_rejections": [],
+          "notes": []
+        }
+      },
+      "decision": {
+        "advance": false,
+        "decision": "eliminate",
+        "reasons": [
+          "screen mean 1.041 mV rms vs control 1.053 mV: deficit 1.09 % against the 5.00 % reduction 1.0 mV requires",
+          "worst t_d 1.88 ns <= 2"
+        ]
+      }
+    },
+    {
+      "name": "cadd2f",
+      "dir": "scr_cadd2f",
+      "candidate": {
+        "name": "cadd2f",
+        "path": "sim/comparator-integration-capacitance/candidates/cadd2f.spice",
+        "sha256": "b7782d6f7c2a9031d8b0c6a86ea9ee65b82cbaa0f50af51c6889a4bdbfeb6984"
+      },
+      "candidate_problems": [],
+      "cap_fF": 2.0,
+      "geometry": {
+        "XM1.w": "8u",
+        "XM2.w": "8u",
+        "XM3.w": "6u",
+        "XM4.w": "6u",
+        "XM5.w": "6u",
+        "XM6.w": "6u",
+        "XMSW.w": "20u",
+        "dut_ib": "1e-05"
+      },
+      "geometry_problems": [],
+      "identity_problems": [],
+      "metrics": {
+        "td01_worst": {
+          "available": true,
+          "value": 1.89881,
+          "point": "ss_-40c_1.08v",
+          "expected": 18,
+          "present": 18,
+          "valid": 18,
+          "required_gates": [
+            "dout_od01_first",
+            "dout_od01_end"
+          ],
+          "rejections": []
+        },
+        "noise_mean": {
+          "available": true,
+          "value": 1.0218390324344908,
+          "point": null,
+          "expected": 18,
+          "present": 18,
+          "valid": 18,
+          "required_gates": [],
+          "rejections": [],
+          "notes": [
+            "1264/1440 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated)."
+          ],
+          "noise_statistic": "mean of the per-point two-rung probit-slope sigma over the 18 screening points (tt/ff/ss x 1.08/1.32 V x -40/27/125 C), N = 80 trials per rung, injected density 36.27 nV/rtHz (the unchanged compliance bench)"
+        }
+      },
+      "benches": {
+        "regeneration": {
+          "expected": 18,
+          "present": 18,
+          "missing_points": [],
+          "evidence_rejections": [],
+          "notes": []
+        },
+        "transient_noise": {
+          "expected": 18,
+          "present": 18,
+          "missing_points": [],
+          "evidence_rejections": [],
+          "notes": []
+        }
+      },
+      "decision": {
+        "advance": false,
+        "decision": "eliminate",
+        "reasons": [
+          "screen mean 1.022 mV rms vs control 1.053 mV: deficit 2.92 % against the 5.00 % reduction 1.0 mV requires",
+          "worst t_d 1.899 ns <= 2"
+        ]
+      }
+    },
+    {
+      "name": "cadd4f",
+      "dir": "scr_cadd4f",
+      "candidate": {
+        "name": "cadd4f",
+        "path": "sim/comparator-integration-capacitance/candidates/cadd4f.spice",
+        "sha256": "f8a53301035e36cc060fd09985a79aaeb539088666b3855bd8aef63baac1f9e3"
+      },
+      "candidate_problems": [],
+      "cap_fF": 4.0,
+      "geometry": {
+        "XM1.w": "8u",
+        "XM2.w": "8u",
+        "XM3.w": "6u",
+        "XM4.w": "6u",
+        "XM5.w": "6u",
+        "XM6.w": "6u",
+        "XMSW.w": "20u",
+        "dut_ib": "1e-05"
+      },
+      "geometry_problems": [],
+      "identity_problems": [],
+      "metrics": {
+        "td01_worst": {
+          "available": true,
+          "value": 1.93635,
+          "point": "ss_-40c_1.08v",
+          "expected": 18,
+          "present": 18,
+          "valid": 18,
+          "required_gates": [
+            "dout_od01_first",
+            "dout_od01_end"
+          ],
+          "rejections": []
+        },
+        "noise_mean": {
+          "available": true,
+          "value": 1.0248670139572758,
+          "point": null,
+          "expected": 18,
+          "present": 18,
+          "valid": 18,
+          "required_gates": [],
+          "rejections": [],
+          "notes": [
+            "1360/1440 samples repeat a raw noise draw also seen at ANOTHER grid point (never within one point). Each point's estimate is valid and unbiased; the points are not mutually independent, so the grid mean's sampling error is wider than an independent-points estimate (bounded above by the per-point error if fully correlated)."
+          ],
+          "noise_statistic": "mean of the per-point two-rung probit-slope sigma over the 18 screening points (tt/ff/ss x 1.08/1.32 V x -40/27/125 C), N = 80 trials per rung, injected density 36.27 nV/rtHz (the unchanged compliance bench)"
+        }
+      },
+      "benches": {
+        "regeneration": {
+          "expected": 18,
+          "present": 18,
+          "missing_points": [],
+          "evidence_rejections": [],
+          "notes": []
+        },
+        "transient_noise": {
+          "expected": 18,
+          "present": 18,
+          "missing_points": [],
+          "evidence_rejections": [],
+          "notes": []
+        }
+      },
+      "decision": {
+        "advance": false,
+        "decision": "eliminate",
+        "reasons": [
+          "screen mean 1.025 mV rms vs control 1.053 mV: deficit 2.63 % against the 5.00 % reduction 1.0 mV requires",
+          "worst t_d 1.936 ns <= 2"
+        ]
+      }
+    }
+  ],
+  "full": []
+}

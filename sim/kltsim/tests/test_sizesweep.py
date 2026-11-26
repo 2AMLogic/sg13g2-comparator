@@ -7,8 +7,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from kltsim import build, grade, sizesweep
+from kltsim import build, cli, grade, sizesweep
 from kltsim.benches import KICKBACK, REGENERATION
 
 
@@ -727,5 +728,697 @@ def sim_row_no_target(rid, verdict):
             "target_verdict": verdict, "stretch_verdict": verdict}
 
 
+# --------------------------------------------------------------------------- #
+# issue #497: integration-node capacitance study (noise joins the screen, one
+# part per process; structural candidate binding)
+# --------------------------------------------------------------------------- #
+
+from kltsim.benches import TRANSIENT_NOISE  # noqa: E402
+
+CAP_GEOMETRY = {"XM1.w": "8u", "XM2.w": "8u", "XM3.w": "6u", "XM4.w": "6u",
+                "XM5.w": "6u", "XM6.w": "6u", "XMSW.w": "20u"}
+
+
+class CapScreenPlanningTests(unittest.TestCase):
+    """The noise bench's screening requests: one six-point part per process
+    (tt/ff/ss), union exactly the 18 screening points, once each, N = 80 per
+    rung preserved -- the fivefold duplication a request-only build produced
+    (issue #497 verified correction) can no longer be generated."""
+
+    def test_noise_screen_parts_cover_18_points_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            body_path, requests, files = sizesweep.plan_screen_inputs(
+                TRANSIENT_NOISE, out, geometry_overrides=CAP_GEOMETRY)
+            tags = sorted(p.name for p in requests)
+            self.assertEqual(tags, ["transient_noise.mos_ff.request.json",
+                                    "transient_noise.mos_ss.request.json",
+                                    "transient_noise.mos_tt.request.json"])
+            bodies = {p for p, _ in files if p.name.endswith(".body.spice")}
+            self.assertEqual(bodies, {body_path})  # one shared body
+            seen = []
+            for path, data in files:
+                if not path.name.endswith(".request.json"):
+                    continue
+                req = json.loads(data)
+                c = req["corners"]
+                self.assertEqual(len(c["process"]), 1, path.name)
+                self.assertEqual(c["supply_v"], {"vsup": [1.08, 1.32]})
+                self.assertEqual(c["temperature_c"], [-40, 27, 125])
+                self.assertEqual(req["monte_carlo"]["n"], 80)
+                self.assertEqual(req["netlist"], "transient_noise.body.spice")
+                for p in c["process"]:
+                    for v in c["supply_v"]["vsup"]:
+                        for t in c["temperature_c"]:
+                            seen.append((p, v, t))
+            self.assertEqual(len(seen), 18)
+            self.assertEqual(len(set(map(str, seen))), 18)  # each point ONCE
+            self.assertNotIn("remote", req)
+
+    def test_noise_screen_parts_pass_the_chain_check(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            _body, _reqs, files = sizesweep.plan_screen_inputs(
+                TRANSIENT_NOISE, out, geometry_overrides=CAP_GEOMETRY)
+            for path, data in files:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+            benches = grade.load_campaign(
+                out, corners=sizesweep.screen_corners_for,
+                bench_names=("transient_noise",))
+            ev = benches["transient_noise"]
+            self.assertEqual(ev.chain_problems, [], ev.chain_problems)
+
+    def test_offset_mc_screen_uses_the_benches_mismatch_sections(self):
+        from kltsim.benches import OFFSET_MC
+        with tempfile.TemporaryDirectory() as tmp:
+            _b, requests, files = sizesweep.plan_screen_inputs(OFFSET_MC, Path(tmp))
+        self.assertEqual(
+            sorted(p.name for p in requests),
+            [f"offset_mc.mos_{p}_mismatch.request.json" for p in ("ff", "ss", "tt")])
+        self.assertEqual(sorted(sizesweep.screen_part_tags(OFFSET_MC)),
+                         sorted(p.name[:-len(".request.json")] for p in requests))
+
+    def test_screen_part_tags_are_a_subset_of_the_benches_full_tags(self):
+        for bench in (TRANSIENT_NOISE, KICKBACK, REGENERATION):
+            self.assertTrue(set(sizesweep.screen_part_tags(bench))
+                            <= set(build.part_tags(bench)), bench.name)
+
+    def test_tiling_preflight_counts_duplicates(self):
+        real = sizesweep.screen_part_request
+
+        def whole_grid(bench, section, body_name=None):
+            return real(bench, section, body_name) | {
+                "corners": sizesweep.screen_corners(bench)}
+
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(sizesweep, "screen_part_request", whole_grid):
+            with self.assertRaises(build.BuildError):
+                sizesweep.plan_screen_inputs(TRANSIENT_NOISE, Path(tmp))
+
+    def test_run_reads_the_screen_tags_the_builder_wrote(self):
+        import argparse
+        from kltsim import cli
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            _b, _r, files = sizesweep.plan_screen_inputs(TRANSIENT_NOISE, out)
+            for path, data in files:
+                path.write_bytes(data)
+            seen = []
+            args = argparse.Namespace(bench="transient_noise", campaign=str(out),
+                                      part=None, skip_existing=False)
+            with mock.patch.object(cli, "_campaign_dir", return_value=out), \
+                    mock.patch.object(cli, "_submit_with_retry",
+                                      side_effect=lambda r, o, tag, a, **k: seen.append(tag) or 0):
+                self.assertEqual(cli.cmd_run(args), 0)
+            self.assertEqual(sorted(seen), sorted(sizesweep.screen_part_tags(TRANSIENT_NOISE)))
+
+    def test_incomplete_full_grid_and_explicit_parts(self):
+        from kltsim import cli
+        from kltsim.benches import OFFSET_MC, NOISE_FULL_BENCHES
+        for bench in (TRANSIENT_NOISE, OFFSET_MC, NOISE_FULL_BENCHES["tn_full_zero"]):
+            with self.subTest(bench=bench.name), tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp)
+                build.commit_inputs(build.plan_bench_inputs(bench, out, target="batch")[2])
+                tags = build.part_tags(bench)
+                fs = next(t for t in tags if ".mos_fs" in t)
+                sf = next(t for t in tags if ".mos_sf" in t)
+                (out / f"{fs}.request.json").unlink()
+                argv = ["run", "--campaign", tmp, "--bench", bench.name]
+                with mock.patch.object(cli, "_submit_with_retry", return_value=0) as submit:
+                    self.assertNotEqual(cli.main(argv), 0)
+                    self.assertNotEqual(cli.main(argv + ["--part", sf, "--part", fs]), 0)
+                    submit.assert_not_called()
+                    self.assertEqual(cli.main(argv + ["--part", sf]), 0)
+                    self.assertEqual([c.args[2] for c in submit.call_args_list], [sf])
+
+    def test_unavailable_screen_part_and_mixed_grids(self):
+        from kltsim import cli
+        bench = TRANSIENT_NOISE
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            build.commit_inputs(sizesweep.plan_screen_inputs(bench, out)[2])
+            argv = ["run", "--campaign", tmp, "--bench", bench.name]
+            with mock.patch.object(cli, "_submit_with_retry", return_value=0) as submit:
+                self.assertNotEqual(cli.main(argv + ["--part", "transient_noise.mos_fs"]), 0)
+                tag = "transient_noise.mos_tt"
+                full = dict(build.plan_bench_inputs(bench, out, target="batch")[2])
+                path = out / f"{tag}.request.json"
+                path.write_bytes(full[path])
+                self.assertNotEqual(cli.main(argv), 0)
+                submit.assert_not_called()
+
+    def test_unsplit_screen_bytes_unchanged(self):
+        # kickback/regeneration screens keep today's exact request bytes
+        # (plan + screen_request), so a rebuild of an archived screen is a
+        # byte-identical no-op
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            _b, _r, files = sizesweep.plan_screen_inputs(KICKBACK, out)
+            for path, data in files:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+            _b2, _r2, old_files = build.plan_bench_inputs(KICKBACK, out, target="batch")
+            old = {p.name: sizesweep.screen_request(d) if p.name.endswith(".request.json") else d
+                   for p, d in old_files}
+            new = {p.name: d for p, d in files}
+            self.assertEqual(old, new)
+
+
+def _cap_corner(bench, proc, supply, temp, sample=None, values=None):
+    section = proc
+    cid = f"{section}/{supply:.3f}V/{temp:g}C"
+    if sample is not None:
+        cid += f"/mc{sample}"
+    values = dict(values or {})
+    for name in bench.probes.get("supply", ()):
+        values.setdefault(name, supply)
+    if bench.probes.get("temperature"):
+        values.setdefault(bench.probes["temperature"], float(temp))
+    measurements = [{"name": m.name, "value": values.get(m.name, 1.0), "unit": m.unit,
+                     "status": "pass", "margin": None}
+                    for m in bench.measurements if m.name in values]
+    return {"corner_id": cid, "process": section,
+            "supply_v": {k: supply for k in bench.supply_keys},
+            "temperature_c": temp, "status": "pass", "diagnostics": [],
+            "monte_carlo": None if sample is None else {"sample_index": sample},
+            "measurements": measurements}
+
+
+def write_cap_screen(root: Path, name="cadd2f", cap="2f", *, geometry=None,
+                     candidate_name=None, mutate_noise=None, drop_draw_at=None,
+                     drop_point=None, wrong_geometry=None):
+    """Write scr_<name>/ holding the issue #497 screen pair: regeneration
+    (one request) + transient_noise (three per-process parts), each with a
+    self-consistent body/request/envelope/invocation chain."""
+    from kltsim import benches as benches_mod
+    geometry = geometry if geometry is not None else CAP_GEOMETRY
+    sub = root / f"scr_{name}"
+    sub.mkdir(parents=True)
+    params = {"dut_ib": "1e-05"}
+    cand_path = root / f"{candidate_name or name}.spice"
+    if not cand_path.is_file():
+        cand_path.write_text(build.compose_candidate_netlist(cap), encoding="utf-8")
+    candidate = (candidate_name or name, cand_path)
+    # -- regeneration: one screen request over the whole grid ----------------
+    bench = benches_mod.REGENERATION
+    body = build.compose_body(bench, build.BATCH_OSDI_DIR, param_overrides=params,
+                              geometry_overrides=geometry, candidate=candidate)
+    (sub / "regeneration.body.spice").write_text(body, encoding="utf-8")
+    req = build.compose_request(bench, "regeneration.body.spice", "batch")
+    req_bytes = sizesweep.screen_request((json.dumps(req, indent=2) + "\n").encode())
+    (sub / "regeneration.request.json").write_bytes(req_bytes)
+    corners = []
+    for p in sizesweep.SCREEN_PROCESSES:
+        for v in sizesweep.SCREEN_SUPPLIES_V:
+            for t in sizesweep.SCREEN_TEMPERATURES_C:
+                vals = {"vdd_meas": v, "vdda_meas": v, "temp_meas": float(t),
+                        "dout_od01_first": 1e-7, "dout_od01_end": 1.0,
+                        "td_od01_ns": 1.5, "td_od50_ns": 0.7, "tau_ps": 90.0,
+                        "p_avg_uw": 25.0, "p_avg": 25e-6}
+                corners.append(_cap_corner(bench, p, v, t, values=vals))
+    env = {"status": "pass", "corner_count": len(corners), "corners": corners,
+           "environment": {"netlist_source": "schematic"},
+           "provenance": {"input": {"content_hash":
+                                    "sha256:" + hashlib.sha256(body.encode()).hexdigest()}}}
+    _write_chain(sub, "regeneration", body, req_bytes, env)
+    # -- transient_noise: three per-process parts, N = 80 ---------------------
+    bench = benches_mod.TRANSIENT_NOISE
+    body = build.compose_body(bench, build.BATCH_OSDI_DIR, param_overrides=params,
+                              geometry_overrides=geometry, candidate=candidate)
+    (sub / "transient_noise.body.spice").write_text(body, encoding="utf-8")
+    _body, requests, _files = sizesweep.plan_screen_inputs(
+        bench, sub, param_overrides=params,
+        geometry_overrides=geometry, candidate=candidate)
+    for path, data in _files:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    for section in sizesweep.SCREEN_PROCESSES:
+        tag = f"transient_noise.{section}"
+        req_path = sub / f"{tag}.request.json"
+        req_bytes = req_path.read_bytes()
+        corners, by_corner = [], {"hit_plus": [], "hit_minus": [], "hit_zero": []}
+        draw = 0
+        for v in sizesweep.SCREEN_SUPPLIES_V:
+            for t in sizesweep.SCREEN_TEMPERATURES_C:
+                if drop_point == (section, v, t):
+                    continue
+                counts = {"hit_plus": 76.0, "hit_minus": 4.0, "hit_zero": 40.0}
+                if mutate_noise:
+                    counts.update(mutate_noise(section, v, t))
+                for k in range(80):
+                    draw += 1
+                    vals = {"vdd_meas": v, "temp_meas": float(t),
+                            "vn0_a": draw * 1e-6, "vn0_b": -draw * 1e-6,
+                            "vn1_a": draw * 2e-6,
+                            "res_zero": 0.5, "res_plus": 0.5, "res_minus": 0.5}
+                    if drop_draw_at == (section, v, t) and k == 3:
+                        vals.pop("vn0_a"), vals.pop("vn0_b"), vals.pop("vn1_a")
+                    for nm, ones in counts.items():
+                        vals[nm] = 1.0 if k < ones else 0.0
+                    corners.append(_cap_corner(bench, section, v, t, sample=k, values=vals))
+                base = corners[-1]["corner_id"].rsplit("/mc", 1)[0]
+                for nm, ones in counts.items():
+                    by_corner[nm].append({"corner_id": base, "n": 80, "errored": 0,
+                                          "mean": ones / 80, "stddev": None})
+        env = {"status": "pass", "corner_count": len(corners), "corners": corners,
+               "environment": {"netlist_source": "schematic"},
+               "provenance": {"input": {"content_hash":
+                                        "sha256:" + hashlib.sha256(body.encode()).hexdigest()}},
+               "measurements": [{"name": nm, "unit": "1",
+                                 "monte_carlo": {"by_corner": entries}}
+                                for nm, entries in by_corner.items()]}
+        _write_chain(sub, tag, body, req_bytes, env)
+    return sub
+
+
+def _write_chain(sub: Path, tag: str, body: str, req_bytes: bytes, env: dict):
+    env_bytes = (json.dumps(env, indent=2) + "\n").encode()
+    (sub / f"{tag}.envelope.json").write_bytes(env_bytes)
+    (sub / f"{tag}.invocation.json").write_text(json.dumps({
+        "tag": tag, "request_sha256": hashlib.sha256(req_bytes).hexdigest(),
+        "envelope_sha256": hashlib.sha256(env_bytes).hexdigest()}), encoding="utf-8")
+
+
+def replace_cap_body(sub, bench, old, new):
+    """Change the executable body and rebind every envelope and invocation to it."""
+    path = sub / f"{bench}.body.spice"
+    body = path.read_text()
+    assert old in body
+    body = body.replace(old, new)
+    path.write_text(body)
+    for envelope in sub.glob(f"{bench}.*envelope.json"):
+        tag = envelope.name.removesuffix(".envelope.json")
+        env = json.loads(envelope.read_bytes())
+        env["provenance"]["input"]["content_hash"] = "sha256:" + build.sha256_file(path)
+        _write_chain(sub, tag, body, (sub / f"{tag}.request.json").read_bytes(), env)
+
+
+class CapScreenReductionTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def reduce(self, **kw):
+        write_cap_screen(self.root, **kw)
+        rows = sizesweep.cap_screen(self.root)
+        self.assertEqual(len(rows), 1)
+        return rows[0]
+
+    def test_complete_screen_gives_both_statistics(self):
+        row = self.reduce()
+        self.assertEqual(row["candidate"]["name"], "cadd2f")
+        self.assertEqual(row["cap_fF"], 2.0)
+        self.assertEqual(row["geometry_problems"] + row["candidate_problems"]
+                         + row["identity_problems"], [])
+        noise = row["metrics"]["noise_mean"]
+        td01 = row["metrics"]["td01_worst"]
+        self.assertTrue(noise["available"] and td01["available"])
+        self.assertEqual((noise["valid"], noise["expected"]), (18, 18))
+        self.assertEqual((td01["valid"], td01["expected"]), (18, 18))
+        self.assertAlmostEqual(noise["value"], 2.0 / (grade.probit(0.95) - grade.probit(0.05)),
+                               places=6)
+        self.assertEqual(td01["value"], 1.5)
+        self.assertIn("noise_statistic", row["metrics"]["noise_mean"])  # labelled
+
+    def test_missing_draw_rejects_only_its_point(self):
+        row = self.reduce(drop_draw_at=("mos_tt", 1.08, -40))
+        noise = row["metrics"]["noise_mean"]
+        self.assertFalse(noise["available"])
+        self.assertEqual(noise["valid"], 17)
+        self.assertEqual(noise["present"], 18)
+        self.assertEqual(row["benches"]["transient_noise"]["missing_points"], [])
+        self.assertTrue(any("independence probe" in r for r in noise["rejections"]),
+                        noise["rejections"])
+
+    def test_missing_point_is_counted_not_averaged_over(self):
+        row = self.reduce(drop_point=("mos_ff", 1.32, 125))
+        noise = row["metrics"]["noise_mean"]
+        self.assertFalse(noise["available"])
+        self.assertEqual(noise["valid"], 17)
+        self.assertEqual((noise["present"], noise["expected"]), (17, 18))
+        bench = row["benches"]["transient_noise"]
+        self.assertEqual((bench["present"], bench["missing_points"]), (17, ["ff_125c_1.32v"]))
+        self.assertEqual(noise["missing_points"], bench["missing_points"])
+        self.assertTrue(any("no Monte-Carlo population" in r for r in noise["rejections"]))
+
+    def test_incomplete_screen_is_not_an_elimination(self):
+        row = self.reduce(drop_point=("mos_ff", 1.32, 125))
+        noise = row["metrics"]["noise_mean"]
+        self.assertIsNone(noise["value"])           # no partial mean as the statistic
+        self.assertIsNotNone(noise["partial_mean"])
+        self.assertTrue(noise["missing_points"])
+        self.assertEqual(row["decision"]["decision"], "incomplete")
+        self.assertFalse(row["decision"]["advance"])
+        result = {"campaign": "c", "control": sizesweep.cap_control(),
+                  "screen": [row], "full": []}
+        md = sizesweep.render_capacitance_markdown(result)
+        self.assertIn("Screen INCOMPLETE", md)
+        self.assertNotIn("No setting advanced", md)
+
+        from kltsim import cli
+        from contextlib import redirect_stdout
+        import io
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(cli.main(["capacitance", "--campaign", str(self.root)]), 1)
+        saved = json.loads((self.root / "capacitance.json").read_bytes())
+        self.assertEqual(saved["screen"][0]["decision"]["decision"], "incomplete")
+
+    def test_unregistered_candidate_does_not_advance(self):
+        row = self.reduce(name="unlisted-setting", cap="2f")
+        self.assertTrue(any("not registered" in r for r in
+                            row["benches"]["regeneration"]["evidence_rejections"]),
+                        row["benches"]["regeneration"]["evidence_rejections"])
+        self.assertNotEqual(row["decision"]["decision"], "advance")
+
+    def test_at_most_one_finalist(self):
+        def qualifying(name, noise):
+            return {"name": name, "cap_fF": 2.0,
+                    "metrics": {"noise_mean": {"value": noise}},
+                    "decision": {"advance": True, "decision": "advance", "reasons": []}}
+        rows = [qualifying("cadd4f", 0.9), qualifying("cadd2f", 0.8)]
+        sizesweep._select_finalist(rows)
+        self.assertEqual([r["decision"]["decision"] for r in rows],
+                         ["not-selected", "advance"])
+        self.assertEqual(sum(1 for r in rows if r["decision"]["advance"]), 1)
+
+    def test_substituted_candidate_setting_rejected(self):
+        # scr_cadd2f/ whose regeneration bench is a valid cadd4f body+chain
+        sub = write_cap_screen(self.root, name="cadd2f", cap="2f")
+        other = write_cap_screen(self.root, name="cadd4f", cap="4f")
+        for fname in ("regeneration.body.spice", "regeneration.envelope.json",
+                      "regeneration.invocation.json", "regeneration.request.json"):
+            (sub / fname).write_bytes((other / fname).read_bytes())
+        row = sizesweep.cap_screen(self.root)[0]
+        self.assertEqual(row["name"], "cadd2f")
+        self.assertTrue(any("expected 'cadd2f'" in p for p in row["candidate_problems"]),
+                        row["candidate_problems"])
+        # the substituted bench's own statistic is withheld (wrong setting)
+        self.assertFalse(row["metrics"]["td01_worst"]["available"])
+        self.assertTrue(any("expected 'cadd2f'" in r
+                            for r in row["benches"]["regeneration"]["evidence_rejections"]))
+
+    def test_wrong_candidate_identity_rejected(self):
+        # a scr_ dir whose name does not match the declared candidate
+        row = self.reduce(name="cadd2f", candidate_name="cadd4f", cap="4f")
+        self.assertTrue(row["candidate_problems"])
+        self.assertFalse(row["metrics"]["noise_mean"]["available"])
+
+    def test_non_control_geometry_rejected(self):
+        bad = dict(CAP_GEOMETRY)
+        bad["XM1.w"] = "9u"
+        row = self.reduce(geometry=bad)
+        self.assertTrue(any("archived control" in p for p in row["identity_problems"]),
+                        row["identity_problems"])
+        self.assertFalse(row["metrics"]["noise_mean"]["available"])
+
+    def test_changed_executable_settings_reject_rehashed_screen(self):
+        for bench, metric, old, new in (
+                ("regeneration", "td01_worst", ".param dut_ib='1e-05'", ".param dut_ib=2e-05"),
+                ("transient_noise", "noise_mean", ".param vn_na=5.735e-3", ".param vn_na=1.147e-2")):
+            with self.subTest(bench=bench):
+                sub = write_cap_screen(self.root / bench)
+                replace_cap_body(sub, bench, old, new)
+                row, = sizesweep.cap_screen(sub.parent)
+                self.assertEqual(row["decision"]["decision"], "incomplete")
+                self.assertIsNone(row["metrics"][metric]["value"])
+                self.assertTrue(row["benches"][bench]["evidence_rejections"])
+                if bench == "transient_noise":
+                    self.assertIsNone(row["metrics"][metric]["partial_mean"])
+
+    def test_inconsistent_candidate_references_cannot_advance(self):
+        sub = write_cap_screen(self.root)
+        reference = self.root / "cadd2f.spice"
+        copy = self.root / "other-reference.spice"
+        copy.write_bytes(reference.read_bytes())
+        replace_cap_body(sub, "regeneration", reference.name, copy.name)
+        row, = sizesweep.cap_screen(self.root)
+        self.assertEqual(row["decision"]["decision"], "incomplete")
+        self.assertIn("inconsistent candidate declaration", " ".join(row["candidate_problems"]))
+
+    def test_markdown_renders_screen_and_control(self):
+        write_cap_screen(self.root, "cadd2f", "2f")
+        result = {"campaign": "c", "control": sizesweep.cap_control(),
+                  "screen": sizesweep.cap_screen(self.root), "full": []}
+        md = sizesweep.render_capacitance_markdown(result)
+        self.assertIn("cadd2f", md)
+        self.assertIn("control", md)
+        json.dumps(grade.json_safe(result), allow_nan=False)
+
+
+class CapControlTests(unittest.TestCase):
+    """The archived zero-added-capacitance control, re-derived from the
+    committed #92 bias campaign (issue body, re-verified): 18-point noise
+    mean 1.05259 mV rms at 36.27 nV/rtHz, worst screen Row 3c 1.862 ns."""
+
+    def test_control_row_values(self):
+        control = sizesweep.cap_control()
+        noise = control["metrics"]["noise_mean"]
+        td01 = control["metrics"]["td01_worst"]
+        self.assertTrue(noise["available"] and td01["available"])
+        self.assertAlmostEqual(noise["value"], 1.0525913, places=6)
+        self.assertAlmostEqual(td01["value"], 1.86214, places=4)
+        self.assertEqual(td01["point"], "ss_-40c_1.08v")
+        self.assertEqual(control["archived"], "20261115-issue92-bias")
+        self.assertEqual(control["cap_fF"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class CapFullTests(unittest.TestCase):
+    """The issue #497 finalist table: candidate expectation threading and the
+    archived 8 um baseline's Target verdicts carried beside each row."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self.cand = self.root / "cadd2f.spice"
+        write_cap_screen(self.root)
+
+    def _full_dir(self, name="cadd2f"):
+        sub = self.root / f"full_{name}"
+        sub.mkdir()
+        return sub
+
+    def write_full_bodies(self, name="cadd2f"):
+        from kltsim.benches import BENCHES as all_benches
+        sub = self._full_dir(name)
+        for bname, bench in all_benches.items():
+            (sub / f"{bname}.body.spice").write_text(
+                build.compose_body(bench, build.BATCH_OSDI_DIR,
+                                   param_overrides={"dut_ib": "1e-05"},
+                                   geometry_overrides=CAP_GEOMETRY,
+                                   candidate=(name, self.root / f"{name}.spice")), encoding="utf-8")
+        return sub
+
+    def run_cap_full(self, graded_rows, name="cadd2f"):
+        self.write_full_bodies(name)
+        calls = []
+        orig = grade.grade_campaign
+
+        def fake_grade_campaign(campaign_dir, candidate=None):
+            calls.append((campaign_dir.name, candidate))
+            return {"rows": graded_rows, "t1_item5": {"all_target_rows_pass": True}}
+
+        grade.grade_campaign = fake_grade_campaign
+        self.addCleanup(setattr, grade, "grade_campaign", orig)
+        res = sizesweep.cap_full(self.root)
+        self.assertEqual(len(res), 1)
+        result = {"campaign": "c", "control": sizesweep.cap_control(),
+                  "screen": [], "full": res}
+        json.dumps(grade.json_safe(result), allow_nan=False)
+        return res[0], calls, sizesweep.render_capacitance_markdown(result)
+
+    def test_candidate_expectation_and_baseline_carry(self):
+        rows = [{"id": rid, "target_verdict": grade.PASS, "stretch_verdict": grade.PASS,
+                 "target_bound": 1.0, "stretch_bound": 1.0,
+                 "target": {"points_valid": 45, "points_expected": 45, "points_failing": 0,
+                            "worst": {"value": 0.5, "point": "tt_27c_1.2v"}},
+                 "stretch": {"points_failing": 0}}
+                for rid, _l, _u in sizesweep.FULL_ROWS]
+        r, calls, md = self.run_cap_full(rows)
+        self.assertEqual(r["candidate_status"], "available")
+        self.assertEqual(calls, [("full_cadd2f", "cadd2f")])  # named expectation threaded
+        # the archived 8 um baseline verdict is carried per row
+        self.assertTrue(all(c.get("baseline_w8_l034_target") is not None
+                            for c in r["rows"].values()))
+        self.assertIn("Row 2 (Target <= 1.0 mV rms)", md)
+
+    def test_baseline_broken_marked(self):
+        # rows the 8 um baseline PASSes but the finalist FAILs preserve nothing
+        def row(rid, verdict, value):
+            return {"id": rid, "target_verdict": verdict, "stretch_verdict": verdict,
+                    "target": {"points_valid": 45, "points_expected": 45,
+                               "points_failing": 0 if verdict == grade.PASS else 3,
+                               "worst": {"value": value, "point": "ff_125c_1.08v"}}}
+        rows = [row("3a", grade.PASS, 0.7), row("3c", grade.FAIL, 2.4)]
+        r, _calls, md = self.run_cap_full(rows)
+        self.assertEqual(r["rows"]["3a"]["preservation"], "held")
+        self.assertEqual(r["rows"]["3c"]["preservation"], "broken")
+        self.assertIn("baseline-broken", md)
+
+    def test_incomplete_row_is_unverified_not_broken(self):
+        incomplete = {"id": "3a", "target_verdict": grade.INCOMPLETE,
+                      "stretch_verdict": grade.INCOMPLETE,
+                      "target": {"points_valid": 30, "points_expected": 45,
+                                 "points_failing": 0,
+                                 "binding": {"value": 0.7, "point": "tt_27c_1.2v"}}}
+        empty = {"id": "3c", "target_verdict": grade.INCOMPLETE,
+                 "stretch_verdict": grade.INCOMPLETE,
+                 "target": {"points_valid": 0, "points_expected": 45}}
+        r, _calls, md = self.run_cap_full([incomplete, empty])
+        self.assertEqual(r["rows"]["3a"]["state"], "incomplete")
+        self.assertEqual(r["rows"]["3a"]["preservation"], "unverified")
+        self.assertEqual(r["rows"]["3c"]["preservation"], "unverified")
+        self.assertNotIn("baseline-broken", md)
+
+    def test_row2_summary_keeps_the_graders_grid_mean(self):
+        entry = {"id": "2", "target_verdict": grade.FAIL,
+                 "target": {"grid_mean": 1.0962763220245755, "points_valid": 45,
+                            "points_expected": 45}}
+        s = sizesweep._full_row_summary(entry)
+        self.assertEqual(s["value"], 1.0962763220245755)
+        self.assertEqual((s["points_valid"], s["points_expected"]), (45, 45))
+
+    def test_partial_row2_uses_only_the_ungraded_mean(self):
+        grading = (build.EXPERIMENT_DIR / "campaigns" / sizesweep.CONTROL_CAMPAIGN
+                   / sizesweep.CONTROL_FULL / "grading.json")
+        entry = next(r for r in json.loads(grading.read_bytes())["rows"] if r["id"] == "2")
+        details = entry["monte_carlo_per_point"]
+        details[0].update(sigma=None, problem="missing sigma")
+        column = grade.grade_grid_mean(details, {"max": 1.0})
+        entry.update(target=column, target_verdict=column["verdict"])
+        r, _, md = self.run_cap_full([entry])
+        for cell in (r["rows"]["2"], r["grading_verdicts"]["row2"]):
+            self.assertIsNone(cell["value"])
+            self.assertEqual(cell["partial_mean_ungraded"], column["partial_mean_ungraded"])
+        self.assertIsNone(r["rows"]["2"]["at"])
+        self.assertIn("44/45", md)
+        self.assertIn("partial mean (ungraded)", md)
+        self.assertNotIn(f"{column['range']['max']['value']:.4g}", md)
+
+    def test_only_the_screen_winner_can_be_graded(self):
+        write_cap_screen(self.root, "cadd1f", "1f")
+        self.write_full_bodies("cadd1f")
+        self.write_full_bodies("cadd2f")
+        with mock.patch.object(cli, "CAMPAIGNS_DIR", self.root.parent), \
+                mock.patch("builtins.print"), \
+                mock.patch.object(grade, "grade_campaign", wraps=grade.grade_campaign) as grader:
+            rc = cli.main(["capacitance", "--campaign", self.root.name])
+        self.assertEqual(rc, 1)
+        grader.assert_called_once_with(self.root / "full_cadd1f", candidate="cadd1f")
+        report = json.loads((self.root / "capacitance.json").read_bytes())
+        winner, other = report["full"]
+        self.assertEqual(winner["candidate_status"], "available")
+        self.assertEqual(other["candidate_status"], "rejected")
+        self.assertIn("full_cadd2f", other["rejection_reasons"][0])
+        self.assertIn(other["rejection_reasons"][0], (self.root / "capacitance.md").read_text())
+
+    def test_full_without_a_screen_is_rejected(self):
+        full = self.write_full_bodies()
+        orphan_campaign = self.root / "orphan"
+        orphan_campaign.mkdir()
+        full.rename(orphan_campaign / full.name)
+        with mock.patch.object(grade, "grade_campaign") as grader:
+            row, = sizesweep.cap_full(orphan_campaign)
+        grader.assert_not_called()
+        self.assertEqual(row["candidate_status"], "rejected")
+        self.assertIn("no finalist", " ".join(row["rejection_reasons"]))
+
+    def test_changed_executable_finalist_settings_are_rejected_before_grading(self):
+        sub = self.write_full_bodies()
+        for bench, old, new in (
+                ("regeneration", ".param dut_ib='1e-05'", ".param dut_ib=2e-05"),
+                ("transient_noise", ".param vn_na=5.735e-3", ".param vn_na=1.147e-2")):
+            with self.subTest(bench=bench):
+                replace_cap_body(sub, bench, old, new)
+                with mock.patch.object(grade, "grade_campaign") as grader:
+                    row, = sizesweep.cap_full(self.root)
+                grader.assert_not_called()
+                self.assertEqual(row["candidate_status"], "rejected")
+                self.assertIn(bench, " ".join(row["rejection_reasons"]))
+                replace_cap_body(sub, bench, new, old)
+
+    def test_finalist_without_envelopes_retains_real_grader_diagnostics(self):
+        sub = self.write_full_bodies()
+        entries = {r["id"]: r for r in grade.grade_campaign(sub, candidate="cadd2f")["rows"]}
+        result = {"campaign": "c", "full": sizesweep.cap_full(self.root)}
+        rows = result["full"][0]["rows"]
+        self.assertEqual(rows["4c"]["state"], "incomplete")
+        self.assertEqual(rows["4c"]["report_verdict"], entries["4c"]["report_verdict"])
+        self.assertEqual(rows["5a"]["benches_fully_covered"], [])
+        self.assertEqual(len(rows["5a"]["coverage_problems"]), 4)
+        self.assertEqual(rows["5a"]["coverage_problems"], entries["5a"]["coverage_problems"])
+        md = sizesweep.render_capacitance_markdown(result)
+        self.assertIn("reporting requirement: INCOMPLETE", md)
+        for reason in entries["5a"]["coverage_problems"]:
+            self.assertIn(reason, md)
+
+    def test_completed_reporting_and_coverage_rows_from_archived_grade(self):
+        baseline = (build.EXPERIMENT_DIR / "campaigns" / sizesweep.BASELINE_CAMPAIGN
+                    / sizesweep.BASELINE_FULL / "grading.json")
+        entries = json.loads(baseline.read_bytes())["rows"]
+        finalist, _, md = self.run_cap_full(entries)
+        self.assertEqual(finalist["rows"]["4c"]["report_verdict"], grade.REPORTED)
+        self.assertIn("reporting requirement: REPORTED", md)
+        covered = next(r for r in entries if r["id"] == "5a")["benches_fully_covered"]
+        self.assertEqual(finalist["rows"]["5a"]["benches_fully_covered"], covered)
+        self.assertIn("covered: " + ", ".join(covered), md)
+
+    def test_table_includes_reporting_and_coverage_rows(self):
+        ids = [i for i, _l, _u in sizesweep._table_rows()]
+        self.assertIn("4c", ids)
+        self.assertIn("5a", ids)
+        r, _calls, md = self.run_cap_full([])
+        self.assertIn("4c", r["rows"])
+        self.assertIn("5a", r["rows"])
+        self.assertIn("5a grid coverage", md)
+
+    def test_finalist_with_other_geometry_rejected_before_grading(self):
+        from kltsim.benches import BENCHES as all_benches
+        sub = self._full_dir("cadd2f")
+        bad = dict(CAP_GEOMETRY)
+        bad["XM1.w"] = "9u"
+        for bname, bench in all_benches.items():
+            (sub / f"{bname}.body.spice").write_text(
+                build.compose_body(bench, build.BATCH_OSDI_DIR,
+                                   param_overrides={"dut_ib": "1e-05"},
+                                   geometry_overrides=bad,
+                                   candidate=("cadd2f", self.cand)), encoding="utf-8")
+        called = []
+        orig = grade.grade_campaign
+        grade.grade_campaign = lambda *a, **k: called.append(1) or {"rows": []}
+        self.addCleanup(setattr, grade, "grade_campaign", orig)
+        r = sizesweep.cap_full(self.root)[0]
+        self.assertEqual(called, [])
+        self.assertEqual(r["candidate_status"], "rejected")
+        self.assertTrue(any("archived control identity" in x for x in r["rejection_reasons"]))
+
+    def test_wrong_candidate_name_rejected_before_grading(self):
+        sub = self.write_full_bodies()
+        replace_cap_body(sub, "regeneration", "name=cadd2f ", "name=cadd4f ")
+        with mock.patch.object(grade, "grade_campaign") as grader:
+            r, = sizesweep.cap_full(self.root)
+        grader.assert_not_called()
+        self.assertEqual(r["candidate_status"], "rejected")
+        self.assertIn("inconsistent candidate declaration", " ".join(r["rejection_reasons"]))
+        self.assertEqual(r["rows"]["3c"]["state"], "rejected")
+
+
+
+
+class GradeCliCandidateTests(unittest.TestCase):
+    def test_offset_n_with_candidate_is_rejected(self):
+        import argparse
+        import contextlib
+        import io
+        from kltsim import cli
+        args = argparse.Namespace(campaign="x", offset_n=100, candidate="cadd2f")
+        with mock.patch.object(cli, "_campaign_dir", return_value=Path("/nonexistent")), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(cli.cmd_grade(args), 2)
+        self.assertIn("--offset-n", err.getvalue())

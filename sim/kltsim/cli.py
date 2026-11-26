@@ -168,6 +168,14 @@ def cmd_build(args) -> int:
             return 2
     overrides = _parse_overrides(args.dut_param)
     geometry = build_mod.parse_geometry(getattr(args, "geometry", None)) or None
+    candidate = None
+    if getattr(args, "candidate", None):
+        try:
+            cand_name, cand_path, _ = build_mod.load_candidate(args.candidate)
+        except build_mod.BuildError as exc:
+            print(f"build: {exc}", file=sys.stderr)
+            return 2
+        candidate = (cand_name, cand_path)
     # Compose EVERY selected bench's inputs before writing anything, then
     # commit them append-only: a conflict in any bench changes no file.
     planned: list[tuple[Path, bytes]] = []
@@ -175,12 +183,23 @@ def cmd_build(args) -> int:
         bench = benches_mod.offset_mc_with_n(offset_n) if name == "offset_mc" else ALL_BENCHES[name]
         if args.bias_probes and name == "regeneration":
             bench = benches_mod.regeneration_with_bias_probes(bench)
-        planned += build_mod.plan_bench_inputs(
+        if getattr(args, "screen", False) and bench.split_by_process:
+            # issue #497: a process-split bench's screen parts stay split --
+            # one six-point part per screening process section, so the parts
+            # tile the 18-point grid exactly once (a request-only rewrite of
+            # the five full-grid parts duplicated every point five times).
+            planned += sizesweep_mod.plan_screen_inputs(
+                bench, out_dir, param_overrides=overrides or None,
+                geometry_overrides=geometry, candidate=candidate)[2]
+            continue
+        files = build_mod.plan_bench_inputs(
             bench, out_dir, target="batch", param_overrides=overrides or None,
-            geometry_overrides=geometry)[2]
-    if getattr(args, "screen", False):
-        planned = [(path, sizesweep_mod.screen_request(data) if path.name.endswith(".request.json") else data)
-                   for path, data in planned]
+            geometry_overrides=geometry, candidate=candidate)[2]
+        if getattr(args, "screen", False):
+            files = [(path, sizesweep_mod.screen_request(data)
+                      if path.name.endswith(".request.json") else data)
+                     for path, data in files]
+        planned += files
     return commit_build("build", planned)
 
 
@@ -538,18 +557,55 @@ def _submit(request_path: Path, out_dir: Path, tag: str, args,
     return 0
 
 
+def _run_parts(bench, out_dir: Path, requested: list[str] | None) -> list[str]:
+    """Preflight the selected requests before the first batch submission."""
+    tags = build_mod.part_tags(bench)
+    if bench.split_by_process:
+        screen_tags = sizesweep_mod.screen_part_tags(bench)
+        modes = set()
+        for tag in tags:
+            path = out_dir / f"{tag}.request.json"
+            if not path.is_file():
+                continue
+            try:
+                request = json.loads(path.read_bytes())
+            except ValueError as exc:
+                raise ValueError(f"{path}: invalid request JSON") from exc
+            corners = request.get("corners") if isinstance(request, dict) else None
+            if tag in screen_tags and corners == sizesweep_mod.screen_corners_for(bench, tag):
+                modes.add("screen")
+            elif corners == grade_mod._expected_request(bench, tag)["corners"]:
+                modes.add("full")
+            else:
+                raise ValueError(f"{path}: unexpected grid for {tag}")
+        if len(modes) > 1:
+            raise ValueError(f"{bench.name}: mixed screen and full-grid requests")
+        if modes == {"screen"}:
+            tags = screen_tags
+
+    if requested:
+        unavailable = set(requested).difference(tags)
+        if unavailable:
+            raise ValueError("unavailable request part(s): " + ", ".join(sorted(unavailable)))
+        tags = [tag for tag in tags if tag in requested]
+    for tag in tags:
+        path = out_dir / f"{tag}.request.json"
+        if not path.is_file():
+            raise ValueError(f"no request at {path}; run `build` first")
+    return tags
+
+
 def cmd_run(args) -> int:
     out_dir = _campaign_dir(args.campaign)
     bench = ALL_BENCHES[args.bench]
-    tags = build_mod.part_tags(bench)
-    if args.part:
-        tags = [tag for tag in tags if tag in args.part]
+    try:
+        tags = _run_parts(bench, out_dir, args.part)
+    except (ValueError, OSError) as exc:
+        print(f"run: {exc}", file=sys.stderr)
+        return 1
     rc = 0
     for tag in tags:
         request_path = out_dir / f"{tag}.request.json"
-        if not request_path.is_file():
-            print(f"no request at {request_path}; run `build` first", file=sys.stderr)
-            return 1
         if (out_dir / f"{tag}.envelope.json").exists() and args.skip_existing:
             print(f"{tag}: envelope present, skipped", file=sys.stderr)
             continue
@@ -700,7 +756,23 @@ def cmd_grade(args) -> int:
         except ValueError as exc:
             print(f"grade: {exc}", file=sys.stderr)
             return 2
-    result = declared_n_mod.grade_campaign(out_dir, offset_n)
+    candidate = getattr(args, "candidate", None)
+    if candidate is not None:
+        if offset_n is not None:
+            print("grade: --offset-n cannot be combined with --candidate (the candidate "
+                  "study is graded at the committed grid; a declared N would be ignored)",
+                  file=sys.stderr)
+            return 2
+        try:
+            build_mod.load_candidate(candidate)
+        except build_mod.BuildError as exc:
+            print(f"grade: {exc}", file=sys.stderr)
+            return 2
+        # a named setting's benches must declare exactly that candidate
+        # (issue #497); the candidate study is not a declared-N campaign
+        result = grade_mod.grade_campaign(out_dir, candidate=candidate)
+    else:
+        result = declared_n_mod.grade_campaign(out_dir, offset_n)
     rc = publish_report_pair("grade", args, out_dir, "grading", result,
                              grade_mod.render_markdown(result), "campaign")
     if rc == 0 and not getattr(args, "check", False):
@@ -764,6 +836,22 @@ def cmd_sizesweep(args) -> int:
     return 0 if result["screen"] or result["full"] else 1
 
 
+def cmd_capacitance(args) -> int:
+    """The issue #497 integration-node capacitance study report: archived
+    control + candidate screens (+ full finalists), append-only beside the
+    campaign like ``sizesweep``."""
+    try:
+        result = sizesweep_mod.cap_run(args.campaign, CAMPAIGNS_DIR, args.report_name)
+    except FileExistsError as exc:
+        print(f"capacitance: {exc}", file=sys.stderr)
+        return 1
+    print((CAMPAIGNS_DIR / args.campaign / f"{args.report_name}.md").read_text(encoding="utf-8"))
+    if (any(row["decision"]["decision"] == "incomplete" for row in result["screen"])
+            or any(row["candidate_status"] == "rejected" for row in result["full"])):
+        return 1
+    return 0 if result["screen"] or result["full"] else 1
+
+
 def cmd_loadwidth_build(args) -> int:
     """Issue #498: append-only write of every declared candidate's scr_
     inputs (kickback + regeneration screens via the standard screening
@@ -802,8 +890,14 @@ def main(argv: list[str] | None = None) -> int:
                    help="override a sim/dut.json param in the emitted body only (issue #80 sweep)")
     b.add_argument("--geometry", action="append", metavar="INST.FIELD=VALUE",
                    help="override a MOS w/l in the inlined DUT body only (issue #92 sizing study)")
+    b.add_argument("--candidate", metavar="NAME",
+                   help="inline this named structural candidate netlist (issue #497 "
+                        "integration-capacitance study) as the DUT instead of the "
+                        "schematic; geometry overrides still apply on top")
     b.add_argument("--screen", action="store_true",
-                   help="reduced screening grid (tt/ff/ss x 1.08/1.32 V x -40/27/125 C), issue #92")
+                   help="reduced screening grid (tt/ff/ss x 1.08/1.32 V x -40/27/125 C), issue #92; "
+                        "a process-split bench keeps its split (one 6-point part per "
+                        "process, issue #497)")
     b.add_argument("--bias-probes", action="store_true",
                    help="append the mirror/headroom probes to the regeneration bench")
     b.add_argument("--offset-n", type=int, metavar="N",
@@ -879,6 +973,13 @@ def main(argv: list[str] | None = None) -> int:
                     help="output stem; an existing different report is never overwritten")
     sz.set_defaults(func=cmd_sizesweep)
 
+    cap = sub.add_parser("capacitance",
+                         help="tabulate the integration-node capacitance study (issue #497)")
+    cap.add_argument("--campaign", required=True)
+    cap.add_argument("--report-name", default="capacitance",
+                     help="output stem; an existing different report is never overwritten")
+    cap.set_defaults(func=cmd_capacitance)
+
     lwb = sub.add_parser("loadwidth-build",
                          help="write the issue #498 PMOS load-width screen inputs (scr_* dirs)")
     lwb.add_argument("--campaign", required=True)
@@ -901,6 +1002,9 @@ def main(argv: list[str] | None = None) -> int:
     g.add_argument("--offset-n", type=int, metavar="N",
                    help="declared offset_mc draws per PVT point of a non-historical campaign "
                         "(issue #167); the saved requests must carry exactly this N")
+    g.add_argument("--candidate", metavar="NAME",
+                   help="the named issue #497 candidate setting this campaign holds; every "
+                        "bench body must declare exactly it (structural DUT binding)")
     add_report_pair_args(g, "grading", "campaign")
     g.set_defaults(func=cmd_grade)
 
