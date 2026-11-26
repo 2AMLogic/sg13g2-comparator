@@ -1,12 +1,11 @@
 # Work plan
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-24T23:27:50Z (snapshot; compare against live labels)_
+_Generated: 2026-11-25T23:01:56Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs with an active hold (`loom:blocked` or `loom:operator`).
 
-- **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
 - **#490**: spec: draft DR-0033 input-pair kickback adoption record (unratified, held for operator)
 
 ## Very Important
@@ -25,7 +24,7 @@ _None._
 
 Human-approved issues (`loom:issue`) ready for implementation — excluding held (`loom:blocked`/`loom:operator`/`loom:frozen`), `loom:building`, and issues closed by an open `loom:pr` PR (listed under Approved).
 
-_None._
+- **#160**: Draft decision record: input common-mode range row for the ratified spec — Doctor is addressing requested changes on PR #166.
 
 ## In Progress
 
@@ -44,7 +43,6 @@ PRs waiting on Judge (`loom:review-requested`).
 
 PRs that passed Judge review (`loom:pr`).
 
-- **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified) — closes #160
 - **#490**: spec: draft DR-0033 input-pair kickback adoption record (unratified, held for operator)
 
 ## Proposed
@@ -69,13 +67,13 @@ _None._
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 2 |
+| Operator merge-risk holds | 1 |
 | Very important | 0 |
 | Important | 1 |
-| Ready (`loom:issue`) | 0 |
+| Ready (`loom:issue`) | 1 |
 | In Progress (`loom:building`) | 2 |
 | PRs awaiting review | 1 |
-| Approved PRs awaiting merge | 2 |
+| Approved PRs awaiting merge | 1 |
 | Curated | 5 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
