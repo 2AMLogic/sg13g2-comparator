@@ -604,31 +604,35 @@ PROBE_ARMS_415 = ("repro", "obs", "optdc", "icdc")
 # INITIALIZATION PHASE instead of solver hints:
 #
 #   vclti clti 0 pulse(1 0 25n 100p 100p 1 2)      (one release control)
-#   Binit_bpp bpp 0 i = 'v(clti)*0.01*(v(bsp)-v(bpp))'   (and bpn/cpp/cpn)
-#   Sinit_outa douta 0 clti 0 kbinit_sw           (and doutb/doutc)
+#   Sinit_bpp bpp bsp clti 0 kbinit_sw             (and bpn/cpp/cpn: the pin
+#   is bridged to its own ideal source during init, bypassing rfloat)
+#   Sinit_outa douta 0 clti 0 kbinit_sw            (and doutb/doutc)
 #   .model kbinit_sw sw ron=200 roff=1e12 von=0.6 voff=0.4
 #
 # During [0, 25 ns) the drive pins the four floating pins at the analytic DC
 # values their own 1 GOhm / 1 pF network would deliver (v(bsp), v(bsn),
 # v(csp), v(csn) = cm +/- dv/2) and holds all three non-inverting latch
 # outputs at the WRONG-POLARITY LOW rail (0 V, the one supply-independent
-# rail), the state the rejects already hold on their failing branch. The pin
-# drive is a Thevenin source (behavioural current source, 100 Ohm) gated by
-# v(clti); it is released by multiplication -- from 25.1 ns on its current is
-# IDENTICALLY zero (a 0 A current source is an open circuit, no residual
-# conductance), so the measured input network is exactly the #165 network.
-# The output drive is a voltage-controlled switch (a linear stamp; the
-# latch-output nodes are ~20 fF, far too small for a self-referencing current
-# source at any gain that could win against the latch), whose ROFF = 1e12 Ohm
-# after release is electrically invisible on nodes the latch itself drives at
-# microamp scale (12 pA at 1.2 V) and is NOT part of the measured input
-# network. The release happens before the 29 ns baseline (bd0/cd0) and stays
-# released through evaluation (30 ns strobe, 55 ns end); the realized control
-# voltage is re-read from the run itself (init_ctl_1n / init_ctl_29n), never
-# assumed. No arm is forced toward the expected answer: a 55 ns gate pass
-# requires a genuine post-strobe decision from a stated wrong-polarity start
-# with the full differential applied, and the initialization and
-# qualification rules are identical on the edges and the controls.
+# rail), the state the rejects already hold on their failing branch. Every
+# drive is a voltage-controlled switch -- a LINEAR stamp, no solver-feedback
+# loop: the first fleet attempt drove the pins with self-referencing
+# behavioural current sources (Thevenin, 100 Ohm) and ngspice collapsed the
+# timestep on the input pair's tail node at every ss/-40 point (branches B/C
+# only -- the branches whose pins were driven), which a linear conductance
+# cannot do. After release each switch is ROFF = 1e12 Ohm: on the latch
+# outputs it is electrically invisible (12 pA at 1.2 V against the latch's
+# microamp drive), and in parallel with the measured network's 1e9 Ohm
+# rfloat it changes the source conductance by 0.1% -- over the 25 ns
+# measurement window that advances the 1 ms pin relaxation by 2.5e-5 of a
+# time constant, far below the .meas print resolution (disclosed here and in
+# the series summary). The release happens before the 29 ns baseline
+# (bd0/cd0) and stays released through evaluation (30 ns strobe, 55 ns end);
+# the realized control voltage is re-read from the run itself (init_ctl_1n /
+# init_ctl_29n), never assumed. No arm is forced toward the expected answer:
+# a 55 ns gate pass requires a genuine post-strobe decision from a stated
+# wrong-polarity start with the full differential applied, and the
+# initialization and qualification rules are identical on the edges and the
+# controls.
 
 COLD_ISSUE = 552
 #: Series-name token that routes a series to this supplement: requests,
@@ -642,20 +646,26 @@ PROBE_ARMS_552 = ("init",)
 #: (pulse width 1 s); 25.1 ns < 29 ns baseline < 30 ns strobe.
 INIT_RELEASE_NS = 25.0
 INIT_RELEASE_RAMP_PS = 100
-#: The pin drive's Thevenin conductance (100 Ohm). Basis: 100 Ohm against the
-#: 1 pF floating node settles in ~0.5 ns (5 tau), pins the DC value exactly,
-#: and keeps G*dt/C <= 0.005 at the tran's 5 ps max step -- ngspice's
-#: behavioural current sources collapse the timestep on self-referencing
-#: drives of small capacitors at larger G*dt/C (verified against the pinned
-#: ngspice-47 in a stdlib toy circuit; the latch-output nodes at ~20 fF would
-#: need G <= 4e-4, too weak to win against the latch, hence the switch).
-INIT_PIN_DRIVE_S = 0.01
-#: The output drive: a voltage-controlled switch (linear stamp, no
-#: self-referencing loop) to the 0 V rail; ROFF = 1e12 Ohm is electrically
-#: invisible on nodes the latch drives at microamp scale and is not part of
-#: the measured input network.
+#: The drive element: a voltage-controlled switch (a LINEAR two-terminal
+#: stamp, no solver-feedback loop). The first fleet attempt drove the pins
+#: with self-referencing behavioural current sources (Thevenin, 100 Ohm --
+#: stable against a linear 1 pF load in an ngspice-47 toy) and ngspice
+#: collapsed the timestep on the input pair's tail node at every ss/-40
+#: point, on exactly the driven branches; a linear conductance cannot do
+#: that, so every drive is a switch. The pin drives bridge each floating pin
+#: to its own ideal source (v(bsp)/v(bsn)/v(csp)/v(csn)), bypassing rfloat
+#: during initialization; the output drives switch to the 0 V rail.
 INIT_SW_MODEL = "kbinit_sw"
 INIT_SW_CARD = ".model kbinit_sw sw ron=200 roff=1e12 von=0.6 voff=0.4"
+#: After release ROFF = 1e12 Ohm sits in parallel with the measured network's
+#: 1e9 Ohm rfloat (a 0.1% source-conductance change; over the 25 ns
+#: measurement window the 1 ms pin relaxation advances 2.5e-5 of a time
+#: constant -- far below the .meas print resolution) and on the latch
+#: outputs it is electrically invisible (12 pA at 1.2 V).
+INIT_SW_ROFF_NOTE = (
+    "ROFF=1e12 Ohm: 0.1% of the measured network's rfloat conductance, "
+    "2.5e-5 of the 1 ms pin relaxation over the 25 ns window; invisible "
+    "(12 pA at 1.2 V) on the latch outputs")
 #: Qualification criteria, stated before grading (see coldinit_qualify). The
 #: applied-stimulus tolerance: the #415 clean controls delivered 99.93-99.96 %
 #: of the programmed differential with the same 1 GOhm / 1 pF network, while
@@ -689,17 +699,19 @@ PROBE_ARM_NOTES = {
             "analytic DC values and .ic of every branch output at the LOW (dout=0) "
             "state -- the wrong polarity for the programmed differential.",
     "init": "arm init (#552): arm obs+xing + a bench-only initialization phase -- "
-            "the four floating input pins are pinned at their analytic DC values "
-            "(v(bsp)/v(bsn)/v(csp)/v(csn)) by Thevenin drives (behavioural current "
-            f"sources, {1 / INIT_PIN_DRIVE_S:.0f} Ohm) gated by v(clti), and douta/"
-            "doutb/doutc are held at the wrong-polarity LOW rail by switches to 0 V "
-            f"during [0, {INIT_RELEASE_NS:g} ns). Release: v(clti) falls "
+            "the four floating input pins are bridged to their own ideal sources "
+            "(v(bsp)/v(bsn)/v(csp)/v(csn) = cm +/- dv/2) and douta/doutb/doutc are "
+            "switched to the wrong-polarity LOW rail (0 V) during [0, "
+            f"{INIT_RELEASE_NS:g} ns); every drive is a voltage-controlled switch "
+            "(a linear stamp; the first fleet attempt's behavioural current-source "
+            "pin drives collapsed the timestep on the input pair's tail node at "
+            "every ss/-40 point). Release: v(clti) falls "
             f"{INIT_RELEASE_NS:g} -> {INIT_RELEASE_NS + INIT_RELEASE_RAMP_PS * 1e-3:g} ns "
-            "(100 ps edge, never returns); a released pin drive is a 0 A current "
-            "source (an open circuit), and the switches' 1e12 Ohm off-state on "
-            "latch outputs is electrically invisible, so the 29 ns baseline and the "
-            "whole evaluation window run on the exact #165 input network. Release is "
-            "re-read from the run (init_ctl_1n / init_ctl_29n), never assumed.",
+            "(100 ps edge, never returns); each switch then holds only its "
+            f"{INIT_SW_ROFF_NOTE}, so the 29 ns baseline and the whole evaluation "
+            "window run on the #165 input network for all measurement purposes. "
+            "Release is re-read from the run (init_ctl_1n / init_ctl_29n), never "
+            "assumed.",
 }
 
 
@@ -831,43 +843,39 @@ def probe_body_supplement(cond: Condition, arm: str) -> str:
             "* Appended verbatim after the issue #165 body; nothing else changed. The\n"
             "* drive establishes, in the bench (not in solver hints), the pre-strobe\n"
             "* state the failing DC solve at the cold edges cannot: the four floating\n"
-            "* pins are pinned to the analytic DC values their own 1 GOhm / 1 pF network\n"
-            "* would deliver (v(bsp), v(bsn), v(csp), v(csn) = v(cm) +/- dv/2), and all\n"
-            "* three non-inverting latch outputs are held at the wrong-polarity LOW\n"
-            "* rail (0 V, the one supply-independent rail).\n"
+            "* pins are bridged to the analytic DC values their own 1 GOhm / 1 pF\n"
+            "* network would deliver (v(bsp), v(bsn), v(csp), v(csn) = v(cm) +/- dv/2),\n"
+            "* and all three non-inverting latch outputs are held at the wrong-polarity\n"
+            "* LOW rail (0 V, the one supply-independent rail).\n"
             "*\n"
-            "* PIN DRIVE: a Thevenin source (behavioural current source,\n"
-            f"* {1 / INIT_PIN_DRIVE_S:.0f} Ohm) gated by v(clti). Release is by multiplication:\n"
-            f"* v(clti) falls {INIT_RELEASE_NS:g} ns -> "
+            "* EVERY DRIVE IS A VOLTAGE-CONTROLLED SWITCH (a linear two-terminal\n"
+            "* stamp, no solver-feedback loop). The first fleet attempt drove the\n"
+            "* pins with self-referencing behavioural current sources (Thevenin,\n"
+            "* 100 Ohm) and ngspice collapsed the timestep on the input pair's tail\n"
+            "* node at every ss/-40 point, on exactly the driven branches; a linear\n"
+            "* conductance cannot do that.\n"
+            "*\n"
+            f"* RELEASE: v(clti) falls {INIT_RELEASE_NS:g} ns -> "
             f"{INIT_RELEASE_NS + INIT_RELEASE_RAMP_PS * 1e-3:g} ns (100 ps edge) and never\n"
-            "* returns (pulse width 1 s), and from then on the drive current is\n"
-            "* IDENTICALLY zero -- a 0 A current source is an open circuit, no residual\n"
-            "* conductance -- so the measured 1 GOhm / 1 pF input network is exactly the\n"
-            f"* issue #165 one from {INIT_RELEASE_NS + INIT_RELEASE_RAMP_PS * 1e-3:g} ns on.\n"
-            "* OUTPUT DRIVE: a voltage-controlled switch to the 0 V rail (a linear\n"
-            "* stamp; the ~20 fF latch-output nodes cannot take a self-referencing\n"
-            "* current-source drive at any gain that would win against the latch).\n"
-            "* Its 1e12 Ohm off-state after release is electrically invisible on nodes\n"
-            "* the latch itself drives at microamp scale (12 pA at 1.2 V) and is not\n"
-            "* part of the measured input network.\n"
-            "*\n"
-            f"* The release is before the 29 ns baseline (bd0/cd0) and stays released\n"
-            "* through evaluation (30 ns strobe, 55 ns end); the realized control\n"
-            "* voltage is re-read from the run (init_ctl_1n / init_ctl_29n), never\n"
-            "* assumed. No .options, .nodeset, .ic or analysis change; the DUT is\n"
-            "* untouched. No arm is forced toward the expected answer: a 55 ns gate\n"
-            "* pass needs a genuine post-strobe decision from the stated wrong-polarity\n"
-            "* start with the full differential applied.\n"
+            "* returns (pulse width 1 s). From then on each switch holds only its\n"
+            "* ROFF = 1e12 Ohm: on the latch outputs electrically invisible (12 pA\n"
+            "* at 1.2 V against the latch's microamp drive), and in parallel with\n"
+            "* the measured network's 1e9 Ohm rfloat a 0.1% source-conductance\n"
+            "* change -- over the 25 ns measurement window that advances the 1 ms\n"
+            "* pin relaxation by 2.5e-5 of a time constant, far below the .meas\n"
+            "* print resolution. The release is before the 29 ns baseline (bd0/cd0)\n"
+            "* and stays released through evaluation (30 ns strobe, 55 ns end); the\n"
+            "* realized control voltage is re-read from the run (init_ctl_1n /\n"
+            "* init_ctl_29n), never assumed. No .options, .nodeset, .ic or analysis\n"
+            "* change; the DUT is untouched. No arm is forced toward the expected\n"
+            "* answer: a 55 ns gate pass needs a genuine post-strobe decision from\n"
+            "* the stated wrong-polarity start with the full differential applied.\n"
             f"vclti clti 0 pulse(1 0 {INIT_RELEASE_NS:g}n {INIT_RELEASE_RAMP_PS:g}p "
             f"{INIT_RELEASE_RAMP_PS:g}p 1 2)\n"
-            "Binit_bpp bpp 0 i = 'v(clti)*"
-            f"{INIT_PIN_DRIVE_S:g}*(v(bsp)-v(bpp))'\n"
-            "Binit_bpn bpn 0 i = 'v(clti)*"
-            f"{INIT_PIN_DRIVE_S:g}*(v(bsn)-v(bpn))'\n"
-            "Binit_cpp cpp 0 i = 'v(clti)*"
-            f"{INIT_PIN_DRIVE_S:g}*(v(csp)-v(cpp))'\n"
-            "Binit_cpn cpn 0 i = 'v(clti)*"
-            f"{INIT_PIN_DRIVE_S:g}*(v(csn)-v(cpn))'\n"
+            f"Sinit_bpp bpp bsp clti 0 {INIT_SW_MODEL}\n"
+            f"Sinit_bpn bpn bsn clti 0 {INIT_SW_MODEL}\n"
+            f"Sinit_cpp cpp csp clti 0 {INIT_SW_MODEL}\n"
+            f"Sinit_cpn cpn csn clti 0 {INIT_SW_MODEL}\n"
             f"Sinit_outa douta 0 clti 0 {INIT_SW_MODEL}\n"
             f"Sinit_outb doutb 0 clti 0 {INIT_SW_MODEL}\n"
             f"Sinit_outc doutc 0 clti 0 {INIT_SW_MODEL}\n"
@@ -1321,15 +1329,17 @@ def coldinit_render_markdown(res: dict) -> str:
          f"`{res['reference_series']}` populations. Not a ratification, not a spec-row "
          "verdict, and the #165 44/45 parent populations are untouched.", "",
          "The bench is the #165 bench plus exactly the declared `init` supplement block: a "
-         "bench-only initialization phase pins the four floating input pins at their analytic "
-         "DC values and holds all three latch outputs at the wrong-polarity LOW rail, then "
-         f"releases (v(clti) falls {res['release_ns']:g} ns -> {res['released_fully_ns']:g} ns, "
-         "100 ps edge, never returns). A released drive is a 0 A current source -- an open "
-         "circuit, no residual conductance -- so from "
-         f"{res['released_fully_ns']:g} ns on the circuit is exactly the #165 network, and "
-         f"the {res['baseline_ns']} ns baseline, the {res['strobe_ns']} ns strobe and the "
-         f"{res['end_ns']} ns end all run fully released. The release is re-read from each "
-         "run (`init_ctl_1n` / `init_ctl_29n`).", "",
+         "bench-only initialization phase bridges the four floating input pins to their "
+         "analytic DC values and holds all three latch outputs at the wrong-polarity LOW "
+         f"rail (every drive a voltage-controlled switch), then releases (v(clti) falls "
+         f"{res['release_ns']:g} ns -> {res['released_fully_ns']:g} ns, "
+         "100 ps edge, never returns). After release each switch holds only its "
+         "ROFF = 1e12 Ohm -- invisible on the latch outputs (12 pA at 1.2 V) and a 0.1% "
+         "conductance beside the measured network's 1 GOhm rfloat (2.5e-5 of the 1 ms pin "
+         "relaxation over the 25 ns window, far below print resolution) -- so the "
+         f"{res['baseline_ns']} ns baseline, the {res['strobe_ns']} ns strobe and the "
+         f"{res['end_ns']} ns end all run on the #165 input network for every measurement "
+         "purpose. The release is re-read from each run (`init_ctl_1n` / `init_ctl_29n`).", "",
          "## Qualification rules (stated before grading)", "",
          "A point is qualified only when ALL of these hold; unqualified points are named "
          "with every failed or missing observation and are never graded:", "",

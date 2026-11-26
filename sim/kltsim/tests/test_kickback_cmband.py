@@ -1006,9 +1006,12 @@ class ColdInit552(unittest.TestCase):
         sup = kb.probe_body_supplement(kb.condition("vcm-m050"), "init")
         for node in ("bpp", "bpn", "cpp", "cpn", "douta", "doutb", "doutc", "clti"):
             self.assertIn(node, sup)
-        # pins follow their own ideal sources (cm +/- dv/2), not hard numbers
-        for node in ("bsp", "bsn", "csp", "csn"):
-            self.assertIn(f"v({node})", sup)
+        # pins are bridged to their own ideal sources (cm +/- dv/2), not hard
+        # numbers, and every drive is a linear switch (no B-source pin drive)
+        for pin, src in (("bpp", "bsp"), ("bpn", "bsn"), ("cpp", "csp"), ("cpn", "csn")):
+            self.assertIn(f"Sinit_{pin} {pin} {src} clti 0 {kb.INIT_SW_MODEL}", sup)
+        for forbidden in ("Binit_bpp", "Binit_cpn", "Binit_outa"):
+            self.assertNotIn(forbidden, sup)
         # outputs are switched to 0 V (the supply-independent LOW rail)
         for node in ("douta", "doutb", "doutc"):
             self.assertIn(f"Sinit_out{node[-1]} {node} 0 clti 0 {kb.INIT_SW_MODEL}", sup)
