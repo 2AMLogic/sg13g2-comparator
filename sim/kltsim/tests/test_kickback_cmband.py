@@ -1148,9 +1148,10 @@ class ColdInitCompare(unittest.TestCase):
     def write_env(self, cdir, cond, per_supply, status="pass"):
         """One envelope for the condition, one corner per supply (the shape a
         real probe-run leaves: one request per condition)."""
+        units = {m["name"]: m["unit"] for m in kb.probe_request(cond, "init")["measurements"]}
         corners = []
         for sup, values in per_supply.items():
-            cards = [{"name": n, "value": v, "unit": "C" if n == "temp_meas" else "V",
+            cards = [{"name": n, "value": v, "unit": units[n],
                       "status": "fail" if n == "dout_float_big_end" and v < 0.9 else "pass",
                       "margin": None} for n, v in values.items()]
             corners.append({"corner_id": f"mos_ss/{sup:.3f}V/-40C", "process": "mos_ss",
@@ -1272,6 +1273,90 @@ class ColdInitCompare(unittest.TestCase):
                     if not qualified:
                         self.assertEqual(q["failed"], [
                             f"{name}: output already above half supply at the strobe"])
+
+    def test_qualification_and_display_use_the_request_units(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(kb, "SERIES_DIR", Path(d)):
+            series = self.write_series(Path(d))
+            path = series / M050.name / "kickback-init.envelope.json"
+            original = path.read_text()
+            cases = (
+                ("b_vd_strobe", 0.001, "V", 0.001, True),
+                ("b_vd_strobe", 1, "mV", 0.001, True),
+                ("b_vd_strobe", 0.001, "mV", 1e-6, False),
+                ("b_vd_strobe", 1e-6, "V", 1e-6, False),
+                ("c_vd_strobe", 0.1, "V", 0.1, True),
+                ("c_vd_strobe", 102, "mV", 0.102, True),
+                ("c_vd_strobe", 0.1, "mV", 0.0001, False),
+                ("c_vd_strobe", 0.0001, "V", 0.0001, False),
+                ("vcm_meas", 550, "mV", 0.55, True),
+                ("vcm_meas", 0.55, "mV", 0.00055, False),
+                ("init_ctl_1n", 1000, "mV", 1.0, True),
+                ("init_ctl_1n", 1, "mV", 0.001, False),
+                ("init_ctl_29n", 1, "mV", 0.001, True),
+                ("kick_sigdep_uv", 0.05, "mV", 50.0, True),
+                ("kick_sigdep_uv", 50, "mV", 50000.0, False),
+                ("bd0", 999, "µV", 0.000999, True),
+                ("cd1", 100, "mV", 0.1, True),
+                ("a_dn_30n", 1190, "mV", 1.19, True),
+                ("b_t_pair", 30.9, "ns", 30.9e-9, True),
+            )
+            crossings = [(f"{br}_t_half", t, "ns", t / 1e9, True)
+                         for br in "abc" for t in (30, 31, 55)]
+            for name, value, unit, canonical, qualified in itertools.chain(cases, crossings):
+                with self.subTest(name=name, value=value, unit=unit):
+                    env = json.loads(original)
+                    meas(env["corners"][0], name).update(value=value, unit=unit)
+                    path.write_text(json.dumps(env))
+                    res = kb.coldinit_compare(series)
+                    edge = next(p for p in res["points"] if p["condition"] == M050.name)
+                    self.assertEqual(edge["values"][name], canonical)
+                    self.assertEqual(edge["qualification"]["residue_verdict"],
+                                     "MET" if qualified else None)
+                    if name == "b_t_pair":
+                        self.assertIn("b 31 / pair 30.9", kb.coldinit_render_markdown(res))
+
+    def test_incompatible_measurements_withhold_only_the_affected_grade(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(kb, "SERIES_DIR", Path(d)):
+            series = self.write_series(Path(d))
+            path = series / M050.name / "kickback-init.envelope.json"
+            original = path.read_text()
+            for name, unit in (("vcm_meas", "s"), ("temp_meas", "pC"), ("dbn_29n", "V"),
+                               ("dout_float_big_end", "V"), ("a_t_half", None),
+                               ("cd1", "s"), ("kick_sigdep_uv", "ns"), ("a_dn_30n", "fC")):
+                with self.subTest(name=name, unit=unit):
+                    env = json.loads(original)
+                    meas(env["corners"][0], name)["unit"] = unit
+                    path.write_text(json.dumps(env))
+                    for point in kb.coldinit_compare(series)["points"]:
+                        q = point["qualification"]
+                        if point["condition"] == M050.name:
+                            self.assertIsNone(point["values"][name])
+                            self.assertIsNone(q["residue_verdict"])
+                            self.assertTrue(any(name in f and "unit" in f for f in q["failed"]))
+                        else:
+                            self.assertEqual(q["residue_verdict"], "MET")
+
+    def test_card_and_samples_must_agree_on_inclusive_residue_target(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(kb, "SERIES_DIR", Path(d)):
+            series = self.write_series(Path(d))
+            path = series / M050.name / "kickback-init.envelope.json"
+            env = json.loads(path.read_text())
+            corner = env["corners"][0]
+            for cd1, recomputed, card, verdict in (
+                    (0.100055, 105, 99, None), (0.100049, 99, 105, None),
+                    (0.10005, 100, 100, "MET"), (0.10005, 100, 101, None),
+                    (0.100051, 101, 100, None), (0.100055, 105, 101, "NOT MET")):
+                with self.subTest(cd1=cd1, card=card):
+                    meas(corner, "cd1")["value"] = cd1
+                    meas(corner, kb.RESIDUE)["value"] = card
+                    path.write_text(json.dumps(env))
+                    edge = next(p for p in kb.coldinit_compare(series)["points"]
+                                if p["condition"] == M050.name)
+                    self.assertEqual(edge["residue_recomputed_uv"], recomputed)
+                    self.assertEqual(edge["qualification"]["qualified"], verdict is not None)
+                    self.assertEqual(edge["qualification"]["residue_verdict"], verdict)
+                    if verdict is None:
+                        self.assertTrue(any("100" in f for f in edge["qualification"]["failed"]))
 
     def test_wrong_common_mode_withholds_only_the_affected_grade(self):
         with tempfile.TemporaryDirectory() as d:

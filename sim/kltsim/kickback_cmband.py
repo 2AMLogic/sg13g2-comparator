@@ -51,6 +51,7 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable
+from decimal import Decimal
 from pathlib import Path
 
 from . import build as build_mod
@@ -211,9 +212,10 @@ def _num(index: dict, name: str, unit: str | None = None):
         value = grade_mod.finite(m["value"], name)
         if unit is None:
             return value
-        if not isinstance(m.get("unit"), str):
-            return None
-        return grade_mod.finite(grade_mod.convert(value, m["unit"], unit), name)
+        source = m.get("unit")
+        if not isinstance(source, str) or (name == "temp_meas" and source.strip() != "C"):
+            return None  # Temperature is Celsius. The SI conversion table uses C for charge.
+        return grade_mod.finite(grade_mod.convert(value, source, unit, decimal_scale=True), name)
     except (grade_mod.NonFiniteError, grade_mod.UnitError):
         return None
 
@@ -1076,7 +1078,7 @@ INIT_GATE_NS = 55
 
 def coldinit_qualify(values: dict, *, validity_failures: Iterable[str] = ()) -> dict:
     """Apply the issue #552 qualification rules to one cold-edge point's
-    measured values (the supply and 30 ns output samples are in volts).
+    measured values in the units declared by the init request.
 
     A point is QUALIFIED only when every one of these holds; the rules are
     stated here, before grading, so each classification is reproducible from
@@ -1172,6 +1174,30 @@ def coldinit_qualify(values: dict, *, validity_failures: Iterable[str] = ()) -> 
             "residue_target_uv": RESIDUE_TARGET_UV, "residue_verdict": verdict}
 
 
+def _coldinit_observations(corner: dict, units: dict, vcm_v: float) -> tuple[dict, list[str]]:
+    """Read the corner in the units used by the #552 checks and report."""
+    index, bad = grade_mod.measurement_index(corner)
+    if bad:
+        return {}, [bad]
+    values = {}
+    measurements = []
+    failures = []
+    for name, observation in index.items():
+        if name not in units:
+            continue
+        unit = units[name]
+        value = _num(index, name, unit)
+        values[name] = value
+        if value is None and observation.get("value") is not None:
+            failures.append(f"{name}: {observation['value']!r} with unit "
+                            f"{observation.get('unit')!r} is not a finite {unit} measurement")
+        measurements.append({**observation, "value": value, "unit": unit})
+    problem = point_problem({**corner, "measurements": measurements}, vcm_v, required_measurements())
+    if problem:
+        failures.append(problem)
+    return values, failures
+
+
 def coldinit_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS_552) -> dict:
     """Offline four-point comparison of the #552 cold-edge initialized series:
     every point's observations, its qualification under ``coldinit_qualify``,
@@ -1209,9 +1235,10 @@ def coldinit_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS_552) ->
         },
         "jobs": {}, "points": [], "problems": [],
     }
-    expected_rises = {m["name"]: m["spice"] for m in init_observables()
-                      if m["name"].endswith("_t_half")}
-    strobe_units = dict.fromkeys(("vdd_meas", "a_dp_30n", "b_dp_30n", "c_dp_30n"), "V")
+    init_cards = init_observables()
+    expected_rises = {m["name"]: m["spice"] for m in init_cards if m["name"].endswith("_t_half")}
+    units = {m.name: m.unit for m in (*KICKBACK.measurements, VCM_PROBE)}
+    units.update({m["name"]: m["unit"] for m in probe_observables(with_crossings=False) + init_cards})
     for cond in CONDITIONS:
         cdir = series / cond.name
         env_path = cdir / f"{probe_arm_tag(arm)}.envelope.json"
@@ -1265,22 +1292,23 @@ def coldinit_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS_552) ->
             else:
                 entry["corner_id"] = corner.get("corner_id")
                 entry["corner_status"] = corner.get("status")
-                index, _ = grade_mod.measurement_index(corner)
-                values = {name: _num(index, name, strobe_units.get(name)) for name in (index or {})}
+                values, failures = _coldinit_observations(corner, units, cond.vcm_v())
                 entry["values"] = values
-                problem = point_problem(corner, cond.vcm_v(), required_measurements())
-                failures = list(acquisition_failures)
-                if problem:
-                    failures.append(problem)
+                failures.extend(acquisition_failures)
                 samples = [values.get(n) for n in ("bd0", "bd1", "cd0", "cd1")]
                 residue = values.get(RESIDUE)
                 if None not in samples and residue is not None:
-                    bd0, bd1, cd0, cd1 = samples
-                    recomputed = abs((cd1 - cd0) - (bd1 - bd0)) * 1e6
-                    entry["residue_recomputed_uv"] = round(recomputed, 6)
-                    if abs(recomputed - residue) > max(2.0, 0.1 * abs(residue)):
+                    # Subtract the decimal observations before comparing to the inclusive bound.
+                    bd0, bd1, cd0, cd1 = (Decimal(str(v)) for v in samples)
+                    recomputed = abs((cd1 - cd0) - (bd1 - bd0)) * 1_000_000
+                    entry["residue_recomputed_uv"] = float(recomputed)
+                    card = Decimal(str(residue))
+                    target_disagrees = (recomputed <= RESIDUE_TARGET_UV) != (card <= RESIDUE_TARGET_UV)
+                    if target_disagrees or abs(recomputed - card) > max(2, abs(card) / 10):
                         mismatch = (f"{RESIDUE}={residue} uV is inconsistent with its own "
-                                    f"29/55 ns samples ({recomputed:.4g} uV recomputed)")
+                                    f"29/55 ns samples ({recomputed} uV recomputed)")
+                        if target_disagrees:
+                            mismatch += f" across the inclusive {RESIDUE_TARGET_UV:g} uV target"
                         failures.append(mismatch)
                         out["problems"].append(f"{cond.name} {key_str(key)}: {mismatch}")
                 entry["qualification"] = coldinit_qualify(values, validity_failures=failures)
@@ -1288,13 +1316,11 @@ def coldinit_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS_552) ->
             if ref is None:
                 entry["context_165"] = {"present": False}
             else:
-                rm = _meas_map(ref)
-                reason = point_problem(ref, cond.vcm_v(), required_measurements())
+                ref_values, ref_failures = _coldinit_observations(ref, units, cond.vcm_v())
                 entry["context_165"] = {
                     "present": True, "corner_status": ref.get("status"),
-                    "valid_in_165": reason is None, "reject_reason": reason,
-                    "gates": {g: (rm.get(g) or {}).get("value") for g in GATES},
-                    RESIDUE: (rm.get(RESIDUE) or {}).get("value")}
+                    "valid_in_165": not ref_failures, "reject_reason": "; ".join(ref_failures) or None,
+                    "gates": {g: ref_values.get(g) for g in GATES}, RESIDUE: ref_values.get(RESIDUE)}
             out["points"].append(entry)
     out["points"].sort(key=lambda p: (p["supply_v"], p["role"] != "edge", p["condition"]))
     return out
@@ -1354,7 +1380,8 @@ def coldinit_render_markdown(res: dict) -> str:
          f"Row 4 Target <= {rules['residue_target_uv']:g} uV. A miss is a reportable "
          "result. Every point must also pass the corner checks (including supply, temperature "
          "and common mode). The stored residue must agree with the 29/55 ns samples within "
-         "the larger of 2 uV and 10% of the stored residue.", ""]
+         "the larger of 2 uV and 10% of the stored residue. Both must give the same verdict "
+         f"against the inclusive {rules['residue_target_uv']:g} uV target.", ""]
     if res["problems"]:
         o += ["## Problems", ""] + [f"- {p}" for p in res["problems"]] + [""]
     o += ["## Fleet jobs", "",
