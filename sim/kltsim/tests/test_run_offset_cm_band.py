@@ -40,7 +40,8 @@ class Base(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.series = Path(tmp.name)
+        self.series = Path(tmp.name) / "series"
+        self.series.mkdir()
         p = mock.patch.object(cmband, "SERIES_DIR", self.series.parent)
         p.start()
         self.addCleanup(p.stop)
@@ -938,7 +939,9 @@ class SupplementReportTests(Base):
         self.full_pair("mos_tt_mismatch", cmband.condition("vcm-m050"))
         self.assertEqual(rcb.cmd_supplement_report(self.report_args()), 1)
         result = json.loads((self.supp / "supplement-report.json").read_text())
-        self.assertEqual(len(result["missing_envelopes"]), 5)
+        missing = result["missing_envelopes"]
+        self.assertEqual(len(missing), 10)  # Five absent parent/supplement pairs.
+        self.assertEqual(sum(entry.startswith("parent ") for entry in missing), 5)
         md = (self.supp / "supplement-report.md").read_text()
         self.assertIn("Missing or malformed envelopes", md)
 
