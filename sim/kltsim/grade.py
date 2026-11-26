@@ -40,7 +40,6 @@ import json
 import math
 import re
 from dataclasses import dataclass, field
-from decimal import Decimal
 from pathlib import Path
 from statistics import NormalDist
 
@@ -141,14 +140,12 @@ def dumps_strict(obj, **kw) -> str:
     return json.dumps(json_safe(obj), allow_nan=False, **kw)
 
 
-def convert(value: float, from_unit: str | None, to_unit: str | None, *,
-            decimal_scale: bool = False) -> float:
+def convert(value: float, from_unit: str | None, to_unit: str | None) -> float:
     """Convert ``value`` between two units of one dimension.
 
     Identical units (including both ``None``) pass through; anything the
     table cannot place, or two different dimensions, is a ``UnitError`` --
-    never a silent pass-through. Use decimal scaling for inclusive bounds
-    stated in the decimal units of the recorded observations.
+    never a silent pass-through.
     """
     a, b = _norm_unit(from_unit), _norm_unit(to_unit)
     if a == b:
@@ -159,8 +156,6 @@ def convert(value: float, from_unit: str | None, to_unit: str | None, *,
     dim_b, scale_b = _SCALE[b]
     if dim_a != dim_b:
         raise UnitError(f"{from_unit!r} ({dim_a}) is not convertible to {to_unit!r} ({dim_b})")
-    if decimal_scale:
-        return float(Decimal(str(value)) * Decimal(str(scale_a)) / Decimal(str(scale_b)))
     return value * scale_a / scale_b
 
 

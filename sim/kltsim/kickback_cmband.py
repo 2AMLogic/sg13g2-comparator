@@ -215,8 +215,18 @@ def _num(index: dict, name: str, unit: str | None = None):
         source = m.get("unit")
         if not isinstance(source, str) or (name == "temp_meas" and source.strip() != "C"):
             return None  # Temperature is Celsius. The SI conversion table uses C for charge.
-        return grade_mod.finite(grade_mod.convert(value, source, unit, decimal_scale=True), name)
-    except (grade_mod.NonFiniteError, grade_mod.UnitError):
+        source = grade_mod._norm_unit(source)
+        if source == unit:
+            return value
+        src = grade_mod._SCALE.get(source)
+        dst = grade_mod._SCALE.get(unit)
+        if src is None or dst is None or src[0] != dst[0]:
+            return None
+        # Apply the shared SI scales in decimal so 102 mV and 55 ns retain
+        # their exact inclusive limits when read in volts and seconds.
+        scaled = Decimal(str(value)) * Decimal(str(src[1])) / Decimal(str(dst[1]))
+        return grade_mod.finite(scaled, name)
+    except grade_mod.NonFiniteError:
         return None
 
 
