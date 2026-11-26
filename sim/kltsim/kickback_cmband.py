@@ -1441,11 +1441,13 @@ def coldinit_render_markdown(res: dict) -> str:
         o.append(f"| {p['key']} | {c.get('corner_status')} | "
                   f"{c.get('valid_in_165')} | {c.get('reject_reason') or '-'} | {gates} | "
                   f"{_g4(c.get(RESIDUE))} |")
-    o += ["", "Reproduce (offline, from the stored envelopes):",
-          "",
+    o += ["", "Reproduce (offline, from the stored envelopes): fetch the series' bytes",
+          "through the run's manifest (`klt artifact get <manifest>#<name> -o <out>`; every",
+          "path under `sim/comparator-kickback-cm-band/campaigns/"
+          f"{res['series']}/`), then from the repository root:", "",
           "```bash",
           "python3 sim/run_kickback_cm_band.py probe-compare --series "
-          f"{res['series']}",
+          f"{res['series']} --root <dir-holding-the-series>",
           "```",
           ""]
     return "\n".join(o) + "\n"

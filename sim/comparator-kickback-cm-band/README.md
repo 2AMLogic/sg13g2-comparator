@@ -107,3 +107,27 @@ fails its DC op and delivers only ~1/46 of the programmed differential at the
 reject common modes. Do not count these two cells as design rejections; the
 residual gap (a bench whose DC op converges at 0.55/0.65 V) is named there and
 fixing the bench stays out of scope.
+
+## Cold-edge initialized measurement (issue #552)
+
+The issue #552 supplement closes the residual gap #415 named: a bench-only
+initialization phase (a declared `init` supplement block -- switches that
+bridge the four floating pins to their analytic DC values and hold the three
+latch outputs at the wrong-polarity LOW rail during [0, 25 ns), released
+before the 29 ns baseline and re-read from every run) establishes the
+pre-strobe state the failing DC solve at the cold edges cannot, so the two
+DR-0004 cold-edge cells PR #166 left open finally carry strobe-qualified
+residue: 15.47 uV at vcm 0.55 V / 1.200 V and 9.81 uV at vcm 0.65 V /
+1.080 V, both MET against the unchanged 100 uV Target, with the full
+programmed differential applied, low pre-strobe outputs and genuine
+post-strobe transitions; the 0.60 V controls land on #165's own values.
+Every point is qualified by rules stated before grading (release, applied
+stimulus within +/- 2 %, pre-strobe state, transitions, gates). The series'
+bytes are in the artifact store with the manifest
+`manifests/artifacts/comparator-kickback-cm-band-20261126-552-coldinit-v2.manifest.json`;
+the four-point summary is
+[`campaigns/20261126-552-coldinit-v2.md`](campaigns/20261126-552-coldinit-v2.md).
+The first attempt (`20261126-552-coldinit`, behavioural current-source pin
+drives) is stored as a negative result: ngspice collapsed the timestep on
+the driven branches' tail node at every ss/-40 point, which is why every
+drive in the final design is a linear switch.
