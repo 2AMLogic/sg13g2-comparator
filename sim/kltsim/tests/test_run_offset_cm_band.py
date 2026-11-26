@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import gzip
 import hashlib
 import io
 import json
@@ -14,6 +15,7 @@ import sys
 import tempfile
 import time
 import unittest
+import zlib
 from pathlib import Path
 from unittest import mock
 
@@ -1055,3 +1057,102 @@ class SupplementReportTests(Base):
         self.assertIn("request seeds = parent", md)
         self.assertIn("structural, request-level", md)
         self.assertIn("0/6 populations valid", md)
+
+    # --- issue #564: a corrupt deflate body in a ``.gz`` envelope ---------
+
+    def gz_envelope(self, root, section, cond):
+        """Replace one written envelope with its ``.gz`` form; returns the
+        compressed path and the exact bytes it decompresses to."""
+        path = root / cond.name / f"offset_cm.{section}.envelope.json"
+        raw = path.read_bytes()
+        gz = path.with_name(path.name + ".gz")
+        gz.write_bytes(gzip.compress(raw))
+        path.unlink()
+        return gz, raw
+
+    def failing_gz_report(self, root):
+        """A full healthy series in which ``root``'s envelope of the pair
+        ``compare_supplement`` reports first is a ``.gz`` whose deflate body
+        fails to decompress. ``gzip.decompress`` raises ``zlib.error`` for a
+        valid header over a corrupt deflate body, and the message text is
+        zlib's own, so the error is injected for those bytes. The last pair's
+        supplement stays a valid gzip as the control: returns the report, the
+        failing (section, condition) and the control's uncompressed bytes."""
+        self.full_series()
+        first = (cmband.supplement_sections()[0], cmband.CONDITIONS[0])
+        last = (cmband.supplement_sections()[-1], cmband.CONDITIONS[-1])
+        broken, _ = self.gz_envelope(root, *first)
+        _, control_raw = self.gz_envelope(self.supp, *last)
+        corrupt = broken.read_bytes()
+        decompress = gzip.decompress
+
+        def fail_on_corrupt(data):
+            if data == corrupt:
+                raise zlib.error(
+                    "Error -3 while decompressing data: invalid stored block lengths")
+            return decompress(data)
+
+        with mock.patch.object(gzip, "decompress", fail_on_corrupt):
+            report = cmband.compare_supplement(self.supp)
+        return report, first, control_raw
+
+    def population(self, report, section, cond):
+        rows = [p for p in report["populations"]
+                if p["condition"] == cond.name and p["section"] == section]
+        self.assertEqual(len(rows), 1)
+        return rows[0]
+
+    def assert_healthy_gz_pair(self, report, section, cond, raw):
+        """The control: a valid ``.gz`` supplement reported after the
+        failure keeps its measurements, its parent pairing and its source
+        digest."""
+        p = self.population(report, section, cond)
+        self.assertEqual((p["stats"]["n"], p["n_valid"]), (60, 60))
+        self.assertIsNone(p["stats"]["rejected"])
+        self.assertTrue(p["pairing_vs_parent"]["seeds_paired"])
+        self.assertEqual(p["pairing_vs_parent"]["n_compared"], 60)
+        tag = f"{cmband.BENCH_NAME}.{section}"
+        self.assertEqual(report["sources"][f"{cond.name}/{tag}"]["envelope_sha256"],
+                         hashlib.sha256(raw).hexdigest())
+
+    def test_corrupt_deflate_supplement_envelope_is_reported_unreadable(self):
+        """Issue #564: a ``zlib.error`` from the ``.gz`` reader escaped
+        ``compare_supplement`` and killed the whole report. The unreadable
+        supplement is now one missing-envelope entry naming its condition
+        and tag with an ``unreadable:`` reason, and its target reads zero
+        valid draws."""
+        report, (section, cond), control_raw = self.failing_gz_report(self.supp)
+        tag = f"{cmband.BENCH_NAME}.{section}"
+        self.assertEqual(len(report["populations"]), 6)
+        self.assertEqual(len(report["missing_envelopes"]), 1)
+        self.assertTrue(report["missing_envelopes"][0].startswith(
+            f"{cond.name}/{tag}: unreadable:"))
+        affected = self.population(report, section, cond)
+        self.assertEqual((affected["stats"]["n"], affected["n_valid"]), (0, 0))
+        self.assertEqual(affected["draws"], [])
+        self.assertIsNone(affected["pairing_vs_parent"]["seeds_paired"])
+        self.assertNotIn(f"{cond.name}/{tag}", report["sources"])
+        self.assert_healthy_gz_pair(report, cmband.supplement_sections()[-1],
+                                    cmband.CONDITIONS[-1], control_raw)
+
+    def test_corrupt_deflate_parent_envelope_is_reported_unreadable(self):
+        """Issue #564, parent side: the diagnostic names the parent, and the
+        supplement's valid measurements survive, with no pairing against
+        the unreadable parent."""
+        report, (section, cond), control_raw = self.failing_gz_report(self.parent)
+        tag = f"{cmband.BENCH_NAME}.{section}"
+        self.assertEqual(len(report["populations"]), 6)
+        self.assertEqual(len(report["missing_envelopes"]), 1)
+        self.assertTrue(report["missing_envelopes"][0].startswith(
+            f"parent {cond.name}/{tag}: unreadable:"))
+        affected = self.population(report, section, cond)
+        self.assertEqual((affected["stats"]["n"], affected["n_valid"]), (60, 60))
+        self.assertEqual(len(affected["draws"]), 60)
+        self.assertIsNone(affected["stats"]["rejected"])
+        self.assertEqual(affected["parent_status"], "parent population not loadable")
+        self.assertIsNone(affected["pairing_vs_parent"]["seeds_paired"])
+        self.assertEqual(affected["pairing_vs_parent"]["n_compared"], 0)
+        self.assertFalse([s for s in report["sensitivity"]
+                          if s["condition"] == cond.name and s["point"] == affected["point"]])
+        self.assert_healthy_gz_pair(report, cmband.supplement_sections()[-1],
+                                    cmband.CONDITIONS[-1], control_raw)
