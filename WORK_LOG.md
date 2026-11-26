@@ -8,6 +8,16 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-11-26
 
+- **Issue #564** (closed): Offset supplement report aborts on a corrupt-deflate .gz envelope (zlib.error escapes _supplement_envelope)
+- **PR #565**: fix: report corrupt-deflate gz envelopes as unreadable in offset supplement report
+- **Issue #563** (closed): Row 2 report aborts on a corrupt-deflate .gz envelope (zlib.error escapes validate_config)
+- **PR #566**: fix: report corrupt-deflate gzip envelopes as unreadable instead of aborting
+- **Issue #560** (closed): Remove redundant envelope reads during optional full-noise discovery
+- **PR #561**: fix: discover optional noise configs by presence, not envelope reads
+- **Issue #558** (closed): Share invocation digest checks between campaign grading and timestep smoke runs
+- **PR #559**: refactor: share the invocation digest loop between grader and smoke
+- **Issue #497** (closed): Measure the integration-node capacitance tradeoff between Row 2 noise and Row 3c delay
+- **PR #504**: sim: integration-node capacitance study, negative result (issue #497)
 - **Issue #555** (closed): Reuse draw identity checks in offset supplement pairing
 - **PR #557**: fix: enforce draw identity in offset supplement pairing
 
