@@ -2,6 +2,14 @@
 
 Sections moved byte-for-byte from [WORK_LOG.md](../WORK_LOG.md) by `loom-daemon work-docs archive`.
 
+### 2026-09-26
+
+- **PR #53**: test: discover harness unit tests in sim/selftest.sh step 0
+- **PR #52**: docs: correct post-DR-0002 stale claims in comparator-offset-transient-mc README
+- **PR #50**: docs: correct six post-DR-0002 stale DRAFT/unratified claims
+- **Issue #51** (closed): sim/selftest.sh hardcodes its three test modules instead of discovering them — reopens #41's no-gate coverage gap
+- **Issue #49** (closed): sim/comparator-offset-transient-mc/README.md still asserts PR #18 is open / DR-0002 is not yet ratified
+- **Issue #48** (closed): Post-DR-0002 sweep missed six files: stale "DRAFT/unratified" claims, an open-PR-#18 banner, and a broken README anchor
 ### 2026-09-23
 
 - **PR #47**: chore: remove unwired npm placeholder scripts from package.json
