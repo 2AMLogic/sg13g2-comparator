@@ -11,6 +11,7 @@ import contextlib
 import copy
 import io
 import json
+import math
 import re
 import sys
 import tempfile
@@ -926,6 +927,10 @@ def healthy_init_values(residue_uv=50.0):
         "b_vd_1n": 0.9996e-3, "b_vd_strobe": 0.9996e-3,
         "c_vd_1n": 99.96e-3, "c_vd_strobe": 99.96e-3,
         "dan_29n": 0.0, "dbn_29n": 0.0, "dcn_29n": 0.0,
+        "vdd_meas": 1.2,
+        "a_dp_30n": 0.01, "a_dn_30n": 1.19,
+        "b_dp_30n": 0.02, "b_dn_30n": 1.18,
+        "c_dp_30n": 0.03, "c_dn_30n": 1.17,
         "a_dp_29n": 0.0, "a_dn_29n": 1.2,
         "b_dp_29n": 0.0, "b_dn_29n": 1.2,
         "c_dp_29n": 0.0, "c_dn_29n": 1.2,
@@ -982,6 +987,12 @@ class ColdInit552(unittest.TestCase):
                      "init_ctl_1n", "init_ctl_29n"):                      # release
             self.assertIn(name, names, name)
 
+    def test_init_measures_rising_crossings_for_all_outputs(self):
+        cards = {m["name"]: m["spice"] for m in self.request("vcm-m050")["measurements"]}
+        for br in ("a", "b", "c"):
+            for name in (f"{br}_t_half", f"{br}_t_pair"):
+                self.assertTrue(cards[name].endswith("td=30n rise=1"), cards[name])
+
     def test_analysis_unchanged(self):
         for name in kb.PROBE_SUPPLIES_V:
             self.assertEqual(self.request(name)["analysis"],
@@ -1015,7 +1026,7 @@ class ColdInit552(unittest.TestCase):
         # outputs are switched to 0 V (the supply-independent LOW rail)
         for node in ("douta", "doutb", "doutc"):
             self.assertIn(f"Sinit_out{node[-1]} {node} 0 clti 0 {kb.INIT_SW_MODEL}", sup)
-        self.assertIn(kb.INIT_SW_CARD, sup)
+        self.assertIn(".model kbinit_sw sw ron=200 roff=1e12 vt=0.5 vh=0.1", sup)
 
     def test_commit_probe_inputs_append_only(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1086,20 +1097,29 @@ class ColdInitQualify(unittest.TestCase):
         self.assertFalse(q["qualified"])
         self.assertTrue(any("not proven engaged" in w for w in q["failed"]))
 
-    def test_stimulus_tolerance_boundaries(self):
-        tol_b = kb.STIMULUS_TOL_REL * 1e-3
-        self.assertTrue(self.qualify(b_vd_strobe=1e-3 + 0.999 * tol_b)["qualified"])
-        q = self.qualify(b_vd_strobe=1e-3 + 1.001 * tol_b)
-        self.assertFalse(q["qualified"])
-        self.assertTrue(any("branch-b pin differential" in w for w in q["failed"]))
-        self.assertTrue(self.qualify(c_vd_strobe=0.1 - 0.999 * kb.STIMULUS_TOL_REL * 0.1)
-                        ["qualified"])
-        self.assertFalse(self.qualify(c_vd_strobe=0.1 - 1.001 * kb.STIMULUS_TOL_REL * 0.1)
-                         ["qualified"])
+    def test_inclusive_bounds_and_adjacent_floats(self):
+        for name, lo, hi in (("init_ctl_1n", 0.999, 1.001),
+                             ("init_ctl_29n", -1e-3, 1e-3),
+                             ("b_vd_strobe", 0.00098, 0.00102),
+                             ("c_vd_strobe", 0.098, 0.102),
+                             ("a_t_half", 30e-9, 55e-9)):
+            for value, valid in ((lo, True), (hi, True),
+                                 (math.nextafter(lo, -math.inf), False),
+                                 (math.nextafter(hi, math.inf), False)):
+                with self.subTest(name=name, value=value):
+                    self.assertEqual(self.qualify(**{name: value})["qualified"], valid)
+
+    def test_early_decision_and_late_falling_edge_are_unqualified(self):
+        for br in ("a", "b", "c"):
+            with self.subTest(branch=br):
+                q = self.qualify(**{f"{br}_dp_30n": 1.2, f"{br}_t_half": 57e-9})
+                self.assertTrue(any(f"{br}_dp_30n" in why for why in q["failed"]))
+                self.assertTrue(any(f"{br}_t_half" in why for why in q["failed"]))
+                self.assertIsNone(q["residue_verdict"])
 
     def test_missing_observations_are_named(self):
         values = healthy_init_values()
-        for name in ("init_ctl_29n", "b_vd_strobe", "dbn_29n", "b_t_half",
+        for name in ("init_ctl_29n", "b_vd_strobe", "dbn_29n", "b_dp_30n", "b_t_half",
                      "dout_float_small_end", "kick_sigdep_uv"):
             broken = dict(values, **{name: None})
             q = kb.coldinit_qualify(broken)
@@ -1228,6 +1248,41 @@ class ColdInitCompare(unittest.TestCase):
                     self.assertTrue(p["qualification"]["qualified"])
                     self.assertEqual(p["qualification"]["residue_verdict"], "MET")
 
+    def test_wrong_common_mode_withholds_only_the_affected_grade(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = self.write_series(Path(d), lambda cond, sup:
+                                       {"vcm_meas": 0.6} if cond == M050 else {})
+            with mock.patch.object(kb, "SERIES_DIR", Path(d)):
+                res = kb.coldinit_compare(series)
+            for p in res["points"]:
+                q = p["qualification"]
+                if p["condition"] == M050.name:
+                    self.assertFalse(q["qualified"])
+                    self.assertIsNone(q["residue_verdict"])
+                    self.assertTrue(any("vcm_meas" in why for why in q["failed"]))
+                else:
+                    self.assertEqual(q["residue_verdict"], "MET")
+            self.assertIn("**NO** | - | not graded", kb.coldinit_render_markdown(res))
+
+    def test_v2_cross_card_cannot_supply_a_rising_measurement(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = self.write_series(Path(d))
+            path = series / "vcm-nom" / "kickback-init.request.json"
+            req = json.loads(path.read_text())
+            card = next(m for m in req["measurements"] if m["name"] == "a_t_half")
+            card["spice"] = card["spice"].replace("rise=1", "cross=1")
+            path.write_text(json.dumps(req))
+            with mock.patch.object(kb, "SERIES_DIR", Path(d)):
+                res = kb.coldinit_compare(series)
+            for p in res["points"]:
+                q = p["qualification"]
+                if p["condition"] == "vcm-nom":
+                    self.assertFalse(q["qualified"])
+                    self.assertIsNone(q["residue_verdict"])
+                    self.assertTrue(any("a_t_half" in why for why in q["failed"]))
+                else:
+                    self.assertTrue(q["qualified"])
+
     def test_residue_inconsistent_with_its_own_samples_is_a_problem(self):
         with tempfile.TemporaryDirectory() as d:
             series = self.write_series(Path(d))
@@ -1240,6 +1295,14 @@ class ColdInitCompare(unittest.TestCase):
                 res = kb.coldinit_compare(series)
             self.assertTrue(any("inconsistent with its own 29/55 ns samples" in p
                                 for p in res["problems"]), res["problems"])
+            for point in res["points"]:
+                q = point["qualification"]
+                if point["condition"] == "vcm-nom":
+                    self.assertFalse(q["qualified"])
+                    self.assertIsNone(q["residue_verdict"])
+                    self.assertTrue(any("inconsistent" in why for why in q["failed"]))
+                else:
+                    self.assertEqual(q["residue_verdict"], "MET")
 
     def test_missing_envelope_is_a_problem(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1262,6 +1325,8 @@ class ColdInitCompare(unittest.TestCase):
             with mock.patch.object(kb, "SERIES_DIR", Path(d)):
                 res = kb.coldinit_compare(series)
             md = kb.coldinit_render_markdown(res)
+            self.assertIn("| t (ns) | a dp | a dn | b dp | b dn | c dp | c dn |", md)
+            self.assertIn("| 30 | 0.01 | 1.19 | 0.02 | 1.18 | 0.03 | 1.17 |", md)
             for fragment in ("issue #552", "pull/166", "## Qualification rules",
                              "## Four-point summary", "## Fleet jobs",
                              "klt-sim-coldinit-test", "## Historical context",

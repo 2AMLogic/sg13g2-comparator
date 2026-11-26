@@ -50,6 +50,7 @@ import dataclasses
 import hashlib
 import json
 import re
+from collections.abc import Iterable
 from pathlib import Path
 
 from . import build as build_mod
@@ -607,25 +608,18 @@ PROBE_ARMS_415 = ("repro", "obs", "optdc", "icdc")
 #   Sinit_bpp bpp bsp clti 0 kbinit_sw             (and bpn/cpp/cpn: the pin
 #   is bridged to its own ideal source during init, bypassing rfloat)
 #   Sinit_outa douta 0 clti 0 kbinit_sw            (and doutb/doutc)
-#   .model kbinit_sw sw ron=200 roff=1e12 von=0.6 voff=0.4
+#   .model kbinit_sw sw ron=200 roff=1e12 vt=0.5 vh=0.1
 #
 # During [0, 25 ns) the drive pins the four floating pins at the analytic DC
 # values their own 1 GOhm / 1 pF network would deliver (v(bsp), v(bsn),
 # v(csp), v(csn) = cm +/- dv/2) and holds all three non-inverting latch
 # outputs at the WRONG-POLARITY LOW rail (0 V, the one supply-independent
 # rail), the state the rejects already hold on their failing branch. Every
-# drive is a voltage-controlled switch -- a LINEAR stamp, no solver-feedback
-# loop: the first fleet attempt drove the pins with self-referencing
-# behavioural current sources (Thevenin, 100 Ohm) and ngspice collapsed the
-# timestep on the input pair's tail node at every ss/-40 point (branches B/C
-# only -- the branches whose pins were driven), which a linear conductance
-# cannot do. After release each switch is ROFF = 1e12 Ohm: on the latch
-# outputs it is electrically invisible (12 pA at 1.2 V against the latch's
-# microamp drive), and in parallel with the measured network's 1e9 Ohm
-# rfloat it changes the source conductance by 0.1% -- over the 25 ns
-# measurement window that advances the 1 ms pin relaxation by 2.5e-5 of a
-# time constant, far below the .meas print resolution (disclosed here and in
-# the series summary). The release happens before the 29 ns baseline
+# drive is a voltage-controlled switch. The first fleet attempt's behavioural
+# sources sank current from pins below their targets, increasing the error.
+# ngspice reported a small timestep at a driven branch's tail node at every
+# ss/-40 point. The diagnostic alone does not establish the cause.
+# Release happens before the 29 ns baseline
 # (bd0/cd0) and stays released through evaluation (30 ns strobe, 55 ns end);
 # the realized control voltage is re-read from the run itself (init_ctl_1n /
 # init_ctl_29n), never assumed. No arm is forced toward the expected answer:
@@ -646,26 +640,13 @@ PROBE_ARMS_552 = ("init",)
 #: (pulse width 1 s); 25.1 ns < 29 ns baseline < 30 ns strobe.
 INIT_RELEASE_NS = 25.0
 INIT_RELEASE_RAMP_PS = 100
-#: The drive element: a voltage-controlled switch (a LINEAR two-terminal
-#: stamp, no solver-feedback loop). The first fleet attempt drove the pins
-#: with self-referencing behavioural current sources (Thevenin, 100 Ohm --
-#: stable against a linear 1 pF load in an ngspice-47 toy) and ngspice
-#: collapsed the timestep on the input pair's tail node at every ss/-40
-#: point, on exactly the driven branches; a linear conductance cannot do
-#: that, so every drive is a switch. The pin drives bridge each floating pin
-#: to its own ideal source (v(bsp)/v(bsn)/v(csp)/v(csn)), bypassing rfloat
-#: during initialization; the output drives switch to the 0 V rail.
+#: The native ngspice SW model switches on above 0.6 V and off below 0.4 V.
+#: It bridges each pin to its own source and each output to ground during init.
 INIT_SW_MODEL = "kbinit_sw"
-INIT_SW_CARD = ".model kbinit_sw sw ron=200 roff=1e12 von=0.6 voff=0.4"
-#: After release ROFF = 1e12 Ohm sits in parallel with the measured network's
-#: 1e9 Ohm rfloat (a 0.1% source-conductance change; over the 25 ns
-#: measurement window the 1 ms pin relaxation advances 2.5e-5 of a time
-#: constant -- far below the .meas print resolution) and on the latch
-#: outputs it is electrically invisible (12 pA at 1.2 V).
+INIT_SW_CARD = ".model kbinit_sw sw ron=200 roff=1e12 vt=0.5 vh=0.1"
 INIT_SW_ROFF_NOTE = (
-    "ROFF=1e12 Ohm: 0.1% of the measured network's rfloat conductance, "
-    "2.5e-5 of the 1 ms pin relaxation over the 25 ns window; invisible "
-    "(12 pA at 1.2 V) on the latch outputs")
+    "1 TOhm off resistance (1.2 pA at 1.2 V). With 1 pF, this adds 2.5e-8 "
+    "time constants in 25 ns to the 2.5e-5 from the 1 GOhm input resistor")
 #: Qualification criteria, stated before grading (see coldinit_qualify). The
 #: applied-stimulus tolerance: the #415 clean controls delivered 99.93-99.96 %
 #: of the programmed differential with the same 1 GOhm / 1 pF network, while
@@ -703,13 +684,11 @@ PROBE_ARM_NOTES = {
             "(v(bsp)/v(bsn)/v(csp)/v(csn) = cm +/- dv/2) and douta/doutb/doutc are "
             "switched to the wrong-polarity LOW rail (0 V) during [0, "
             f"{INIT_RELEASE_NS:g} ns); every drive is a voltage-controlled switch "
-            "(a linear stamp; the first fleet attempt's behavioural current-source "
-            "pin drives collapsed the timestep on the input pair's tail node at "
-            "every ss/-40 point). Release: v(clti) falls "
+            "with VT=0.5 V and VH=0.1 V. The first fleet attempt used pin drives "
+            "of the opposite conductance sign and reported timestep failures. v(clti) falls "
             f"{INIT_RELEASE_NS:g} -> {INIT_RELEASE_NS + INIT_RELEASE_RAMP_PS * 1e-3:g} ns "
-            "(100 ps edge, never returns); each switch then holds only its "
-            f"{INIT_SW_ROFF_NOTE}, so the 29 ns baseline and the whole evaluation "
-            "window run on the #165 input network for all measurement purposes. "
+            "(100 ps edge, never returns). Each switch has "
+            f"{INIT_SW_ROFF_NOTE}. "
             "Release is re-read from the run (init_ctl_1n / init_ctl_29n), never "
             "assumed.",
 }
@@ -756,7 +735,7 @@ def probe_request(cond: Condition, arm: str, *, issue: int = PROBE_ISSUE) -> dic
     req["corners"]["supply_v"] = {"vsup": list(PROBE_SUPPLIES_V[cond.name])}
     req["corners"]["temperature_c"] = [PROBE_TEMPERATURE_C]
     if arm == "init":
-        req["measurements"] = (req["measurements"] + probe_observables(with_crossings=True)
+        req["measurements"] = (req["measurements"] + probe_observables(with_crossings=False)
                                + init_observables())
     elif arm != "repro":
         req["measurements"] = req["measurements"] + probe_observables(with_crossings=(arm == "xing"))
@@ -848,22 +827,15 @@ def probe_body_supplement(cond: Condition, arm: str) -> str:
             "* and all three non-inverting latch outputs are held at the wrong-polarity\n"
             "* LOW rail (0 V, the one supply-independent rail).\n"
             "*\n"
-            "* EVERY DRIVE IS A VOLTAGE-CONTROLLED SWITCH (a linear two-terminal\n"
-            "* stamp, no solver-feedback loop). The first fleet attempt drove the\n"
-            "* pins with self-referencing behavioural current sources (Thevenin,\n"
-            "* 100 Ohm) and ngspice collapsed the timestep on the input pair's tail\n"
-            "* node at every ss/-40 point, on exactly the driven branches; a linear\n"
-            "* conductance cannot do that.\n"
+            "* Each pin switch provides positive conductance to its own source. In the\n"
+            "* first attempt the B sources drew current away from pins below target.\n"
+            "* ngspice reported a timestep failure at a B/C tail node at each point.\n"
             "*\n"
             f"* RELEASE: v(clti) falls {INIT_RELEASE_NS:g} ns -> "
             f"{INIT_RELEASE_NS + INIT_RELEASE_RAMP_PS * 1e-3:g} ns (100 ps edge) and never\n"
-            "* returns (pulse width 1 s). From then on each switch holds only its\n"
-            "* ROFF = 1e12 Ohm: on the latch outputs electrically invisible (12 pA\n"
-            "* at 1.2 V against the latch's microamp drive), and in parallel with\n"
-            "* the measured network's 1e9 Ohm rfloat a 0.1% source-conductance\n"
-            "* change -- over the 25 ns measurement window that advances the 1 ms\n"
-            "* pin relaxation by 2.5e-5 of a time constant, far below the .meas\n"
-            "* print resolution. The release is before the 29 ns baseline (bd0/cd0)\n"
+            "* returns (pulse width 1 s). The switch opens below 0.4 V.\n"
+            f"* Off-state loading: {INIT_SW_ROFF_NOTE}.\n"
+            "* The release is before the 29 ns baseline (bd0/cd0)\n"
             "* and stays released through evaluation (30 ns strobe, 55 ns end); the\n"
             "* realized control voltage is re-read from the run (init_ctl_1n /\n"
             "* init_ctl_29n), never assumed. No .options, .nodeset, .ic or analysis\n"
@@ -1061,24 +1033,19 @@ PROBE_BRANCH_A = ("douta", "doutba", "dan")
 
 
 def init_observables() -> list[dict]:
-    """The ``init`` arm's measurement cards beyond ``probe_observables(True)``
-    (which supplies branches B/C over time, their pin differentials at 1 ns and
-    at the strobe, and their crossings): branch A's over-time samples and
-    crossings, every branch's output level immediately before the strobe (raw
-    and supply-normalized, 29 ns), and the initialization control voltage at
-    1 ns (engaged) and 29 ns (released) -- the observable release evidence."""
+    """Add branch A traces, all three rising decisions, baseline and release probes."""
     cards: list[dict] = []
-    dp, dn, norm = PROBE_BRANCH_A
+    dp, dn, _ = PROBE_BRANCH_A
     for t in PROBE_SAMPLE_NS:
         cards.append(_find(f"a_dp_{t}n", f"v({dp})", t, "V"))
         cards.append(_find(f"a_dn_{t}n", f"v({dn})", t, "V"))
-    cards.append({"name": "a_t_half", "unit": "s", "spice":
-                  f".meas tran a_t_half when v({norm})=0.5 td={PROBE_STROBE_NS}n cross=1"})
-    cards.append({"name": "a_t_pair", "unit": "s", "spice":
-                  f".meas tran a_t_pair when v({dp})=v({dn}) td={PROBE_STROBE_NS}n cross=1"})
     branches = {"a": PROBE_BRANCH_A,
                 "b": PROBE_BRANCHES["b"][:3], "c": PROBE_BRANCHES["c"][:3]}
     for br, (dp, dn, norm) in branches.items():
+        cards.append({"name": f"{br}_t_half", "unit": "s", "spice":
+                      f".meas tran {br}_t_half when v({norm})=0.5 td={PROBE_STROBE_NS}n rise=1"})
+        cards.append({"name": f"{br}_t_pair", "unit": "s", "spice":
+                      f".meas tran {br}_t_pair when v({dp})=v({dn}) td={PROBE_STROBE_NS}n rise=1"})
         cards.append(_find(f"{br}_dp_29n", f"v({dp})", 29, "V"))
         cards.append(_find(f"{br}_dn_29n", f"v({dn})", 29, "V"))
         cards.append(_find(f"{norm}_29n", f"v({norm})", 29, "V/V"))
@@ -1096,11 +1063,13 @@ def _finite_or_none(value, name: str):
         return None
 
 
-#: branch -> (programmed differential, per-branch display scale and unit)
-_STIMULUS = (("b", 1e-3, 1e6, "uV"), ("c", 0.1, 1e3, "mV"))
+#: Programmed differentials in mV. Calculate tolerance endpoints in mV before
+#: converting to volts to retain the inclusive decimal bounds printed by ngspice.
+_STIMULUS_MV = {"b": 1, "c": 100}
+INIT_GATE_NS = 55
 
 
-def coldinit_qualify(values: dict) -> dict:
+def coldinit_qualify(values: dict, *, validity_failures: Iterable[str] = ()) -> dict:
     """Apply the issue #552 qualification rules to one cold-edge point's
     measured values (``name -> value`` straight from the corner).
 
@@ -1121,8 +1090,8 @@ def coldinit_qualify(values: dict) -> dict:
        (<= PRE_STROBE_LOW_MAX, the complement of the 0.9 decision gate): the
        known opposite polarity the post-strobe decision must override.
     4. TRANSITIONS. Each branch's normalized output has a post-strobe
-       low-to-high crossing (a finite ``{a,b,c}_t_half`` at or after the
-       strobe).
+       low-to-high crossing in the inclusive 30–55 ns window. Its 30 ns
+       output sample must be at or below half the measured supply.
     5. GATES. ``dout_1k_end``, ``dout_float_small_end`` and
        ``dout_float_big_end`` are all >= GATE_MIN at 55 ns.
 
@@ -1131,31 +1100,31 @@ def coldinit_qualify(values: dict) -> dict:
     (<= 100 uV); a miss is a reportable result, not a measurement failure.
     An unqualified point is named with every failed or missing observation
     and is never graded."""
-    failed: list[str] = []
+    failed = list(validity_failures)
 
     def f(name):
         return _finite_or_none(values.get(name), name)
 
     ctl_1n, ctl_29n = f("init_ctl_1n"), f("init_ctl_29n")
-    if ctl_1n is None or abs(ctl_1n - 1.0) > CTL_TOL_V:
+    if ctl_1n is None or not 1.0 - CTL_TOL_V <= ctl_1n <= 1.0 + CTL_TOL_V:
         failed.append(f"init_ctl_1n at 1 ns is {values.get('init_ctl_1n')!r} V "
                       f"(expected 1 V +/- {CTL_TOL_V:g}: drive not proven engaged)")
     if ctl_29n is None or abs(ctl_29n) > CTL_TOL_V:
         failed.append(f"init_ctl_29n at 29 ns is {values.get('init_ctl_29n')!r} V "
                       f"(expected 0 V +/- {CTL_TOL_V:g}: drive not proven released before "
                       "the baseline)")
-    for br, programmed, scale, unit in _STIMULUS:
+    for br, programmed_mv in _STIMULUS_MV.items():
         v = f(f"{br}_vd_strobe")
-        tol = STIMULUS_TOL_REL * programmed
+        low = programmed_mv * (1 - STIMULUS_TOL_REL) / 1000
+        high = programmed_mv * (1 + STIMULUS_TOL_REL) / 1000
         if v is None:
             failed.append(f"{br}_vd_strobe: the realized branch-{br} pin differential at "
                           "the 30 ns strobe is unmeasured (no applied-stimulus evidence)")
-        elif abs(v - programmed) > tol:
+        elif not low <= v <= high:
             failed.append(
                 f"{br}_vd_strobe: the realized branch-{br} pin differential at the 30 ns "
-                f"strobe is {v * scale:.4g} {unit}, outside the programmed "
-                f"{programmed * scale:.4g} {unit} +/- {STIMULUS_TOL_REL:.0%} "
-                f"({(programmed - tol) * scale:.4g} .. {(programmed + tol) * scale:.4g} {unit})")
+                f"strobe is {v * 1000:.4g} mV, outside the programmed "
+                f"{programmed_mv} mV +/- {STIMULUS_TOL_REL:.0%}")
     for br, name in (("a", "dan_29n"), ("b", "dbn_29n"), ("c", "dcn_29n")):
         v = f(name)
         if v is None:
@@ -1165,14 +1134,23 @@ def coldinit_qualify(values: dict) -> dict:
             failed.append(f"{name}: the branch-{br} pre-strobe output at 29 ns is {v:.4g} "
                           f"(normalized), above the LOW ceiling {PRE_STROBE_LOW_MAX:g}: "
                           "not the known opposite polarity")
+    vdd = f("vdd_meas")
+    if vdd is None or vdd <= 0:
+        failed.append("vdd_meas: missing or invalid supply for the 30 ns output samples")
     for br in ("a", "b", "c"):
+        name = f"{br}_dp_30n"
+        at_strobe = f(name)
+        if at_strobe is None:
+            failed.append(f"{name}: output at the strobe is unmeasured")
+        elif vdd is not None and at_strobe > vdd / 2:
+            failed.append(f"{name}: output already above half supply at the strobe")
         v = f(f"{br}_t_half")
         if v is None:
             failed.append(f"{br}_t_half: the branch-{br} post-strobe low-to-high crossing "
                           "is missing")
-        elif v < PROBE_STROBE_NS * 1e-9:
+        elif not PROBE_STROBE_NS / 1e9 <= v <= INIT_GATE_NS / 1e9:
             failed.append(f"{br}_t_half: the branch-{br} crossing at {v * 1e9:.4g} ns "
-                          "precedes the strobe")
+                          f"is outside {PROBE_STROBE_NS}–{INIT_GATE_NS} ns")
     for name in GATES:
         v = f(name)
         if v is None:
@@ -1181,9 +1159,8 @@ def coldinit_qualify(values: dict) -> dict:
             failed.append(f"{name}: the final gate at 55 ns is {v:.4g}, below {GATE_MIN:g}")
     residue = f(RESIDUE)
     verdict = None
-    if not failed and residue is None:
-        failed.append(f"{RESIDUE} is unmeasured on a point that passed every "
-                      "qualification rule")
+    if residue is None:
+        failed.append(f"{RESIDUE} is unmeasured")
     if not failed:
         verdict = "MET" if residue <= RESIDUE_TARGET_UV else "NOT MET"
     return {"qualified": not failed, "failed": failed, "residue_uv": residue,
@@ -1209,13 +1186,13 @@ def coldinit_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS_552) ->
         "reference_series": PROBE_REFERENCE_SERIES,
         "release_ns": INIT_RELEASE_NS,
         "released_fully_ns": INIT_RELEASE_NS + INIT_RELEASE_RAMP_PS * 1e-3,
-        "baseline_ns": 29, "strobe_ns": PROBE_STROBE_NS, "end_ns": 55,
+        "baseline_ns": 29, "strobe_ns": PROBE_STROBE_NS, "end_ns": INIT_GATE_NS,
         "rules": {
             "release": {"ctl_tol_v": CTL_TOL_V,
                         "basis": "the control pulse is 1 -> 0 with 100 ps edges; a value "
                                  "outside tolerance at 29 ns means the deck is not the "
                                  "declared one"},
-            "stimulus": {f"{br}_programmed_v": programmed for br, programmed, _, _ in _STIMULUS}
+            "stimulus": {f"{br}_programmed_v": mv / 1000 for br, mv in _STIMULUS_MV.items()}
                         | {"tolerance_relative": STIMULUS_TOL_REL,
                            "basis": "the #415 clean controls delivered 99.93-99.96 % of the "
                                     "programmed differential with the same 1 GOhm / 1 pF "
@@ -1227,6 +1204,8 @@ def coldinit_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS_552) ->
         },
         "jobs": {}, "points": [], "problems": [],
     }
+    expected_rises = {m["name"]: m["spice"] for m in init_observables()
+                      if m["name"].endswith("_t_half")}
     for cond in CONDITIONS:
         cdir = series / cond.name
         env_path = cdir / f"{probe_arm_tag(arm)}.envelope.json"
@@ -1234,9 +1213,19 @@ def coldinit_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS_552) ->
             out["problems"].append(f"missing envelope {cond.name}/{arm}")
             continue
         env = _load(env_path)
+        request_path = cdir / f"{probe_arm_tag(arm)}.request.json"
+        # V2 used the same measurement names for either-direction crossings.
+        # Read the stored cards so replay cannot upgrade old measurements.
+        cards = {m["name"]: m.get("spice", "").lower().split()
+                 for m in _load(request_path)["measurements"] if m.get("name") in expected_rises}
+        acquisition_failures = [f"{name}: stored request lacks the rising half-supply measurement"
+                                for name, spice in expected_rises.items()
+                                if cards.get(name) != spice.split()]
+        body_path = cdir / probe_body_name(arm)
         out["jobs"][cond.name] = {
             **_remote(env), "envelope_status": env.get("status"),
-            "request_sha256": _sha(cdir / f"{probe_arm_tag(arm)}.request.json"),
+            "body_sha256": _sha(body_path),
+            "request_sha256": _sha(request_path),
             "envelope_sha256": _sha(env_path)}
         inv = cdir / f"{probe_arm_tag(arm)}.invocation.json"
         if inv.is_file():
@@ -1270,25 +1259,25 @@ def coldinit_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS_552) ->
             else:
                 entry["corner_id"] = corner.get("corner_id")
                 entry["corner_status"] = corner.get("status")
-                entry["values"] = {n: x.get("value")
-                                   for n, x in _meas_map(corner).items()}
-                # the #165 house validity first (errored corner, measurement
-                # integrity, supply/temperature/vcm probes, gate card status),
-                # then this issue's own qualification rules on top.
+                index, _ = grade_mod.measurement_index(corner)
+                values = {name: _num(index, name) for name in (index or {})}
+                entry["values"] = values
                 problem = point_problem(corner, cond.vcm_v(), required_measurements())
-                q = coldinit_qualify(entry["values"])
+                failures = list(acquisition_failures)
                 if problem:
-                    q = {**q, "qualified": False, "failed": [problem, *q["failed"]]}
-                entry["qualification"] = q
-                bd0, bd1, cd0, cd1 = (entry["values"].get(n) for n in ("bd0", "bd1", "cd0", "cd1"))
-                if None not in (bd0, bd1, cd0, cd1) and q["residue_uv"] is not None:
+                    failures.append(problem)
+                samples = [values.get(n) for n in ("bd0", "bd1", "cd0", "cd1")]
+                residue = values.get(RESIDUE)
+                if None not in samples and residue is not None:
+                    bd0, bd1, cd0, cd1 = samples
                     recomputed = abs((cd1 - cd0) - (bd1 - bd0)) * 1e6
                     entry["residue_recomputed_uv"] = round(recomputed, 6)
-                    if abs(recomputed - q["residue_uv"]) > max(2.0, 0.1 * abs(q["residue_uv"])):
-                        out["problems"].append(
-                            f"{cond.name} {key_str(key)}: {RESIDUE}={q['residue_uv']} uV is "
-                            f"inconsistent with its own 29/55 ns samples "
-                            f"({recomputed:.4g} uV recomputed)")
+                    if abs(recomputed - residue) > max(2.0, 0.1 * abs(residue)):
+                        mismatch = (f"{RESIDUE}={residue} uV is inconsistent with its own "
+                                    f"29/55 ns samples ({recomputed:.4g} uV recomputed)")
+                        failures.append(mismatch)
+                        out["problems"].append(f"{cond.name} {key_str(key)}: {mismatch}")
+                entry["qualification"] = coldinit_qualify(values, validity_failures=failures)
             ref = ref_corners.get(key)
             if ref is None:
                 entry["context_165"] = {"present": False}
@@ -1333,13 +1322,9 @@ def coldinit_render_markdown(res: dict) -> str:
          "analytic DC values and holds all three latch outputs at the wrong-polarity LOW "
          f"rail (every drive a voltage-controlled switch), then releases (v(clti) falls "
          f"{res['release_ns']:g} ns -> {res['released_fully_ns']:g} ns, "
-         "100 ps edge, never returns). After release each switch holds only its "
-         "ROFF = 1e12 Ohm -- invisible on the latch outputs (12 pA at 1.2 V) and a 0.1% "
-         "conductance beside the measured network's 1 GOhm rfloat (2.5e-5 of the 1 ms pin "
-         "relaxation over the 25 ns window, far below print resolution) -- so the "
-         f"{res['baseline_ns']} ns baseline, the {res['strobe_ns']} ns strobe and the "
-         f"{res['end_ns']} ns end all run on the #165 input network for every measurement "
-         "purpose. The release is re-read from each run (`init_ctl_1n` / `init_ctl_29n`).", "",
+         "100 ps edge, never returns). Refer to the recorded body and request for the switch "
+         "model and crossing cards used in each run. "
+         f"Each switch has {INIT_SW_ROFF_NOTE}. The control is measured at 1 and 29 ns.", "",
          "## Qualification rules (stated before grading)", "",
          "A point is qualified only when ALL of these hold; unqualified points are named "
          "with every failed or missing observation and are never graded:", "",
@@ -1353,23 +1338,26 @@ def coldinit_render_markdown(res: dict) -> str:
          f"{rules['pre_strobe_low_max']:g} (the complement of the 0.9 gate) -- the known "
          "opposite polarity.",
          "4. **Transitions**: each output has a post-strobe low-to-high crossing "
-         "(`{a,b,c}_t_half`, finite, at or after the strobe).",
+         "(`{a,b,c}_t_half`, first rising half-supply crossing in [30, 55] ns). Each "
+         "non-inverting output is at or below half the measured supply at the strobe.",
          f"5. **Gates**: `dout_1k_end`, `dout_float_small_end`, `dout_float_big_end` >= "
          f"{rules['gate_min']:g} at 55 ns.",
          "",
          f"For a qualified point the original `kick_sigdep_uv` card (#165's own 29 ns / "
          f"55 ns samples: `abs((cd1-cd0)-(bd1-bd0))*1e6`) is graded against the unchanged "
          f"Row 4 Target <= {rules['residue_target_uv']:g} uV. A miss is a reportable "
-         "result. The two edges and both controls are qualified by the same rules.", ""]
+         "result. Every point must also pass the corner checks (including supply, temperature "
+         "and common mode). The stored residue must agree with the 29/55 ns samples within "
+         "the larger of 2 uV and 10% of the stored residue.", ""]
     if res["problems"]:
         o += ["## Problems", ""] + [f"- {p}" for p in res["problems"]] + [""]
     o += ["## Fleet jobs", "",
-          "| condition | job id | state | PVT | envelope status | request sha256 |",
-          "|---|---|---|---|---|---|"]
+          "| condition | job id | state | PVT | envelope status | request sha256 | body sha256 |",
+          "|---|---|---|---|---|---|---|"]
     for name, j in res["jobs"].items():
         o.append(f"| `{name}` | {j.get('job_id')} | {j.get('state')} | "
                   f"{PROBE_PROCESS}/{PROBE_TEMPERATURE_C:g}C | {j.get('envelope_status')} | "
-                  f"`{str(j.get('request_sha256'))[:12]}` |")
+                  f"`{j['request_sha256'][:12]}` | `{j['body_sha256'][:12]}` |")
     o += ["", "## Four-point summary", "",
           "| pair | point | role | vcm (V) | b vd @30n (uV) | c vd @30n (mV) | "
           "a/b/c pre-strobe @29n | a/b/c t_half (ns) | gates @55n | qualified | "
@@ -1385,7 +1373,7 @@ def coldinit_render_markdown(res: dict) -> str:
             + "/".join(_ns(v.get(n)) for n in ("a_t_half", "b_t_half", "c_t_half")) + " | "
             + "/".join(_g4(v.get(g)) for g in GATES) + " | "
             + ("yes" if q["qualified"] else "**NO**") + " | "
-            + _g4(q["residue_uv"]) + " | "
+            + (_g4(q["residue_uv"]) if q["qualified"] else "-") + " | "
             + (q["residue_verdict"] or "not graded (unqualified)") + " |")
     unqualified = [p for p in res["points"] if p["qualification"] and not p["qualification"]["qualified"]]
     if unqualified:
@@ -1394,6 +1382,7 @@ def coldinit_render_markdown(res: dict) -> str:
             o.append(f"- `{p['condition']}` {p['key']} ({p['role']}):")
             o += [f"  - {why}" for why in p["qualification"]["failed"]]
     o += ["", "## Per-point observations", ""]
+    columns = [(br, pin) for br in ("a", "b", "c") for pin in ("dp", "dn")]
     for p in res["points"]:
         v, q = p["values"], p["qualification"]
         o += [f"### `{p['condition']}` {p['key']} -- {p['role']}, {p['pair']}", "",
@@ -1424,12 +1413,11 @@ def coldinit_render_markdown(res: dict) -> str:
               + ("; ".join(q["failed"]) if q["failed"] else "every rule passed") + ".",
               ""]
         o += ["Outputs over time (V):", "",
-              "| t (ns) | a dp | a dn | b dp | b dn | c dp | c dn |",
-              "|---|" + "---|" * 6]
+              "| t (ns) | " + " | ".join(f"{br} {pin}" for br, pin in columns) + " |",
+              "|---|" + "---|" * len(columns)]
         for t in PROBE_SAMPLE_NS:
             o.append(f"| {t} | " + " | ".join(
-                _g4(v.get(f"{b}_dp_{t}n")) for b in ("a", "b", "c"))
-                + " | " + " | ".join(_g4(v.get(f"{b}_dn_{t}n")) for b in ("a", "b", "c")) + " |")
+                _g4(v.get(f"{br}_{pin}_{t}n")) for br, pin in columns) + " |")
         o += [""]
     o += ["## Historical context: #165 at the same four points", "",
           "| point | #165 corner status | valid in #165 | reject reason | gates (a/b/c) | "
