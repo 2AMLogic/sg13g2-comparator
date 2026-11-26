@@ -118,14 +118,11 @@ measures whether matched added capacitance at the input-pair drains can
 close Row 2 within the Row 3c limit (Phase 2 of #479). Candidate settings
 are structural DUT netlists (`comparator.spice` plus two matched capacitor
 pairs) bound by name/path/sha256 in each bench body and re-derived from
-today's schematic by both builder and grader; the Row 2 noise bench joins
-the 18-point screen as one six-point part per process. Result: negative --
-the noise deficit saturates at ~2-3 % against the 5 % the Target needs
-while Row 3c rises toward its limit, and the Phase 1 calibration shows the
-input-referred density itself is unchanged. No setting advanced; the graded
-screen is
-[`klt-corner-verification/campaigns/20261121-issue497/capacitance.md`](klt-corner-verification/campaigns/20261121-issue497/capacitance.md).
-Characterization only; no row is changed.
+today's schematic by both builder and grader. At 36.27 nV/√Hz, the lowest
+18-point mean noise was 1.022 mV rms at 2 fF per side. All three tested
+settings (1, 2 and 4 fF) exceeded the 1.0 mV screen and kept the worst
+Row 3c delay below 2.0 ns. None advanced to full-grid grading.
+[Revised screen table](klt-corner-verification/campaigns/20261121-issue497/capacitance-r2.md).
 
 Plus one supporting confirmation, not a spec-row bench:
 
