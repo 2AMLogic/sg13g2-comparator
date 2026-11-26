@@ -594,9 +594,8 @@ def render_markdown(report: dict) -> str:
 
 #: Report directories are append-only, so a grader change (its sha256 is an
 #: indexed source) mints a NEW report directory rather than rewriting one.
-#: campaign id -> current report directory name; the superseded directory
-#: (``<campaign>-schematic``) stays as history.
-REPORT_DIR_NAMES = {"20261009-d73a9ac": "20261009-d73a9ac-schematic-r2"}
+#: Map campaign IDs to their current report directories and retain prior revisions.
+REPORT_DIR_NAMES = {"20261009-d73a9ac": "20261009-d73a9ac-schematic-r3"}
 
 
 def default_out_dir(campaign_id: str, root: Path | None = None) -> Path:
