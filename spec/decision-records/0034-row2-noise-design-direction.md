@@ -77,18 +77,16 @@ and this is the drafting-only decision record it was run for.
 
 Three findings shape the answer:
 
-- **The Row 2 bench cannot see a design's own noise.** Phase 1 showed it
-  injects one fixed density at every PVT point, so cross-design differences
-  in its numbers are differences in effective decision bandwidth, not in
-  front-end noise.
+- **The candidate bench holds the input noise density fixed.** At that
+  common density, differences between candidates reflect differences in
+  effective decision bandwidth.
 - **Phase 2 did not study the two topology alternatives.** Its candidates
   were the integration-node capacitance #477 expected and a load-width
   family added from Phase 1's per-device finding. Both stay inside the
   DR-0001 topology.
-- **The best measured candidate sits close to the Target, on either side of
-  it depending on the density used.** `w10` measures 0.04143 mV rms over the
-  Target at the unchanged bench and projects to 0.96930 mV rms at its own TT
-  density. The projection is not a measurement.
+- **The best measured candidate misses the Target.** The unchanged bench
+  places `w10` 0.04143 mV rms over the Target. Applying its TT density to
+  all 45 points gives a projected grid mean of 0.96930 mV rms.
 
 Every value below was re-read from the committed artifact while drafting
 this record, not copied from issue text. Nothing was simulated for it.
@@ -136,7 +134,7 @@ take the first three and reject the fourth without affecting them.
 | 1 | Keep DR-0001, or supersede it with a named topology? | Keep DR-0001. Neither named alternative has been measured. |
 | 2 | Adopt the integration-node capacitance change? | No, for 1, 2 and 4 fF per side: all three settings were eliminated at the screen. |
 | 3 | Which in-topology path carries Row 2 forward? | The load-width / bias axis, with `w10` as the measured reference point. No sizing adoption is proposed. |
-| 4 | Score Row 2 at each candidate's own density? | Accept the per-candidate, per-PVT-point density derivation, reported beside the unchanged-bench figure. |
+| 4 | Characterize each candidate at its own density at each PVT point? | Yes. Report the resulting grid mean as characterization only. The unchanged-bench 45-point mean grades the candidate against Row 2. |
 
 **1. Topology: keep DR-0001; supersede nothing.** The comparator stays
 DR-0001's single-tail (bottom-tail) StrongARM dynamic latch with no
@@ -163,14 +161,13 @@ further in-topology Row 2 work starts from. It does not claim the axis is
 exhausted, and it does not claim `w10` is the best width; the study shows
 neither.
 
-**4. Measurement-method item, to accept or reject.** Phase 1 shows the
-fixed 36.27 nV/√Hz injection misstates every candidate whose front end
-differs from the committed 12 µm design's. The proposal is derived in its
-own section below. In one line: measure each candidate's own input-referred
-white density at every PVT point of the Row 2 grid, inject that density at
-that point, and report the resulting grid mean beside the unchanged-bench
-figure. It moves no bound, and the unchanged-bench figure stays, because it
-is the only measured quantity that isolates the latch's decision bandwidth.
+**4. Measurement-method item, to accept or reject.** Measure the candidate's
+front-end white noise density at each PVT point, inject it at that point,
+and report the grid mean as characterization beside the unchanged-bench
+grade. If the means fall on opposite sides of 1.0 mV rms, the unchanged-bench
+mean controls the candidate verdict. For `w10` that verdict is FAIL.
+Using the characterization to grade compliance would require an explicitly
+ratified change to the DR-0002 measurement method.
 
 **5. No bound moves.** No Target or Stretch bound is relaxed, tightened or
 reworded. Row 2's Target (≤ 1.0 mV rms) and Stretch (≤ 0.6 mV rms) stay
@@ -224,11 +221,11 @@ Three readings follow:
   raises the input-referred density 16–17 % at each of the four points. At
   TT the gain falls from 1.639 to 1.434 V/V while the output density rises
   from 59.46 to 60.45 nV/√Hz.
-- **The fixed injection cuts both ways.** It overstates the noise of a
-  design whose own density is below 36.27 nV/√Hz and understates one whose
-  density is above it. The 8 µm baseline's own density is above the
-  injection at all four points. `w10`'s is below it at `sf`, `tt` and `fs`
-  and above it at `ff`.
+- **The calibration error changes sign with corner.** For the 8 µm baseline,
+  the fixed 36.27 nV/√Hz injection exceeds the reduced-model density at
+  `sf` (33.98) and `fs` (34.50) and falls below it at `tt` (42.16) and
+  `ff` (54.53), all in nV/√Hz. For `w10` the fixed injection exceeds the
+  reduced-model density at `sf`, `tt` and `fs` and falls below it at `ff`.
 - **Widening the loads lowers the density monotonically, at the cost of DC
   gain.** From 6 µm to 12 µm the TT density falls from 36.78 to 32.74
   nV/√Hz and the TT gain from 1.085 to 0.871 V/V.
@@ -440,7 +437,8 @@ PASS on Row 4b.
 ### Limits of the comparison, in the Phase 2 report's own terms
 
 - **Capacitance.** Only 1, 2 and 4 fF per side were measured. Saturation
-  and the behaviour at other capacitances remain undetermined.
+  and the behaviour at other capacitances remain undetermined. The three
+  measured settings have 18-point screen results only.
 - **Load width.** Widths between 10 and 12 µm have no timing grade. Only
   `w10` has a 45-point grade, and nothing shows it is the best width. The
   screen places `w10` (1.008 mV rms) below `w12` (1.032 mV rms), a 2.3 %
@@ -532,7 +530,7 @@ committed for any candidate.
 | Candidate | Schematic change | Expected layout cost |
 |---|---|---|
 | `cadd1f`, `cadd2f`, `cadd4f` | Two capacitor pairs added: `C497P`/`C497N` at `np`/`nn` to `vss` inside `.subckt comparator`, and the loop-broken twins. Bound as structural candidate netlists because the geometry override cannot express them ([`cadd1f.spice`](../../sim/comparator-integration-capacitance/candidates/cadd1f.spice)). | **The largest of the study, and none of it exists.** The generator has no capacitor primitive. Its reference parser reads only `X` instances inside `.subckt comparator`, so a capacitor line would neither be drawn nor make the self-check refuse. LVS compares against that block cut verbatim, so a layout without the capacitors would not match. The ERC request declares no device carve-out, on the stated ground that the cell has no MiM or similar device. Adopting a capacitance needs generator, self-check, LVS and ERC work before the standard re-runs below. None is proposed: all three settings were eliminated. |
-| `w4`, `w8`, `w10`, `w12` | Geometry only: `XM5.w`/`XM6.w` on the control's settings, which are themselves overrides of `design/comparator.spice`. `dut_ib` at 10 µA is an operating condition carried by [`sim/dut.json`](../../sim/dut.json), not geometry. | **The same class of change the DR-0033 draft discloses for the 8 µm pair.** [`generate.py`](../../layout/comparator/generate.py) draws from a hand-written device table and refuses to draw unless drawn W equals schematic W × m for all 24 instances, so each width is a device-table edit followed by regeneration. The GDS hash changes; DRC, LVS, ERC and nominal PEX re-run; #61's extracted evidence, tied to the current hash, is superseded; a fresh 45-point campaign, an N = 200 offset population and yield report, a characterization report and the manifest repins follow, as #481 lists for the 8 µm pair. |
+| `w4`, `w8`, `w10`, `w12` | The screen varies `XM5.w`/`XM6.w` on the control's geometry and bias. The [archived `w10` deck](../../sim/klt-corner-verification/campaigns/20261121-issue498/full_w10/regeneration.body.spice) records the geometry overrides and the separate bias override `dut_ib=1e-05` (10 µA). The [DUT default](../../sim/dut.json) is 20 µA. | **The same class of change the DR-0033 draft discloses for the 8 µm pair.** [`generate.py`](../../layout/comparator/generate.py) draws from a hand-written device table and refuses to draw unless drawn W equals schematic W × m for all 24 instances, so each width is a device-table edit followed by regeneration. The GDS hash changes; DRC, LVS, ERC and nominal PEX re-run; #61's extracted evidence, tied to the current hash, is superseded; a fresh 45-point campaign, an N = 200 offset population and yield report, a characterization report and the manifest repins follow, as #481 lists for the 8 µm pair. |
 
 Relative to the committed schematic, `w10` changes four widths: XM1/XM2
 12 → 8 µm, XM3/XM4 3 → 6 µm, XM5/XM6 3 → 10 µm and XMSW 40 → 20 µm. The
@@ -547,13 +545,11 @@ dynamic current pulse". No netlist exists to estimate from.
 ## Measurement-method item: per-candidate density, for the ratifier to accept or reject
 
 **What Phase 1 shows.** The fixed 36.27 nV/√Hz injection is the committed
-12 µm design's own nominal-corner density. For every other design measured
-it is not that design's density, and the gap is not small: 16–17 % for the
-8 µm pair at all four characterized points, and of opposite sign from point
-to point for `w10`, below the injection at `sf`, `tt` and `fs` and above it
-at `ff`. A Row 2 figure taken at the fixed
-injection therefore answers "how wide is this latch's decision aperture at
-the committed design's noise density", not "how noisy is this comparator".
+12 µm design's own nominal-corner density. The 8 µm pair has 16–17 % higher
+density than the 12 µm pair **at the same corner** across the four sampled
+points. Relative to the fixed injection, the 8 µm baseline is lower at
+`sf` and `fs` and higher at `tt` and `ff`. For `w10` only `ff` is higher.
+Holding the injection fixed lets the study compare decision bandwidths.
 As #477 put it of the #92 sweep, "'Input-pair W/L is not the lever' may
 therefore be a property of the bench, not of the design".
 
@@ -568,8 +564,9 @@ points of the Row 2 grid:
 2. Inject S(PVT) at that point's Row 2 run, scaling `vn_na` by S(PVT)/36.27.
    Keep `vn_ts`, the three rungs, N = 80, the statistic and the grader as
    they are.
-3. Report the resulting grid-wide mean **beside** the unchanged-bench
-   figure, each labelled with the density it was run with.
+3. Label the resulting grid-wide mean **front-end characterization**.
+   Report it beside the 45-point candidate grade at the fixed 36.27 nV/√Hz
+   injection, with the density basis for each.
 4. For a candidate that adds or changes front-end devices, include those
    devices in the sub-model, as #477 required of its topology candidates.
 
@@ -583,10 +580,16 @@ is a difference of unestablished sign, and the fourth bounds precision:
 
 - The sub-model's density is a **reportable lower bound** on the front
   end's own noise. It excludes the regenerative pair and the reset devices.
-  On the committed design, issue #81 measured the internal term alone at
-  ≈ 0.177 mV at 1×, about 2 % of the power, with front end alone 1.356 mV
-  and complete injection 1.305 mV
-  ([`comparator-transient-noise-full/README.md`](../../sim/comparator-transient-noise-full/README.md)).
+  For the committed design, the #81 internal-only run saturated at all 45
+  points at 1×, giving a 95 % upper bound of 0.56 mV rms per point.
+  At 8× internal density the measured grid mean was 1.414 mV rms. Dividing
+  by eight gives a model-based 1× estimate of 0.177 mV rms for that design.
+  At the fixed 36.27 nV/√Hz input density, the front-end-only mean was
+  1.356 mV rms. Adding regenerative-pair and reset-device sources gave
+  1.305 mV rms, the committed design's current whole-latch Row 2 evidence.
+  The `w10` campaign has no corresponding complete-injection result.
+  [Issue #81 campaign](../../sim/comparator-transient-noise-full/README.md) ·
+  [Ratified table and current evidence](../../README.md#target-specification-ratified--dr-0002)
 - The sub-model is a different operating point from the strobed latch:
   loop-broken, with the PMOS pair diode-connected.
 - Only a white density is injected. 1/f, gate-resistance and substrate
@@ -605,9 +608,10 @@ own-density grid mean.
 unchanged-bench grades stand as they are, and candidate-own-density numbers
 remain projections, labelled as such.
 
-**In either case** the Row 2 bound is untouched, and so is the
-unchanged-bench figure's role as the measurement that isolates decision
-bandwidth.
+**In either case** DR-0002 governs compliance. A per-PVT front-end mean
+below 1.0 mV rms would leave `w10`'s unchanged-bench FAIL in force.
+Establishing total-noise closure calls for whole-latch evidence covering
+the candidate's regenerative-pair and reset-device sources as well.
 
 ## What is left, per Phase 1
 
@@ -624,16 +628,16 @@ and Phase 2 measured how far each in-topology lever moves them:
   below the control's. 1–4 fF of integration-node capacitance lowers the
   18-point mean 1.09–2.92 %, against the 5.00 % the screen required.
 
-What remains for `w10` at the unchanged bench is 0.04143 mV rms, 4.1 % of
-the Target. Whether its own density closes that gap is the open question
-the method item decides, and the committed data do not answer it: the
-projection says yes at TT and the measured `ff` density says the injection
-understates it there.
+The measured `w10` mean exceeds the Target by 0.04143 mV rms (4.1 %).
+The 0.96930 mV rms projection scales the **45-point mean** by the single
+TT density ratio, 33.758 / 36.27. Its scope is the whole grid. The proposed
+experiment would instead measure the grid mean using each point's own
+density for characterization.
 
 The study leaves these ranges and questions open, and none is started by
 this record:
 
-1. **Own-density Row 2 figures** for the committed design, the baseline,
+1. **Own-density characterization means** for the committed design, the baseline,
    the control and `w10` on the 45-point grid, if the method item is
    accepted.
 2. **Load widths between 10 and 12 µm**, which have no timing grade.
@@ -717,10 +721,11 @@ proposed here the topology-change risk the draft named does not arise.
 - **Relax the Row 2 Target.** Out of scope and not proposed. #477 excluded
   it, the 2026-10-15 ruling directed "do not adopt relaxed targets", and
   agents do not relax the spec to make results pass.
-- **Record the negative result and state no direction.** Rejected. The
-  study does say which in-topology axis moves Row 2 on the full grid and
-  which does not, and leaving that unsaid would send the next study back to
-  the axis the screen closed for the measured settings.
+- **Record the negative result and state no direction.** Rejected. Only
+  `w10` advanced and reduced the measured 45-point mean relative to both
+  the control and the 8 µm baseline. The 1, 2 and 4 fF settings each missed
+  the required noise improvement on the 18-point screen. Their 45-point
+  outcomes are unmeasured.
 
 ## What this record does not do
 
@@ -762,21 +767,21 @@ If ratified as proposed:
 4. **Further in-topology Row 2 work starts from `w10`**, and anyone
    proposing a `w10` adoption does so in an adoption record that weighs its
    0.023 ns Row 3c margin.
-5. **The measurement-method question is settled one way or the other**, and
-   Row 2 candidate figures are either reported at two densities or at the
-   fixed one, by rule rather than by choice of the report.
+5. **Accepting question 4 adds a characterization result** beside the
+   fixed-injection grade. The grade controls the candidate verdict under
+   either disposition of question 4.
 
 ## Open items
 
-- **Own-density Row 2 grid means** for the reference designs, pending
+- **Own-density characterization means** for the reference designs, pending
   question 4.
 - **Timing grade for load widths between 10 and 12 µm**, and noise and
   timing for capacitances outside 1, 2 and 4 fF, if the in-topology search
   is to be completed.
 - **A grid-mean uncertainty statement for `w10`'s 45-point mean.** The
   issue #81 campaign's statement covers the committed design only.
-- **A bounded study of a topology alternative**, if the in-topology path
-  and the own-density measurement do not close Row 2. That is the point at
-  which DR-0001's escalation paths come up for a decision.
+- **A bounded study of a topology alternative**, if further in-topology
+  work fails to demonstrate Row 2 compliance on the ratified evidence path.
+  That is the point at which DR-0001's escalation paths come up for a decision.
 - **The DR-0033 draft's adopt-or-wait question**, which stays with its own
   PR.
