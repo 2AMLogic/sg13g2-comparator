@@ -68,6 +68,7 @@ import hashlib
 import json
 import math
 import random
+import zlib
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -1083,7 +1084,7 @@ def _supplement_envelope(path: Path) -> tuple[dict | None, bytes | None, str | N
         raw = _envelope_bytes(path)
     except FileNotFoundError:
         return None, None, "envelope not found (part not run)"
-    except (OSError, EOFError) as exc:
+    except (OSError, EOFError, zlib.error) as exc:
         return None, None, f"unreadable: {exc}"
     try:
         return json.loads(raw), raw, None
