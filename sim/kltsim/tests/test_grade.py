@@ -1007,6 +1007,18 @@ class CampaignChainTests(unittest.TestCase):
         self._edit_invocation(self.SPLIT, envelope_sha256=5)
         self._assert_rejected("offset_mc", "envelope_sha256 is missing or not")
 
+    def test_null_tag_and_exit_code_are_not_chain_problems(self):
+        # Campaign check_chain accepts a null tag and never reads exit_code;
+        # the timestep smoke chain is the stricter one (issue #558).
+        path = self.dir / f"{self.SPLIT}.invocation.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data.update(tag=None, exit_code=1)
+        path.write_text(json.dumps(data), encoding="utf-8")
+        ev = self._load("offset_mc")
+        self.assertEqual(ev.chain_problems, [], ev.chain_problems)
+        checked = ev.chain_checked[self.SPLIT]
+        self.assertEqual(checked["request_sha256"], checked["invocation_request_sha256"])
+
     def test_missing_and_malformed_companions(self):
         (self.dir / "regeneration.invocation.json").unlink()
         self._assert_rejected("regeneration", "invocation regeneration.invocation.json is missing")
