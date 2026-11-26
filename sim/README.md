@@ -112,6 +112,18 @@ strobes and +/-50 mV supply steps (45-point regeneration grid, 20-point paired
 offset grid, N = 16 draws) on the batch fleet. Characterization only; no row is
 changed.
 
+**Integration-node capacitance tradeoff (issue #497).**
+[`comparator-integration-capacitance/`](comparator-integration-capacitance/README.md)
+measures whether matched added capacitance at the input-pair drains can
+close Row 2 within the Row 3c limit (Phase 2 of #479). Candidate settings
+are structural DUT netlists (`comparator.spice` plus two matched capacitor
+pairs) bound by name/path/sha256 in each bench body and re-derived from
+today's schematic by both builder and grader. At 36.27 nV/√Hz, the lowest
+18-point mean noise was 1.022 mV rms at 2 fF per side. All three tested
+settings (1, 2 and 4 fF) exceeded the 1.0 mV screen and kept the worst
+Row 3c delay below 2.0 ns. None advanced to full-grid grading.
+[Revised screen table](klt-corner-verification/campaigns/20261121-issue497/capacitance-r2.md).
+
 Plus one supporting confirmation, not a spec-row bench:
 
 ```
@@ -262,14 +274,14 @@ locally launched grid.
 simulation-free step (issue #64):
 
 ```bash
-./sim/characterize.sh report          # regenerate sim/characterization/20261009-d73a9ac-schematic-r3/
+./sim/characterize.sh report          # regenerate sim/characterization/20261009-d73a9ac-schematic-r5/
 ./sim/characterize.sh report check    # re-hash every indexed source; fail if anything is stale
 ```
 
 A grader change re-mints the report directory (the sha256 of every grader source,
 `sim/kltsim/grade.py` and `sim/kltsim/populations.py`, is an indexed source);
 `sim/kltsim/characterization.py` `REPORT_DIR_NAMES` names the current
-one (`-r3` after issue #558). Earlier revisions stay as history.
+one (`-r5` for the combined grader from issues #497 and #558). Earlier revisions stay as history.
 
 The declared-contract loaders (`sim/kltsim/declared_n.py`,
 `sim/kltsim/bias_probes.py`) are deliberately not indexed grader sources:
@@ -721,7 +733,7 @@ transitive inputs):
 |---|---|
 | signoff-manifest-parity | `ci.yml`, `scripts/check_{klt_pin,signoff_report,readme_claims}.py`, `scripts/tests/test_item5_spec_rows.py` (issue #478 verdict regression, run by its own step), `manifests/`, `layout/`, `design/`, the manifest-cited `sim/klt-corner-verification/campaigns/20261009-d73a9ac/*.{json,jsonl,spice}` (both item 5 envelopes' pinned bodies), `sim/klt-corner-verification/campaigns/20261009-issue92/full_w8_l034/kickback.envelope.json` (the passing-kickback fixture that regression cites), `sim/klt-yield/` (the item 6 report and the samples document signoff re-hashes) |
 | layout-reproducibility | `layout/`, `design/comparator.spice`, `manifests/klt-pin.json` |
-| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh,tools/regen_reverse_control.py}`, `sim/comparator-{regeneration,kickback,memory,offset-transient-mc,transient-noise}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `sim/klt-corner-verification/campaigns/20261115-issue92-bias/full_ib10_sw20lat6/grading.json` (the issue #498 control whose Row 2 grades the load-width screen baseline is recomputed from), `campaigns/`: `20261009-issue78/fixture/`, `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-issue80/ib_{2.5,5,7.5,10,15,20,40}uA/*.{json,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `sim/comparator-offset-cm-band/campaigns/20261009-5185f52/{vcm-m050,vcm-nom,vcm-p050}/{*.spice,*.request.json}`; `sim/comparator-kickback-cm-band/campaigns/20261011-165/{vcm-m050,vcm-nom,vcm-p050}/{kickback.body.spice,kickback.envelope.json}`, `sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/{comparison.json,comparison.md,vcm-m050/kickback.body.spice}`, `sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/{vcm-m050,vcm-nom,vcm-p050}/kickback-*.{envelope.json,request.json}`, `sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/{comparison.json,comparison.md,{vcm-m050,vcm-nom,vcm-p050}/kickback-*.{envelope.json,request.json}}`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
+| harness-unit-tests | `ci.yml` (read by the lint preflight), patterns: `sim/{harness,kltsim,comparator-pex,dut,klt-yield,characterization}/`, `sim/{run_*.py,dut.json,tools/build-osdi.sh,tools/regen_reverse_control.py}`, `sim/comparator-{regeneration,kickback,memory,offset-transient-mc,transient-noise}/testbench/`, `sim/comparator-transient-noise/{*.py,records/20260921-154729-41cbc7f.md}`, `sim/comparator-transient-noise-full/*.py`, `sim/device-mismatch-confirm/*.py`, `scripts/`, `sim/klt-corner-verification/{benches/,rows.json}`, `campaigns/`: `20261009-issue78/fixture/`, `20261009-issue92/full_w8_l034/grading.json`, `20261115-issue92-bias/full_ib10_sw20lat6/grading.json` (also the #498 load-width screen control), `20261115-issue92-bias/scr_ib10_sw20lat6/*.{json,jsonl,spice}` (issue #497 capacitance control/baseline reads); `sim/comparator-integration-capacitance/candidates/*.spice` (issue #497 candidate references), `{20261009-d73a9ac,20261010-n200}/*.{json,jsonl,spice}`, `20261009-issue80/ib_{2.5,5,7.5,10,15,20,40}uA/*.{json,spice}`, `20261009-d73a9ac/smoke/offset_mc-mismatch-vs-negctrl.envelope.json`, `20261010-n200/smoke/offset_mc-preflight-seed-mismatch.envelope.json`; `sim/comparator-offset-cm-band/campaigns/20261009-5185f52/{vcm-m050,vcm-nom,vcm-p050}/{*.spice,*.request.json}`; `sim/comparator-kickback-cm-band/campaigns/20261011-165/{vcm-m050,vcm-nom,vcm-p050}/{kickback.body.spice,kickback.envelope.json}`, `sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/{comparison.json,comparison.md,vcm-m050/kickback.body.spice}`, `sim/comparator-kickback-cm-band/campaigns/20261108-405-probe/{vcm-m050,vcm-nom,vcm-p050}/kickback-*.{envelope.json,request.json}`, `sim/comparator-kickback-cm-band/campaigns/20261114-415-forceddc/{comparison.json,comparison.md,{vcm-m050,vcm-nom,vcm-p050}/kickback-*.{envelope.json,request.json}}`; `manifests/{sg13g2-comparator,t1-signoff-report,klt-pin}.json`, `spec/decision-records/0002-target-spec-ratification.md`, `design/`, `layout/{tests/,common_sg13g2.py}`, `layout/comparator/{*.py,erc_report.json,pdk_drc_report.json,comparator.gds,pex_report.json}` |
 | netlist-regeneration | `design/`, `sim/harness/`, `sim/pdk.json` |
 | append-only-evidence | `scripts/`, `ci.yml`, `sim/evidence-{exceptions,size-budget}.json`, `spec/decision-records/` (the size and manifest checks read blobs from the target commit, not the working tree) |
 

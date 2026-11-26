@@ -16,6 +16,7 @@ import hashlib
 import json
 import math
 import unittest
+from unittest import mock
 
 from kltsim import bias_probes, build, declared_n, grade
 from kltsim.benches import BENCHES, BIAS_PROBES, OFFSET_MC_N, PROCESSES, SUPPLIES_V, TEMPERATURES_C
@@ -511,6 +512,159 @@ class DutTests(unittest.TestCase):
             fake.write_text(json.dumps(binding), encoding="utf-8")
             with self.assertRaises(build.BuildError):
                 build.compose_body(BENCHES["regeneration"], "/x", dut_json=fake)
+
+
+class CandidateDutTests(unittest.TestCase):
+    """Issue #497 structural candidate binding at the grading boundary.
+
+    A candidate body inlines a study netlist (design/comparator.spice plus
+    matched integration-node capacitors) instead of the schematic itself.
+    `check_dut` must verify the embedded DUT against the INDEPENDENT
+    reference file (its path and sha256 are declared in the body header), so
+    a self-consistent body of the WRONG setting, a tampered reference, a
+    stale envelope hash and the plain schematic are each refused when a
+    named candidate is expected -- while the default schematic path and the
+    geometry-only path keep today's behaviour exactly.
+    """
+
+    GEOMETRY = {"XM1.w": "8u", "XM2.w": "8u", "XM3.w": "6u", "XM4.w": "6u",
+                "XM5.w": "6u", "XM6.w": "6u", "XMSW.w": "20u"}
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        self.dut = grade.load_dut_reference()
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = Path(self._tmp.name)
+        self.cand2f = self.dir / "cadd2f.spice"
+        self.cand2f.write_text(build.compose_candidate_netlist("2f"), encoding="utf-8")
+        self.cand4f = self.dir / "cadd4f.spice"
+        self.cand4f.write_text(build.compose_candidate_netlist("4f"), encoding="utf-8")
+
+    def _cand_body(self, cand=None, geometry=None):
+        return build.compose_body(
+            BENCHES["regeneration"], "/x", geometry_overrides=geometry,
+            candidate=(cand.stem, cand) if cand else None)
+
+    def _grade(self, body, candidate=None):
+        env = regeneration_envelope(body)
+        return grade.grade(_spec([_row("3a")]),
+                           {"regeneration": _evidence("regeneration", env, body)},
+                           self.dut, candidate=candidate)["rows"][0]
+
+    def test_candidate_body_accepted_with_and_without_expectation(self):
+        body = self._cand_body(self.cand2f, self.GEOMETRY)
+        self.assertEqual(self._grade(body, candidate="cadd2f")["target_verdict"], grade.PASS)
+
+    def test_candidate_body_refused_as_ordinary_schematic_grade(self):
+        body = self._cand_body(self.cand2f, self.GEOMETRY)
+        row = self._grade(body)
+        self.assertEqual(row["target_verdict"], grade.INVALID_DUT)
+        self.assertTrue(any("no registered candidate was requested" in p
+                            for p in row["dut_problems"]), row["dut_problems"])
+
+    def test_unregistered_candidate_refused(self):
+        body = self._cand_body(self.cand2f, self.GEOMETRY)
+        reg = build.candidate_netlist_path("cadd2f")
+        with mock.patch.object(build, "candidate_netlist_path",
+                               return_value=reg.with_name("nope-unlisted.spice")):
+            row = self._grade(body, candidate="cadd2f")
+        self.assertEqual(row["target_verdict"], grade.INVALID_DUT)
+        self.assertTrue(any("is not registered" in p for p in row["dut_problems"]),
+                        row["dut_problems"])
+
+    def test_substituted_candidate_body_rejected(self):
+        # another setting's VALID body (self-consistent path, sha and
+        # envelope hash) must still be refused for a named setting
+        body = self._cand_body(self.cand4f, self.GEOMETRY)
+        row = self._grade(body, candidate="cadd2f")
+        self.assertEqual(row["target_verdict"], grade.INVALID_DUT)
+        self.assertTrue(any("declares candidate 'cadd4f', expected 'cadd2f'"
+                            in p for p in row["dut_problems"]), row["dut_problems"])
+
+    def test_tampered_reference_file_rejected(self):
+        body = self._cand_body(self.cand2f, self.GEOMETRY)
+        self.cand2f.write_text(
+            self.cand2f.read_text(encoding="utf-8").replace("2f", "3f"), encoding="utf-8")
+        row = self._grade(body, candidate="cadd2f")
+        self.assertEqual(row["target_verdict"], grade.INVALID_DUT)
+        self.assertTrue(any("candidate reference file hashes to" in p
+                            for p in row["dut_problems"]), row["dut_problems"])
+
+    def test_candidate_drift_from_schematic_rejected(self):
+        # a reference file that is no longer today's comparator.spice plus
+        # exactly the matched capacitors is not a candidate, whatever it hashes to
+        drifted = build.compose_candidate_netlist("2f").replace(
+            "C497P np vss 2f", "C497P np vss 2f\nR497X np vss 1")
+        self.cand2f.write_text(drifted, encoding="utf-8")
+        with self.assertRaises(build.BuildError):
+            self._cand_body(self.cand2f, self.GEOMETRY)  # composition itself refuses
+        # grade-time: a body composed while the file was valid goes INVALID_DUT
+        # once the file drifts; even a fully re-signed chain around the drifted
+        # file cannot pass, because the derivation check is independent
+        body = self._cand_body(self.cand4f, self.GEOMETRY)
+        self.cand4f.write_text(drifted.replace("2f", "4f"), encoding="utf-8")
+        new_sha = hashlib.sha256(self.cand4f.read_bytes()).hexdigest()
+        tampered = body.replace(build.extract_candidate(body)["sha256"], new_sha)
+        row = self._grade(tampered, candidate="cadd4f")
+        self.assertEqual(row["target_verdict"], grade.INVALID_DUT)
+        self.assertTrue(any("not today's design/comparator.spice" in p
+                            for p in row["dut_problems"]), row["dut_problems"])
+
+    def test_default_schematic_body_rejected_for_named_candidate(self):
+        row = self._grade(_body("regeneration"), candidate="cadd2f")
+        self.assertEqual(row["target_verdict"], grade.INVALID_DUT)
+        self.assertTrue(any("declares no candidate" in p for p in row["dut_problems"]))
+        # without an expectation the default schematic keeps today's verdict
+        self.assertEqual(self._grade(_body("regeneration"))["target_verdict"], grade.PASS)
+
+    def test_geometry_only_body_keeps_today_behaviour(self):
+        body = self._cand_body(None, self.GEOMETRY)
+        self.assertEqual(self._grade(body)["target_verdict"], grade.PASS)
+        # an undeclared edit inside the DUT block is still refused
+        edited = body.replace("w=8u l=0.34u", "w=9u l=0.34u", 1)
+        self.assertNotEqual(edited, body)
+        row = self._grade(edited)
+        self.assertEqual(row["target_verdict"], grade.INVALID_DUT)
+
+    def test_stale_envelope_hash_rejected_for_candidate(self):
+        body = self._cand_body(self.cand2f, self.GEOMETRY)
+        env = regeneration_envelope(body + "* trailing edit\n")
+        row = grade.grade(_spec([_row("3a")]),
+                          {"regeneration": _evidence("regeneration", env, body)},
+                          self.dut, candidate="cadd2f")["rows"][0]
+        self.assertEqual(row["target_verdict"], grade.INVALID_DUT)
+
+    def test_marker_declares_name_path_and_sha(self):
+        body = self._cand_body(self.cand2f, self.GEOMETRY)
+        declared = build.extract_candidate(body)
+        self.assertEqual(declared["name"], "cadd2f")
+        self.assertEqual(build.REPO_ROOT / declared["path"], self.cand2f.resolve())
+        self.assertEqual(declared["sha256"],
+                         hashlib.sha256(self.cand2f.read_bytes()).hexdigest())
+
+    def test_candidate_netlist_derivation_round_trip(self):
+        base = (build.REPO_ROOT / self.dut.netlist_rel).read_text(encoding="utf-8")
+        for value in ("1f", "2.5f", "4f"):
+            text = build.compose_candidate_netlist(value)
+            self.assertNotEqual(text, base)
+            self.assertIn(f"C497P np vss {value}", text)
+            self.assertIn(f"C497N nn vss {value}", text)
+            self.assertIn(f"C497AP aon vss {value}", text)
+            self.assertIn(f"C497AN aop vss {value}", text)
+            self.assertEqual(build.check_candidate_netlist(text), value)
+        # the plain schematic is not a candidate, and neither is a candidate
+        # with an extra element or one capacitor pair missing
+        with self.assertRaises(build.BuildError):
+            build.check_candidate_netlist(base)
+        with self.assertRaises(build.BuildError):
+            build.check_candidate_netlist(
+                build.compose_candidate_netlist("2f") + "\nC497Z ln vss 2f\n")
+        with self.assertRaises(build.BuildError):
+            build.check_candidate_netlist(
+                build.compose_candidate_netlist("2f").replace("C497N nn vss 2f\n", ""))
 
 
 class MonteCarloTests(unittest.TestCase):

@@ -1,0 +1,132 @@
+{
+  "engine": "ngspice",
+  "netlist": "front-end-cadd.spice",
+  "models": {
+    "pdk": "ihp-sg13g2",
+    "lib": "libs.tech/ngspice/models/cornerMOSlv.lib"
+  },
+  "corners": {
+    "process": [
+      "mos_tt"
+    ],
+    "supply_v": {
+      "vsup": [
+        1.2
+      ]
+    },
+    "temperature_c": [
+      27
+    ],
+    "params": {
+      "pair_w": [
+        8e-06,
+        8e-06,
+        8e-06,
+        8e-06
+      ],
+      "pair_l": [
+        3.4e-07,
+        3.4e-07,
+        3.4e-07,
+        3.4e-07
+      ],
+      "switch_w": [
+        2e-05,
+        2e-05,
+        2e-05,
+        2e-05
+      ],
+      "latch_w": [
+        6e-06,
+        6e-06,
+        6e-06,
+        6e-06
+      ],
+      "dut_ib": [
+        1e-05,
+        1e-05,
+        1e-05,
+        1e-05
+      ],
+      "c_add": [
+        0.0,
+        1e-15,
+        2e-15,
+        4e-15
+      ]
+    }
+  },
+  "analysis": {
+    "kind": "noise",
+    "args": "v(aop,aon) vd dec 20 1 1e9 1"
+  },
+  "measurements": [
+    {
+      "name": "white_out",
+      "noise": {
+        "quantity": "onoise",
+        "at_hz": 1000000.0
+      },
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "gain_dc",
+      "expr": "noise1.onoise_spectrum[0]/noise1.inoise_spectrum[0]",
+      "unit": "V/V"
+    },
+    {
+      "name": "xm1a",
+      "expr": "noise1.onoise_n.xa.xm1a.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xm2a",
+      "expr": "noise1.onoise_n.xa.xm2a.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xmta",
+      "expr": "noise1.onoise_n.xa.xmta.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xmswa",
+      "expr": "noise1.onoise_n.xa.xmswa.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xmba",
+      "expr": "noise1.onoise_n.xa.xmba.nsg13_lv_nmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xm5a",
+      "expr": "noise1.onoise_n.xa.xm5a.nsg13_lv_pmos[120]",
+      "unit": "V/rtHz"
+    },
+    {
+      "name": "xm6a",
+      "expr": "noise1.onoise_n.xa.xm6a.nsg13_lv_pmos[120]",
+      "unit": "V/rtHz"
+    }
+  ],
+  "options": {
+    "osdi_preload": [
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/psp103.osdi",
+      "$PDK_ROOT/ihp-sg13g2/libs.tech/ngspice/osdi/psp103_nqs.osdi"
+    ],
+    "timeout_s": 30,
+    "keep_artifacts": true
+  },
+  "_comment": [
+    "Issue #497 Phase 1 calibration: the loop-broken front-end model with the",
+    "candidate capacitance mapped onto its integration nodes (np -> aon, nn -> aop).",
+    "Parameter rows, zipped: control (c_add = 0), cadd1f, cadd2f, cadd4f, every row",
+    "at the archived ib10_sw20lat6 geometry (8 um/0.34 um pair, 20 um switch,",
+    "6 um latch) and 10 uA bias. Row 0 reproduces Phase 1's measured",
+    "ib10_sw20lat6 densities (36.78 / 29.72 / 45.61 / 30.52 nV/rtHz at",
+    "tt / sf / ff / fs) as the cross-check.",
+    "white_out is the differential output density at 1 MHz, gain_dc the absolute",
+    "gain at 1 Hz; their quotient is the input-referred density S."
+  ]
+}

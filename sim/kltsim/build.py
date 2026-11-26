@@ -64,6 +64,158 @@ BATCH_OSDI_DIR = "/opt/pdk/ihp-sg13g2/libs.tech/ngspice/osdi"
 DUT_BEGIN = "* ==== BEGIN DUT"
 DUT_END = "* ==== END DUT"
 
+#: Study-only structural candidate netlists (issue #497): matched
+#: integration-node capacitance on the input-pair drains. ``design/
+#: comparator.spice`` itself is never edited; a candidate is that file plus
+#: one matched capacitor pair in the latch core and one in the loop-broken
+#: reduced sub-model, and both build and grade re-derive the candidate from
+#: TODAY's base bytes, so it can never silently drift from the schematic it
+#: modifies.
+CANDIDATES_DIR = SIM_DIR / "comparator-integration-capacitance" / "candidates"
+
+#: Body-header marker naming the structural candidate a body was built from
+#: (issue #497). ``kltsim.grade`` verifies the embedded DUT against the named
+#: reference FILE (an independent path + sha256), not just against the body.
+CANDIDATE_MARKER = (
+    "*   CANDIDATE NETLIST (issue #497 integration-capacitance study; "
+    "design/comparator.spice untouched):")
+
+#: The matched capacitors a candidate adds, per subckt: (instance, node)
+#: pairs -- each capacitor runs from its node to the subckt's ``vss`` rail --
+#: plus the header comment. Equal value per side by construction.
+_CANDIDATE_CAPS = {
+    "comparator": (
+        (("C497P", "np"), ("C497N", "nn")),
+        ("* issue #497: matched integration-node capacitance, per side, "
+         "node to the vss rail"),
+    ),
+    "comparator_dut_analog": (
+        (("C497AP", "aon"), ("C497AN", "aop")),
+        ("* issue #497: the same per-side capacitance at the loop-broken "
+         "model's integration\n* nodes (np maps to aon, nn maps to aop)"),
+    ),
+}
+
+#: the SPICE capacitance values a candidate may declare (verbatim tokens)
+_CAP_VALUE_RE = re.compile(r"[0-9.]+e-?[0-9]+|[0-9.]+[pfn]F?", re.IGNORECASE)
+
+
+def _subckt_ends_insert(text: str, insertions: dict) -> str:
+    """``text`` with each subckt's block of ``insertions`` added immediately
+    before its ``.ends`` line (only the named subckts; everything else
+    byte-identical)."""
+    out: list[str] = []
+    subckt = None
+    for line in text.split("\n"):
+        if line.startswith(".subckt "):
+            subckt = line.split()[1]
+        elif line.startswith(".ends") and subckt in insertions:
+            out.extend(insertions[subckt])
+            subckt = None
+        out.append(line)
+    return "\n".join(out)
+
+
+def compose_candidate_netlist(cap: str, dut_json: Path = DUT_JSON) -> str:
+    """``design/comparator.spice`` plus the matched per-side integration-node
+    capacitors ``cap`` (a verbatim SPICE value, e.g. ``"2f"``): the exact
+    bytes a committed candidate netlist must hold."""
+    if not isinstance(cap, str) or not _CAP_VALUE_RE.fullmatch(cap.strip()):
+        raise BuildError(f"candidate capacitance {cap!r} is not a plain SPICE value")
+    binding = load_dut_binding(dut_json)
+    base = binding["_netlist_path"].read_text(encoding="utf-8")
+    insertions = {
+        name: list(comment.split("\n")) + [f"{inst} {node} vss {cap.strip()}"
+                                           for inst, node in pairs]
+        for name, (pairs, comment) in _CANDIDATE_CAPS.items()
+    }
+    return _subckt_ends_insert(base, insertions)
+
+
+def candidate_caps(text: str) -> dict[str, str]:
+    """The per-side capacitance a candidate text declares per subckt, e.g.
+    ``{"comparator": "2f", "comparator_dut_analog": "2f"}`` (``{}`` when the
+    text declares none). Only capacitor lines of the exact generated shape
+    (``C<inst> <node> vss <value>`` on the studied nodes) count."""
+    caps: dict[str, str] = {}
+    subckt = None
+    for line in text.split("\n"):
+        if line.startswith(".subckt "):
+            subckt = line.split()[1]
+        elif subckt in _CANDIDATE_CAPS:
+            for inst, node in _CANDIDATE_CAPS[subckt][0]:
+                prefix = f"{inst} {node} vss "
+                if line.startswith(prefix) and " " not in line[len(prefix):]:
+                    caps[subckt] = line[len(prefix):]
+    return caps
+
+
+def check_candidate_netlist(text: str, dut_json: Path = DUT_JSON) -> str:
+    """The per-side capacitance value of a candidate netlist, after verifying
+    it IS today's DUT plus exactly the two matched capacitor pairs and
+    nothing else. Raises ``BuildError`` naming the deviation otherwise."""
+    caps = candidate_caps(text)
+    if set(caps) != set(_CANDIDATE_CAPS):
+        raise BuildError(
+            "candidate netlist must declare the matched capacitor pair in both "
+            "`.subckt comparator' (np/nn) and `.subckt comparator_dut_analog' "
+            f"(aon/aop); found {sorted(caps) or 'none'}")
+    values = set(caps.values())
+    if len(values) != 1:
+        raise BuildError(
+            f"candidate capacitance differs across sides or subckts: {sorted(caps.items())}")
+    value = next(iter(values))
+    if compose_candidate_netlist(value, dut_json) != text:
+        raise BuildError(
+            "candidate netlist is not today's design/comparator.spice plus exactly "
+            "the two matched capacitor pairs (re-derived bytes differ; the base "
+            "DUT or the candidate changed since it was written)")
+    return value
+
+
+def cap_to_farads(value: str) -> float:
+    """A SPICE capacitor value to farads (``f``/``p``/``n`` suffixes and
+    plain e-notation)."""
+    token = value.strip()
+    scale = {"f": 1e-15, "p": 1e-12, "n": 1e-9}
+    if token[-1:].lower() in scale:
+        return float(token[:-1]) * scale[token[-1:].lower()]
+    if token[-1:].upper() == "F":  # bare farads
+        return float(token[:-1])
+    return float(token)
+
+
+def candidate_netlist_path(name: str) -> Path:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name or ""):
+        raise BuildError(f"candidate name {name!r} is not a plain file name")
+    return CANDIDATES_DIR / f"{name}.spice"
+
+
+def load_candidate(name: str, dut_json: Path = DUT_JSON) -> tuple[str, Path, bytes]:
+    """Resolve a named candidate to ``(name, path, bytes)``, refusing a name
+    that is unknown, or whose file is not today's DUT plus exactly the
+    matched capacitors."""
+    path = candidate_netlist_path(name)
+    if not path.is_file():
+        raise BuildError(f"unknown candidate {name!r}: {path} does not exist")
+    text = path.read_text(encoding="utf-8")
+    check_candidate_netlist(text, dut_json)
+    return name, path, text.encode("utf-8")
+
+
+def extract_candidate(body_text: str) -> dict:
+    """The structural candidate a body declares (``{"name": ..., "path": ...,
+    "sha256": ...}``, the sha256 of the candidate FILE's bytes), or ``{}``."""
+    for line in body_text.split("\n"):
+        if line.startswith(CANDIDATE_MARKER):
+            out = {}
+            for item in line[len(CANDIDATE_MARKER):].split():
+                key, sep, value = item.partition("=")
+                if sep:
+                    out[key] = value
+            return out
+    return {}
+
 
 class BuildError(RuntimeError):
     pass
@@ -210,11 +362,21 @@ def extract_param_overrides(body_text: str) -> dict:
 
 def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
                  param_overrides: dict | None = None,
-                 geometry_overrides: dict | None = None) -> str:
+                 geometry_overrides: dict | None = None,
+                 candidate: tuple[str, Path] | None = None) -> str:
     """``param_overrides`` replaces named ``sim/dut.json`` operating-point
     parameters in the emitted ``.param`` lines only (issue #80's bias-point
     sweep). The file itself is never edited, and each override is stated in
-    the body header so it is visible in the hashed netlist."""
+    the body header so it is visible in the hashed netlist.
+
+    ``geometry_overrides`` (issue #92) rewrites instance w/l fields inside
+    ``.subckt comparator`` only, declared in the body header the same way.
+
+    ``candidate`` (issue #497) is ``(name, path)`` of a study-only structural
+    candidate netlist that replaces ``design/comparator.spice`` as the inlined
+    DUT (geometry still applies on top). The candidate must BE today's DUT
+    plus exactly the matched integration-node capacitors, verified here and
+    again at grading against the file's own bytes."""
     binding = load_dut_binding(dut_json)
     params = dict(binding.get("params") or {})
     for key in (param_overrides or {}):
@@ -224,8 +386,20 @@ def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
     dut_path: Path = binding["_netlist_path"]
     base_bytes = dut_path.read_bytes()
     dut_bytes = base_bytes
+    cand_name = cand_rel = None
+    cand_bytes: bytes | None = None
+    if candidate is not None:
+        cand_name, cand_path = candidate[0], Path(candidate[1])
+        cand_text = cand_path.read_text(encoding="utf-8")
+        check_candidate_netlist(cand_text, dut_json)
+        cand_bytes = cand_text.encode("utf-8")
+        dut_bytes = cand_bytes
+        try:
+            cand_rel = cand_path.resolve().relative_to(REPO_ROOT).as_posix()
+        except ValueError:  # a test fixture outside the repo
+            cand_rel = str(cand_path)
     if geometry_overrides:
-        dut_bytes = apply_geometry(base_bytes.decode("utf-8"), geometry_overrides).encode("utf-8")
+        dut_bytes = apply_geometry(dut_bytes.decode("utf-8"), geometry_overrides).encode("utf-8")
     dut_text = dut_bytes.decode("utf-8")
     circuit_path = BENCH_DIR / bench.circuit
     circuit_text = circuit_path.read_text(encoding="utf-8")
@@ -249,10 +423,16 @@ def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
             "*   OVERRIDE (issue #80 sweep; sim/dut.json untouched): "
             + ", ".join(f"{k}={v!r}" for k, v in sorted(param_overrides.items()))
         )
+    if cand_bytes is not None:
+        lines.append(CANDIDATE_MARKER
+                     + f" name={cand_name} path={cand_rel} sha256={sha256_bytes(cand_bytes)}")
     if geometry_overrides:
         lines.append(GEOMETRY_MARKER + " "
                      + " ".join(f"{k}={v}" for k, v in sorted(geometry_overrides.items())))
-        lines.append(f"*   base DUT (unmodified) sha256={sha256_bytes(base_bytes)}")
+        if cand_bytes is None:
+            lines.append(f"*   base DUT (unmodified) sha256={sha256_bytes(base_bytes)}")
+        else:
+            lines.append(f"*   base candidate {cand_name} (unmodified) sha256={sha256_bytes(cand_bytes)}")
     lines += [
         "*",
         "* klt sim netlist-body convention: no .lib / .temp / analysis / .end here --",
@@ -271,9 +451,10 @@ def compose_body(bench: Bench, osdi_dir: str, dut_json: Path = DUT_JSON,
         lines += ["", "* ---- bench parameters (sim/kltsim/benches.py) ----"]
         for key, value in sorted(bench.params.items()):
             lines.append(f".param {key}={value!r}")
+    dut_block_rel = dut_rel if cand_bytes is None else cand_rel
     lines += [
         "",
-        f"{DUT_BEGIN} {dut_rel} sha256={sha256_bytes(dut_bytes)} ====",
+        f"{DUT_BEGIN} {dut_block_rel} sha256={sha256_bytes(dut_bytes)} ====",
         dut_text.rstrip("\n"),
         f"{DUT_END} ====",
         "",
@@ -365,6 +546,7 @@ def plan_bench_inputs(
     split: bool = True,
     param_overrides: dict | None = None,
     geometry_overrides: dict | None = None,
+    candidate: tuple[str, Path] | None = None,
 ) -> tuple[Path, list[Path], list[tuple[Path, bytes]]]:
     """Compose (without writing) ``<bench>.body.spice`` and its request(s).
 
@@ -375,7 +557,8 @@ def plan_bench_inputs(
     batch image, ``backend: batch``) or ``local`` (a single-corner smoke
     form against this host's PDK; never committed). With ``split`` (the
     default) a ``split_by_process`` bench gets one request per process
-    corner, all sharing the one body.
+    corner, all sharing the one body. ``candidate`` (issue #497) inlines a
+    named structural candidate netlist as the DUT instead of the schematic.
     """
     if target not in ("batch", "local"):
         raise BuildError(f"unknown target {target!r}")
@@ -388,7 +571,8 @@ def plan_bench_inputs(
     files: list[tuple[Path, bytes]] = [(
         body_path,
         compose_body(bench, osdi_dir, param_overrides=param_overrides,
-                     geometry_overrides=geometry_overrides).encode("utf-8"),
+                     geometry_overrides=geometry_overrides,
+                     candidate=candidate).encode("utf-8"),
     )]
     backend = "batch" if target == "batch" else "local"
     requests: list[Path] = []
@@ -446,13 +630,15 @@ def write_bench_inputs(
     split: bool = True,
     param_overrides: dict | None = None,
     geometry_overrides: dict | None = None,
+    candidate: tuple[str, Path] | None = None,
 ) -> tuple[Path, list[Path]]:
     """Write a bench's inputs, OVERWRITING (disposable smoke directories and
     the fleet-smoke scratch path only). Campaign builds use
     :func:`plan_bench_inputs` + :func:`commit_inputs` instead."""
     body_path, requests, files = plan_bench_inputs(
         bench, out_dir, target=target, osdi_dir=osdi_dir, split=split,
-        param_overrides=param_overrides, geometry_overrides=geometry_overrides)
+        param_overrides=param_overrides, geometry_overrides=geometry_overrides,
+        candidate=candidate)
     out_dir.mkdir(parents=True, exist_ok=True)
     for path, data in files:
         path.write_bytes(data)
