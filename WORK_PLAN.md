@@ -1,7 +1,7 @@
 # Work plan
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-26T10:52:47Z (snapshot; compare against live labels)_
+_Generated: 2026-11-26T16:53:20Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs with an active hold (`loom:blocked` or `loom:operator`).
@@ -25,7 +25,7 @@ _None._
 
 Human-approved issues (`loom:issue`) ready for implementation — excluding held (`loom:blocked`/`loom:operator`/`loom:frozen`), `loom:building`, and issues closed by an open `loom:pr` PR (listed under Approved).
 
-- **#479**: Row 2 noise, Phase 2: compare integration-node capacitance and PMOS load sizing against the 8 µm baseline
+_None._
 
 ## In Progress
 
@@ -73,7 +73,7 @@ _None._
 | Operator merge-risk holds | 2 |
 | Very important | 0 |
 | Important | 1 |
-| Ready (`loom:issue`) | 1 |
+| Ready (`loom:issue`) | 0 |
 | In Progress (`loom:building`) | 2 |
 | PRs awaiting review | 1 |
 | Approved PRs awaiting merge | 2 |
