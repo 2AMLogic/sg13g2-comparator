@@ -126,6 +126,7 @@ import gzip
 import hashlib
 import json
 import tempfile
+import zlib
 from pathlib import Path
 from unittest import mock
 
@@ -159,6 +160,20 @@ def _write_config(root: Path, bench_name: str, *, gz: bool = False) -> None:
         inv = {"tag": tag, "envelope_sha256": _sha(raw),
                "request_sha256": _sha((root / f"{tag}.request.json").read_bytes())}
         (root / f"{tag}.invocation.json").write_text(json.dumps(inv), encoding="utf-8")
+
+
+def _corrupt_deflate(path: Path) -> None:
+    """Keep the gzip header but overwrite the start of the deflate body with an
+    invalid block type, so ``gzip.decompress`` raises a bare ``zlib.error``."""
+    data = bytearray(path.read_bytes())
+    data[10:14] = b"\xff\xff\xff\xff"
+    try:
+        gzip.decompress(bytes(data))
+    except zlib.error:
+        pass
+    else:
+        raise AssertionError("fixture no longer raises zlib.error")
+    path.write_bytes(bytes(data))
 
 
 class ProvenanceValidationTest(unittest.TestCase):
@@ -204,6 +219,22 @@ class ProvenanceValidationTest(unittest.TestCase):
                 self.setUp()
                 _write_config(self.root, name)
                 self.assertEqual(self.validate(name)[2], [])
+
+    def test_corrupt_deflate_body_is_rejected_not_raised(self):
+        _write_config(self.root, self.bench, gz=True)
+        _corrupt_deflate(self.root / f"{self.bench}.mos_tt.envelope.json.gz")
+        self.assertRejected(f"{self.bench}.mos_tt: envelope ")
+        _, _, problems, _ = self.validate()
+        self.assertTrue(any("cannot be read" in p for p in problems), problems)
+
+    def test_bad_magic_and_truncated_gzip_still_rejected(self):
+        full = gzip.compress(b'{"a": 1}' * 200, mtime=0)
+        for label, blob in (("bad magic", b"not a gzip stream"), ("truncated", full[:20])):
+            with self.subTest(label):
+                self.setUp()
+                _write_config(self.root, self.bench, gz=True)
+                (self.root / f"{self.bench}.mos_tt.envelope.json.gz").write_bytes(blob)
+                self.assertRejected("cannot be read")
 
     def test_missing_body(self):
         _write_config(self.root, self.bench)
@@ -419,6 +450,24 @@ class OptionalDiscoveryTest(unittest.TestCase):
             self.assertEqual(result.get(key), baseline.get(key))
         md = nf.render_markdown(result)
         self.assertIn("`zero` REJECTED by provenance validation", md)
+
+    def test_corrupt_deflate_control_is_included_as_rejected(self):
+        _write_config(self.root, self.CONTROL, gz=True)
+        _corrupt_deflate(self.root / f"{self.CONTROL}.mos_tt.envelope.json.gz")
+        result = nf.analyse(self.root, self.dut)
+        zero = result["configs"]["zero"]
+        self.assertTrue(zero["rejected"])
+        self.assertTrue(any("cannot be read" in r for r in zero["rejection_reasons"]),
+                        zero["rejection_reasons"])
+
+    def test_corrupt_deflate_required_config_is_rejected(self):
+        for plain in self.root.glob("tn_full_both.*.envelope.json"):
+            plain.unlink()  # the fixture's plain copy would otherwise win
+        _write_config(self.root, "tn_full_both", gz=True)
+        _corrupt_deflate(self.root / "tn_full_both.mos_tt.envelope.json.gz")
+        _, _, problems, prov = nf.validate_config(self.root, "tn_full_both", self.dut)
+        self.assertEqual(prov["status"], "rejected")
+        self.assertTrue(any("cannot be read" in p for p in problems), problems)
 
     def test_discovery_reads_no_envelope_bytes(self):
         _write_config(self.root, self.CONTROL, gz=True)
@@ -794,6 +843,15 @@ class TimestepSmokeValidationTest(unittest.TestCase):
         ts = self.run_ts(smoke)
         self.assertEqual(ts["steps"]["10p"]["n"], 10)
         self.assertIn("N", ts["withheld"]["10p"])
+
+    def test_corrupt_deflate_smoke_envelope_is_a_rejected_rung(self):
+        smoke = self.smoke()
+        ep = smoke / "timestep-10p.envelope.json"
+        ep.with_name(ep.name + ".gz").write_bytes(gzip.compress(ep.read_bytes(), mtime=0))
+        ep.unlink()
+        _corrupt_deflate(ep.with_name(ep.name + ".gz"))
+        ts = self.run_ts(smoke)
+        self.assertRejectedRung(ts, "10p", "envelope cannot be read")
 
     def test_missing_rung_and_absent_smoke_are_explicit(self):
         smoke = self.smoke({"20p": (15, 5, 10), "10p": (17, 4, 9)})
