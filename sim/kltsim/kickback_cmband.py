@@ -591,10 +591,91 @@ SUPPLEMENT_ISSUE = 415
 #: The arm set the #415 forced-DC supplement series runs. repro/obs are shared
 #: with the #405 probe (identical cards and body; only the issue label differs).
 PROBE_ARMS_415 = ("repro", "obs", "optdc", "icdc")
-#: Every arm the probe-build / probe-run / probe-compare CLI accepts (#405+#415).
-ALL_PROBE_ARMS = PROBE_ARMS + tuple(a for a in PROBE_ARMS_415 if a not in PROBE_ARMS)
+
+# --------------------------------------------------------------------------- #
+# issue #552: cold-edge supplement with a bench-only initialization phase
+# --------------------------------------------------------------------------- #
+#
+# MEASUREMENT SUPPLEMENT, NOT A VERDICT CHANGE. The #415 residual gap was that
+# no arm could construct its own discriminating test at the reject common
+# modes: the DC op fails there, so the bench never delivered the programmed
+# differential and the bistable latch was parked in whichever basin the failed
+# solve chose. This supplement closes that gap with a BENCH-ONLY
+# INITIALIZATION PHASE instead of solver hints:
+#
+#   vclti clti 0 pulse(1 0 25n 100p 100p 1 2)      (one release control)
+#   Binit_bpp bpp 0 i = 'v(clti)*0.01*(v(bsp)-v(bpp))'   (and bpn/cpp/cpn)
+#   Sinit_outa douta 0 clti 0 kbinit_sw           (and doutb/doutc)
+#   .model kbinit_sw sw ron=200 roff=1e12 von=0.6 voff=0.4
+#
+# During [0, 25 ns) the drive pins the four floating pins at the analytic DC
+# values their own 1 GOhm / 1 pF network would deliver (v(bsp), v(bsn),
+# v(csp), v(csn) = cm +/- dv/2) and holds all three non-inverting latch
+# outputs at the WRONG-POLARITY LOW rail (0 V, the one supply-independent
+# rail), the state the rejects already hold on their failing branch. The pin
+# drive is a Thevenin source (behavioural current source, 100 Ohm) gated by
+# v(clti); it is released by multiplication -- from 25.1 ns on its current is
+# IDENTICALLY zero (a 0 A current source is an open circuit, no residual
+# conductance), so the measured input network is exactly the #165 network.
+# The output drive is a voltage-controlled switch (a linear stamp; the
+# latch-output nodes are ~20 fF, far too small for a self-referencing current
+# source at any gain that could win against the latch), whose ROFF = 1e12 Ohm
+# after release is electrically invisible on nodes the latch itself drives at
+# microamp scale (12 pA at 1.2 V) and is NOT part of the measured input
+# network. The release happens before the 29 ns baseline (bd0/cd0) and stays
+# released through evaluation (30 ns strobe, 55 ns end); the realized control
+# voltage is re-read from the run itself (init_ctl_1n / init_ctl_29n), never
+# assumed. No arm is forced toward the expected answer: a 55 ns gate pass
+# requires a genuine post-strobe decision from a stated wrong-polarity start
+# with the full differential applied, and the initialization and
+# qualification rules are identical on the edges and the controls.
+
+COLD_ISSUE = 552
+#: Series-name token that routes a series to this supplement: requests,
+#: invocations and comparisons then all carry the #552 identity.
+COLD_INIT_MARK = "552"
+#: The arm set the #552 cold-edge series runs: one initialized arm. The
+#: un-initialized behaviour at the same four points is already recorded by the
+#: #405 (repro/obs/xing/step20p) and #415 (repro/obs/optdc/icdc) series.
+PROBE_ARMS_552 = ("init",)
+#: The temporary drive falls INIT_RELEASE_NS -> +100 ps and never returns
+#: (pulse width 1 s); 25.1 ns < 29 ns baseline < 30 ns strobe.
+INIT_RELEASE_NS = 25.0
+INIT_RELEASE_RAMP_PS = 100
+#: The pin drive's Thevenin conductance (100 Ohm). Basis: 100 Ohm against the
+#: 1 pF floating node settles in ~0.5 ns (5 tau), pins the DC value exactly,
+#: and keeps G*dt/C <= 0.005 at the tran's 5 ps max step -- ngspice's
+#: behavioural current sources collapse the timestep on self-referencing
+#: drives of small capacitors at larger G*dt/C (verified against the pinned
+#: ngspice-47 in a stdlib toy circuit; the latch-output nodes at ~20 fF would
+#: need G <= 4e-4, too weak to win against the latch, hence the switch).
+INIT_PIN_DRIVE_S = 0.01
+#: The output drive: a voltage-controlled switch (linear stamp, no
+#: self-referencing loop) to the 0 V rail; ROFF = 1e12 Ohm is electrically
+#: invisible on nodes the latch drives at microamp scale and is not part of
+#: the measured input network.
+INIT_SW_MODEL = "kbinit_sw"
+INIT_SW_CARD = ".model kbinit_sw sw ron=200 roff=1e12 von=0.6 voff=0.4"
+#: Qualification criteria, stated before grading (see coldinit_qualify). The
+#: applied-stimulus tolerance: the #415 clean controls delivered 99.93-99.96 %
+#: of the programmed differential with the same 1 GOhm / 1 pF network, while
+#: the failing solves at the rejects delivered ~2.2 %; +/- 2 % accepts exactly
+#: the delivered stimulus (20x the clean-control deficit, 40x below the
+#: collapse) and nothing wider.
+STIMULUS_TOL_REL = 0.02
+#: The pre-strobe LOW ceiling: the complement of the bench's own 0.9 gate.
+PRE_STROBE_LOW_MAX = 0.1
+#: The bench's own decision-gate limit (benches.py GATES cards).
+GATE_MIN = 0.9
+#: Tolerance on the initialization-control observations.
+CTL_TOL_V = 1e-3
+
+#: Every arm the probe-build / probe-run / probe-compare CLI accepts
+#: (#405 + #415 + #552).
+ALL_PROBE_ARMS = PROBE_ARMS + tuple(
+    a for a in (*PROBE_ARMS_415, *PROBE_ARMS_552) if a not in PROBE_ARMS)
 #: Arms whose body is the #165 body plus exactly probe_body_supplement().
-PROBE_BODY_SUPPLEMENT_ARMS = ("optdc", "icdc")
+PROBE_BODY_SUPPLEMENT_ARMS = ("optdc", "icdc", "init")
 
 PROBE_ARM_NOTES = {
     "repro": "arm repro: the #165 measurement cards and analysis, unchanged "
@@ -607,6 +688,18 @@ PROBE_ARM_NOTES = {
     "icdc": "arm icdc: arm obs + .nodeset of the four floating input pins at their "
             "analytic DC values and .ic of every branch output at the LOW (dout=0) "
             "state -- the wrong polarity for the programmed differential.",
+    "init": "arm init (#552): arm obs+xing + a bench-only initialization phase -- "
+            "the four floating input pins are pinned at their analytic DC values "
+            "(v(bsp)/v(bsn)/v(csp)/v(csn)) by Thevenin drives (behavioural current "
+            f"sources, {1 / INIT_PIN_DRIVE_S:.0f} Ohm) gated by v(clti), and douta/"
+            "doutb/doutc are held at the wrong-polarity LOW rail by switches to 0 V "
+            f"during [0, {INIT_RELEASE_NS:g} ns). Release: v(clti) falls "
+            f"{INIT_RELEASE_NS:g} -> {INIT_RELEASE_NS + INIT_RELEASE_RAMP_PS * 1e-3:g} ns "
+            "(100 ps edge, never returns); a released pin drive is a 0 A current "
+            "source (an open circuit), and the switches' 1e12 Ohm off-state on "
+            "latch outputs is electrically invisible, so the 29 ns baseline and the "
+            "whole evaluation window run on the exact #165 input network. Release is "
+            "re-read from the run (init_ctl_1n / init_ctl_29n), never assumed.",
 }
 
 
@@ -650,7 +743,10 @@ def probe_request(cond: Condition, arm: str, *, issue: int = PROBE_ISSUE) -> dic
     req["corners"]["process"] = [PROBE_PROCESS]
     req["corners"]["supply_v"] = {"vsup": list(PROBE_SUPPLIES_V[cond.name])}
     req["corners"]["temperature_c"] = [PROBE_TEMPERATURE_C]
-    if arm != "repro":
+    if arm == "init":
+        req["measurements"] = (req["measurements"] + probe_observables(with_crossings=True)
+                               + init_observables())
+    elif arm != "repro":
         req["measurements"] = req["measurements"] + probe_observables(with_crossings=(arm == "xing"))
     if arm in STEP_ARM_ARGS:
         req["analysis"] = {**req["analysis"], "args": STEP_ARM_ARGS[arm]}
@@ -675,6 +771,10 @@ def probe_request(cond: Condition, arm: str, *, issue: int = PROBE_ISSUE) -> dic
                          "probe_arm": arm, "reference_series": PROBE_REFERENCE_SERIES}
     if arm in PROBE_BODY_SUPPLEMENT_ARMS:
         req["_condition"]["body_supplement"] = arm
+    if arm == "init":
+        req["_condition"]["release_ns"] = INIT_RELEASE_NS
+        req["_condition"]["released_fully_ns"] = (
+            INIT_RELEASE_NS + INIT_RELEASE_RAMP_PS * 1e-3)
     return req
 
 
@@ -723,6 +823,55 @@ def probe_body_supplement(cond: Condition, arm: str) -> str:
             "* from the 1 ns observables (series README).\n"
             f"{nodeset}"
             ".ic v(douta)=0 v(doutb)=0 v(doutc)=0\n"
+        )
+    if arm == "init":
+        return (
+            "\n"
+            "* ---- issue #552 supplement (arm init): bench-only initialization phase ----\n"
+            "* Appended verbatim after the issue #165 body; nothing else changed. The\n"
+            "* drive establishes, in the bench (not in solver hints), the pre-strobe\n"
+            "* state the failing DC solve at the cold edges cannot: the four floating\n"
+            "* pins are pinned to the analytic DC values their own 1 GOhm / 1 pF network\n"
+            "* would deliver (v(bsp), v(bsn), v(csp), v(csn) = v(cm) +/- dv/2), and all\n"
+            "* three non-inverting latch outputs are held at the wrong-polarity LOW\n"
+            "* rail (0 V, the one supply-independent rail).\n"
+            "*\n"
+            "* PIN DRIVE: a Thevenin source (behavioural current source,\n"
+            f"* {1 / INIT_PIN_DRIVE_S:.0f} Ohm) gated by v(clti). Release is by multiplication:\n"
+            f"* v(clti) falls {INIT_RELEASE_NS:g} ns -> "
+            f"{INIT_RELEASE_NS + INIT_RELEASE_RAMP_PS * 1e-3:g} ns (100 ps edge) and never\n"
+            "* returns (pulse width 1 s), and from then on the drive current is\n"
+            "* IDENTICALLY zero -- a 0 A current source is an open circuit, no residual\n"
+            "* conductance -- so the measured 1 GOhm / 1 pF input network is exactly the\n"
+            f"* issue #165 one from {INIT_RELEASE_NS + INIT_RELEASE_RAMP_PS * 1e-3:g} ns on.\n"
+            "* OUTPUT DRIVE: a voltage-controlled switch to the 0 V rail (a linear\n"
+            "* stamp; the ~20 fF latch-output nodes cannot take a self-referencing\n"
+            "* current-source drive at any gain that would win against the latch).\n"
+            "* Its 1e12 Ohm off-state after release is electrically invisible on nodes\n"
+            "* the latch itself drives at microamp scale (12 pA at 1.2 V) and is not\n"
+            "* part of the measured input network.\n"
+            "*\n"
+            f"* The release is before the 29 ns baseline (bd0/cd0) and stays released\n"
+            "* through evaluation (30 ns strobe, 55 ns end); the realized control\n"
+            "* voltage is re-read from the run (init_ctl_1n / init_ctl_29n), never\n"
+            "* assumed. No .options, .nodeset, .ic or analysis change; the DUT is\n"
+            "* untouched. No arm is forced toward the expected answer: a 55 ns gate\n"
+            "* pass needs a genuine post-strobe decision from the stated wrong-polarity\n"
+            "* start with the full differential applied.\n"
+            f"vclti clti 0 pulse(1 0 {INIT_RELEASE_NS:g}n {INIT_RELEASE_RAMP_PS:g}p "
+            f"{INIT_RELEASE_RAMP_PS:g}p 1 2)\n"
+            "Binit_bpp bpp 0 i = 'v(clti)*"
+            f"{INIT_PIN_DRIVE_S:g}*(v(bsp)-v(bpp))'\n"
+            "Binit_bpn bpn 0 i = 'v(clti)*"
+            f"{INIT_PIN_DRIVE_S:g}*(v(bsn)-v(bpn))'\n"
+            "Binit_cpp cpp 0 i = 'v(clti)*"
+            f"{INIT_PIN_DRIVE_S:g}*(v(csp)-v(cpp))'\n"
+            "Binit_cpn cpn 0 i = 'v(clti)*"
+            f"{INIT_PIN_DRIVE_S:g}*(v(csn)-v(cpn))'\n"
+            f"Sinit_outa douta 0 clti 0 {INIT_SW_MODEL}\n"
+            f"Sinit_outb doutb 0 clti 0 {INIT_SW_MODEL}\n"
+            f"Sinit_outc doutc 0 clti 0 {INIT_SW_MODEL}\n"
+            f"{INIT_SW_CARD}\n"
         )
     return ""
 
@@ -890,4 +1039,403 @@ def probe_render_markdown(res: dict) -> str:
                 f"{f(v.get(f'{b}_dp_{t}n'))} | {f(v.get(f'{b}_dn_{t}n'))}"
                 for b in PROBE_BRANCHES) + " |")
         o.append("")
+    return "\n".join(o) + "\n"
+
+
+# --------------------------------------------------------------------------- #
+# issue #552: request cards, qualification, comparison
+# --------------------------------------------------------------------------- #
+
+#: branch A's output nodes for the init arm's extra cards (branch A's input
+#: network is not floating, so it gets output/crossing cards only -- the
+#: differential-qualification inputs are branches B and C).
+PROBE_BRANCH_A = ("douta", "doutba", "dan")
+
+
+def init_observables() -> list[dict]:
+    """The ``init`` arm's measurement cards beyond ``probe_observables(True)``
+    (which supplies branches B/C over time, their pin differentials at 1 ns and
+    at the strobe, and their crossings): branch A's over-time samples and
+    crossings, every branch's output level immediately before the strobe (raw
+    and supply-normalized, 29 ns), and the initialization control voltage at
+    1 ns (engaged) and 29 ns (released) -- the observable release evidence."""
+    cards: list[dict] = []
+    dp, dn, norm = PROBE_BRANCH_A
+    for t in PROBE_SAMPLE_NS:
+        cards.append(_find(f"a_dp_{t}n", f"v({dp})", t, "V"))
+        cards.append(_find(f"a_dn_{t}n", f"v({dn})", t, "V"))
+    cards.append({"name": "a_t_half", "unit": "s", "spice":
+                  f".meas tran a_t_half when v({norm})=0.5 td={PROBE_STROBE_NS}n cross=1"})
+    cards.append({"name": "a_t_pair", "unit": "s", "spice":
+                  f".meas tran a_t_pair when v({dp})=v({dn}) td={PROBE_STROBE_NS}n cross=1"})
+    branches = {"a": PROBE_BRANCH_A,
+                "b": PROBE_BRANCHES["b"][:3], "c": PROBE_BRANCHES["c"][:3]}
+    for br, (dp, dn, norm) in branches.items():
+        cards.append(_find(f"{br}_dp_29n", f"v({dp})", 29, "V"))
+        cards.append(_find(f"{br}_dn_29n", f"v({dn})", 29, "V"))
+        cards.append(_find(f"{norm}_29n", f"v({norm})", 29, "V/V"))
+    for t, name in ((1, "init_ctl_1n"), (29, "init_ctl_29n")):
+        cards.append(_find(name, "v(clti)", t, "V"))
+    return cards
+
+
+def _finite_or_none(value, name: str):
+    if value is None:
+        return None
+    try:
+        return grade_mod.finite(value, name)
+    except grade_mod.NonFiniteError:
+        return None
+
+
+#: branch -> (programmed differential, per-branch display scale and unit)
+_STIMULUS = (("b", 1e-3, 1e6, "uV"), ("c", 0.1, 1e3, "mV"))
+
+
+def coldinit_qualify(values: dict) -> dict:
+    """Apply the issue #552 qualification rules to one cold-edge point's
+    measured values (``name -> value`` straight from the corner).
+
+    A point is QUALIFIED only when every one of these holds; the rules are
+    stated here, before grading, so each classification is reproducible from
+    the stored observations alone:
+
+    1. RELEASE. The initialization control is engaged at 1 ns
+       (|v(clti) - 1 V| <= CTL_TOL_V) and released at the 29 ns baseline
+       (|v(clti)| <= CTL_TOL_V): the temporary drive is proven gone before
+       evaluation, from the run's own measurements.
+    2. APPLIED STIMULUS. The realized branch-B and branch-C pin differentials
+       at the 30 ns strobe are within +/- STIMULUS_TOL_REL of the programmed
+       1 mV and 100 mV (the documented tolerance and its basis: the #415 clean
+       controls delivered 99.93-99.96 % with the same network; the failing
+       solves delivered ~2.2 %).
+    3. PRE-STROBE STATE. All three supply-normalized outputs are LOW at 29 ns
+       (<= PRE_STROBE_LOW_MAX, the complement of the 0.9 decision gate): the
+       known opposite polarity the post-strobe decision must override.
+    4. TRANSITIONS. Each branch's normalized output has a post-strobe
+       low-to-high crossing (a finite ``{a,b,c}_t_half`` at or after the
+       strobe).
+    5. GATES. ``dout_1k_end``, ``dout_float_small_end`` and
+       ``dout_float_big_end`` are all >= GATE_MIN at 55 ns.
+
+    For a qualified point the original ``kick_sigdep_uv`` card (#165's own
+    29 ns / 55 ns samples) is graded against the unchanged Row 4 Target
+    (<= 100 uV); a miss is a reportable result, not a measurement failure.
+    An unqualified point is named with every failed or missing observation
+    and is never graded."""
+    failed: list[str] = []
+
+    def f(name):
+        return _finite_or_none(values.get(name), name)
+
+    ctl_1n, ctl_29n = f("init_ctl_1n"), f("init_ctl_29n")
+    if ctl_1n is None or abs(ctl_1n - 1.0) > CTL_TOL_V:
+        failed.append(f"init_ctl_1n at 1 ns is {values.get('init_ctl_1n')!r} V "
+                      f"(expected 1 V +/- {CTL_TOL_V:g}: drive not proven engaged)")
+    if ctl_29n is None or abs(ctl_29n) > CTL_TOL_V:
+        failed.append(f"init_ctl_29n at 29 ns is {values.get('init_ctl_29n')!r} V "
+                      f"(expected 0 V +/- {CTL_TOL_V:g}: drive not proven released before "
+                      "the baseline)")
+    for br, programmed, scale, unit in _STIMULUS:
+        v = f(f"{br}_vd_strobe")
+        tol = STIMULUS_TOL_REL * programmed
+        if v is None:
+            failed.append(f"{br}_vd_strobe: the realized branch-{br} pin differential at "
+                          "the 30 ns strobe is unmeasured (no applied-stimulus evidence)")
+        elif abs(v - programmed) > tol:
+            failed.append(
+                f"{br}_vd_strobe: the realized branch-{br} pin differential at the 30 ns "
+                f"strobe is {v * scale:.4g} {unit}, outside the programmed "
+                f"{programmed * scale:.4g} {unit} +/- {STIMULUS_TOL_REL:.0%} "
+                f"({(programmed - tol) * scale:.4g} .. {(programmed + tol) * scale:.4g} {unit})")
+    for br, name in (("a", "dan_29n"), ("b", "dbn_29n"), ("c", "dcn_29n")):
+        v = f(name)
+        if v is None:
+            failed.append(f"{name}: the branch-{br} pre-strobe output level at 29 ns "
+                          "is unmeasured")
+        elif v > PRE_STROBE_LOW_MAX:
+            failed.append(f"{name}: the branch-{br} pre-strobe output at 29 ns is {v:.4g} "
+                          f"(normalized), above the LOW ceiling {PRE_STROBE_LOW_MAX:g}: "
+                          "not the known opposite polarity")
+    for br in ("a", "b", "c"):
+        v = f(f"{br}_t_half")
+        if v is None:
+            failed.append(f"{br}_t_half: the branch-{br} post-strobe low-to-high crossing "
+                          "is missing")
+        elif v < PROBE_STROBE_NS * 1e-9:
+            failed.append(f"{br}_t_half: the branch-{br} crossing at {v * 1e9:.4g} ns "
+                          "precedes the strobe")
+    for name in GATES:
+        v = f(name)
+        if v is None:
+            failed.append(f"{name}: the final gate at 55 ns is unmeasured")
+        elif v < GATE_MIN:
+            failed.append(f"{name}: the final gate at 55 ns is {v:.4g}, below {GATE_MIN:g}")
+    residue = f(RESIDUE)
+    verdict = None
+    if not failed and residue is None:
+        failed.append(f"{RESIDUE} is unmeasured on a point that passed every "
+                      "qualification rule")
+    if not failed:
+        verdict = "MET" if residue <= RESIDUE_TARGET_UV else "NOT MET"
+    return {"qualified": not failed, "failed": failed, "residue_uv": residue,
+            "residue_target_uv": RESIDUE_TARGET_UV, "residue_verdict": verdict}
+
+
+def coldinit_compare(series: Path, *, arms: tuple[str, ...] = PROBE_ARMS_552) -> dict:
+    """Offline four-point comparison of the #552 cold-edge initialized series:
+    every point's observations, its qualification under ``coldinit_qualify``,
+    the graded residue for qualified points, and the #165 context at the same
+    key -- all recomputed deterministically from the stored envelopes (the
+    committed ``comparison.json`` is this function's output). The two edges
+    (vcm-m050 at 1.200 V, vcm-p050 at 1.080 V) and both controls (vcm-nom at
+    1.080 V and 1.200 V) are listed independently."""
+    if tuple(arms) != PROBE_ARMS_552:
+        raise KickbackCmBandError(
+            f"the issue #552 cold-edge series is compared with its own arm set "
+            f"{PROBE_ARMS_552}, not {arms}")
+    arm = "init"
+    ref_root = SERIES_DIR / PROBE_REFERENCE_SERIES
+    out: dict = {
+        "issue": COLD_ISSUE, "series": series.name,
+        "reference_series": PROBE_REFERENCE_SERIES,
+        "release_ns": INIT_RELEASE_NS,
+        "released_fully_ns": INIT_RELEASE_NS + INIT_RELEASE_RAMP_PS * 1e-3,
+        "baseline_ns": 29, "strobe_ns": PROBE_STROBE_NS, "end_ns": 55,
+        "rules": {
+            "release": {"ctl_tol_v": CTL_TOL_V,
+                        "basis": "the control pulse is 1 -> 0 with 100 ps edges; a value "
+                                 "outside tolerance at 29 ns means the deck is not the "
+                                 "declared one"},
+            "stimulus": {f"{br}_programmed_v": programmed for br, programmed, _, _ in _STIMULUS}
+                        | {"tolerance_relative": STIMULUS_TOL_REL,
+                           "basis": "the #415 clean controls delivered 99.93-99.96 % of the "
+                                    "programmed differential with the same 1 GOhm / 1 pF "
+                                    "network; the failing solves at the rejects delivered "
+                                    "~2.2 %; +/- 2 % accepts exactly the delivered stimulus"},
+            "pre_strobe_low_max": PRE_STROBE_LOW_MAX,
+            "gate_min": GATE_MIN,
+            "residue_target_uv": RESIDUE_TARGET_UV,
+        },
+        "jobs": {}, "points": [], "problems": [],
+    }
+    for cond in CONDITIONS:
+        cdir = series / cond.name
+        env_path = cdir / f"{probe_arm_tag(arm)}.envelope.json"
+        if not env_path.is_file():
+            out["problems"].append(f"missing envelope {cond.name}/{arm}")
+            continue
+        env = _load(env_path)
+        out["jobs"][cond.name] = {
+            **_remote(env), "envelope_status": env.get("status"),
+            "request_sha256": _sha(cdir / f"{probe_arm_tag(arm)}.request.json"),
+            "envelope_sha256": _sha(env_path)}
+        inv = cdir / f"{probe_arm_tag(arm)}.invocation.json"
+        if inv.is_file():
+            invocation = _load(inv)
+            out["jobs"][cond.name]["invocation"] = {
+                k: invocation.get(k) for k in ("klt_version", "env", "request_sha256",
+                                               "exit_code", "started_utc", "finished_utc",
+                                               "envelope_sha256")}
+        corners, notes = load_points(env)
+        out["problems"] += [f"{cond.name}/{arm}: {n}" for n in notes]
+        ref_env_path = ref_root / cond.name / f"{TAG}.envelope.json"
+        ref_corners = (load_points(_load(ref_env_path))[0] if ref_env_path.is_file() else {})
+        if not ref_env_path.is_file():
+            out["problems"].append(f"missing #165 reference envelope {ref_env_path}")
+        for sup in PROBE_SUPPLIES_V[cond.name]:
+            key = (PROBE_PROCESS.removeprefix("mos_"), round(float(sup), 6),
+                   PROBE_TEMPERATURE_C)
+            role = "control" if cond.name == NOMINAL else "edge"
+            entry = {"condition": cond.name, "key": key_str(key), "role": role,
+                     "pair": f"{key[1]:.3f} V supply pair", "vcm_v": cond.vcm_v(),
+                     "supply_v": key[1], "temperature_c": key[2],
+                     "corner_id": None, "corner_status": None, "values": {},
+                     "qualification": None, "context_165": None}
+            corner = corners.get(key)
+            if corner is None:
+                entry["qualification"] = {
+                    "qualified": False,
+                    "failed": [f"grid point {key_str(key)} not in the envelope"],
+                    "residue_uv": None, "residue_target_uv": RESIDUE_TARGET_UV,
+                    "residue_verdict": None}
+            else:
+                entry["corner_id"] = corner.get("corner_id")
+                entry["corner_status"] = corner.get("status")
+                entry["values"] = {n: x.get("value")
+                                   for n, x in _meas_map(corner).items()}
+                # the #165 house validity first (errored corner, measurement
+                # integrity, supply/temperature/vcm probes, gate card status),
+                # then this issue's own qualification rules on top.
+                problem = point_problem(corner, cond.vcm_v(), required_measurements())
+                q = coldinit_qualify(entry["values"])
+                if problem:
+                    q = {**q, "qualified": False, "failed": [problem, *q["failed"]]}
+                entry["qualification"] = q
+                bd0, bd1, cd0, cd1 = (entry["values"].get(n) for n in ("bd0", "bd1", "cd0", "cd1"))
+                if None not in (bd0, bd1, cd0, cd1) and q["residue_uv"] is not None:
+                    recomputed = abs((cd1 - cd0) - (bd1 - bd0)) * 1e6
+                    entry["residue_recomputed_uv"] = round(recomputed, 6)
+                    if abs(recomputed - q["residue_uv"]) > max(2.0, 0.1 * abs(q["residue_uv"])):
+                        out["problems"].append(
+                            f"{cond.name} {key_str(key)}: {RESIDUE}={q['residue_uv']} uV is "
+                            f"inconsistent with its own 29/55 ns samples "
+                            f"({recomputed:.4g} uV recomputed)")
+            ref = ref_corners.get(key)
+            if ref is None:
+                entry["context_165"] = {"present": False}
+            else:
+                rm = _meas_map(ref)
+                reason = point_problem(ref, cond.vcm_v(), required_measurements())
+                entry["context_165"] = {
+                    "present": True, "corner_status": ref.get("status"),
+                    "valid_in_165": reason is None, "reject_reason": reason,
+                    "gates": {g: (rm.get(g) or {}).get("value") for g in GATES},
+                    RESIDUE: (rm.get(RESIDUE) or {}).get("value")}
+            out["points"].append(entry)
+    out["points"].sort(key=lambda p: (p["supply_v"], p["role"] != "edge", p["condition"]))
+    return out
+
+
+def _g4(x):
+    return "-" if x is None else f"{x:.4g}"
+
+
+def _scaled(x, k):
+    return "-" if x is None else f"{x * k:.4g}"
+
+
+def _ns(x):
+    return "-" if x is None else f"{x * 1e9:.4g}"
+
+
+def coldinit_render_markdown(res: dict) -> str:
+    """The #552 four-point summary markdown (the series' comparison.md)."""
+    rules = res["rules"]
+    stim = rules["stimulus"]
+    o = [f"# Strobe-qualified kickback residue at the cold edge corners (issue #{res['issue']})", "",
+         "Supplementary measurement for the two DR-0004 cold-edge cells PR #166 left open "
+         "(`vcm-m050` ss/1.200 V/-40 C and `vcm-p050` ss/1.080 V/-40 C); evidence for "
+         "[PR #166](https://github.com/2AMLogic/sg13g2-comparator/pull/166), recorded "
+         "beside -- never merged into -- the "
+         f"`{res['reference_series']}` populations. Not a ratification, not a spec-row "
+         "verdict, and the #165 44/45 parent populations are untouched.", "",
+         "The bench is the #165 bench plus exactly the declared `init` supplement block: a "
+         "bench-only initialization phase pins the four floating input pins at their analytic "
+         "DC values and holds all three latch outputs at the wrong-polarity LOW rail, then "
+         f"releases (v(clti) falls {res['release_ns']:g} ns -> {res['released_fully_ns']:g} ns, "
+         "100 ps edge, never returns). A released drive is a 0 A current source -- an open "
+         "circuit, no residual conductance -- so from "
+         f"{res['released_fully_ns']:g} ns on the circuit is exactly the #165 network, and "
+         f"the {res['baseline_ns']} ns baseline, the {res['strobe_ns']} ns strobe and the "
+         f"{res['end_ns']} ns end all run fully released. The release is re-read from each "
+         "run (`init_ctl_1n` / `init_ctl_29n`).", "",
+         "## Qualification rules (stated before grading)", "",
+         "A point is qualified only when ALL of these hold; unqualified points are named "
+         "with every failed or missing observation and are never graded:", "",
+         f"1. **Release**: |v(clti) at 1 ns - 1 V| and |v(clti) at 29 ns| <= "
+         f"{rules['release']['ctl_tol_v']:g} V.",
+         f"2. **Applied stimulus**: the realized branch B/C pin differentials at the 30 ns "
+         f"strobe are within +/- {stim['tolerance_relative']:.0%} of the programmed "
+         f"{stim['b_programmed_v'] * 1e3:g} mV / {stim['c_programmed_v'] * 1e3:g} mV. "
+         f"Basis: {stim['basis']}.",
+         f"3. **Pre-strobe state**: all three normalized outputs at 29 ns <= "
+         f"{rules['pre_strobe_low_max']:g} (the complement of the 0.9 gate) -- the known "
+         "opposite polarity.",
+         "4. **Transitions**: each output has a post-strobe low-to-high crossing "
+         "(`{a,b,c}_t_half`, finite, at or after the strobe).",
+         f"5. **Gates**: `dout_1k_end`, `dout_float_small_end`, `dout_float_big_end` >= "
+         f"{rules['gate_min']:g} at 55 ns.",
+         "",
+         f"For a qualified point the original `kick_sigdep_uv` card (#165's own 29 ns / "
+         f"55 ns samples: `abs((cd1-cd0)-(bd1-bd0))*1e6`) is graded against the unchanged "
+         f"Row 4 Target <= {rules['residue_target_uv']:g} uV. A miss is a reportable "
+         "result. The two edges and both controls are qualified by the same rules.", ""]
+    if res["problems"]:
+        o += ["## Problems", ""] + [f"- {p}" for p in res["problems"]] + [""]
+    o += ["## Fleet jobs", "",
+          "| condition | job id | state | PVT | envelope status | request sha256 |",
+          "|---|---|---|---|---|---|"]
+    for name, j in res["jobs"].items():
+        o.append(f"| `{name}` | {j.get('job_id')} | {j.get('state')} | "
+                  f"{PROBE_PROCESS}/{PROBE_TEMPERATURE_C:g}C | {j.get('envelope_status')} | "
+                  f"`{str(j.get('request_sha256'))[:12]}` |")
+    o += ["", "## Four-point summary", "",
+          "| pair | point | role | vcm (V) | b vd @30n (uV) | c vd @30n (mV) | "
+          "a/b/c pre-strobe @29n | a/b/c t_half (ns) | gates @55n | qualified | "
+          "kick_sigdep (uV) | verdict |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    for p in res["points"]:
+        v, q = p["values"], p["qualification"]
+        o.append(
+            f"| {p['pair']} | {p['key']} | {p['role']} | {p['vcm_v']} | "
+            f"{_scaled(v.get('b_vd_strobe'), 1e6)} | "
+            f"{_scaled(v.get('c_vd_strobe'), 1e3)} | "
+            + "/".join(_g4(v.get(n)) for n in ("dan_29n", "dbn_29n", "dcn_29n")) + " | "
+            + "/".join(_ns(v.get(n)) for n in ("a_t_half", "b_t_half", "c_t_half")) + " | "
+            + "/".join(_g4(v.get(g)) for g in GATES) + " | "
+            + ("yes" if q["qualified"] else "**NO**") + " | "
+            + _g4(q["residue_uv"]) + " | "
+            + (q["residue_verdict"] or "not graded (unqualified)") + " |")
+    unqualified = [p for p in res["points"] if p["qualification"] and not p["qualification"]["qualified"]]
+    if unqualified:
+        o += ["", "## Failed conditions, unqualified points", ""]
+        for p in unqualified:
+            o.append(f"- `{p['condition']}` {p['key']} ({p['role']}):")
+            o += [f"  - {why}" for why in p["qualification"]["failed"]]
+    o += ["", "## Per-point observations", ""]
+    for p in res["points"]:
+        v, q = p["values"], p["qualification"]
+        o += [f"### `{p['condition']}` {p['key']} -- {p['role']}, {p['pair']}", "",
+              f"- corner `{p['corner_id']}` status `{p['corner_status']}`; fleet job "
+              f"`{(res['jobs'].get(p['condition']) or {}).get('job_id')}`.",
+              f"- initialization control: 1 ns {_g4(v.get('init_ctl_1n'))} V, "
+              f"29 ns {_g4(v.get('init_ctl_29n'))} V (released "
+              f"{res['release_ns']:g} -> {res['released_fully_ns']:g} ns, before the "
+              f"{res['baseline_ns']} ns baseline).",
+              f"- pin differentials: 1 ns b {_g4(v.get('b_vd_1n'))} V / "
+              f"c {_g4(v.get('c_vd_1n'))} V; 30 ns strobe b {_g4(v.get('b_vd_strobe'))} V / "
+              f"c {_g4(v.get('c_vd_strobe'))} V.",
+              f"- pre-strobe outputs at 29 ns (raw V): a {_g4(v.get('a_dp_29n'))} / "
+              f"{_g4(v.get('a_dn_29n'))}, b {_g4(v.get('b_dp_29n'))} / {_g4(v.get('b_dn_29n'))}, "
+              f"c {_g4(v.get('c_dp_29n'))} / {_g4(v.get('c_dn_29n'))};"
+              f" normalized a/b/c {_g4(v.get('dan_29n'))}/{_g4(v.get('dbn_29n'))}/"
+              f"{_g4(v.get('dcn_29n'))}.",
+              f"- crossings (post-strobe): a {_ns(v.get('a_t_half'))} / pair "
+              f"{_ns(v.get('a_t_pair'))}, b {_ns(v.get('b_t_half'))} / pair "
+              f"{_ns(v.get('b_t_pair'))}, c {_ns(v.get('c_t_half'))} / pair "
+              f"{_ns(v.get('c_t_pair'))} ns.",
+              f"- 29/55 ns samples: bd0 {_g4(v.get('bd0'))}, bd1 {_g4(v.get('bd1'))}, "
+              f"cd0 {_g4(v.get('cd0'))}, cd1 {_g4(v.get('cd1'))} V"
+              + (f"; residue recomputed from the samples "
+                 f"{_g4(p.get('residue_recomputed_uv'))} uV"
+                 if "residue_recomputed_uv" in p else "") + ".",
+              f"- qualification: {'qualified' if q['qualified'] else 'UNQUALIFIED'}; "
+              + ("; ".join(q["failed"]) if q["failed"] else "every rule passed") + ".",
+              ""]
+        o += ["Outputs over time (V):", "",
+              "| t (ns) | a dp | a dn | b dp | b dn | c dp | c dn |",
+              "|---|" + "---|" * 6]
+        for t in PROBE_SAMPLE_NS:
+            o.append(f"| {t} | " + " | ".join(
+                _g4(v.get(f"{b}_dp_{t}n")) for b in ("a", "b", "c"))
+                + " | " + " | ".join(_g4(v.get(f"{b}_dn_{t}n")) for b in ("a", "b", "c")) + " |")
+        o += [""]
+    o += ["## Historical context: #165 at the same four points", "",
+          "| point | #165 corner status | valid in #165 | reject reason | gates (a/b/c) | "
+          "#165 kick_sigdep (uV) |",
+          "|---|---|---|---|---|---|"]
+    for p in res["points"]:
+        c = p["context_165"] or {}
+        gates = "/".join(_g4(g) for g in (c.get("gates") or {}).values())
+        o.append(f"| {p['key']} | {c.get('corner_status')} | "
+                  f"{c.get('valid_in_165')} | {c.get('reject_reason') or '-'} | {gates} | "
+                  f"{_g4(c.get(RESIDUE))} |")
+    o += ["", "Reproduce (offline, from the stored envelopes):",
+          "",
+          "```bash",
+          "python3 sim/run_kickback_cm_band.py probe-compare --series "
+          f"{res['series']}",
+          "```",
+          ""]
     return "\n".join(o) + "\n"

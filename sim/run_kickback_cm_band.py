@@ -22,15 +22,26 @@ the saved envelopes.
 
 Probe supplements (never merged into the #165 populations): the frozen
 `20261108-405-probe` series (issue #405) runs arms repro/obs/xing/step20p;
-a series with any other id defaults to the issue #415 forced-DC supplement's
-arms repro/obs/optdc/icdc, whose optdc/icdc bodies append a declared block
-to the #165 body (sim/kltsim/kickback_cmband.py: probe_body_supplement).
+a series whose name contains `552` is the issue #552 cold-edge supplement and
+runs the single `init` arm (a bench-only initialization phase that releases
+before the 29 ns baseline; four-point summary from `probe-compare`); any other
+series defaults to the issue #415 forced-DC supplement's arms
+repro/obs/optdc/icdc, whose optdc/icdc bodies append a declared block to the
+#165 body (sim/kltsim/kickback_cmband.py: probe_body_supplement).
 probe-compare only ever writes into the series it is pointed at; it refuses
 to rewrite the frozen #405 series in place with a non-#405 arm set
 (`--report-dir NEW-DIR` publishes such an analysis in a new namespace).
 `compare` and `probe-compare` write their `comparison.{json,md}` pair
 append-only through `kltsim.artifacts.publish` (`--check` is the read-only
 twin; `--report-dir` redirects into a new, citing namespace).
+
+The probe subcommands accept `--root DIR` to place the series under a
+staging root other than sim/comparator-kickback-cm-band/campaigns/ -- the
+default is unchanged. Issue #552 uses it to stage its series in git-ignored
+scratch (sim/.work/...) so the campaign bytes can be stored through the
+manifest workflow (sim/run_store_evidence.py) instead of committed under
+sim/: `probe-build`/`probe-run`/`probe-compare` there take
+`--root sim/.work/<scratch>`.
 
 See sim/kltsim/kickback_cmband.py and sim/comparator-kickback-cm-band/README.md.
 Run from the repository root.
@@ -57,17 +68,36 @@ FROZEN_PROBE_SERIES = "20261108-405-probe"
 
 def _arms_for(series_name: str, chosen: list[str] | None) -> tuple[str, ...]:
     """Default arm set by series: the frozen #405 probe keeps its four arms;
-    any other series is the issue #415 forced-DC supplement's arm set."""
+    a #552 series (name contains kb.COLD_INIT_MARK) is the cold-edge
+    initialized supplement; any other series is the issue #415 forced-DC
+    supplement's arm set."""
     if chosen:
         return tuple(chosen)
-    return kb.PROBE_ARMS if series_name == FROZEN_PROBE_SERIES else kb.PROBE_ARMS_415
+    if series_name == FROZEN_PROBE_SERIES:
+        return kb.PROBE_ARMS
+    if kb.COLD_INIT_MARK in series_name:
+        return kb.PROBE_ARMS_552
+    return kb.PROBE_ARMS_415
 
 
 def _issue_for(series_name: str) -> int:
-    return kb.PROBE_ISSUE if series_name == FROZEN_PROBE_SERIES else kb.SUPPLEMENT_ISSUE
+    """The issue identity a series carries in its requests, invocations and
+    comparisons: #405 for the frozen probe, #552 for a cold-edge series (name
+    contains kb.COLD_INIT_MARK), #415 for every other supplement series."""
+    if series_name == FROZEN_PROBE_SERIES:
+        return kb.PROBE_ISSUE
+    if kb.COLD_INIT_MARK in series_name:
+        return kb.COLD_ISSUE
+    return kb.SUPPLEMENT_ISSUE
 
 
 def _series(args) -> Path:
+    # ``--root`` stages the series under another root (issue #552 stores its
+    # campaign bytes through sim/run_store_evidence.py, which requires
+    # git-ignored scratch); absent or non-path-like (test Mocks) -> default.
+    root = getattr(args, "root", None)
+    if isinstance(root, (str, Path)) and root:
+        return Path(root) / args.series
     return kb.SERIES_DIR / args.series
 
 
@@ -225,19 +255,41 @@ def cmd_probe_compare(args) -> int:
     series = _series(args)
     arms = _arms_for(args.series, args.arm)
     report_dir = getattr(args, "report_dir", None)
-    if args.series == FROZEN_PROBE_SERIES and set(arms) != set(kb.PROBE_ARMS) and (
-            not report_dir or Path(report_dir) == series):
-        print(f"{args.series} is the frozen #405 probe series; refusing to rewrite it in "
-              "place with a non-#405 arm set (its committed files must stay byte-unchanged; "
-              "publish under a NEW --report-dir instead)", file=sys.stderr)
-        return 1
-    res = kb.probe_compare(series, arms=arms, issue=_issue_for(args.series))
+    issue = _issue_for(args.series)
+    if issue == kb.COLD_ISSUE:
+        # The #552 cold-edge series' comparison is the init-arm four-point
+        # summary; any other arm set would publish an analysis this issue
+        # never defined into its namespace.
+        if set(arms) != set(kb.PROBE_ARMS_552):
+            print(f"{args.series} is the issue #552 cold-edge series; its comparison is the "
+                  f"four-point summary of arm set {list(kb.PROBE_ARMS_552)}, not {list(arms)}; "
+                  "refusing to publish that into its namespace", file=sys.stderr)
+            return 1
+        res = kb.coldinit_compare(series, arms=arms)
+        md = kb.coldinit_render_markdown(res)
+    else:
+        if args.series == FROZEN_PROBE_SERIES and set(arms) != set(kb.PROBE_ARMS) and (
+                not report_dir or Path(report_dir) == series):
+            print(f"{args.series} is the frozen #405 probe series; refusing to rewrite it in "
+                  "place with a non-#405 arm set (its committed files must stay byte-unchanged; "
+                  "publish under a NEW --report-dir instead)", file=sys.stderr)
+            return 1
+        res = kb.probe_compare(series, arms=arms, issue=issue)
+        md = kb.probe_render_markdown(res)
     rc = kcli.publish_report_pair("probe-compare", args, series, "comparison", res,
-                                  kb.probe_render_markdown(res), "series")
+                                  md, "series")
     if rc or getattr(args, "check", False):
         return rc
     for p in res["problems"]:
         print("problem:", p, file=sys.stderr)
+    if issue == kb.COLD_ISSUE:
+        for p in res["points"]:
+            q = p["qualification"]
+            note = (f"residue {q['residue_uv']} uV vs <= {q['residue_target_uv']} uV: "
+                    f"{q['residue_verdict']}" if q["qualified"] else "; ".join(q["failed"]))
+            print(f"{p['key']} {p['role']} {'qualified' if q['qualified'] else 'UNQUALIFIED'}"
+                  f" -- {note}")
+        return 1 if res["problems"] else 0
     for r in res["points"]:
         for arm, a in r["arms"].items():
             if a.get("present"):
@@ -288,6 +340,10 @@ def main(argv: list[str] | None = None) -> int:
     pb.add_argument("--series", required=True)
     pb.add_argument("--condition", action="append", choices=names)
     pb.add_argument("--arm", action="append", choices=list(kb.ALL_PROBE_ARMS))
+    pb.add_argument("--root", type=Path, default=None,
+                    help="stage the series under this root instead of "
+                         "sim/comparator-kickback-cm-band/campaigns/ (issue #552 stages in "
+                         "git-ignored scratch for the manifest store workflow)")
     pb.set_defaults(func=cmd_probe_build)
 
     pr = sub.add_parser("probe-run")
@@ -298,12 +354,20 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--klt", default=default_klt)
     pr.add_argument("--retry-refused", type=int, default=0)
     pr.add_argument("--retry-wait", type=int, default=120)
+    pr.add_argument("--root", type=Path, default=None,
+                    help="stage the series under this root instead of "
+                         "sim/comparator-kickback-cm-band/campaigns/ (issue #552 stages in "
+                         "git-ignored scratch for the manifest store workflow)")
     pr.set_defaults(func=cmd_probe_run, force=False)
 
     pc = sub.add_parser("probe-compare")
     pc.add_argument("--series", required=True)
     pc.add_argument("--arm", action="append", choices=list(kb.ALL_PROBE_ARMS),
                     help="arm set to compare (default: by series, see --help)")
+    pc.add_argument("--root", type=Path, default=None,
+                    help="read the series from this root instead of "
+                         "sim/comparator-kickback-cm-band/campaigns/ (issue #552 stages in "
+                         "git-ignored scratch for the manifest store workflow)")
     kcli.add_report_pair_args(pc, "comparison", "series")
     pc.set_defaults(func=cmd_probe_compare)
 
