@@ -47,6 +47,7 @@ import gzip
 import json
 import math
 import re
+import zlib
 from pathlib import Path
 from statistics import NormalDist
 
@@ -126,7 +127,13 @@ def read_envelope_bytes(path: Path) -> bytes | None:
         return path.read_bytes()
     gz = path.with_name(path.name + ".gz")
     if gz.is_file():
-        return gzip.decompress(gz.read_bytes())
+        try:
+            return gzip.decompress(gz.read_bytes())
+        except zlib.error as exc:
+            # A valid gzip header over a corrupt deflate body raises a bare
+            # zlib.error, which neither caller's handler names; normalise it
+            # so every caller reports it as an unreadable envelope.
+            raise gzip.BadGzipFile(str(exc)) from exc
     return None
 
 
