@@ -828,6 +828,60 @@ class SupplementReportTests(Base):
                 self.assert_duplicate_index_rejected(
                     self.duplicate_fixture_result(self.supp, reverse=reverse))
 
+    def edited_target_report(self, roots, edit):
+        section = "mos_tt_mismatch"
+        cond = cmband.condition("vcm-nom")
+        self.full_series()
+
+        def edit_target(corners):
+            draws = {c["monte_carlo"]["sample_index"]: c for c in corners
+                     if self.at_target(section, c)}
+            edit(draws)
+            return corners
+
+        for root in roots:
+            self.rewrite_envelope(root, section, cond, edit_target)
+        result = cmband.compare_supplement(self.supp)
+        target = next(p for p in result["populations"]
+                      if p["condition"] == cond.name and p["section"] == section)
+        row = next(s for s in result["sensitivity"]
+                   if s["condition"] == cond.name and s["point"] == target["point"])
+        return row, result["conclusion"]
+
+    def test_duplicate_seed_excludes_both_draws_from_sensitivity(self):
+        def repeat_seed(draws):
+            draws[6]["monte_carlo"]["seed"] = draws[5]["monte_carlo"]["seed"]
+
+        for roots, mismatches in (((self.parent,), 1), ((self.supp,), 1),
+                                  ((self.parent, self.supp), 0)):
+            with self.subTest(roots=roots):
+                row, conclusion = self.edited_target_report(roots, repeat_seed)
+                pair = row["pairing_vs_parent"]
+                self.assertFalse(pair["seeds_paired"])
+                self.assertIn("seed(s) reported by more than one draw", pair["pairing_rejected"])
+                self.assertEqual(pair["n_compared"], 60)
+                self.assertEqual(pair["seed_mismatches"], mismatches)
+                self.assertEqual(row["sensitivity"]["n_pairs"], 58)
+                self.assertEqual(row["sensitivity"]["n_both_valid"], 58)
+                self.assertFalse(conclusion["pairing_all_matched"])
+
+    def test_clipped_offset_pairs_but_contributes_no_delta(self):
+        def clip_offset(draws):
+            measurements = {m["name"]: m for m in draws[6]["measurements"]}
+            measurements["lowcount"].update(value=33, status="fail")
+            measurements["vos_mv"]["value"] = 49.5
+
+        for root, rejection in ((self.parent, "parent_rejected"), (self.supp, "supp_rejected")):
+            with self.subTest(rejection=rejection):
+                row, conclusion = self.edited_target_report([root], clip_offset)
+                self.assertIn("1 clipped draw", row[rejection])
+                self.assertTrue(row["pairing_vs_parent"]["seeds_paired"])
+                self.assertEqual(row["sensitivity"]["n_pairs"], 60)
+                self.assertEqual(row["sensitivity"]["n_both_valid"], 59)
+                self.assertEqual(row["sensitivity"]["n_identical"], 59)
+                self.assertEqual(row["sensitivity"]["max_abs_delta_mv"], 0.0)
+                self.assertEqual(conclusion["max_abs_delta_mv"], 0.0)
+
     def test_aborted_parent_draw_pairs_but_contributes_no_delta(self):
         """The identity/measurement distinction (issue #555): a parent draw
         whose measurement aborted still has a known seed, so it establishes

@@ -68,6 +68,7 @@ import hashlib
 import json
 import math
 import random
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -529,6 +530,11 @@ def load_points(envelopes: list[dict], vcm_v: float | None = None) -> dict[tuple
     return points
 
 
+def _duplicate_seeds(samples: list[dict]) -> set[int]:
+    counts = Counter(s["seed"] for s in samples if valid_identity(s.get("seed")))
+    return {seed for seed, count in counts.items() if count > 1}
+
+
 def identity_problems(samples: list[dict], expected_n: int | None = OFFSET_MC_N
                       ) -> list[tuple[str, str]]:
     """Why this point's draw identities do not establish one population, as
@@ -541,18 +547,15 @@ def identity_problems(samples: list[dict], expected_n: int | None = OFFSET_MC_N
     the verdict is invariant under envelope and sample order."""
     out = []
     idx_counts: dict[int, int] = {}
-    seed_counts: dict[int, int] = {}
     for s in samples:
         if valid_identity(s.get("sample_index")):
             idx_counts[s["sample_index"]] = idx_counts.get(s["sample_index"], 0) + 1
-        if valid_identity(s.get("seed")):
-            seed_counts[s["seed"]] = seed_counts.get(s["seed"], 0) + 1
     dup_idx = sorted(k for k, c in idx_counts.items() if c > 1)
     if dup_idx:
         out.append(("ambiguous", "duplicate sample index(es) "
                    + ", ".join(f"{k} (x{idx_counts[k]})" for k in dup_idx[:10])
                    + ": ambiguous draw identity, no copy selected"))
-    dup_seed = sorted(k for k, c in seed_counts.items() if c > 1)
+    dup_seed = _duplicate_seeds(samples)
     if dup_seed:
         out.append(("ambiguous", f"{len(dup_seed)} seed(s) reported by more than one draw: "
                                  "ambiguous mismatch draw identity"))
@@ -1094,21 +1097,15 @@ def _identity_match(sup: list[dict] | None, par: list[dict] | None,
     the parent's samples at the same grid point (issue #555), shared by the
     supplement pairing and sensitivity calculations.
 
-    Reuses the main comparison's draw-identity machinery (issue #250):
-    ``sup`` / ``par`` are the unambiguous ``sample_index -> sample`` maps of
-    the two sides (``_identity_map``: a malformed or repeated index drops
-    every copy, so no verdict depends on envelope or sample order), and
-    ``seeds_paired`` is a full match only when both sides additionally
-    report exactly the expected draw identities (``identity_problems``:
-    the indices 0..expected_n-1 of the ratified basis, no repeated index or
-    seed) with valid, corresponding seeds. ``seeds_paired`` is None when a
-    side is missing entirely, so nothing was compared; ``pairing_rejected``
-    says why a compared verdict is False.
+    Pairs share an unambiguous sample index and the same valid seed, which
+    must occur only once in each population. A full match also requires
+    both populations to cover the ratified basis (indices 0..expected_n-1).
+    When a side is missing, the pairing verdict is None.
 
     Measurement validity is deliberately not consulted: a draw with a known
     seed and an aborted measurement still establishes identity (the check
     is request-level and holds for draws that produced no data)."""
-    out = {"sup": {}, "par": {}, "n_compared": 0, "seed_mismatches": None,
+    out = {"pairs": [], "n_compared": 0, "seed_mismatches": None,
            "seeds_paired": None, "pairing_rejected": None}
     if not sup or not par:
         return out
@@ -1117,13 +1114,19 @@ def _identity_match(sup: list[dict] | None, par: list[dict] | None,
     probs_a = identity_problems(sup, expected_n)
     probs_b = identity_problems(par, expected_n)
     common = sorted(set(a) & set(b))
-    same_seed = {k: (valid_identity(a[k].get("seed")) and valid_identity(b[k].get("seed"))
-                     and a[k]["seed"] == b[k]["seed"]) for k in common}
+    duplicate_seeds = _duplicate_seeds(sup) | _duplicate_seeds(par)
+    pairs = []
+    mismatches = []
+    for k in common:
+        s, t = a[k], b[k]
+        if not (valid_identity(s.get("seed")) and valid_identity(t.get("seed"))
+                and s["seed"] == t["seed"]):
+            mismatches.append(k)
+        elif s["seed"] not in duplicate_seeds:
+            pairs.append((s, t))
     out.update({
-        "sup": a, "par": b, "n_compared": len(common),
-        "seed_mismatches": sum(1 for k in common if not same_seed[k]),
-        "seeds_paired": (not bad_a and not bad_b and not probs_a and not probs_b
-                         and all(same_seed.values())),
+        "pairs": pairs, "n_compared": len(common), "seed_mismatches": len(mismatches),
+        "seeds_paired": not (bad_a or bad_b or probs_a or probs_b or mismatches),
     })
     if out["seeds_paired"]:
         return out
@@ -1134,7 +1137,7 @@ def _identity_match(sup: list[dict] | None, par: list[dict] | None,
         side, probs = ("supplement", probs_a) if probs_a else ("parent", probs_b)
         out["pairing_rejected"] = f"{side} population: {probs[0][1]}"
     else:
-        k = next(k for k in common if not same_seed[k])
+        k = mismatches[0]
         out["pairing_rejected"] = (f"sample {k} is not the same mismatch draw "
                                    f"(seed {a[k].get('seed')!r} vs {b[k].get('seed')!r})")
     return out
@@ -1143,11 +1146,15 @@ def _identity_match(sup: list[dict] | None, par: list[dict] | None,
 def _pair_check(match: dict) -> dict:
     """Seed-pairing of a supplementary population against the parent's
     samples at the same grid point (structural, request-level), projected
-    from the shared identity match (issue #555). The identity maps stay
+    from the shared identity match (issue #555). The sample pairs stay
     out of the row: the report never embeds per-sample records here."""
     return {"n_compared": match["n_compared"], "seed_mismatches": match["seed_mismatches"],
             "seeds_paired": match["seeds_paired"],
             "pairing_rejected": match["pairing_rejected"]}
+
+
+def _usable_offset(draw: dict) -> bool:
+    return draw["vos_mv"] is not None and not draw["problem"] and not draw["clipped"]
 
 
 def _sensitivity(match: dict) -> dict:
@@ -1158,21 +1165,12 @@ def _sensitivity(match: dict) -> dict:
     (``n_both_valid``) -- measurement validity is separate from the
     structural pairing, so a known-seed draw with an aborted measurement
     still pairs, it just contributes no delta (issue #555)."""
-    out = {"n_pairs": 0, "n_both_valid": 0, "n_identical": 0, "delta_mean_mv": None,
-           "delta_sd_mv": None, "max_abs_delta_mv": None}
-    a, b = match["sup"], match["par"]
-    deltas = []
-    for k in sorted(set(a) & set(b)):
-        s, t = a[k], b[k]
-        if not (valid_identity(s.get("seed")) and valid_identity(t.get("seed"))
-                and s["seed"] == t["seed"]):
-            continue
-        out["n_pairs"] += 1
-        if s["vos_mv"] is None or t["vos_mv"] is None or s["problem"] or t["problem"]:
-            continue
-        out["n_both_valid"] += 1
-        deltas.append(s["vos_mv"] - t["vos_mv"])
-    out["n_identical"] = sum(1 for d in deltas if d == 0.0)
+    pairs = match["pairs"]
+    deltas = [s["vos_mv"] - t["vos_mv"] for s, t in pairs
+              if _usable_offset(s) and _usable_offset(t)]
+    out = {"n_pairs": len(pairs), "n_both_valid": len(deltas),
+           "n_identical": sum(1 for d in deltas if d == 0.0),
+           "delta_mean_mv": None, "delta_sd_mv": None, "max_abs_delta_mv": None}
     if deltas:
         dm = sum(deltas) / len(deltas)
         out["delta_mean_mv"] = dm
@@ -1231,8 +1229,7 @@ def compare_supplement(series_dir: Path, *,
                 "target": True, "stats": st,
                 # draws that produced a trusted, in-window vos (not the
                 # requested count): 0 for a batch job that never ran
-                "n_valid": sum(1 for d in (sup_s or []) if d["vos_mv"] is not None
-                               and not d["problem"] and not d["clipped"]),
+                "n_valid": sum(1 for d in (sup_s or []) if _usable_offset(d)),
                 "parent_status": (point_stats(par_s)["rejected"] if par_s else
                                   "parent population not loadable"),
                 "pairing_vs_parent": _pair_check(match),
@@ -1244,7 +1241,7 @@ def compare_supplement(series_dir: Path, *,
                 if not sup_g or not par_g:
                     continue
                 st_s, st_p = point_stats(sup_g), point_stats(par_g)
-                g_match = _identity_match(sup_g, par_g)
+                g_match = match if k == key else _identity_match(sup_g, par_g)
                 sensitivity.append({
                     "condition": cond.name, "point": _label(k),
                     "target": (s, t) == (supply, temp),
