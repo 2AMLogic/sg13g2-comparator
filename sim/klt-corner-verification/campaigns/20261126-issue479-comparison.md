@@ -130,8 +130,9 @@ two. Every other committed envelope in these campaigns has status `pass`.
 
 Both grades cover 45 PVT points (tt/ff/ss/fs/sf × 1.08/1.20/1.32 V ×
 −40/27/125 °C). Row 1 has 60 offset draws per point and Row 2 has 80 draws per
-rung at every point, in both designs. Rows 3–5 are deterministic. Neither
-grade has a missing draw or an INCOMPLETE row. Bounds are the DR-0002 values in
+rung at every point, in both designs. Rows 3, 4 and 5b are deterministic
+measurements; Row 5a is the coverage check across all four benches, including
+both Monte-Carlo benches. Neither grade has a missing draw or an INCOMPLETE row. Bounds are the DR-0002 values in
 [rows.json](../rows.json). A dash marks a bound DR-0002 does not specify.
 Graded NOT SPECIFIED is never PASS. The PVT point of each worst-case value
 follows it. Sources:
@@ -147,7 +148,7 @@ follows it. Sources:
 | 3c | Decision time at 0.1 mV, worst | ≤ 2.0 ns | — | 1.705 `ss_-40c_1.08v` | 1.977 `ss_-40c_1.08v` | PASS / PASS | — |
 | 4a | Injected charge per side, worst | ≤ 25 fC | ≤ 8 fC | 21.2 `ff_125c_1.32v` | 19.76 `ff_125c_1.32v` | PASS / PASS | FAIL / FAIL |
 | 4b | Signal-dependent residue, worst | ≤ 100 µV | ≤ 30 µV | 10.29 `ss_-40c_1.20v` | 10.42 `ss_-40c_1.08v` | PASS / PASS | PASS / PASS |
-| 4c | Single-ended excursion, worst (reporting only) | — | — | 96.03 `ff_27c_1.32v` | 97.95 `ff_125c_1.32v` | REPORTED | — |
+| 4c | Single-ended excursion, worst, mV (reporting only) | — | — | 96.03 `ff_27c_1.32v` | 97.95 `ff_125c_1.32v` | REPORTED | — |
 | 5a | PVT coverage, all four benches | full grid | — | 45/45 per bench | 45/45 per bench | PASS / PASS | — |
 | 5b | Average power at 33.3 MHz, worst | — | ≤ 20 µW | 37.61 `ff_125c_1.32v` | 25.67 `ff_125c_1.32v` | — | FAIL / FAIL |
 
@@ -169,11 +170,21 @@ below the control's 45-point mean, and it misses the Target by 4.1 %.
 bound; both grades report it. DR-0002 specifies no Stretch for Rows 3b, 3c
 and 5a and no Target for Row 5b.
 
-**Margins that narrowed.** Two preserved Targets sit closer to their bound
+**Margins that narrowed.** Three preserved Targets sit closer to their bound
 under `w10`. Row 3a moves from 0.8664 to 1.188 ns against ≤ 1.5 ns. Row 3c
 moves from 1.705 to 1.977 ns against ≤ 2.0 ns, which leaves 0.023 ns at the
-binding corner `ss_-40c_1.08v`. Row 4b is nearly unchanged. Rows 1, 3b, 4a
-and 5b move away from their bounds.
+binding corner `ss_-40c_1.08v`. Row 4b residue rises from 10.29 to 10.42 µV
+against ≤ 100 µV, a slightly narrower margin that still meets its 30 µV
+Stretch.
+
+**Margins that widened.** Target headroom grows on Row 1 (13.93 to 13.37 mV
+against ≤ 15 mV), Row 3b (168.7 to 135.6 ps against ≤ 250 ps) and Row 4a
+(21.2 to 19.76 fC against ≤ 25 fC). On Rows 1 and 4a the gap to the
+still-failing Stretch limit shrinks: Row 1 from 5.93 to 5.37 mV above 8 mV,
+and Row 4a from 13.2 to 11.76 fC above 8 fC. Row 3a's gap to its 0.8 ns
+Stretch widens, from 0.0664 to 0.388 ns. Row 5b has no Target; its power
+falls from 37.61 to 25.67 µW, so its excess over the 20 µW Stretch limit
+shrinks from 17.61 to 5.67 µW and still fails.
 
 ## Basis of every Row 2 value
 
@@ -261,10 +272,15 @@ a compliance figure.
   [`cadd1f`](../../comparator-integration-capacitance/candidates/cadd1f.spice),
   [`cadd2f`](../../comparator-integration-capacitance/candidates/cadd2f.spice)
   and [`cadd4f`](../../comparator-integration-capacitance/candidates/cadd4f.spice),
-  sha256 `e7362662210f…`, `b7782d6f7c2a…` and `f8a53301035e…`. Each is the
-  control geometry plus the declared per-side capacitance. Every bench body
-  declares the name, path and sha256, and the grader re-reads and re-hashes
-  the file. #498 bound geometry overrides on `design/comparator.spice` (sha256
+  sha256 `e7362662210f…`, `b7782d6f7c2a…` and `f8a53301035e…`. Each file is
+  the structural netlist plus the declared per-side capacitance. Its own
+  `XM1`, `XM5` and `XMSW` are 12, 3 and 40 µm, not the control's. The
+  simulated comparator is that file together with the control overrides each
+  bench body applies on top of it: `XM1.w=8u XM2.w=8u XM3.w=6u XM4.w=6u
+  XM5.w=6u XM6.w=6u XMSW.w=20u` and `dut_ib=1e-05` (10 µA). See the generated
+  [`regeneration.body.spice`](20261121-issue497/scr_cadd1f/regeneration.body.spice)
+  header (lines 8–10) for the pair. Every bench body declares the name, path
+  and sha256, and the grader re-reads and re-hashes the file. #498 bound geometry overrides on `design/comparator.spice` (sha256
   `b31b936dd78634b2…`): `XM5.w` and `XM6.w` at 4, 8, 10 or 12 µm, with every
   other device at the control's settings, declared in each bench body. The
   baseline and control grades bind the same schematic with the overrides in
@@ -280,7 +296,10 @@ a compliance figure.
   `environment.remote`.
 - **Seeds and run counts.** Bench defaults, committed in each request:
   transient noise N = 80 per rung, offset Monte Carlo N = 60 per point, base
-  seed 20260916. The seed is recorded only.
+  seed 20260916. For the offset Monte-Carlo bench each draw's
+  `.options seed=` derives from the committed base seed, so its draws are
+  reproducible. For the transient-noise benches the seed is recorded only (see
+  below).
 - **TRNOISE seed limitation.** ngspice's TRNOISE generator ignores klt's
   per-sample `.options seed=`. Draws are independent within a point but not
   reproducible, and separate batch jobs can share noise streams
