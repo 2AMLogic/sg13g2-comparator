@@ -6,8 +6,19 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 - [2026-09](work_log/WORK_LOG_2026-09.md)
 
+### 2026-11-26
+
+- **Issue #555** (closed): Reuse draw identity checks in offset supplement pairing
+- **PR #557**: fix: enforce draw identity in offset supplement pairing
+
 ### 2026-11-23
 
+- **Issue #549** (closed): Remove six token-shadowed zero-reference definitions in sim/kltsim and sim/comparator-pex
+- **PR #550**: refactor: remove six zero-reference definitions from sim modules
+- **Issue #546** (closed): Consolidate nine derived-report publish epilogues onto cli.publish_report_pair
+- **PR #548**: refactor(sim): consolidate derived-report publish epilogues onto cli.publish_report_pair
+- **Issue #487** (closed): test_item5_spec_rows: pinned-klt skip guard uses a substring match, so a 0.9.2.dev build passes as the pin
+- **PR #492**: fix: require exact klt version match to run item 5 spec-row tests
 - **PR #545**: refactor: drop test-only write_*_inputs wrappers, move kickback build onto commit_build
 - **Issue #543** (closed): Remove test-only write_*_inputs wrappers in kltsim; finish commit_build move for kickback driver
 - **PR #541**: test: pin run_decision_cm_band build: fresh, idempotent, conflict
@@ -499,20 +510,3 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 - **PR #55**: fix: skip loom:needs-capability in the shared work-finder skip source
 - **Issue #54** (closed): loom:needs-capability is documented as skipped by the work finder but is in neither skip source — #19 is rediscovered as the sole Priority-2 candidate every Curator pass
 - **Issue #22** (closed): Certify the offset and noise rows: transient Monte-Carlo and transient-noise benches (DR-0001 Consequence 1)
-
-### 2026-09-26
-
-- **PR #53**: test: discover harness unit tests in sim/selftest.sh step 0
-- **PR #52**: docs: correct post-DR-0002 stale claims in comparator-offset-transient-mc README
-- **PR #50**: docs: correct six post-DR-0002 stale DRAFT/unratified claims
-- **Issue #51** (closed): sim/selftest.sh hardcodes its three test modules instead of discovering them — reopens #41's no-gate coverage gap
-- **Issue #49** (closed): sim/comparator-offset-transient-mc/README.md still asserts PR #18 is open / DR-0002 is not yet ratified
-- **Issue #48** (closed): Post-DR-0002 sweep missed six files: stale "DRAFT/unratified" claims, an open-PR-#18 banner, and a broken README anchor
-
-### 2026-09-23
-
-- **PR #47**: chore: remove unwired npm placeholder scripts from package.json
-- **PR #46**: docs: embed fleet burndown chart in README
-- **Issue #45** (closed): Remove dead npm placeholder scripts from package.json: test/lint/check:ci/check:all are unwired no-ops
-- **Issue #44** (closed): README: embed the fleet burndown chart (one line)
-- **Issue #35** (closed): README.md's Offset sigma row states 10/45 PVT points over 15 mV, but the cited corrected-seed record shows 13/45

@@ -1,12 +1,13 @@
 # Work plan
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-23T10:45:00Z (snapshot; compare against live labels)_
+_Generated: 2026-11-26T07:23:20Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
-Judge-approved PRs under a hold (`loom:blocked` or `loom:operator`) — only a human merge decision is missing.
+Judge-approved PRs with an active hold (`loom:blocked` or `loom:operator`).
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
+- **#490**: spec: draft DR-0033 input-pair kickback adoption record (unratified, held for operator)
 
 ## Very Important
 
@@ -31,21 +32,26 @@ _None._
 Issues currently being built (`loom:building`).
 
 - **#476**: Draft the decision record on adopting the 8 µm input pair for Row 4a kickback
-- **#487**: test_item5_spec_rows: pinned-klt skip guard uses a substring match, so a 0.9.2.dev build passes as the pin
 - **#497**: Measure the integration-node capacitance tradeoff between Row 2 noise and Row 3c delay
+- **#552**: Measure strobe-qualified kickback residue at the two DR-0004 cold edge corners
+- **#558**: Share invocation digest checks between campaign grading and timestep smoke runs
+- **#560**: Remove redundant envelope reads during optional full-noise discovery
 
 ## PRs Awaiting Review
 
 PRs waiting on Judge (`loom:review-requested`).
 
-_None._
+- **#504**: sim: integration-node capacitance study, negative result (issue #497)
+- **#554**: sim: measure strobe-qualified kickback residue at the DR-0004 cold edges *(held)*
+- **#559**: refactor: share the invocation digest loop between grader and smoke
+- **#561**: fix: discover optional noise configs by presence, not envelope reads
 
 ## Approved (Awaiting Merge)
 
-PRs that passed review and are queued for Champion auto-merge (`loom:pr`).
+PRs that passed Judge review (`loom:pr`).
 
-- **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified) — closes #160
-- **#492**: fix: require exact klt version match to run item 5 spec-row tests — closes #487
+- **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
+- **#490**: spec: draft DR-0033 input-pair kickback adoption record (unratified, held for operator)
 
 ## Proposed
 
@@ -55,12 +61,13 @@ Issues carrying `loom:curated`.
 - **#160**: Draft decision record: input common-mode range row for the ratified spec *(curated)*
 - **#470**: Merge queue: add the merge_group trigger and adapt the PR-metadata gates *(curated)* *(held)*
 - **#476**: Draft the decision record on adopting the 8 µm input pair for Row 4a kickback *(curated)*
-- **#487**: test_item5_spec_rows: pinned-klt skip guard uses a substring match, so a 0.9.2.dev build passes as the pin *(curated)*
 - **#497**: Measure the integration-node capacitance tradeoff between Row 2 noise and Row 3c delay *(curated)*
+- **#552**: Measure strobe-qualified kickback residue at the two DR-0004 cold edge corners *(curated)*
+- **#556**: Collect and publish the four corrected cold-edge fleet results for PR #554 *(curated)* *(held)*
 
 ## Proposed (Architect / Hermit)
 
-- **#546**: Consolidate nine derived-report publish epilogues onto cli.publish_report_pair *(hermit)*
+- **#558**: Share invocation digest checks between campaign grading and timestep smoke runs *(hermit)*
 
 ## Epics
 
@@ -70,14 +77,14 @@ Issues carrying `loom:curated`.
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 1 |
+| Operator merge-risk holds | 2 |
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 3 |
-| PRs awaiting review | 0 |
+| In Progress (`loom:building`) | 5 |
+| PRs awaiting review | 4 |
 | Approved PRs awaiting merge | 2 |
-| Curated | 6 |
+| Curated | 7 |
 | Architect / Hermit proposals | 1 |
 | Active epics | 1 |
 <!-- guide:plan-body:end -->

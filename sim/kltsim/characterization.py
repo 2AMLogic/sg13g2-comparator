@@ -594,12 +594,8 @@ def render_markdown(report: dict) -> str:
 
 #: Report directories are append-only, so a grader change (its sha256 is an
 #: indexed source) mints a NEW report directory rather than rewriting one.
-#: campaign id -> current report directory name; the superseded directories
-#: (``<campaign>-schematic``, ``...-r2``, ``...-r3``) stay as history.
-#: ``...-r3`` is the first issue #497 re-mint (grade.py gained the
-#: structural-candidate DUT check); ``...-r4`` follows the review fixes that
-#: require an explicit registered candidate for candidate evidence.
-REPORT_DIR_NAMES = {"20261009-d73a9ac": "20261009-d73a9ac-schematic-r4"}
+#: Map campaign IDs to their current report directories and retain prior revisions.
+REPORT_DIR_NAMES = {"20261009-d73a9ac": "20261009-d73a9ac-schematic-r5"}
 
 
 def default_out_dir(campaign_id: str, root: Path | None = None) -> Path:

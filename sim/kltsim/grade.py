@@ -1264,6 +1264,33 @@ def check_request_semantics(bench, tag: str, request: dict,
     return problems
 
 
+def check_invocation_digests(tag: str, inv: dict, checked: dict,
+                             envelope_sha: str | None, problems: list[str]) -> None:
+    """Accept the invocation's recorded request/envelope digests, or say why not.
+
+    Shared by the campaign loader's ``check_chain`` and the timestep smoke
+    checker: for each of ``request_sha256`` (the actual digest recorded in
+    ``checked``) and ``envelope_sha256`` (``envelope_sha``), a saved digest
+    that is missing or not a 64-char lowercase hex sha256, or one that
+    disagrees with the available actual digest, is reported in ``problems``;
+    an accepted one is recorded in ``checked`` as ``invocation_<field>``.
+    When the actual digest is unavailable (``None``), a well-formed saved
+    digest is accepted without comparison. Tag and exit-code checks stay
+    with the callers, whose contracts differ.
+    """
+    for field_name, actual in (("request_sha256", checked.get("request_sha256")),
+                               ("envelope_sha256", envelope_sha)):
+        saved = inv.get(field_name)
+        if not isinstance(saved, str) or not _HEX64.fullmatch(saved):
+            problems.append(f"{tag}: invocation {field_name} is missing or not a "
+                            f"64-char lowercase hex sha256 ({saved!r})")
+        elif actual is not None and saved != actual:
+            problems.append(f"{tag}: {field_name} mismatch: invocation records "
+                            f"{saved[:12]}..., file bytes hash to {actual[:12]}...")
+        else:
+            checked[f"invocation_{field_name}"] = saved
+
+
 def check_chain(bench, tag: str, campaign_dir: Path, envelope_sha: str,
                 problems: list[str], corners: dict | None = None) -> dict:
     """Validate <tag>.request.json / <tag>.invocation.json against the envelope bytes.
@@ -1281,17 +1308,7 @@ def check_chain(bench, tag: str, campaign_dir: Path, envelope_sha: str,
     if req_raw is not None:
         checked["request_sha256"] = hashlib.sha256(req_raw).hexdigest()
     if inv is not None:
-        for field_name, actual in (("request_sha256", checked.get("request_sha256")),
-                                   ("envelope_sha256", envelope_sha)):
-            saved = inv.get(field_name)
-            if not isinstance(saved, str) or not _HEX64.fullmatch(saved):
-                problems.append(f"{tag}: invocation {field_name} is missing or not a "
-                                f"64-char lowercase hex sha256 ({saved!r})")
-            elif actual is not None and saved != actual:
-                problems.append(f"{tag}: {field_name} mismatch: invocation records "
-                                f"{saved[:12]}..., file bytes hash to {actual[:12]}...")
-            else:
-                checked[f"invocation_{field_name}"] = saved
+        check_invocation_digests(tag, inv, checked, envelope_sha, problems)
         if inv.get("tag") not in (None, tag):
             problems.append(f"{tag}: invocation names tag {inv.get('tag')!r}")
     if req is not None:

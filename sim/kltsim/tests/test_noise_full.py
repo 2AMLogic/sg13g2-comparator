@@ -127,6 +127,7 @@ import hashlib
 import json
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from kltsim import build as build_mod
 from kltsim import grade as grade_mod
@@ -364,6 +365,87 @@ class RejectedConfigurationNeverCompleteTest(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------- #
+# issue #560: optional configurations are discovered by file presence only
+# --------------------------------------------------------------------------- #
+
+class OptionalDiscoveryTest(unittest.TestCase):
+    REQUIRED = ("fe", "int", "both")
+    CONTROL = "tn_full_zero"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dut = grade_mod.load_dut_reference()
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        for name in nf.CONFIGS.values():
+            _write_config(self.root, name)
+
+    def test_absent_optional_control_is_omitted(self):
+        result = nf.analyse(self.root, self.dut)
+        self.assertEqual(list(result["configs"]), list(self.REQUIRED))
+        for cfg in self.REQUIRED:
+            self.assertEqual(result["provenance"][cfg]["status"], "validated")
+
+    def test_presence_accepts_plain_or_gzip_envelope(self):
+        for gz in (False, True):
+            with self.subTest(gz=gz), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                self.assertFalse(nf._present(root, self.CONTROL))
+                _write_config(root, self.CONTROL, gz=gz)
+                self.assertTrue(nf._present(root, self.CONTROL))
+
+    def test_malformed_gzip_control_is_included_as_rejected(self):
+        baseline = nf.analyse(self.root, self.dut)
+        _write_config(self.root, self.CONTROL, gz=True)
+        (self.root / f"{self.CONTROL}.mos_tt.envelope.json.gz").write_bytes(b"not a gzip stream")
+        result = nf.analyse(self.root, self.dut)
+        zero = result["configs"]["zero"]
+        self.assertTrue(zero["rejected"])
+        self.assertFalse(zero["complete"])
+        self.assertEqual(zero["points_valid"], 0)
+        self.assertEqual(result["provenance"]["zero"]["status"], "rejected")
+        self.assertTrue(any(r.startswith(f"{self.CONTROL}.mos_tt: envelope ")
+                             and "cannot be read" in r for r in zero["rejection_reasons"]),
+                        zero["rejection_reasons"])
+        for cfg in self.REQUIRED:
+            self.assertEqual(result["provenance"][cfg], baseline["provenance"][cfg])
+            self.assertEqual(result["configs"][cfg], baseline["configs"][cfg])
+            self.assertEqual([p[cfg] for p in result["points"]],
+                             [p[cfg] for p in baseline["points"]])
+        for key in ("as_measured", "split_grid", "timestep"):
+            self.assertEqual(result.get(key), baseline.get(key))
+        md = nf.render_markdown(result)
+        self.assertIn("`zero` REJECTED by provenance validation", md)
+
+    def test_discovery_reads_no_envelope_bytes(self):
+        _write_config(self.root, self.CONTROL, gz=True)
+        no_read = mock.patch.object(Path, "read_bytes", side_effect=AssertionError("envelope read"))
+        no_gunzip = mock.patch.object(gzip, "decompress",
+                                       side_effect=AssertionError("envelope decompressed"))
+        for bench, expected in ((self.CONTROL, True), ("tn_full_int_x4", False)):
+            with self.subTest(bench=bench), no_read, no_gunzip:
+                self.assertEqual(nf._present(self.root, bench), expected)
+
+    def test_validator_makes_the_only_envelope_reads(self):
+        _write_config(self.root, self.CONTROL, gz=True)
+        read: list[str] = []
+        orig = nf.read_envelope_bytes
+
+        def counting(path):
+            read.append(path.name)
+            return orig(path)
+
+        with mock.patch.object(nf, "read_envelope_bytes", counting):
+            nf.analyse(self.root, self.dut)
+        self.assertEqual(sorted(read), sorted(f"{bench}.{sec}.envelope.json"
+                                             for bench in (*nf.CONFIGS.values(), self.CONTROL)
+                                             for sec in nf.PROCESSES))
+
+
+# --------------------------------------------------------------------------- #
 # issue #263: timestep smoke evidence is validated before convergence arithmetic
 # --------------------------------------------------------------------------- #
 
@@ -584,6 +666,51 @@ class TimestepSmokeValidationTest(unittest.TestCase):
         smoke = self.smoke()
         self.rewrite(smoke, "5p", invocation=lambda i: i.update(tag="timestep-10p"))
         self.assertRejectedRung(self.run_ts(smoke), "5p", "invocation names tag")
+
+    def test_invocation_digest_fields(self):
+        # The digest loop is shared with the campaign loader's check_chain
+        # (issue #558): pin the smoke side's diagnostics and rejection.
+        for field, bad, text in (
+                ("request_sha256", None, "request_sha256 is missing or not"),
+                ("request_sha256", "nothex", "request_sha256 is missing or not"),
+                ("request_sha256", "0" * 64, "request_sha256 mismatch"),
+                ("envelope_sha256", None, "envelope_sha256 is missing or not"),
+                ("envelope_sha256", "A" * 64, "envelope_sha256 is missing or not"),
+                ("envelope_sha256", "0" * 64, "envelope_sha256 mismatch")):
+            with self.subTest(field=field, bad=bad):
+                self.setUp()
+                smoke = self.smoke()
+                self.rewrite(smoke, "10p", invocation=lambda i: i.update({field: bad}))
+                self.assertRejectedRung(self.run_ts(smoke), "10p", text)
+
+    def test_invocation_digests_recorded_when_valid(self):
+        smoke = self.smoke()
+        ts = self.run_ts(smoke)
+        prov = ts["steps"]["10p"]["provenance"]
+        self.assertEqual(prov["invocation_request_sha256"], prov["request_sha256"])
+        self.assertEqual(prov["invocation_envelope_sha256"], prov["envelope_sha256"])
+
+    def test_envelope_digest_accepted_when_envelope_unavailable(self):
+        # A well-formed saved digest is accepted without comparison when the
+        # actual bytes are unavailable: no digest diagnostic is emitted
+        # (issue #558: preserve this behavior).
+        smoke = self.smoke()
+        (smoke / "timestep-10p.envelope.json").unlink()
+        ts = self.run_ts(smoke)
+        rung = ts["steps"]["10p"]
+        self.assertEqual(rung["status"], "rejected")
+        self.assertTrue(any("is missing" in p for p in rung["problems"]), rung["problems"])
+        self.assertFalse(any("sha256 is missing or not" in p or "sha256 mismatch" in p
+                             for p in rung["problems"]), rung["problems"])
+
+    def test_null_tag_and_exit_code_are_smoke_only_problems(self):
+        # Campaign check_chain accepts a null tag and never reads exit_code;
+        # the smoke chain rejects both (issue #558's asymmetry fixture).
+        smoke = self.smoke()
+        self.rewrite(smoke, "10p", invocation=lambda i: i.update(tag=None, exit_code=1))
+        ts = self.run_ts(smoke)
+        self.assertRejectedRung(ts, "10p", "invocation names tag")
+        self.assertRejectedRung(ts, "10p", "exit_code is 1, not 0")
 
     def test_input_hash_and_body_mismatch(self):
         smoke = self.smoke()

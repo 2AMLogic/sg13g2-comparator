@@ -277,14 +277,14 @@ locally launched grid.
 simulation-free step (issue #64):
 
 ```bash
-./sim/characterize.sh report          # regenerate sim/characterization/20261009-d73a9ac-schematic-r2/
+./sim/characterize.sh report          # regenerate sim/characterization/20261009-d73a9ac-schematic-r5/
 ./sim/characterize.sh report check    # re-hash every indexed source; fail if anything is stale
 ```
 
 A grader change re-mints the report directory (the sha256 of every grader source,
 `sim/kltsim/grade.py` and `sim/kltsim/populations.py`, is an indexed source);
 `sim/kltsim/characterization.py` `REPORT_DIR_NAMES` names the current
-one (`-r2` after issue #245) and the superseded directory stays as history.
+one (`-r5` for the combined grader from issues #497 and #558). Earlier revisions stay as history.
 
 The declared-contract loaders (`sim/kltsim/declared_n.py`,
 `sim/kltsim/bias_probes.py`) are deliberately not indexed grader sources:

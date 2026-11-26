@@ -261,8 +261,12 @@ def _details(campaign_dir: Path, bench_name: str, ev: dict, grid: dict,
 
 
 def _present(campaign_dir: Path, bench_name: str) -> bool:
-    return any(read_envelope_bytes(campaign_dir / f"{bench_name}.{sec}.envelope.json") is not None
-               for sec in PROCESSES)
+    """Whether the configuration committed any of its expected process
+    envelopes, plain or gzip -- a file-presence check only (issue #560). The
+    bytes are first read by ``validate_config``, so an unreadable envelope is
+    reported as a rejected configuration instead of raising here."""
+    return any((campaign_dir / f"{bench_name}.{sec}.envelope.json{ext}").is_file()
+               for sec in PROCESSES for ext in ("", ".gz"))
 
 
 def grid_mean_se_bounds(ses: list[float]) -> tuple[float, float]:
@@ -577,17 +581,7 @@ def _smoke_chain(smoke_dir: Path, tag: str, envelope_sha: str | None
     if req_raw is not None:
         checked["request_sha256"] = build_mod.sha256_bytes(req_raw)
     if inv is not None:
-        for name, actual in (("request_sha256", checked.get("request_sha256")),
-                             ("envelope_sha256", envelope_sha)):
-            saved = inv.get(name)
-            if not isinstance(saved, str) or not grade_mod._HEX64.fullmatch(saved):
-                problems.append(f"{tag}: invocation {name} is missing or not a 64-char "
-                                f"lowercase hex sha256 ({saved!r})")
-            elif actual is not None and saved != actual:
-                problems.append(f"{tag}: {name} mismatch: invocation records {saved[:12]}..., "
-                                f"file bytes hash to {actual[:12]}...")
-            else:
-                checked[f"invocation_{name}"] = saved
+        grade_mod.check_invocation_digests(tag, inv, checked, envelope_sha, problems)
         if inv.get("tag") != tag:
             problems.append(f"{tag}: invocation names tag {inv.get('tag')!r}")
         if inv.get("exit_code") != 0:
