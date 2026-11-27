@@ -1,13 +1,14 @@
 # Work plan
 
 <!-- guide:plan-body:start -->
-_Generated: 2026-11-26T16:53:20Z (snapshot; compare against live labels)_
+_Generated: 2026-11-27T00:38:08Z (snapshot; compare against live labels)_
 ## Operator Attention: Merge-Risk-Hold Pileup
 
 Judge-approved PRs with an active hold (`loom:blocked` or `loom:operator`).
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
 - **#490**: spec: draft DR-0033 input-pair kickback adoption record (unratified, held for operator)
+- **#570**: docs: draft DR-0034 Row 2 noise design-direction record (unratified)
 
 ## Very Important
 
@@ -32,6 +33,7 @@ _None._
 Issues currently being built (`loom:building`).
 
 - **#476**: Draft the decision record on adopting the 8 µm input pair for Row 4a kickback
+- **#480**: Row 2 noise, Phase 3: drafting-only decision record for the design direction (follows #477 and Phase 2)
 - **#552**: Measure strobe-qualified kickback residue at the two DR-0004 cold edge corners
 
 ## PRs Awaiting Review
@@ -46,6 +48,7 @@ PRs that passed Judge review (`loom:pr`).
 
 - **#166**: spec: draft DR-0004 input common-mode range row (evidence-gated, unratified)
 - **#490**: spec: draft DR-0033 input-pair kickback adoption record (unratified, held for operator)
+- **#570**: docs: draft DR-0034 Row 2 noise design-direction record (unratified)
 
 ## Proposed
 
@@ -70,13 +73,13 @@ _None._
 
 | Bucket | Count |
 |------|-------|
-| Operator merge-risk holds | 2 |
+| Operator merge-risk holds | 3 |
 | Very important | 0 |
 | Important | 1 |
 | Ready (`loom:issue`) | 0 |
-| In Progress (`loom:building`) | 2 |
+| In Progress (`loom:building`) | 3 |
 | PRs awaiting review | 1 |
-| Approved PRs awaiting merge | 2 |
+| Approved PRs awaiting merge | 3 |
 | Curated | 6 |
 | Architect / Hermit proposals | 0 |
 | Active epics | 1 |
