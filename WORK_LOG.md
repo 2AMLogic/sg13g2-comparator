@@ -8,6 +8,8 @@ Merged pull requests and closed issues from the preceding 30 days, recorded by G
 
 ### 2026-11-26
 
+- **Issue #479** (closed): Row 2 noise, Phase 2: publish the combined comparison against the 8 µm input-pair baseline
+- **PR #569**: docs: add Phase 2 noise comparison report against the 8 µm baseline
 - **Issue #564** (closed): Offset supplement report aborts on a corrupt-deflate .gz envelope (zlib.error escapes _supplement_envelope)
 - **PR #565**: fix: report corrupt-deflate gz envelopes as unreadable in offset supplement report
 - **Issue #563** (closed): Row 2 report aborts on a corrupt-deflate .gz envelope (zlib.error escapes validate_config)
