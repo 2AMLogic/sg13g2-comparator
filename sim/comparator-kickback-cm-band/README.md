@@ -107,3 +107,25 @@ fails its DC op and delivers only ~1/46 of the programmed differential at the
 reject common modes. Do not count these two cells as design rejections; the
 residual gap (a bench whose DC op converges at 0.55/0.65 V) is named there and
 fixing the bench stays out of scope.
+
+## Cold-edge initialized measurement (issue #552)
+
+The `init` arm bridges four floating pins to their ideal sources and holds
+all three latch outputs low until the release pulse at 25 ns. The original
+v2 fleet run reported 15.47 µV at the 0.55 V edge and 9.809 µV at the
+0.65 V edge. It used undirected crossing measurements and switch parameters
+ignored by ngspice 47. Its summary identifies the original deck, the trace
+column order in the archived comparison, and both controls.
+[Original v2 campaign](campaigns/20261126-552-coldinit-v2.md).
+
+The revised deck uses the native switch's `vt=0.5 vh=0.1` parameters.
+Each output must start low at 29 ns, be at or below half supply at 30 ns,
+rise through half supply during [30, 55] ns and pass its 55 ns gate.
+The grader also checks both input differentials, the release control,
+corner validity and agreement with the 29/55 ns residue samples. A new
+fleet series is required to associate these rules with the revised deck.
+
+The first attempt used pin current sources whose polarity increased the
+error from the target voltage. The four runs stopped at B/C tail nodes
+during initialization. The failed runs and the original requests remain
+available. [First campaign](campaigns/20261126-552-coldinit.md).

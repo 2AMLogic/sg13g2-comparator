@@ -10,7 +10,9 @@ from __future__ import annotations
 import contextlib
 import copy
 import io
+import itertools
 import json
+import math
 import re
 import sys
 import tempfile
@@ -914,3 +916,624 @@ class Evidence(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def healthy_init_values(residue_uv=50.0):
+    """One point's measured values as a healthy initialized run would report
+    them: released control, full applied differential, low pre-strobe outputs,
+    post-strobe crossings, gates at 1.0, and 29/55 ns samples whose own
+    arithmetic reproduces ``kick_sigdep_uv`` (so the cross-check agrees)."""
+    return {
+        "init_ctl_1n": 1.0, "init_ctl_29n": 0.0,
+        "b_vd_1n": 0.9996e-3, "b_vd_strobe": 0.9996e-3,
+        "c_vd_1n": 99.96e-3, "c_vd_strobe": 99.96e-3,
+        "dan_29n": 0.0, "dbn_29n": 0.0, "dcn_29n": 0.0,
+        "vdd_meas": 1.2,
+        "a_dp_30n": 0.01, "a_dn_30n": 1.19,
+        "b_dp_30n": 0.02, "b_dn_30n": 1.18,
+        "c_dp_30n": 0.03, "c_dn_30n": 1.17,
+        "a_dp_29n": 0.0, "a_dn_29n": 1.2,
+        "b_dp_29n": 0.0, "b_dn_29n": 1.2,
+        "c_dp_29n": 0.0, "c_dn_29n": 1.2,
+        "a_t_half": 30.8e-9, "b_t_half": 31.0e-9, "c_t_half": 30.9e-9,
+        "a_t_pair": 30.7e-9, "b_t_pair": 30.9e-9, "c_t_pair": 30.8e-9,
+        "dout_1k_end": 1.0, "dout_float_small_end": 1.0, "dout_float_big_end": 1.0,
+        "bd0": 0.9990e-3, "bd1": 1.0000e-3,
+        "cd0": 99.949e-3, "cd1": 100.000e-3,
+        "kick_sigdep_uv": residue_uv,
+    }
+
+
+class ColdInit552(unittest.TestCase):
+    """Issue #552 cold-edge supplement: the init arm's request and body."""
+
+    def request(self, cond_name, issue=kb.COLD_ISSUE):
+        return kb.probe_request(kb.condition(cond_name), "init", issue=issue)
+
+    def test_grid_is_exactly_the_four_points_and_batch(self):
+        for name, sups in kb.PROBE_SUPPLIES_V.items():
+            req = self.request(name)
+            self.assertEqual(req["corners"]["process"], ["mos_ss"])
+            self.assertEqual(req["corners"]["supply_v"], {"vsup": list(sups)})
+            self.assertEqual(req["corners"]["temperature_c"], [-40.0])
+            self.assertEqual(req["backend"], "batch")
+            self.assertEqual(req["batch"]["capacity_wait_s"], 600)
+
+    def test_labels_issue_552_and_declares_the_release(self):
+        for name in kb.PROBE_SUPPLIES_V:
+            req = self.request(name)
+            self.assertEqual(req["_condition"]["issue"], 552)
+            self.assertEqual(req["_condition"]["probe_arm"], "init")
+            self.assertEqual(req["_condition"]["body_supplement"], "init")
+            self.assertEqual(req["_condition"]["release_ns"], kb.INIT_RELEASE_NS)
+            self.assertLess(req["_condition"]["released_fully_ns"], 29)
+            self.assertIn("(issue #552)", req["_comment"][0])
+            self.assertIn("init", req["_comment"][3])
+        # the default issue label stays #405 (the runner routes #552 by series)
+        self.assertEqual(self.request("vcm-nom", issue=kb.PROBE_ISSUE)
+                         ["_condition"]["issue"], kb.PROBE_ISSUE)
+
+    def test_cards_cover_the_qualification_observations(self):
+        names = [m["name"] for m in self.request("vcm-m050")["measurements"]]
+        self.assertEqual(len(names), len(set(names)))
+        for name in (*kb.required_measurements(), "vcm_meas"):  # #165 originals
+            self.assertIn(name, names)
+        for name in ("b_vd_1n", "b_vd_strobe", "c_vd_1n", "c_vd_strobe",  # obs
+                     "b_dp_55n", "c_dn_50n", "b_t_half", "b_t_pair",     # + xing
+                     "a_t_half", "a_t_pair",                              # branch A
+                     "a_dp_30n", "a_dn_55n",
+                     "a_dp_29n", "a_dn_29n", "b_dp_29n", "b_dn_29n",      # pre-strobe
+                     "c_dp_29n", "c_dn_29n",
+                     "dan_29n", "dbn_29n", "dcn_29n",
+                     "init_ctl_1n", "init_ctl_29n"):                      # release
+            self.assertIn(name, names, name)
+
+    def test_init_measures_rising_crossings_for_all_outputs(self):
+        cards = {m["name"]: m["spice"] for m in self.request("vcm-m050")["measurements"]}
+        for br in ("a", "b", "c"):
+            for name in (f"{br}_t_half", f"{br}_t_pair"):
+                self.assertTrue(cards[name].endswith("td=30n rise=1"), cards[name])
+
+    def test_analysis_unchanged(self):
+        for name in kb.PROBE_SUPPLIES_V:
+            self.assertEqual(self.request(name)["analysis"],
+                             {"kind": "tran", "args": "5p 60n"})
+
+    def test_init_body_is_165_plus_exactly_the_declared_block(self):
+        for name in kb.PROBE_SUPPLIES_V:
+            cond = kb.condition(name)
+            body = kb.probe_expected_body(cond, "init")
+            self.assertEqual(body, kb.compose_body(cond)
+                             + kb.probe_body_supplement(cond, "init"))
+            sup = kb.probe_body_supplement(cond, "init")
+            cards = [ln for ln in sup.splitlines() if ln and not ln.startswith("*")]
+            self.assertEqual(len(cards), 9, cards)
+            self.assertTrue(cards[0].startswith("vclti clti 0 pulse(1 0 "
+                                                f"{kb.INIT_RELEASE_NS:g}n"))
+            active = [ln for ln in sup.splitlines() if ln and not ln.startswith("*")]
+            for forbidden in (".options", ".nodeset", ".ic ", ".tran"):
+                self.assertNotIn(forbidden, "\n".join(active))
+
+    def test_supplement_drives_analytic_targets_and_wrong_polarity(self):
+        sup = kb.probe_body_supplement(kb.condition("vcm-m050"), "init")
+        for node in ("bpp", "bpn", "cpp", "cpn", "douta", "doutb", "doutc", "clti"):
+            self.assertIn(node, sup)
+        # pins are bridged to their own ideal sources (cm +/- dv/2), not hard
+        # numbers, and every drive is a linear switch (no B-source pin drive)
+        for pin, src in (("bpp", "bsp"), ("bpn", "bsn"), ("cpp", "csp"), ("cpn", "csn")):
+            self.assertIn(f"Sinit_{pin} {pin} {src} clti 0 {kb.INIT_SW_MODEL}", sup)
+        for forbidden in ("Binit_bpp", "Binit_cpn", "Binit_outa"):
+            self.assertNotIn(forbidden, sup)
+        # outputs are switched to 0 V (the supply-independent LOW rail)
+        for node in ("douta", "doutb", "doutc"):
+            self.assertIn(f"Sinit_out{node[-1]} {node} 0 clti 0 {kb.INIT_SW_MODEL}", sup)
+        self.assertIn(".model kbinit_sw sw ron=200 roff=1e12 vt=0.5 vh=0.1", sup)
+
+    def test_commit_probe_inputs_append_only(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "vcm-m050"
+            self.assertEqual(commit_probe_inputs(M050, "init", out, issue=kb.COLD_ISSUE)[0], 0)
+            before = {p.name: p.read_bytes() for p in out.iterdir()}
+            self.assertEqual(sorted(before),
+                             ["kickback-init.body.spice", "kickback-init.request.json"])
+            self.assertEqual(commit_probe_inputs(M050, "init", out, issue=kb.COLD_ISSUE)[0], 0)
+            self.assertEqual({p.name: p.read_bytes() for p in out.iterdir()}, before)
+            (out / "kickback-init.body.spice").write_bytes(b"tampered")
+            self.assertEqual(commit_probe_inputs(M050, "init", out, issue=kb.COLD_ISSUE)[0], 1)
+
+
+class ColdInitQualify(unittest.TestCase):
+    """The #552 qualification rules on synthetic observations."""
+
+    def qualify(self, **over):
+        values = healthy_init_values()
+        values.update(over)
+        return kb.coldinit_qualify(values)
+
+    def test_healthy_point_qualifies_and_meets(self):
+        q = self.qualify()
+        self.assertTrue(q["qualified"], q)
+        self.assertEqual(q["failed"], [])
+        self.assertEqual(q["residue_verdict"], "MET")
+
+    def test_qualified_residue_above_the_bound_is_reportable_not_met(self):
+        q = self.qualify(kick_sigdep_uv=kb.RESIDUE_TARGET_UV + 1.0)
+        self.assertTrue(q["qualified"], q)  # the measurement is valid ...
+        self.assertEqual(q["residue_verdict"], "NOT MET")  # ... and a miss is reportable
+
+    def test_collapsed_stimulus_fails_both_differential_criteria(self):
+        q = self.qualify(b_vd_strobe=23.5e-6, c_vd_strobe=2.353e-3)
+        self.assertFalse(q["qualified"])
+        self.assertTrue(any("b_vd_strobe" in w and "outside" in w for w in q["failed"]),
+                        q["failed"])
+        self.assertTrue(any("c_vd_strobe" in w and "outside" in w for w in q["failed"]),
+                        q["failed"])
+        self.assertIsNone(q["residue_verdict"])
+
+    def test_output_already_high_before_the_strobe_fails(self):
+        # the #415 icdc reject signature: parked high before the strobe, no crossing
+        q = self.qualify(dbn_29n=1.0, b_t_half=None, b_dp_29n=1.2, b_dn_29n=0.0)
+        self.assertFalse(q["qualified"])
+        self.assertTrue(any("pre-strobe" in w and "opposite polarity" in w for w in q["failed"]))
+        self.assertTrue(any("missing" in w and "b_t_half" in w for w in q["failed"]))
+
+    def test_missing_crossing_alone_fails(self):
+        q = self.qualify(c_t_half=None)
+        self.assertFalse(q["qualified"])
+        self.assertIn("c_t_half: the branch-c post-strobe low-to-high crossing is missing",
+                      q["failed"])
+
+    def test_gate_below_bound_fails(self):
+        q = self.qualify(dout_float_big_end=0.68e-9)
+        self.assertFalse(q["qualified"])
+        self.assertTrue(any("dout_float_big_end" in w and "below" in w for w in q["failed"]))
+
+    def test_drive_not_released_fails(self):
+        q = self.qualify(init_ctl_29n=1.0)
+        self.assertFalse(q["qualified"])
+        self.assertTrue(any("not proven released" in w for w in q["failed"]))
+
+    def test_drive_not_engaged_fails(self):
+        q = self.qualify(init_ctl_1n=0.5)
+        self.assertFalse(q["qualified"])
+        self.assertTrue(any("not proven engaged" in w for w in q["failed"]))
+
+    def test_inclusive_bounds_and_adjacent_floats(self):
+        for name, lo, hi in (("init_ctl_1n", 0.999, 1.001),
+                             ("init_ctl_29n", -1e-3, 1e-3),
+                             ("b_vd_strobe", 0.00098, 0.00102),
+                             ("c_vd_strobe", 0.098, 0.102),
+                             ("a_t_half", 30e-9, 55e-9)):
+            for value, valid in ((lo, True), (hi, True),
+                                 (math.nextafter(lo, -math.inf), False),
+                                 (math.nextafter(hi, math.inf), False)):
+                with self.subTest(name=name, value=value):
+                    self.assertEqual(self.qualify(**{name: value})["qualified"], valid)
+
+    def test_early_decision_and_late_falling_edge_are_unqualified(self):
+        for br in ("a", "b", "c"):
+            with self.subTest(branch=br):
+                q = self.qualify(**{f"{br}_dp_30n": 1.2, f"{br}_t_half": 57e-9})
+                self.assertTrue(any(f"{br}_dp_30n" in why for why in q["failed"]))
+                self.assertTrue(any(f"{br}_t_half" in why for why in q["failed"]))
+                self.assertIsNone(q["residue_verdict"])
+
+    def test_missing_observations_are_named(self):
+        values = healthy_init_values()
+        for name in ("init_ctl_29n", "b_vd_strobe", "dbn_29n", "b_dp_30n", "b_t_half",
+                     "dout_float_small_end", "kick_sigdep_uv"):
+            broken = dict(values, **{name: None})
+            q = kb.coldinit_qualify(broken)
+            self.assertFalse(q["qualified"], name)
+            self.assertTrue(any(name in w for w in q["failed"]), (name, q["failed"]))
+
+    def test_residue_unmeasured_on_an_otherwise_qualified_point(self):
+        q = self.qualify(kick_sigdep_uv=None)
+        self.assertFalse(q["qualified"])
+        self.assertTrue(any("kick_sigdep_uv is unmeasured" in w for w in q["failed"]))
+
+
+class ColdInitCompare(unittest.TestCase):
+    """coldinit_compare over a synthetic #552 series (stdlib only)."""
+
+    @staticmethod
+    def corner_values(cond, sup, residue_uv, **over):
+        values = {n: 1.0 for n in kb.required_measurements()}
+        values.update(healthy_init_values(residue_uv=residue_uv))
+        values.update({"vcm_meas": cond.vcm_v(), "vdd_meas": float(sup),
+                       "temp_meas": -40.0})
+        values.update(over)
+        return values
+
+    def write_env(self, cdir, cond, per_supply, status="pass"):
+        """One envelope for the condition, one corner per supply (the shape a
+        real probe-run leaves: one request per condition)."""
+        units = {m["name"]: m["unit"] for m in kb.probe_request(cond, "init")["measurements"]}
+        corners = []
+        for sup, values in per_supply.items():
+            cards = [{"name": n, "value": v, "unit": units[n],
+                      "status": "fail" if n == "dout_float_big_end" and v < 0.9 else "pass",
+                      "margin": None} for n, v in values.items()]
+            corners.append({"corner_id": f"mos_ss/{sup:.3f}V/-40C", "process": "mos_ss",
+                            "supply_v": {"vsup": sup}, "temperature_c": -40.0,
+                            "status": status, "measurements": cards})
+        env = {"schema_version": 1, "status": status, "corner_count": len(corners),
+               "passed": len(corners), "failed": 0, "errored": 0, "inconclusive": 0,
+               "environment": {"engine": "ngspice", "engine_version": "47",
+                               "models_lib_sha256": "0" * 64,
+                               "remote": {"provider": "aws-batch-fleet",
+                                          "job_id": "klt-sim-coldinit-test",
+                                          "state": "SUCCEEDED"}},
+               "corners": corners}
+        cdir.mkdir(parents=True, exist_ok=True)
+        for name, data in kb.probe_input_bytes(cond, "init", issue=kb.COLD_ISSUE).items():
+            (cdir / name).write_bytes(data)
+        (cdir / f"{kb.probe_arm_tag('init')}.envelope.json").write_text(
+            json.dumps(env), encoding="utf-8")
+
+    def write_165_reference(self, base):
+        for cond in kb.CONDITIONS:
+            env = env_for(cond)
+            corners, _ = kb.load_points(env)
+            picked = {k: v for k, v in corners.items()
+                      if k in {("ss", round(float(s), 6), -40.0)
+                               for s in kb.PROBE_SUPPLIES_V[cond.name]}}
+            out = base / kb.PROBE_REFERENCE_SERIES / cond.name
+            out.mkdir(parents=True, exist_ok=True)
+            (out / f"{kb.TAG}.envelope.json").write_text(
+                json.dumps({"status": "pass", "corners": list(picked.values())}),
+                encoding="utf-8")
+
+    def write_series(self, base, mutate=None):
+        self.write_165_reference(base)
+        series = base / "series"
+        for cond in kb.CONDITIONS:
+            per_supply = {}
+            for sup in kb.PROBE_SUPPLIES_V[cond.name]:
+                over = {}
+                if mutate:
+                    over = mutate(cond, sup) or {}
+                per_supply[sup] = self.corner_values(cond, sup, 50.0, **over)
+            self.write_env(series / cond.name, cond, per_supply)
+        return series
+
+    def test_four_points_roles_pairs_and_classifications(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = self.write_series(Path(d))
+            with mock.patch.object(kb, "SERIES_DIR", Path(d)):
+                res = kb.coldinit_compare(series)
+                again = kb.coldinit_compare(series)
+            self.assertEqual(res["problems"], [])
+            self.assertEqual(res["issue"], 552)
+            self.assertEqual(len(res["points"]), 4)
+            by_ck = {(p["condition"], p["key"]): p for p in res["points"]}
+            edge12 = by_ck[("vcm-m050", "ss/1.200V/-40C")]
+            self.assertEqual(edge12["role"], "edge")
+            self.assertEqual(edge12["pair"], "1.200 V supply pair")
+            self.assertEqual(by_ck[("vcm-p050", "ss/1.080V/-40C")]["role"], "edge")
+            self.assertEqual(by_ck[("vcm-nom", "ss/1.080V/-40C")]["role"], "control")
+            self.assertEqual(by_ck[("vcm-nom", "ss/1.200V/-40C")]["role"], "control")
+            controls = [p for p in res["points"] if p["role"] == "control"]
+            self.assertEqual(sorted(p["condition"] for p in controls), ["vcm-nom"] * 2)
+            self.assertEqual({p["supply_v"] for p in controls}, {1.08, 1.2})
+            for p in res["points"]:
+                self.assertTrue(p["qualification"]["qualified"], p)
+                self.assertEqual(p["qualification"]["residue_verdict"], "MET")
+                self.assertTrue(p["context_165"]["present"])
+            # deterministic: the committed comparison is recomputed exactly
+            self.assertEqual(json.dumps(res, sort_keys=True),
+                             json.dumps(again, sort_keys=True))
+
+    def test_unqualified_point_is_named_and_never_graded(self):
+        def mutate(cond, sup):
+            if cond.name == "vcm-m050":
+                return {"b_vd_strobe": 21.9e-6, "c_vd_strobe": 2.191e-3}
+            return None
+
+        with tempfile.TemporaryDirectory() as d:
+            series = self.write_series(Path(d), mutate)
+            with mock.patch.object(kb, "SERIES_DIR", Path(d)):
+                res = kb.coldinit_compare(series)
+            self.assertEqual(res["problems"], [])
+            edge = next(p for p in res["points"] if p["condition"] == "vcm-m050")
+            q = edge["qualification"]
+            self.assertFalse(q["qualified"])
+            self.assertTrue(any("branch-b pin differential" in w for w in q["failed"]))
+            self.assertIsNone(q["residue_verdict"])
+            md = kb.coldinit_render_markdown(res)
+            self.assertIn("**NO**", md)
+            self.assertIn("not graded (unqualified)", md)
+            self.assertIn("## Failed conditions, unqualified points", md)
+            # every other point is still independently qualified and graded
+            for p in res["points"]:
+                if p is not edge:
+                    self.assertTrue(p["qualification"]["qualified"])
+                    self.assertEqual(p["qualification"]["residue_verdict"], "MET")
+
+    def test_strobe_polarity_uses_measured_voltages_in_the_same_unit(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(kb, "SERIES_DIR", Path(d)):
+            series = self.write_series(Path(d))
+            path = series / M050.name / "kickback-init.envelope.json"
+            original = path.read_text()
+            supplies = ((1.2, "V"), (1200, "mV"))
+            samples = ((0.8, "V", False), (800, "mV", False), (600, "mV", True))
+            for br, (vdd, supply_unit), (sample, unit, qualified) in itertools.product(
+                    ("a", "b", "c"), supplies, samples):
+                name = f"{br}_dp_30n"
+                with self.subTest(branch=br, supply=supply_unit, sample=(sample, unit)):
+                    env = json.loads(original)
+                    corner = env["corners"][0]
+                    meas(corner, "vdd_meas").update(value=vdd, unit=supply_unit)
+                    meas(corner, name).update(value=sample, unit=unit)
+                    path.write_text(json.dumps(env))
+                    points = kb.coldinit_compare(series)["points"]
+                    q = next(p["qualification"] for p in points if p["condition"] == M050.name)
+                    self.assertEqual(q["qualified"], qualified, q["failed"])
+                    self.assertEqual(q["residue_verdict"], "MET" if qualified else None)
+                    if not qualified:
+                        self.assertEqual(q["failed"], [
+                            f"{name}: output already above half supply at the strobe"])
+
+    def test_qualification_and_display_use_the_request_units(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(kb, "SERIES_DIR", Path(d)):
+            series = self.write_series(Path(d))
+            path = series / M050.name / "kickback-init.envelope.json"
+            original = path.read_text()
+            cases = (
+                ("b_vd_strobe", 0.001, "V", 0.001, True),
+                ("b_vd_strobe", 1, "mV", 0.001, True),
+                ("b_vd_strobe", 0.001, "mV", 1e-6, False),
+                ("b_vd_strobe", 1e-6, "V", 1e-6, False),
+                ("c_vd_strobe", 0.1, "V", 0.1, True),
+                ("c_vd_strobe", 102, "mV", 0.102, True),
+                ("c_vd_strobe", 0.1, "mV", 0.0001, False),
+                ("c_vd_strobe", 0.0001, "V", 0.0001, False),
+                ("vcm_meas", 550, "mV", 0.55, True),
+                ("vcm_meas", 0.55, "mV", 0.00055, False),
+                ("init_ctl_1n", 1000, "mV", 1.0, True),
+                ("init_ctl_1n", 1, "mV", 0.001, False),
+                ("init_ctl_29n", 1, "mV", 0.001, True),
+                ("kick_sigdep_uv", 0.05, "mV", 50.0, True),
+                ("kick_sigdep_uv", 50, "mV", 50000.0, False),
+                ("bd0", 999, "µV", 0.000999, True),
+                ("cd1", 100, "mV", 0.1, True),
+                ("a_dn_30n", 1190, "mV", 1.19, True),
+                ("b_t_pair", 30.9, "ns", 30.9e-9, True),
+            )
+            crossings = [(f"{br}_t_half", t, "ns", t / 1e9, True)
+                         for br in "abc" for t in (30, 31, 55)]
+            for name, value, unit, canonical, qualified in itertools.chain(cases, crossings):
+                with self.subTest(name=name, value=value, unit=unit):
+                    env = json.loads(original)
+                    meas(env["corners"][0], name).update(value=value, unit=unit)
+                    path.write_text(json.dumps(env))
+                    res = kb.coldinit_compare(series)
+                    edge = next(p for p in res["points"] if p["condition"] == M050.name)
+                    self.assertEqual(edge["values"][name], canonical)
+                    self.assertEqual(edge["qualification"]["residue_verdict"],
+                                     "MET" if qualified else None)
+                    if name == "b_t_pair":
+                        self.assertIn("b 31 / pair 30.9", kb.coldinit_render_markdown(res))
+
+    def test_incompatible_measurements_withhold_only_the_affected_grade(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(kb, "SERIES_DIR", Path(d)):
+            series = self.write_series(Path(d))
+            path = series / M050.name / "kickback-init.envelope.json"
+            original = path.read_text()
+            for name, unit in (("vcm_meas", "s"), ("temp_meas", "pC"), ("dbn_29n", "V"),
+                               ("dout_float_big_end", "V"), ("a_t_half", None),
+                               ("cd1", "s"), ("kick_sigdep_uv", "ns"), ("a_dn_30n", "fC")):
+                with self.subTest(name=name, unit=unit):
+                    env = json.loads(original)
+                    meas(env["corners"][0], name)["unit"] = unit
+                    path.write_text(json.dumps(env))
+                    for point in kb.coldinit_compare(series)["points"]:
+                        q = point["qualification"]
+                        if point["condition"] == M050.name:
+                            self.assertIsNone(point["values"][name])
+                            self.assertIsNone(q["residue_verdict"])
+                            self.assertTrue(any(name in f and "unit" in f for f in q["failed"]))
+                        else:
+                            self.assertEqual(q["residue_verdict"], "MET")
+
+    def test_card_and_samples_must_agree_on_inclusive_residue_target(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(kb, "SERIES_DIR", Path(d)):
+            series = self.write_series(Path(d))
+            path = series / M050.name / "kickback-init.envelope.json"
+            env = json.loads(path.read_text())
+            corner = env["corners"][0]
+            for cd1, recomputed, card, verdict in (
+                    (0.100055, 105, 99, None), (0.100049, 99, 105, None),
+                    (0.10005, 100, 100, "MET"), (0.10005, 100, 101, None),
+                    (0.100051, 101, 100, None), (0.100055, 105, 101, "NOT MET")):
+                with self.subTest(cd1=cd1, card=card):
+                    meas(corner, "cd1")["value"] = cd1
+                    meas(corner, kb.RESIDUE)["value"] = card
+                    path.write_text(json.dumps(env))
+                    edge = next(p for p in kb.coldinit_compare(series)["points"]
+                                if p["condition"] == M050.name)
+                    self.assertEqual(edge["residue_recomputed_uv"], recomputed)
+                    self.assertEqual(edge["qualification"]["qualified"], verdict is not None)
+                    self.assertEqual(edge["qualification"]["residue_verdict"], verdict)
+                    if verdict is None:
+                        self.assertTrue(any("100" in f for f in edge["qualification"]["failed"]))
+
+    def test_wrong_common_mode_withholds_only_the_affected_grade(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = self.write_series(Path(d), lambda cond, sup:
+                                       {"vcm_meas": 0.6} if cond == M050 else {})
+            with mock.patch.object(kb, "SERIES_DIR", Path(d)):
+                res = kb.coldinit_compare(series)
+            for p in res["points"]:
+                q = p["qualification"]
+                if p["condition"] == M050.name:
+                    self.assertFalse(q["qualified"])
+                    self.assertIsNone(q["residue_verdict"])
+                    self.assertTrue(any("vcm_meas" in why for why in q["failed"]))
+                else:
+                    self.assertEqual(q["residue_verdict"], "MET")
+            self.assertIn("**NO** | - | not graded", kb.coldinit_render_markdown(res))
+
+    def test_v2_cross_card_cannot_supply_a_rising_measurement(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = self.write_series(Path(d))
+            path = series / "vcm-nom" / "kickback-init.request.json"
+            req = json.loads(path.read_text())
+            card = next(m for m in req["measurements"] if m["name"] == "a_t_half")
+            card["spice"] = card["spice"].replace("rise=1", "cross=1")
+            path.write_text(json.dumps(req))
+            with mock.patch.object(kb, "SERIES_DIR", Path(d)):
+                res = kb.coldinit_compare(series)
+            for p in res["points"]:
+                q = p["qualification"]
+                if p["condition"] == "vcm-nom":
+                    self.assertFalse(q["qualified"])
+                    self.assertIsNone(q["residue_verdict"])
+                    self.assertTrue(any("a_t_half" in why for why in q["failed"]))
+                else:
+                    self.assertTrue(q["qualified"])
+
+    def test_residue_inconsistent_with_its_own_samples_is_a_problem(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = self.write_series(Path(d))
+            cdir = series / "vcm-nom"
+            env = json.loads((cdir / "kickback-init.envelope.json").read_text())
+            for c in env["corners"]:
+                meas(c, "kick_sigdep_uv")["value"] = 5000.0
+            (cdir / "kickback-init.envelope.json").write_text(json.dumps(env))
+            with mock.patch.object(kb, "SERIES_DIR", Path(d)):
+                res = kb.coldinit_compare(series)
+            self.assertTrue(any("inconsistent with its own 29/55 ns samples" in p
+                                for p in res["problems"]), res["problems"])
+            for point in res["points"]:
+                q = point["qualification"]
+                if point["condition"] == "vcm-nom":
+                    self.assertFalse(q["qualified"])
+                    self.assertIsNone(q["residue_verdict"])
+                    self.assertTrue(any("inconsistent" in why for why in q["failed"]))
+                else:
+                    self.assertEqual(q["residue_verdict"], "MET")
+
+    def test_missing_envelope_is_a_problem(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = self.write_series(Path(d))
+            (series / "vcm-m050" / "kickback-init.envelope.json").unlink()
+            with mock.patch.object(kb, "SERIES_DIR", Path(d)):
+                res = kb.coldinit_compare(series)
+            self.assertIn("missing envelope vcm-m050/init", res["problems"])
+            self.assertEqual(len(res["points"]), 3)  # the other conditions still report
+
+    def test_wrong_arm_set_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = self.write_series(Path(d))
+            with self.assertRaises(kb.KickbackCmBandError):
+                kb.coldinit_compare(series, arms=("repro", "init"))
+
+    def test_markdown_carries_the_summary_sections(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = self.write_series(Path(d))
+            with mock.patch.object(kb, "SERIES_DIR", Path(d)):
+                res = kb.coldinit_compare(series)
+            md = kb.coldinit_render_markdown(res)
+            self.assertIn("| t (ns) | a dp | a dn | b dp | b dn | c dp | c dn |", md)
+            self.assertIn("| 30 | 0.01 | 1.19 | 0.02 | 1.18 | 0.03 | 1.17 |", md)
+            for fragment in ("issue #552", "pull/166", "## Qualification rules",
+                             "## Four-point summary", "## Fleet jobs",
+                             "klt-sim-coldinit-test", "## Historical context",
+                             "probe-compare"):
+                self.assertIn(fragment, md, fragment)
+            self.assertIn(f"released {kb.INIT_RELEASE_NS:g} -> "
+                          f"{kb.INIT_RELEASE_NS + 0.1:g} ns", md)
+
+
+class ColdInitRunner(unittest.TestCase):
+    """Runner-level routing of the #552 cold-edge series."""
+
+    SERIES = "20261126-552-coldinit"
+
+    def test_default_arms_and_issue_by_series(self):
+        self.assertEqual(rkb._arms_for(self.SERIES, None), kb.PROBE_ARMS_552)
+        self.assertEqual(rkb._issue_for(self.SERIES), kb.COLD_ISSUE)
+        # historical routing unchanged
+        self.assertEqual(rkb._issue_for("20261108-405-probe"), kb.PROBE_ISSUE)
+        self.assertEqual(rkb._issue_for("20261114-415-forceddc"), kb.SUPPLEMENT_ISSUE)
+        self.assertEqual(rkb._issue_for("any-other-series"), kb.SUPPLEMENT_ISSUE)
+        self.assertEqual(rkb._arms_for("any-other-series", None), kb.PROBE_ARMS_415)
+        self.assertIn("init", kb.ALL_PROBE_ARMS)
+
+    def test_series_root_option_stages_outside_campaigns(self):
+        args = mock.Mock(series="s", root=None)
+        self.assertEqual(rkb._series(args), kb.SERIES_DIR / "s")
+        args = mock.Mock(series="s", root="sim/.work/scratch")
+        self.assertEqual(rkb._series(args), Path("sim/.work/scratch") / "s")
+        args = mock.Mock(series="s")  # no root attribute at all
+        self.assertEqual(rkb._series(args), kb.SERIES_DIR / "s")
+
+    def test_probe_build_writes_only_the_init_arm(self):
+        with tempfile.TemporaryDirectory(dir=kb.build_mod.SIM_DIR) as d:
+            series = Path(d)
+            args = mock.Mock(series=self.SERIES, condition=None, arm=None, root=None)
+            with mock.patch.object(rkb, "_series", return_value=series):
+                self.assertEqual(rkb.cmd_probe_build(args), 0)
+            for cond in kb.CONDITIONS:
+                written = sorted(p.name for p in (series / cond.name).iterdir())
+                self.assertEqual(written, ["kickback-init.body.spice",
+                                           "kickback-init.request.json"])
+            req = json.loads((series / "vcm-m050" / "kickback-init.request.json")
+                             .read_text(encoding="utf-8"))
+            self.assertEqual(req["_condition"]["issue"], 552)
+            self.assertEqual(req["netlist"], "kickback-init.body.spice")
+
+    def test_probe_run_labels_the_invocation_with_issue_552(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d)
+            out = series / "vcm-m050"
+            self.assertEqual(commit_probe_inputs(M050, "init", out, issue=kb.COLD_ISSUE)[0], 0)
+            args = mock.Mock(series=self.SERIES, condition="vcm-m050", arm="init",
+                             skip_existing=False, retry_refused=0, retry_wait=0,
+                             klt="klt", force=False, root=None)
+            with mock.patch.object(rkb, "_series", return_value=series), \
+                    mock.patch.object(kcli, "_submit", return_value=0) as sub:
+                self.assertEqual(rkb.cmd_probe_run(args), 0)
+            extra = sub.call_args.kwargs["extra"]
+            self.assertEqual(extra["issue"], 552)
+            self.assertEqual(extra["probe_arm"], "init")
+            self.assertEqual(sub.call_args.kwargs["backend"], "batch")
+
+    def test_probe_compare_publishes_the_four_point_summary(self):
+        with tempfile.TemporaryDirectory() as d:
+            base = Path(d)
+            for cond in kb.CONDITIONS:
+                out = base / "series" / cond.name
+                out.mkdir(parents=True)
+                for name, data in kb.probe_input_bytes(cond, "init",
+                                                       issue=kb.COLD_ISSUE).items():
+                    (out / name).write_bytes(data)
+            ref = base / kb.PROBE_REFERENCE_SERIES / cond.name
+            ref.mkdir(parents=True, exist_ok=True)
+            args = mock.Mock(series=self.SERIES, arm=None, report_dir=None, check=False,
+                             root=None)
+            with mock.patch.object(rkb, "_series", return_value=base / "series"), \
+                    mock.patch.object(kb, "SERIES_DIR", base), \
+                    mock.patch.object(kb, "coldinit_compare",
+                                  return_value={"problems": [], "points": []}) as cmp, \
+                    mock.patch.object(kb, "coldinit_render_markdown",
+                                      return_value="md") as render, \
+                    mock.patch.object(kcli, "publish_report_pair", return_value=0) as pub:
+                self.assertEqual(rkb.cmd_probe_compare(args), 0)
+            cmp.assert_called_once_with(base / "series", arms=kb.PROBE_ARMS_552)
+            render.assert_called_once_with({"problems": [], "points": []})
+            pub.assert_called_once()
+
+    def test_probe_compare_refuses_non_init_arm_set_on_a_552_series(self):
+        with tempfile.TemporaryDirectory() as d:
+            series = Path(d) / "series"
+            args = mock.Mock(series=self.SERIES, arm=["repro"], report_dir=None,
+                             check=False, root=None)
+            with mock.patch.object(rkb, "_series", return_value=series):
+                self.assertEqual(rkb.cmd_probe_compare(args), 1)
+            self.assertFalse((series / "comparison.json").exists())
+
+    def test_default_issue_by_series_docs_example(self):
+        # a series named with the token anywhere routes to #552 (documented)
+        self.assertEqual(rkb._issue_for("x-552-y"), kb.COLD_ISSUE)
